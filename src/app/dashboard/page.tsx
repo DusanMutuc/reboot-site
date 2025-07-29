@@ -44,15 +44,17 @@ export default function DashboardPage() {
     <div style={{ padding: 40 }}>
       <h1>Dashboard</h1>
       <iframe
-        width="100%"
-        height="800"
-        src={lookerLink}
-        frameBorder="0"
-        style={{ border: 0 }}
-        allowFullScreen
-        sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-        title="Looker Studio Report"
-      ></iframe>
+  width="100%"
+  height="800"
+  src={lookerLink}
+  frameBorder="0"
+  allowFullScreen
+  /* comment sandbox out first – we’ll tighten later
+  sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+  */
+  title="Looker Studio Report"
+/>
+
     </div>
   );
 }
