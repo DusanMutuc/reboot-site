@@ -9,16 +9,14 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 
-export default function ResetPasswordPageWrapper() {
-  // Move hash params to query string if needed (for Supabase reset links)
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash.startsWith('#access_token=')) {
-      const hashParams = window.location.hash.substring(1); // remove '#'
-      const newUrl = window.location.pathname + '?' + hashParams;
-      window.location.replace(newUrl);
-    }
-  }, []);
+if (typeof window !== 'undefined' && window.location.hash.startsWith('#access_token=')) {
+  const hashParams = window.location.hash.substring(1); // remove '#'
+  const newUrl = window.location.pathname + '?' + hashParams;
+  window.location.replace(newUrl);
+}
 
+export default function ResetPasswordPageWrapper() {
+  // Remove useEffect for hash-to-query logic
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <ResetPasswordPage />

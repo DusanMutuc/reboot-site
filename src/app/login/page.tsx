@@ -35,46 +35,233 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5' }}>
-      <Paper elevation={6} style={{ padding: 32, minWidth: 350, maxWidth: 400, width: '100%' }}>
-        <Typography variant="h4" align="center" gutterBottom>Login</Typography>
-        <TextField
-          label="Email"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          fullWidth
-          margin="normal"
-        />
-        <TextField
-          label="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          fullWidth
-          margin="normal"
-        />
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleLogin}
-          fullWidth
-          style={{ marginTop: 16 }}
-        >
-          Login
-        </Button>
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <Button
-            variant="text"
-            color="primary"
-            onClick={() => setShowForgotModal(true)}
-            style={{ textTransform: 'none' }}
+    <div style={{ 
+      display: 'flex', 
+      minHeight: '100vh'
+    }}>
+      {/* Left Panel - Login Form (1/3 width) */}
+      <div style={{ 
+        flex: '1',
+        backgroundColor: '#5cbca8',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '40px'
+      }}>
+        <div style={{ 
+          width: '100%', 
+          maxWidth: '400px',
+          color: 'white'
+        }}>
+          <Typography 
+            variant="h4" 
+            style={{ 
+              marginBottom: '32px',
+              fontWeight: 'bold',
+              color: 'white'
+            }}
           >
-            Forgot Password?
+            Login information
+          </Typography>
+          
+          <TextField
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            fullWidth
+            margin="normal"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'white',
+                '& fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'transparent',
+                },
+              },
+              '& .MuiInputLabel-root': {
+                color: '#666',
+              },
+              marginBottom: '16px'
+            }}
+          />
+          
+          <TextField
+            label="Password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            fullWidth
+            margin="normal"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'white',
+                '& fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'transparent',
+                },
+              },
+              '& .MuiInputLabel-root': {
+                color: '#666',
+              },
+              marginBottom: '16px'
+            }}
+          />
+          
+          <div style={{ 
+            textAlign: 'right', 
+            marginBottom: '32px'
+          }}>
+            <Button
+              variant="text"
+              onClick={() => setShowForgotModal(true)}
+              style={{ 
+                color: 'white',
+                textTransform: 'none',
+                textDecoration: 'underline'
+              }}
+            >
+              Forgot Password?
+            </Button>
+          </div>
+          
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleLogin}
+            fullWidth
+            style={{ 
+              padding: '12px',
+              fontSize: '16px',
+              fontWeight: 'bold'
+            }}
+          >
+            Sign In
           </Button>
+          
+          {error && (
+            <Typography 
+              color="error" 
+              align="center" 
+              style={{ 
+                marginTop: '16px',
+                color: '#ffebee'
+              }}
+            >
+              {error}
+            </Typography>
+          )}
         </div>
-        {error && <Typography color="error" align="center" style={{ marginTop: 12 }}>{error}</Typography>}
-      </Paper>
+      </div>
+
+      {/* Right Panel - Branding (2/3 width) */}
+      <div style={{ 
+        flex: '2',
+        backgroundColor: '#2a2a2a',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '40px',
+        position: 'relative'
+      }}>
+        {/* Logo and Company Name */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          marginBottom: '60px'
+        }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            backgroundColor: 'white',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: '12px',
+            fontSize: '20px'
+          }}>
+            🔧
+          </div>
+          <div>
+            <Typography 
+              variant="h6" 
+              style={{ 
+                color: 'white',
+                fontWeight: 'bold',
+                marginBottom: '4px'
+              }}
+            >
+              REAL ESTATE REBOOT COACHING
+            </Typography>
+            <Typography 
+              variant="body2" 
+              style={{ 
+                color: '#ccc',
+                fontSize: '12px'
+              }}
+            >
+              Scale-Leadership-Life Design
+            </Typography>
+          </div>
+        </div>
+
+        {/* Main Title */}
+        <div style={{ 
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          <Typography 
+            variant="h1" 
+            style={{ 
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '48px',
+              textAlign: 'center',
+              lineHeight: 1.2,
+              marginBottom: '16px'
+            }}
+          >
+            REAL ESTATE
+          </Typography>
+          <Typography 
+            variant="h1" 
+            style={{ 
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '48px',
+              textAlign: 'center',
+              lineHeight: 1.2,
+              marginBottom: '16px'
+            }}
+          >
+            REBOOT
+          </Typography>
+          <Typography 
+            variant="h2" 
+            style={{ 
+              color: '#5cbca8',
+              fontWeight: 'bold',
+              fontSize: '32px',
+              textAlign: 'center'
+            }}
+          >
+            MEMBER HUB
+          </Typography>
+        </div>
+      </div>
 
       {/* Forgot Password Modal */}
       <Dialog open={showForgotModal} onClose={() => {
