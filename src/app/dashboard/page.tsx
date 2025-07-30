@@ -3,8 +3,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Box from '@mui/material/Box';
 
 export default function DashboardPage() {
   const [lookerLink, setLookerLink] = useState<string | null>(null);
@@ -115,10 +113,10 @@ export default function DashboardPage() {
             console.log('🔧 Checking for initialization function...');
             // Try different possible function names
             const initFunctions = [
-              (window as any).ae_emd_cal_events_init,
-              (window as any).ae_emd_cal_events_init_t4,
-              (window as any).ae_emd_cal_events_init_t4_init,
-              (window as any).ae_emd_cal_events_init_t4_init_js
+              (window as unknown as Record<string, unknown>).ae_emd_cal_events_init,
+              (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4,
+              (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4_init,
+              (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4_init_js
             ];
             
             const availableFunction = initFunctions.find(fn => typeof fn === 'function');
@@ -144,10 +142,10 @@ export default function DashboardPage() {
         setTimeout(() => {
           console.log('🔧 Checking for initialization function...');
           const initFunctions = [
-            (window as any).ae_emd_cal_events_init,
-            (window as any).ae_emd_cal_events_init_t4,
-            (window as any).ae_emd_cal_events_init_t4_init,
-            (window as any).ae_emd_cal_events_init_t4_init_js
+            (window as unknown as Record<string, unknown>).ae_emd_cal_events_init,
+            (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4,
+            (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4_init,
+            (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4_init_js
           ];
           
           const availableFunction = initFunctions.find(fn => typeof fn === 'function');
