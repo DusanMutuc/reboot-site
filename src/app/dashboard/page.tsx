@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
@@ -10,6 +10,7 @@ export default function DashboardPage() {
   const [lookerLink, setLookerLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const addEventRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchLookerLink = async () => {
@@ -32,6 +33,138 @@ export default function DashboardPage() {
       setLoading(false);
     };
     fetchLookerLink();
+  }, []);
+
+  // Load AddEvent script and initialize calendar
+  useEffect(() => {
+    const loadAddEvent = () => {
+      console.log('🔍 Starting AddEvent load process...');
+      
+      // Check if ref is available
+      if (!addEventRef.current) {
+        console.log('⏳ Ref not ready yet, retrying in 100ms...');
+        setTimeout(loadAddEvent, 100);
+        return;
+      }
+      
+      // Remove any existing AddEvent elements
+      const existingElements = document.querySelectorAll('.ae-emd-cal-events');
+      console.log('🗑️ Found existing elements:', existingElements.length);
+      existingElements.forEach(el => el.remove());
+
+      // Create the AddEvent element
+      const addEventDiv = document.createElement('div');
+      addEventDiv.style.width = '100%';
+      addEventDiv.style.height = '500px';
+      addEventDiv.className = 'ae-emd-cal-events';
+      addEventDiv.setAttribute('data-calendar', 'ez616853');
+      addEventDiv.setAttribute('data-lbl-upcoming', 'Upcoming events');
+      addEventDiv.setAttribute('data-lbl-subscribe', 'Subscribe');
+      addEventDiv.setAttribute('data-no-events', 'No events found..');
+      addEventDiv.setAttribute('data-lbl-readmore', 'Read more');
+      addEventDiv.setAttribute('data-lbl-in', 'In');
+      addEventDiv.setAttribute('data-lbl-days', 'days');
+      addEventDiv.setAttribute('data-lbl-day', 'day');
+      addEventDiv.setAttribute('data-lbl-hours', 'hours');
+      addEventDiv.setAttribute('data-lbl-hour', 'hour');
+      addEventDiv.setAttribute('data-lbl-minutes', 'minutes');
+      addEventDiv.setAttribute('data-lbl-minute', 'minute');
+      addEventDiv.setAttribute('data-lbl-seconds', 'seconds');
+      addEventDiv.setAttribute('data-lbl-second', 'second');
+      addEventDiv.setAttribute('data-lbl-live', 'LIVE');
+      addEventDiv.setAttribute('data-include-atc', 'true');
+      addEventDiv.setAttribute('data-include-stc', 'true');
+      addEventDiv.setAttribute('data-include-moupcpicker', 'true');
+      addEventDiv.setAttribute('data-include-location', 'false');
+      addEventDiv.setAttribute('data-include-timezone', 'false');
+      addEventDiv.setAttribute('data-include-organizer', 'false');
+      addEventDiv.setAttribute('data-include-countdown', 'true');
+      addEventDiv.setAttribute('data-include-description', 'false');
+      addEventDiv.setAttribute('data-include-timezone-select', 'true');
+      addEventDiv.setAttribute('data-default-view', 'month');
+      addEventDiv.setAttribute('data-stayonpage', 'false');
+      addEventDiv.setAttribute('data-datetime-format', '1');
+      addEventDiv.setAttribute('data-datetime-language', 'en_US');
+      addEventDiv.setAttribute('data-events-max', '20');
+      addEventDiv.setAttribute('data-description-length', 'brief');
+
+      console.log('📅 Created AddEvent div with attributes:', addEventDiv.outerHTML);
+
+      // Append to the container
+      addEventRef.current.appendChild(addEventDiv);
+      console.log('✅ Added AddEvent div to container');
+
+      // Debug: Check what's in the container
+      console.log('🔍 Container children count:', addEventRef.current.children.length);
+      console.log('🔍 Container innerHTML:', addEventRef.current.innerHTML);
+
+      // Load script if not already loaded
+      const existingScript = document.querySelector('script[src="https://cdn.addevent.com/libs/cal/js/cal.events.embed.t4.init.js"]');
+      console.log('📜 Existing script found:', !!existingScript);
+      
+      if (!existingScript) {
+        console.log('📥 Loading AddEvent script...');
+        const script = document.createElement('script');
+        script.src = 'https://cdn.addevent.com/libs/cal/js/cal.events.embed.t4.init.js';
+        script.async = true;
+        
+        script.onload = () => {
+          console.log('✅ AddEvent script loaded successfully');
+          // Wait a bit for the script to initialize
+          setTimeout(() => {
+            console.log('🔧 Checking for initialization function...');
+            // Try different possible function names
+            const initFunctions = [
+              (window as any).ae_emd_cal_events_init,
+              (window as any).ae_emd_cal_events_init_t4,
+              (window as any).ae_emd_cal_events_init_t4_init,
+              (window as any).ae_emd_cal_events_init_t4_init_js
+            ];
+            
+            const availableFunction = initFunctions.find(fn => typeof fn === 'function');
+            if (availableFunction) {
+              console.log('🚀 Calling initialization function...');
+              availableFunction();
+            } else {
+              console.log('❌ No initialization function found, trying manual approach...');
+              // Try to trigger initialization by dispatching a custom event
+              window.dispatchEvent(new Event('load'));
+            }
+          }, 500);
+        };
+        
+        script.onerror = (error) => {
+          console.log('❌ Failed to load AddEvent script:', error);
+        };
+        
+        document.head.appendChild(script);
+      } else {
+        console.log('🔄 Script already exists, re-initializing...');
+        // Re-initialize if script already exists
+        setTimeout(() => {
+          console.log('🔧 Checking for initialization function...');
+          const initFunctions = [
+            (window as any).ae_emd_cal_events_init,
+            (window as any).ae_emd_cal_events_init_t4,
+            (window as any).ae_emd_cal_events_init_t4_init,
+            (window as any).ae_emd_cal_events_init_t4_init_js
+          ];
+          
+          const availableFunction = initFunctions.find(fn => typeof fn === 'function');
+          if (availableFunction) {
+            console.log('🚀 Calling initialization function...');
+            availableFunction();
+          } else {
+            console.log('❌ No initialization function found, trying manual approach...');
+            window.dispatchEvent(new Event('load'));
+          }
+        }, 500);
+      }
+    };
+
+    console.log('⏰ Setting timeout for AddEvent load...');
+    // Small delay to ensure DOM is ready
+    setTimeout(loadAddEvent, 100);
   }, []);
 
   if (loading) {
@@ -103,139 +236,10 @@ export default function DashboardPage() {
             padding: '24px',
             backgroundColor: 'white'
           }}>
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center',
-              marginBottom: '20px'
-            }}>
-              <Typography variant="h6" style={{ fontWeight: 'bold' }}>
-                Upcoming events
-              </Typography>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px' }}>▼</span>
-                <button style={{
-                  backgroundColor: '#5cbca8',
-                  color: 'white',
-                  border: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}>
-                  📅 Subscribe
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#ff9800',
-                    marginRight: '12px'
-                  }}></div>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    How to Create Raving Fans Masterclass
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#666', marginLeft: '20px' }}>
-                  Tuesday, 29 July 13:00 - 14:30 (EDT)
-                </Typography>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#2196f3',
-                    marginRight: '12px'
-                  }}></div>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Open Coaching with Ben (East Coast)
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#666', marginLeft: '20px' }}>
-                  Friday, 1 August 9:30 - 11:00 (EDT)
-                </Typography>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#2196f3',
-                    marginRight: '12px'
-                  }}></div>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Open Coaching with Ben (West Coast)
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#666', marginLeft: '20px' }}>
-                  Friday, 1 August 11:30 - 13:00 (EDT)
-                </Typography>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#e91e63',
-                    marginRight: '12px'
-                  }}></div>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Assistant Workroom
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#666', marginLeft: '20px' }}>
-                  Friday, 1 August 13:00 - 14:00 (EDT)
-                </Typography>
-              </div>
-              
-              <div style={{ marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-                  <div style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#2196f3',
-                    marginRight: '12px'
-                  }}></div>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Reboot Wednesday Breakout Sessions
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#666', marginLeft: '20px' }}>
-                  Wednesday, 6 August 12:00 – 14:00 (EDT)
-                </Typography>
-              </div>
-            </div>
-            
-            <div style={{ 
-              marginTop: '20px', 
-              paddingTop: '16px', 
-              borderTop: '1px solid #eee',
-              fontSize: '12px',
-              color: '#666'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                <span style={{ marginRight: '8px' }}>🕐</span>
-                <span>Time shown in (GMT-04:00) America, Toronto</span>
-                <span style={{ marginLeft: '8px' }}>↕</span>
-              </div>
-              <div style={{ marginTop: '8px' }}>
-                Powered by AddEvent
-              </div>
-            </div>
+            <div 
+              ref={addEventRef}
+              style={{width:'100%',height:'500px'}} 
+            ></div>
           </div>
         </div>
 
@@ -405,7 +409,8 @@ export default function DashboardPage() {
           flex: '2',
           backgroundColor: '#2a2a2a',
           padding: '40px',
-          color: 'white'
+          display: 'flex',
+          flexDirection: 'column'
         }}>
           <Typography 
             variant="h4" 
@@ -415,148 +420,24 @@ export default function DashboardPage() {
               marginBottom: '32px'
             }}
           >
-            LISTEN TO THE LATEST PRIVATE TRIBE PODCAST EPISODE
+            PODCAST
           </Typography>
           
           <div style={{ 
-            padding: '24px',
-            backgroundColor: 'white',
-            color: '#2a2a2a'
+            flex: 1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-              {/* Podcast Cover Art */}
-              <div style={{ 
-                width: '120px', 
-                height: '120px', 
-                backgroundColor: '#f5f5f5',
-                borderRadius: '8px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '2px solid #e0e0e0'
-              }}>
-                <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎤</div>
-                <Typography variant="caption" style={{ textAlign: 'center', fontWeight: 'bold' }}>
-                  Private TRIBE Podcast
-                </Typography>
-                <Typography variant="caption" style={{ textAlign: 'center', color: '#666' }}>
-                  For Reboot members only
-                </Typography>
-              </div>
-              
-              {/* Podcast Info */}
-              <div style={{ flex: 1 }}>
-                <Typography variant="caption" style={{ color: '#666', marginBottom: '4px' }}>
-                  REAL ESTATE REBOOT COACHING
-                </Typography>
-                <Typography variant="h6" style={{ fontWeight: 'bold', marginBottom: '16px' }}>
-                  Ep 96 - Marketing Mastermind [Mastermind Wednesday Replay]
-                </Typography>
-                
-                {/* Player Controls */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                  <button style={{ 
-                    width: '40px', 
-                    height: '40px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#5cbca8',
-                    border: 'none',
-                    color: 'white',
-                    fontSize: '18px',
-                    cursor: 'pointer'
-                  }}>
-                    ▶
-                  </button>
-                  <button style={{ 
-                    width: '32px', 
-                    height: '32px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#f0f0f0',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}>
-                    ⏪
-                  </button>
-                  <button style={{ 
-                    width: '32px', 
-                    height: '32px', 
-                    borderRadius: '50%', 
-                    backgroundColor: '#f0f0f0',
-                    border: 'none',
-                    cursor: 'pointer'
-                  }}>
-                    ⏩
-                  </button>
-                  <span style={{ fontSize: '12px', color: '#666' }}>1x</span>
-                  <span style={{ fontSize: '16px' }}>🔊</span>
-                </div>
-                
-                {/* Progress Bar */}
-                <div style={{ marginBottom: '12px' }}>
-                  <div style={{ 
-                    width: '100%', 
-                    height: '4px', 
-                    backgroundColor: '#e0e0e0',
-                    borderRadius: '2px',
-                    position: 'relative'
-                  }}>
-                    <div style={{ 
-                      width: '0%', 
-                      height: '100%', 
-                      backgroundColor: '#5cbca8',
-                      borderRadius: '2px'
-                    }}></div>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#666' }}>
-                    <span>00:00</span>
-                    <span>01:04:48</span>
-                  </div>
-                </div>
-                
-                {/* Links */}
-                <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
-                  <a href="#" style={{ color: '#5cbca8', textDecoration: 'none' }}>MORE INFO</a>
-                  <a href="#" style={{ color: '#666', textDecoration: 'none' }}>Transistor</a>
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* More Episodes */}
-          <div style={{ marginTop: '32px' }}>
-            <Typography variant="h6" style={{ fontWeight: 'bold', marginBottom: '16px' }}>
-              MORE EPISODES
-            </Typography>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '16px' }}>▶</span>
-                <div style={{ flex: 1 }}>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Ep 95 - Price Drop Workshop [Workshop Wednesday Replay]
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#ccc' }}>65 min</Typography>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '16px' }}>▶</span>
-                <div style={{ flex: 1 }}>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Ep 94 - Should You Separate Your Socials? Personal vs. Business in Real Estate [Coaching Replay with Sheila]
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#ccc' }}>64 min</Typography>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '16px' }}>▶</span>
-                <div style={{ flex: 1 }}>
-                  <Typography variant="body2" style={{ fontWeight: 'bold' }}>
-                    Ep 93 - Hiring, Firing & Delegation [Coaching Replay]
-                  </Typography>
-                </div>
-                <Typography variant="caption" style={{ color: '#ccc' }}>9 min</Typography>
-              </div>
-            </div>
+            <iframe 
+              width="100%" 
+              height="390" 
+              frameBorder="no" 
+              scrolling="no" 
+              seamless={true}
+              src="https://share.transistor.fm/e/real-estate-reboot-coaching-private-tribe-podcast/playlist"
+              style={{ borderRadius: '8px' }}
+            />
           </div>
         </div>
       </div>
