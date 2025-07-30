@@ -98,14 +98,11 @@ export default function DashboardPage() {
             WHATS HAPPENING NEXT...
           </Typography>
           
-          <Paper 
-            elevation={3} 
-            style={{ 
-              flex: 1,
-              padding: '24px',
-              backgroundColor: 'white'
-            }}
-          >
+          <div style={{ 
+            flex: 1,
+            padding: '24px',
+            backgroundColor: 'white'
+          }}>
             <div style={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
@@ -239,7 +236,7 @@ export default function DashboardPage() {
                 Powered by AddEvent
               </div>
             </div>
-          </Paper>
+          </div>
         </div>
 
         {/* Right Panel - Ideas (2/3 width) */}
@@ -348,7 +345,7 @@ export default function DashboardPage() {
                 fontSize: '1.2rem'
               }}
             >
-              IF YOU MISSED A WEDNESDAY OR FRIDAY SESSION, DON'T WORRY!
+              IF YOU MISSED A WEDNESDAY OR FRIDAY SESSION, DON&apos;T WORRY!
             </Typography>
             <Typography 
               variant="handwritten" 
@@ -421,14 +418,11 @@ export default function DashboardPage() {
             LISTEN TO THE LATEST PRIVATE TRIBE PODCAST EPISODE
           </Typography>
           
-          <Paper 
-            elevation={3} 
-            style={{ 
-              padding: '24px',
-              backgroundColor: 'white',
-              color: '#2a2a2a'
-            }}
-          >
+          <div style={{ 
+            padding: '24px',
+            backgroundColor: 'white',
+            color: '#2a2a2a'
+          }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
               {/* Podcast Cover Art */}
               <div style={{ 
@@ -527,7 +521,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-          </Paper>
+          </div>
           
           {/* More Episodes */}
           <div style={{ marginTop: '32px' }}>

@@ -53,7 +53,6 @@ function ResetPasswordPage() {
     };
     authenticate();
     // Only run on mount or if tokens change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, refreshToken]);
 
   const handleReset = async () => {
