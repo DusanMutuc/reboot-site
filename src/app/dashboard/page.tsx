@@ -49,9 +49,7 @@ export default function DashboardPage() {
   src={lookerLink}
   frameBorder="0"
   allowFullScreen
-  /* comment sandbox out first – we’ll tighten later
   sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-  */
   title="Looker Studio Report"
 />
 
