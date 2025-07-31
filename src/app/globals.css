@@ -26,6 +26,18 @@ body {
   padding: 0;
   margin: 0;
 }
+html {
+  scroll-behavior: smooth;           /* smooth native scrolling */
+}
+
+/* height of the nav bar so anchors aren’t hidden underneath */
+:root {
+  --nav-height: 64px;                /* MUI default AppBar height on desktop */
+}
+
+section[id] {
+  scroll-margin-top: var(--nav-height);
+}
 
 a {
   color: inherit;

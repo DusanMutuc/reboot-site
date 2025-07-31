@@ -115,7 +115,7 @@ const theme = createTheme({
       lineHeight: 1.2,
     },
     h6: {
-      fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
+      fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
       fontWeight: 600,
       fontSize: '1.25rem',
       lineHeight: 1.2,
