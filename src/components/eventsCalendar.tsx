@@ -35,15 +35,21 @@ export default function EventsCalendar() {
         'https://cdn.addevent.com/libs/cal/js/cal.events.embed.t4.init.js';
       const exists = document.querySelector(`script[src="${src}"]`);
 
-      const boot = () => {
-        const fns = [
-          (window as any).ae_emd_cal_events_init,
-          (window as any).ae_emd_cal_events_init_t4,
-          (window as any).ae_emd_cal_events_init_t4_init,
-        ].find(fn => typeof fn === 'function');
+      type AeInitFn = (() => void) | undefined;
 
-        if (fns) fns();
-        else window.dispatchEvent(new Event('load'));
+      const boot = () => {
+        //Grab the three globals, but give the array a concrete type
+        const fn = ([
+          (window as unknown as Record<string, unknown>).ae_emd_cal_events_init,
+          (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4,
+          (window as unknown as Record<string, unknown>).ae_emd_cal_events_init_t4_init,
+        ] as AeInitFn[]).find(
+          //Narrow each element to an actual function
+          (f): f is () => void => typeof f === 'function',
+        );
+
+        //Run whichever one exists, or fall back to the usual load event
+        fn ? fn() : window.dispatchEvent(new Event('load'));
       };
 
       if (exists) {
