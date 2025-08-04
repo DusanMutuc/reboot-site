@@ -1,46 +1,53 @@
 import Typography from '@mui/material/Typography';
 
-type LinkGroup = { title: string; links: string[] };
+type LinkItem = { label: string; href?: string };
 
-const groups: LinkGroup[] = [
+const links: LinkItem[] = [
   {
-    title: 'REBOOT TOOLS',
-    links: [
-      'REBOOT TRAINING, TOOLS &  COURSE',
-      'REBOOT SYSTEMS SHOWCASE',
-      'REFFER AN AGENT',
-    ],
+    label: 'REBOOT TRAINING, TOOLS & COURSE',
+    href: 'https://agentfromwithin.upcoach.com/',
   },
   {
-    title: 'COMMUNITY & SESSIONS',
-    links: [
-      'PRIVATE FACEBOOK GROUP',
-      'REBOOT CALENDAR',
-      'REBOOT  COACHING – ZOOM LINK',
-      'ASSISTANT WORKROOM – ZOOM LINK',
-    ],
+    label: 'REBOOT SYSTEMS SHOWCASE',
+    href: 'https://vimeo.com/showcase/11715034',
   },
   {
-    title: 'BOOKING LINKS',
-    links: [
-      'ASSISTANT ONBOARDING',
-      '15 MIN CALL –  BOOKING LINK',
-      'M2 –  BOOKING LINK',
-    ],
+    label: 'PRIVATE FACEBOOK GROUP',
+    href: 'https://www.facebook.com/groups/realestatereboot',
   },
+  {
+    label: 'REBOOT CALENDAR',
+    href: 'https://www.addevent.com/calendar/ez616853',
+  },
+  {
+    label: 'REBOOT COACHING - ZOOM LINK',
+    href: 'https://zoom.us/j/93233351653',
+  },
+  { label: 'REFFER AN AGENT' }, // no link
+  {
+    label: 'ASSISTANT WORKROOM - ZOOM LINK',
+    href: 'https://zoom.us/j/99652221215',
+  },
+  {
+    label: 'ASSISTANT ONBOARDING',
+    href: 'https://api.leadconnectorhq.com/widget/bookings/assistant_on',
+  },
+  { label: 'M2 - BOOKING LINK' },        // coach-specific
+  { label: '15 MIN CALL - BOOKING LINK' } // coach-specific
 ];
 
-/** 3-column “important links” section that matches the reference image. */
+/** Dark section with a white banner + 2-column teal-border grid. */
 export default function ImportantLinks() {
   return (
     <section
       style={{
         backgroundColor: '#2a2a2a',
+        paddingBottom: 60,
         width: '100%',
         scrollSnapAlign: 'start',
       }}
     >
-      {/* ─────────── Full-width banner ─────────── */}
+      {/* ─────────── Banner ─────────── */}
       <div
         style={{
           width: '100%',
@@ -54,74 +61,63 @@ export default function ImportantLinks() {
         </Typography>
       </div>
 
-      {/* ─────────── Columns ─────────── */}
+      {/* ─────────── Links grid ─────────── */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: 20,
+          maxWidth: 800,
+          margin: '40px auto 0',
+          padding: '0 40px',
         }}
       >
-        {groups.map(({ title, links }, idx) => {
-          // center column gets teal background
-          const isCenter = idx === 1;
+        {links.map(({ label, href }) => {
+          const BoxContent = (
+            <Typography
+              variant="body1"
+              sx={{ color: '#99d9d9', fontWeight: 500, fontSize: 14 }}
+            >
+              {label}
+            </Typography>
+          );
+
           return (
             <div
-              key={title}
+              key={label}
               style={{
-                backgroundColor: isCenter ? '#46c8b3' : '#2a2a2a',
-                padding: '40px 20px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 28,
+                border: '2px solid #5cbca8',
+                borderRadius: 8,
+                padding: 20,
+                textAlign: 'center',
+                cursor: href ? 'pointer' : 'default',
+                transition: 'background 0.2s ease',
+                backgroundColor: 'transparent',
               }}
+              onMouseEnter={e =>
+                (e.currentTarget.style.backgroundColor = href
+                  ? '#3e3e3e'
+                  : 'transparent')
+              }
+              onMouseLeave={e =>
+                (e.currentTarget.style.backgroundColor = 'transparent')
+              }
             >
-              <Typography
-                variant="h5"
-                sx={{
-                  textAlign: 'center',
-                  fontWeight: 'bold',
-                  mb: 2,
-                  color: isCenter ? '2a2a2a' : '#99d9d9',
-                }}
-              >
-                {title}
-              </Typography>
-
-              {links.map(label => (
-                <div
-                  key={label}
+              {href ? (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{
-                    border: isCenter ? '2px solid #2a2a2a' :'2px solid #5cbca8',
-                    borderRadius: 6,
-                    padding: '18px 12px',
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    backgroundColor: isCenter ? '#46c8b3' : 'transparent',
+                    display: 'block',
+                    textDecoration: 'none',
                   }}
-                  onMouseEnter={e =>
-                    (e.currentTarget.style.backgroundColor = isCenter
-                      ? '#34b19c'
-                      : '#3e3e3e')
-                  }
-                  onMouseLeave={e =>
-                    (e.currentTarget.style.backgroundColor = isCenter
-                      ? '#46c8b3'
-                      : 'transparent')
-                  }
                 >
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      fontWeight: 600,
-                      letterSpacing: 0.5,
-                      color: isCenter ? '#2a2a2a' : '#99d9d9',
-                    }}
-                  >
-                    {label}
-                  </Typography>
-                </div>
-              ))}
+                  {BoxContent}
+                </a>
+              ) : (
+                BoxContent
+              )}
             </div>
           );
         })}
