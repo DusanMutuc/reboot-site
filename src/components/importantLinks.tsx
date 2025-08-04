@@ -54,7 +54,7 @@ export default function ImportantLinks() {
           >
             <Typography
               variant="body1"
-              sx={{ color: '#5cbca8', fontWeight: 500, fontSize: '14px' }}
+              sx={{ color: '#99d9d9', fontWeight: 500, fontSize: '14px' }}
             >
               {label}
             </Typography>
