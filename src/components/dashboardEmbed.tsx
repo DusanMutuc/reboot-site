@@ -16,7 +16,6 @@ export default function DashboardEmbed({ src }: Props) {
         height="100%"
         src={src}
         frameBorder="0"
-        allowFullScreen
         sandbox="allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         title="Looker Studio Report"
       />
