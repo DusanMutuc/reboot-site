@@ -26,7 +26,7 @@ export default function DashboardPage() {
       <Toolbar /> 
       {/* each block wrapped in a <section id=""> */}
 
-      <section id="calendar" style={{ display: 'flex', minHeight: '100vh' }}>
+      <section id="calendar" style={{ display: 'flex'}}>
         <EventsCalendar />
         <NewsPanel />
       </section>

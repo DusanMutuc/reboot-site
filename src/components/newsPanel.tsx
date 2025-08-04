@@ -1,55 +1,47 @@
 import Typography from '@mui/material/Typography';
 
-/**
- * Right-hand grey panel that will eventually host
- * a Looker Studio “Reboot News” report.
- */
 export default function NewsPanel() {
   return (
     <div
       style={{
-        flex: '2',
+        flex: 2,
         backgroundColor: '#2a2a2a',
         padding: '40px',
         color: 'white',
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
-      <Typography
-        variant="h4"
-        sx={{ color: 'white', fontWeight: 'bold', mb: '32px' }}
-      >
-        IDEAS FOR THIS SECTION
+      <Typography variant="h4" sx={{ color: 'white', fontWeight: 'bold', mb: 4 }}>
+        REBOOT NEWS
       </Typography>
 
-      <div style={{ lineHeight: 1.8 }}>
-        {[
-          'This section will be a Looker Studio Report',
-          'That we can easily update without needing to code',
-          'REBOOT NEWS-',
-          'UPDATED MONTHLY',
-          'STUDENT WINS, INTENSIVE RETREAT',
-          'UPDATES',
-          'MONTHLY VIDEO FROM BEN WITH',
-          'UPDATES ?',
-          'STATIC PICTURE OF WHAT SONE',
-          'LOOKS LIKE.... WHAT WE ARE',
-          'BUILDING...',
-          'STATIC PICTURE OF WHAT SONE',
-          'LOOKS LIKE.... WHAT WE ARE',
-          'BUILDING...',
-        ].map((txt, i) => (
-          <Typography
-            key={i}
-            variant="body1"
-            sx={{
-              fontWeight: 'bold',
-              mb: i < 2 ? (i === 0 ? '16px' : '32px') : '8px',
-              color: i < 2 ? '#ffeb3b' : 'white',
-            }}
-          >
-            {txt}
-          </Typography>
-        ))}
+      {/* Wrapper needs position:relative so the mask can anchor to it */}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: '1280 / 1080',   // your chosen ratio
+          borderRadius: 8,
+          overflow: 'hidden',
+        }}
+      >
+        <iframe
+          title="Reboot News – Looker Studio"
+          src="https://lookerstudio.google.com/embed/reporting/24bf1f2c-ec7e-480e-adeb-7b3fd4f4ce43/page/p_zrflumxzud"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            border: 'none',
+          }}
+          scrolling="no"
+          allowFullScreen
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+
       </div>
     </div>
   );

@@ -22,12 +22,12 @@ export default function EventsCalendar() {
       // build the div Elementor expects
       const cal = document.createElement('div');
       cal.style.width = '100%';
-      cal.style.height = '500px';
+      cal.style.height = '1000px';
       cal.className = 'ae-emd-cal-events';
       cal.setAttribute('data-calendar', 'ez616853');
       cal.setAttribute('data-default-view', 'month');
       cal.setAttribute('data-include-countdown', 'true');
-      /* …keep / tweak any other data-* attributes you need… */
+      cal.setAttribute('data-include-moupcpicker','true');
 
       addEventRef.current.appendChild(cal);
 

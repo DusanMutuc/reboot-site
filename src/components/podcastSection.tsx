@@ -1,110 +1,155 @@
 import Typography from '@mui/material/Typography';
 
-/**
- * Two-column podcast block:
- * • Left 1/3: fun promo copy + subscribe button
- * • Right 2/3: embedded Transistor.fm playlist
- *
- * Pure presentational right now.
- */
 export default function PodcastSection() {
   return (
-    <div
+    <section
       style={{
-        display: 'flex',
-        minHeight: '100vh',
+        backgroundColor: '#2a2a2a', // keeps dark gutters like the other sections
         width: '100%',
+        scrollSnapAlign: 'start',
       }}
     >
-      {/* Promo column */}
+      {/* ─────────── Full-width banner ─────────── */}
       <div
         style={{
-          flex: '1',
-          backgroundColor: '#5cbca8',
-          padding: '40px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
+          width: '100%',
+          backgroundColor: 'white',
+          padding: '32px 0',
           textAlign: 'center',
         }}
       >
-        <div style={{ color: 'white', maxWidth: '300px' }}>
-          {[
-            "IF YOU MISSED A WEDNESDAY OR FRIDAY SESSION, DON'T WORRY!",
-            'YOU CAN FIND THE HIGHLIGHTS ON THE PODCAST.',
-            'WE UPLOAD NEW EPISODES WEEKLY!',
-            "NOT SUBSCRIBED? CLICK BELOW!",
-          ].map((t, i) => (
-            <Typography
-              key={i}
-              variant="handwritten"
-              sx={{ color: 'white', mb: '16px', fontSize: '1.2rem' }}
-            >
-              {t}
-            </Typography>
-          ))}
+        <Typography variant="h4" sx={{ color: '#2a2a2a', fontWeight: 'bold' }}>
+          PODCAST
+        </Typography>
+      </div>
 
-          <div style={{ marginBottom: '24px' }}>
-            <span style={{ fontSize: '24px' }}>⬇</span>
+      {/* ─────────── Two-column body ─────────── */}
+      <div
+        style={{
+          display: 'flex',
+          width: '100%',
+        }}
+      >
+        {/* Promo column — teal */}
+        <div
+          style={{
+            flex: 1,
+            backgroundColor: '#5cbca8',
+            padding: '50px 40px',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+          }}
+        >
+          {/* Copy block */}
+          <div style={{ color: 'white', maxWidth: 300 }}>
+            {[
+              "IF YOU MISSED A WEDNESDAY OR FRIDAY SESSION, DON'T WORRY!",
+              '',
+              'YOU CAN FIND THE HIGHLIGHTS ON THE PODCAST.',
+              '',
+              'WE UPLOAD NEW EPISODES WEEKLY!',
+              '',
+            ].map((t, i) =>
+              t ? (
+                <Typography
+                  key={i}
+                  variant="handwritten"
+                  sx={{ color: '#2a2a2a', mb: 4, fontSize: '1.35rem' }}
+                >
+                  {t}
+                </Typography>
+              ) : (
+                <div key={i} style={{ height: 24 }} />
+              )
+            )}
+
+            {/* “NOT SUBSCRIBED? / CLICK BELOW!” */}
+            <Typography
+              variant="handwritten"
+              sx={{
+                color: 'white',
+                transform: 'rotate(-3deg) translateY(40px)',
+                display: 'inline-block',
+                mb: 4,
+                fontSize: '1.7rem',
+              }}
+            >
+              NOT SUBSCRIBED?
+              <br />
+              CLICK BELOW!
+            </Typography>
           </div>
 
+          {/* Subscribe button */}
           <button
             style={{
+              marginTop: 32,
+              width: '100%',
               backgroundColor: '#ffeb3b',
+              alignSelf: 'center',
               color: '#2a2a2a',
               border: 'none',
               padding: '16px 32px',
-              borderRadius: '8px',
+              borderRadius: 8,
               cursor: 'pointer',
-              fontSize: '16px',
+              fontSize: 16,
               fontWeight: 'bold',
-              fontFamily: '"Permanent Marker", cursive',
+              fontFamily: "'Poppins', sans-serif",
               boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
               transition: 'transform 0.2s ease',
             }}
           >
             SUBSCRIBE TO THE PODCAST
           </button>
-        </div>
-      </div>
 
-      {/* Player column */}
-      <div
-        style={{
-          flex: '2',
-          backgroundColor: '#2a2a2a',
-          padding: '40px',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <Typography
-          variant="h4"
-          sx={{ color: 'white', fontWeight: 'bold', mb: '32px' }}
-        >
-          PODCAST
-        </Typography>
-
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <iframe
-            width="100%"
-            height="390"
-            frameBorder="no"
-            scrolling="no"
-            seamless
-            src="https://share.transistor.fm/e/real-estate-reboot-coaching-private-tribe-podcast/playlist"
-            style={{ borderRadius: '8px' }}
+          {/* Arrow graphic */}
+          <img
+            src="/Website Arrow.png"
+            alt=""
+            style={{
+              position: 'absolute',
+              bottom: 115,
+              right: 24,
+              width: 150,
+              pointerEvents: 'none',
+            }}
           />
         </div>
+
+        {/* Player column — dark grey */}
+        <div
+          style={{
+            flex: 2,
+            backgroundColor: '#2a2a2a',
+            padding: '60px 40px',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <iframe
+              title="Reboot Podcast"
+              width="100%"
+              height="500"
+              frameBorder="0"
+              scrolling="no"
+              seamless
+              src="https://share.transistor.fm/e/real-estate-reboot-coaching-private-tribe-podcast/playlist"
+              style={{ borderRadius: 8 }}
+            />
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }

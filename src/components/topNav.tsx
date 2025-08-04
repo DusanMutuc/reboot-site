@@ -50,6 +50,8 @@ export default function TopNav() {
             <Button
               size="small"
               sx={{
+                fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
+                fontSize: '1.25rem',
                 textTransform: 'none',
                 fontWeight: active === s.id ? 600 : 400,
                 borderBottom: active === s.id ? '2px solid #1976d2' : 'none',
