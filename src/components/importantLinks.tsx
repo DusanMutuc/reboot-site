@@ -20,7 +20,6 @@ export default function ImportantLinks() {
       style={{
         backgroundColor: '#2a2a2a',
         padding: '40px',
-        minHeight: '100vh',
         width: '100%',
       }}
     >
