@@ -1,4 +1,21 @@
 import Typography from '@mui/material/Typography';
+const btn = {
+  marginTop: 32,
+  width: '100%',
+  backgroundColor: '#ffeb3b',
+  alignSelf: 'center',
+  color: '#2a2a2a',
+  border: 'none',
+  padding: '16px 32px',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontSize: 16,
+  fontWeight: 'bold',
+  fontFamily: "'Poppins', sans-serif",
+  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+  transition: 'transform 0.2s ease, background-color 0.2s ease',
+};
+
 
 export default function PodcastSection() {
   return (
@@ -84,26 +101,22 @@ export default function PodcastSection() {
           </div>
 
           {/* Subscribe button */}
-          <button
-            style={{
-              marginTop: 32,
-              width: '100%',
-              backgroundColor: '#ffeb3b',
-              alignSelf: 'center',
-              color: '#2a2a2a',
-              border: 'none',
-              padding: '16px 32px',
-              borderRadius: 8,
-              cursor: 'pointer',
-              fontSize: 16,
-              fontWeight: 'bold',
-              fontFamily: "'Poppins', sans-serif",
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              transition: 'transform 0.2s ease',
+          <a
+            href="https://subscribe.transistor.fm/shared_invite/CogGHmkX0IYZZ6DRM9EiMHplXXx6YebwAqBR"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={btn}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+              e.currentTarget.style.backgroundColor = '#fff176';          // a tad lighter
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'none';
+              e.currentTarget.style.backgroundColor = '#ffeb3b';
             }}
           >
             SUBSCRIBE TO THE PODCAST
-          </button>
+          </a>
 
           {/* Arrow graphic */}
           <img
