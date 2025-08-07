@@ -1,168 +1,100 @@
-import Typography from '@mui/material/Typography';
-const btn = {
+'use client';
+
+import { Box, Typography } from '@mui/material';
+
+/* button style */
+const subscribeBtn: React.CSSProperties = {
   marginTop: 32,
-  width: '100%',
-  backgroundColor: '#ffeb3b',
-  alignSelf: 'center',
-  color: '#2a2a2a',
+  backgroundColor: '#ff2b2b',
+  color: '#ffffff',
   border: 'none',
-  padding: '16px 32px',
+  padding: '16px 48px',
   borderRadius: 8,
   cursor: 'pointer',
-  fontSize: 16,
-  fontWeight: 'bold',
+  fontSize: 40,
+  fontWeight: 700,
   fontFamily: "'Poppins', sans-serif",
-  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+  textTransform: 'uppercase',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
   transition: 'transform 0.2s ease, background-color 0.2s ease',
 };
-
 
 export default function PodcastSection() {
   return (
     <section
       style={{
-        backgroundColor: '#2a2a2a', // keeps dark gutters like the other sections
         width: '100%',
-        scrollSnapAlign: 'start',
+        backgroundColor: '#000',
+        paddingBottom: 50,          // only bottom padding here
+        textAlign: 'center',
       }}
     >
-      {/* ─────────── Full-width banner ─────────── */}
-      <div
-        style={{
+      {/* ─────────── Hero banner (edge-to-edge) ─────────── */}
+      <Box
+        sx={{
           width: '100%',
-          backgroundColor: 'white',
-          padding: '32px 0',
-          textAlign: 'center',
-        }}
-      >
-        <Typography variant="h4" sx={{ color: '#2a2a2a', fontWeight: 'bold' }}>
-          PODCAST
-        </Typography>
-      </div>
-
-      {/* ─────────── Two-column body ─────────── */}
-      <div
-        style={{
+          height: { xs: 300, md: 400 },
+          backgroundImage: "url('/podcast-hero.png')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center top',
+          backgroundColor: '#000',
           display: 'flex',
-          width: '100%',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          px: 2,                    // small inner padding for text
         }}
       >
-        {/* Promo column — teal */}
-        <div
-          style={{
-            flex: 1,
-            backgroundColor: '#5cbca8',
-            padding: '50px 40px',
-            position: 'relative',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
+        <Typography variant="h2" sx={{ fontWeight: 800, color: '#fff', mb: 1, fontSize: { xs: '4rem', md: '8rem' } }}>
+          PRIVATE PODCAST
+        </Typography>
+
+        <Typography variant="subtitle1" sx={{ color: '#fff', fontSize: { xs: '0.9rem', md: '1.3rem' }, maxWidth: 720 }}>
+          Listen to Coaching Replays, Masterclasses&nbsp;&amp;&nbsp;Powerful Live Coaching Moments
+        </Typography>
+      </Box>
+
+      {/* ─────────── Content BELOW the banner ─────────── */}
+      <Box sx={{ maxWidth: 1000, mx: 'auto', mt: 6, mb: 6, px: 2 }}>
+        <Box
+          sx={{
+            borderRadius: 2,
+            overflow: 'hidden',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
           }}
         >
-          {/* Copy block */}
-          <div style={{ color: 'white', maxWidth: 300 }}>
-            {[
-              "IF YOU MISSED A WEDNESDAY OR FRIDAY SESSION, DON'T WORRY!",
-              '',
-              'YOU CAN FIND THE HIGHLIGHTS ON THE PODCAST.',
-              '',
-              'WE UPLOAD NEW EPISODES WEEKLY!',
-              '',
-            ].map((t, i) =>
-              t ? (
-                <Typography
-                  key={i}
-                  variant="handwritten"
-                  sx={{ color: '#2a2a2a', mb: 4, fontSize: '1.35rem' }}
-                >
-                  {t}
-                </Typography>
-              ) : (
-                <div key={i} style={{ height: 24 }} />
-              )
-            )}
-
-            {/* “NOT SUBSCRIBED? / CLICK BELOW!” */}
-            <Typography
-              variant="handwritten"
-              sx={{
-                color: 'white',
-                transform: 'rotate(-3deg) translateY(40px)',
-                display: 'inline-block',
-                mb: 4,
-                fontSize: '1.7rem',
-              }}
-            >
-              NOT SUBSCRIBED?
-              <br />
-              CLICK BELOW!
-            </Typography>
-          </div>
-
-          {/* Subscribe button */}
-          <a
-            href="https://subscribe.transistor.fm/shared_invite/CogGHmkX0IYZZ6DRM9EiMHplXXx6YebwAqBR"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={btn}
-            onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
-              e.currentTarget.style.backgroundColor = '#fff176';          // a tad lighter
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.transform = 'none';
-              e.currentTarget.style.backgroundColor = '#ffeb3b';
-            }}
-          >
-            SUBSCRIBE TO THE PODCAST
-          </a>
-
-          {/* Arrow graphic */}
-          <img
-            src="/Website Arrow.png"
-            alt=""
-            style={{
-              position: 'absolute',
-              bottom: 115,
-              right: 24,
-              width: 150,
-              pointerEvents: 'none',
-            }}
+          <iframe
+            title="Reboot Podcast"
+            width="100%"
+            height="500"
+            frameBorder="0"
+            scrolling="no"
+            seamless
+            src="https://share.transistor.fm/e/real-estate-reboot-coaching-private-tribe-podcast/playlist"
           />
-        </div>
+        </Box>
+      </Box>
 
-        {/* Player column — dark grey */}
-        <div
-          style={{
-            flex: 2,
-            backgroundColor: '#2a2a2a',
-            padding: '60px 40px',
-            display: 'flex',
-            flexDirection: 'column',
-          }}
-        >
-          <div
-            style={{
-              flex: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <iframe
-              title="Reboot Podcast"
-              width="100%"
-              height="500"
-              frameBorder="0"
-              scrolling="no"
-              seamless
-              src="https://share.transistor.fm/e/real-estate-reboot-coaching-private-tribe-podcast/playlist"
-              style={{ borderRadius: 8 }}
-            />
-          </div>
-        </div>
-      </div>
+      <a
+        href="https://subscribe.transistor.fm/shared_invite/CogGHmkX0IYZZ6DRM9EiMHplXXx6YebwAqBR"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={subscribeBtn}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)';
+          e.currentTarget.style.backgroundColor = '#ff5555';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'none';
+          e.currentTarget.style.backgroundColor = '#ff2b2b';
+        }}
+      >
+        SUBSCRIBE
+      </a>
+
+      <Typography sx={{ color: '#ffffff', fontWeight: 700, mt: 6, fontSize: '1.3rem',  }}>
+        NEVER MISS OUT AGAIN!
+      </Typography>
     </section>
   );
 }

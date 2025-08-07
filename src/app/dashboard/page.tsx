@@ -26,31 +26,31 @@ export default function DashboardPage() {
       <Toolbar /> 
       {/* each block wrapped in a <section id=""> */}
 
-      <section id="calendar" style={{ display: 'flex'}}>
-        <EventsCalendar />
-        <NewsPanel />
-      </section>
-
-      <section id="dashboard">
-        <DashboardEmbed src={lookerLink!} />
-      </section>
-
-
-      <section id="podcast">
-        <PodcastSection />
-      </section>
-
       <section id="links">
         <ImportantLinks />
       </section>
+      
+      <section id="podcast">
+        <PodcastSection />
+      </section>
+      
+     
 
       <section id="library">
         <Search />
       </section>
-
+      
+      <section id="dashboard">
+        <DashboardEmbed src={lookerLink!} />
+      </section>
+      
       <section id="help">
         <HelpSteps />
       </section>
+
+
+
+
     </>
   );
 
