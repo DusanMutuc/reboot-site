@@ -1,109 +1,151 @@
-import Typography from '@mui/material/Typography';
+'use client';
 
-/** Placeholder “Coming Soon” search section. */
+import { Box, Typography } from '@mui/material';
+
 export default function Search() {
   return (
-    <section
-      style={{
-        backgroundColor: '#2a2a2a', // stays full-width dark gray
-        paddingBottom: 60,          // breathing room under the card
-        width: '100%',
-        scrollSnapAlign: 'start',   // optional slide-feel
-      }}
-    >
-      {/* Header banner */}
-      <div
-        style={{
-          backgroundColor: '#f5f5f5',
-          padding: '40px',
+    <section style={{ width: '100%', scrollSnapAlign: 'start' }}>
+      {/* ─────────── Hero banner ─────────── */}
+      <Box
+  sx={{
+    width: '100%',
+    height: { xs: 300, md: 400 },
+    backgroundImage: "url('/search-hero.png')",
+    backgroundSize: 'cover',      // scale until the box is filled
+    backgroundPosition: 'center', // crop top and bototm equally
+    backgroundRepeat: 'no-repeat',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    px: 2,
+  }}
+>
+        <Typography
+          variant="h2"
+          sx={{
+            color: '#fff',
+            fontWeight: 800,
+            fontSize: { xs: '4rem', md: '8rem' },
+            textAlign: 'center',
+          }}
+        >
+          REBOOT SEARCH ENGINE
+        </Typography>
+      </Box>
+
+      {/* ─────────── Green panel ─────────── */}
+      <Box
+        sx={{
+          bgcolor: '#5cbca8',
+          pt: 6,
+          pb: 10,
+          px: { xs: 2, md: 6 },
           textAlign: 'center',
         }}
       >
+        {/* Sub-heading */}
         <Typography
-          variant="h4"
-          sx={{ color: '#2a2a2a', fontWeight: 'bold', mb: 2 }}
+          variant="h6"
+          sx={{
+            color: '#fff',
+            fontWeight: 700,
+            mb: 3,
+            fontSize: { xs: '1rem', md: '1.25rem' },
+          }}
         >
-          LOOKING FOR A SPECIFIC SYSTEM, COURSE OR EPISODE?
+          Type any keyword to find related reboot resources, tools &amp; Training
         </Typography>
 
-        <Typography variant="body1" sx={{ color: '#666' }}>
-          Type any keyword in the search bar to find related Reboot resources.
-        </Typography>
-      </div>
-
-      {/* Content */}
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          {/* Search-bar mock */}
-          <div
-            style={{
-              position: 'relative',
-              maxWidth: 500,
-              margin: '0 auto 40px',
-            }}
-          >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                backgroundColor: '#f5f5f5',
-                borderRadius: 25,
-                padding: '16px 24px',
-                border: '2px solid #e0e0e0',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-              }}
-            >
-              <span
-                style={{
-                  marginRight: 12,
-                  fontSize: 18,
-                  color: '#666',
-                }}
-              >
-                🔍
-              </span>
-              <input
-                type="text"
-                placeholder="Search"
-                disabled
-                style={{
-                  border: 'none',
-                  outline: 'none',
-                  flex: 1,
-                  fontSize: 16,
-                  color: '#2a2a2a',
-                  backgroundColor: 'transparent',
-                }}
-              />
-            </div>
-          </div>
-
-          {/* Results placeholder */}
-          <div
-            style={{
-              backgroundColor: '#f5f5f5',
-              borderRadius: 12,
-              padding: 32,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-              minHeight: 400,
+        {/* Search bar mock */}
+        <Box
+          sx={{
+            maxWidth: 800,
+            mx: 'auto',
+            position: 'relative',
+          }}
+        >
+          <Box
+            sx={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
+              bgcolor: '#fff',
+              borderRadius: 50,
+              px: 3,
+              py: { xs: 1.5, md: 2 },
+              boxShadow: '0 3px 8px rgba(0,0,0,0.15)',
             }}
           >
-            <Typography
-              variant="h5"
+            <span style={{ fontSize: 24, marginRight: 12, color: '#666' }}>🔍</span>
+            <input
+              disabled
+              placeholder="Search…"
+              style={{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                fontSize: 18,
+                background: 'transparent',
+              }}
+            />
+          </Box>
+
+          {/* TODO: replace with arrow PNG/SVG */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: -20,
+              right: -40,
+              fontSize: 60,
+              transform: 'rotate(-15deg)',
+              color: '#fff',
+              pointerEvents: 'none',
+            }}
+          >
+            ➞
+          </Box>
+        </Box>
+
+        {/* Results placeholder list */}
+        <Box
+          sx={{
+            maxWidth: 800,
+            mx: 'auto',
+            mt: 4,
+            bgcolor: '#fff',
+            borderRadius: 3,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            maxHeight: 380,
+            overflowY: 'auto',
+          }}
+        >
+          {[
+            'Hiring Your First Assistant',
+            'Second Part-Time Hire',
+            'Part-Time Assistant Hired',
+            'Ep 4 – Hiring a new Assistant [Coaching Replay]',
+            'Ep 9 – Hiring an Assistant & Choosing between two candidates [Coaching Replay]',
+            'Ep 12 – Hiring an Assistant – Should you hire full time & Should you overpay [Coaching Replay]',
+          ].map((text, i) => (
+            <Box
+              key={i}
               sx={{
-                color: '#5cbca8',
-                fontWeight: 'bold',
-                textAlign: 'center',
+                px: 2.5,
+                py: 1.5,
+                borderBottom: i === 5 ? 'none' : '1px solid #e0e0e0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                bgcolor: i % 2 ? '#f7f7f7' : '#eaeaea',
               }}
             >
-              SEARCH: COMING SOON
-            </Typography>
-          </div>
-        </div>
-      </div>
+              <span style={{ fontSize: 20 }}>📄</span>
+              <Typography sx={{ fontWeight: 500, fontSize: 15, textAlign: 'left' }}>
+                {text}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
     </section>
   );
 }

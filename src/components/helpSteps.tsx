@@ -23,6 +23,7 @@ const steps = [
     subtitle: 'Prepare a 1-3-1 – review your tracker – get one-to-one advice',
   },
 ];
+const LEFT_GUTTER = 120;
 
 /** White “Follow these steps to get help” guide. */
 export default function HelpSteps() {
@@ -39,67 +40,84 @@ export default function HelpSteps() {
         style={{
           width: '100%',
           backgroundColor: '#5cbca8',
-          padding: '32px 24px',
-          textAlign: 'center',
+          padding: `42px ${LEFT_GUTTER}px`,
         }}
       >
         <Typography
-          variant="h4"
-          sx={{ color: '#2a2a2a', fontWeight: 'bold', m: 0 }}
+          variant="h3"
+          sx={{
+            color: '#000',
+            fontWeight: 800,
+            lineHeight: 1.1,
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+            m: 0,
+            fontSize: { xs: '2.2rem', md: '4rem', lg: '8rem' },
+          }}
         >
-          FOLLOW THESE STEPS TO GET HELP
+          STEPS TO GET HELP
         </Typography>
       </div>
 
-      {/* ─────────── Main flex row (kept at 1100 px) ─────────── */}
+      {/* ─────────── Main flex row ─────────── */}
       <div
         style={{
           display: 'flex',
-          justifyContent: 'center',
           position: 'relative',
-          maxWidth: 1100,       // leaves room for the art on wide screens
-          margin: '40px auto 0',// top-margin so content clears the banner
-          padding: '0 40px',    // reinstate horizontal padding for content
+          width: '100%',
+          padding: `40px ${LEFT_GUTTER}px 0`,
+          gap: 32,                // space between columns
         }}
       >
-         {/* Left column: steps */}
-         <div style={{ maxWidth: 800 }}>
-          {steps.map((s, idx) => (
-            <div
-              key={s.title}
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                marginBottom: 24,
-              }}
-            >
-              {/* ─── Number badge image ─── */}
-              <img
-                src={`/${idx + 1}.png`}       // 1.png, 2.png … 5.png
-                alt={`Step ${idx + 1}`}
-                style={{
-                  width: 60,
-                  height: 60,
-                  objectFit: 'contain',
-                  marginRight: 16,
-                  flexShrink: 0,
-                  alignSelf: 'center',
-                  verticalAlign: 'center',
-                  transform: 'translateY(-4px)'
-                }}
-              />
+        <div style={{ maxWidth: 1400 }}>
+  {steps.map((s, idx) => (
+    <div
+      key={s.title}
+      style={{
+        display: 'flex',
+        alignItems: 'center',     // ⇢ centers image with text
+        marginBottom: 40,         // a bit more breathing room
+      }}
+    >
+      {/* number badge */}
+      <img
+        src={`/${idx + 1}.png`}
+        alt={`Step ${idx + 1}`}
+        style={{
+          width: 80,               // ⇢ bigger icon
+          height: 80,
+          objectFit: 'contain',
+          marginRight: 24,
+          flexShrink: 0,
+        }}
+      />
 
-              <div style={{ flex: 1 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                  {s.title}
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#666' }}>
-                  {s.subtitle}
-                </Typography>
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* titles */}
+      <div style={{ flex: 1 }}>
+        <Typography
+          variant="h5"
+          sx={{
+            fontWeight: 800,
+            mb: 1,
+            fontSize: { xs: '2rem', md: '3rem' }, // ⇢ much larger
+          }}
+        >
+          {s.title}
+        </Typography>
+
+        <Typography
+          variant="body1"
+          sx={{
+            color: '#555',
+            fontSize: { xs: '1.5rem', md: '2rem' }, // ⇢ subtitle bigger too
+          }}
+        >
+          {s.subtitle}
+        </Typography>
+      </div>
+    </div>
+  ))}
+</div>
 
         {/* Right column: arrow + “HELP!” art */}
         <div
@@ -114,11 +132,11 @@ export default function HelpSteps() {
             alt=""
             style={{
               position: 'absolute',
-              top: -20,
+              top: -150,
               right: 0,
               width: 'auto',
-              height: '65%',
-              maxWidth: '260px',
+              height: '100%',
+              maxWidth: 260,
               pointerEvents: 'none',
             }}
           />
@@ -130,26 +148,24 @@ export default function HelpSteps() {
               bottom: 20,
               right: 0,
               width: '80%',
-              maxWidth: '180px',
+              maxWidth: 180,
               pointerEvents: 'none',
             }}
           />
         </div>
       </div>
+
       {/* ─────────── Placeholder footer ─────────── */}
       <div
         style={{
           width: '100%',
           backgroundColor: '#2a2a2a',
-          padding: '24px',
-          marginTop: '60px',        // space above the footer
+          padding: 24,
+          marginTop: 60,
           textAlign: 'center',
         }}
       >
-        <Typography
-          variant="body2"
-          sx={{ color: '#aaa', fontSize: 14 }}
-        >
+        <Typography variant="body2" sx={{ color: '#aaa', fontSize: 14 }}>
           © 2025 Reboot • All rights reserved (placeholder text)
         </Typography>
       </div>
