@@ -89,20 +89,19 @@ export default function Search() {
             />
           </Box>
 
-          {/* TODO: replace with arrow PNG/SVG */}
           <Box
+            component="img"
+            src="/Website Arrow 2.png"
+            alt="Arrow"
             sx={{
               position: 'absolute',
-              top: -20,
-              right: -40,
-              fontSize: 60,
-              transform: 'rotate(-15deg)',
-              color: '#fff',
+              top: -50,
+              right: -80,
+              height: 100,
               pointerEvents: 'none',
             }}
-          >
-            ➞
-          </Box>
+          />
+
         </Box>
 
         {/* Results placeholder list */}
