@@ -1,4 +1,6 @@
-import Typography from '@mui/material/Typography';
+'use client';
+
+import { Box, Typography } from '@mui/material';
 
 const steps = [
   {
@@ -23,7 +25,6 @@ const steps = [
     subtitle: 'Prepare a 1-3-1 – review your tracker – get one-to-one advice',
   },
 ];
-const LEFT_GUTTER = 120;
 
 /** White “Follow these steps to get help” guide. */
 export default function HelpSteps() {
@@ -36,140 +37,164 @@ export default function HelpSteps() {
       }}
     >
       {/* ─────────── Full-width banner ─────────── */}
-      <div
-        style={{
+      <Box
+        sx={{
           width: '100%',
           backgroundColor: '#5cbca8',
-          padding: `42px ${LEFT_GUTTER}px`,
+          py: '2.625rem', // 42px
         }}
       >
-        <Typography
-          variant="h3"
+        <Box
           sx={{
-            color: '#000',
-            fontWeight: 800,
-            lineHeight: 1.1,
-            textTransform: 'uppercase',
-            letterSpacing: 1,
-            m: 0,
-            fontSize: { xs: '2.2rem', md: '4rem', lg: '8rem' },
+            maxWidth: '100rem', // 1400px
+            mx: 'auto',
+            px: 3,
           }}
         >
-          STEPS TO GET HELP
-        </Typography>
-      </div>
+          <Typography
+            variant="h3"
+            sx={{
+              color: '#000',
+              fontWeight: 800,
+              lineHeight: 1.1,
+              textTransform: 'uppercase',
+              letterSpacing: 1,
+              m: 0,
+              textAlign: 'left',
+              fontSize: {
+                xs: 'clamp(2.2rem, 6vw, 4rem)',
+                lg: 'clamp(4rem, 8vw, 8rem)',
+              },
+            }}
+          >
+            STEPS TO GET HELP
+          </Typography>
+        </Box>
+      </Box>
 
       {/* ─────────── Main flex row ─────────── */}
-      <div
-        style={{
+      <Box
+        sx={{
           display: 'flex',
           position: 'relative',
           width: '100%',
-          padding: `40px ${LEFT_GUTTER}px 0`,
-          gap: 32,                // space between columns
+          pt: '2.5rem',
         }}
       >
-        <div style={{ maxWidth: 1400 }}>
-  {steps.map((s, idx) => (
-    <div
-      key={s.title}
-      style={{
-        display: 'flex',
-        alignItems: 'center',     // ⇢ centers image with text
-        marginBottom: 40,         // a bit more breathing room
-      }}
-    >
-      {/* number badge */}
-      <img
-        src={`/${idx + 1}.png`}
-        alt={`Step ${idx + 1}`}
-        style={{
-          width: 80,               // ⇢ bigger icon
-          height: 80,
-          objectFit: 'contain',
-          marginRight: 24,
-          flexShrink: 0,
-        }}
-      />
-
-      {/* titles */}
-      <div style={{ flex: 1 }}>
-        <Typography
-          variant="h5"
+        <Box
           sx={{
-            fontWeight: 800,
-            mb: 1,
-            fontSize: { xs: '2rem', md: '3rem' }, // ⇢ much larger
+            maxWidth: '100rem',
+            mx: 'auto',
+            display: 'flex',
+            gap: '2rem',
+            px: 3,
           }}
         >
-          {s.title}
-        </Typography>
+          {/* Left column: steps list */}
+          <Box sx={{ flex: 1 }}>
+            {steps.map((s, idx) => (
+              <Box
+                key={s.title}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  mb: '2.5rem', // 40px
+                }}
+              >
+                {/* number badge */}
+                <Box
+                  component="img"
+                  src={`/${idx + 1}.png`}
+                  alt={`Step ${idx + 1}`}
+                  sx={{
+                    width: '5rem', // 80px
+                    height: '5rem',
+                    objectFit: 'contain',
+                    mr: '1.5rem', // 24px
+                    flexShrink: 0,
+                  }}
+                />
 
-        <Typography
-          variant="body1"
-          sx={{
-            color: '#555',
-            fontSize: { xs: '1.5rem', md: '2rem' }, // ⇢ subtitle bigger too
-          }}
-        >
-          {s.subtitle}
-        </Typography>
-      </div>
-    </div>
-  ))}
-</div>
+                {/* titles */}
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: 800,
+                      mb: 1,
+                      fontSize: { xs: '2rem', md: '3rem' },
+                    }}
+                  >
+                    {s.title}
+                  </Typography>
 
-        {/* Right column: arrow + “HELP!” art */}
-        <div
-          style={{
-            flexShrink: 0,
-            width: 260,
-            position: 'relative',
-          }}
-        >
-          <img
-            src="/Website%20-%20help%20arrow.png"
-            alt=""
-            style={{
-              position: 'absolute',
-              top: -150,
-              right: 0,
-              width: 'auto',
-              height: '100%',
-              maxWidth: 260,
-              pointerEvents: 'none',
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: '#555',
+                      fontSize: { xs: '1.5rem', md: '2rem' },
+                    }}
+                  >
+                    {s.subtitle}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+
+          {/* Right column: arrow + “HELP!” art */}
+          <Box
+            sx={{
+              flexShrink: 0,
+              width: 260,
+              position: 'relative',
             }}
-          />
-          <img
-            src="/Website%20-%20help.png"
-            alt="Help!"
-            style={{
-              position: 'absolute',
-              bottom: 20,
-              right: 0,
-              width: '80%',
-              maxWidth: 180,
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
-      </div>
+          >
+            <Box
+              component="img"
+              src="/Website%20-%20help%20arrow.png"
+              alt=""
+              sx={{
+                position: 'absolute',
+                top: -150,
+                right: 0,
+                width: 'auto',
+                height: '100%',
+                maxWidth: 260,
+                pointerEvents: 'none',
+              }}
+            />
+            <Box
+              component="img"
+              src="/Website%20-%20help.png"
+              alt="Help!"
+              sx={{
+                position: 'absolute',
+                bottom: 20,
+                right: 0,
+                width: '80%',
+                maxWidth: 180,
+                pointerEvents: 'none',
+              }}
+            />
+          </Box>
+        </Box>
+      </Box>
 
       {/* ─────────── Placeholder footer ─────────── */}
-      <div
-        style={{
+      <Box
+        sx={{
           width: '100%',
           backgroundColor: '#2a2a2a',
-          padding: 24,
-          marginTop: 60,
+          p: 3,
+          mt: '3.75rem',
           textAlign: 'center',
         }}
       >
         <Typography variant="body2" sx={{ color: '#aaa', fontSize: 14 }}>
           © 2025 Reboot • All rights reserved (placeholder text)
         </Typography>
-      </div>
+      </Box>
     </section>
   );
 }
-

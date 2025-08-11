@@ -1,18 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
-import React from 'react';
-import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
 import Image from 'next/image';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  TextField,
+  Typography,
+} from '@mui/material';
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -30,278 +32,220 @@ export default function LoginPage() {
     const email = emailRef.current?.value || '';
     const password = passRef.current?.value || '';
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) {
-      setError(error.message);
-    } else {
-      router.push('/dashboard');
-    }
+    if (error) setError(error.message);
+    else router.push('/dashboard');
   };
+
+  // capture autofill after mount
   useEffect(() => {
-    const grabValues = () => {
+    const grab = () => {
       setEmail(emailRef.current?.value || '');
       setPassword(passRef.current?.value || '');
     };
-  
-    grabValues();                 // 1 ️⃣ immediate try
-    const id = setTimeout(grabValues, 400); // 2 ️⃣ late autofill catch
-  
+    grab();
+    const id = setTimeout(grab, 400);
     return () => clearTimeout(id);
   }, []);
+
   return (
-    <div style={{ 
-      display: 'flex', 
-      minHeight: '100vh'
-    }}>
-      {/* Left Panel - Login Form (1/3 width) */}
-      <div style={{ 
-        flex: '1',
-        backgroundColor: '#5cbca8',
+    <Box
+      sx={{
         display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '40px'
-      }}>
-        <div style={{ 
-          width: '100%', 
-          maxWidth: '400px',
-          color: 'white'
-        }}>
-          <Typography 
-            variant="h6" 
-            style={{ 
-              marginBottom: '32px',
-              fontWeight: 'bold',
-              color: 'white',
-            }}
+        minHeight: '100vh',
+        flexDirection: { xs: 'column', md: 'row' }, // stack on mobile
+      }}
+    >
+      {/* Left Panel — Login (1/3) */}
+      <Box
+        sx={{
+          flex: { xs: 'unset', md: '1' },
+          backgroundColor: '#5cbca8',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: { xs: '1.5rem', md: '2.5rem' }, // 24 / 40px
+        }}
+      >
+        <Box sx={{ width: '100%', maxWidth: '40rem', color: '#fff' /* 400px */ }}>
+          <Typography
+            variant="h6"
+            sx={{ mb: '2rem', fontWeight: 700, color: '#fff', fontSize: '2.5rem' }}
           >
             Login information
           </Typography>
-          
+
           <TextField
             placeholder="Email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onInput={(e) => setEmail((e.target as HTMLInputElement).value)}  // ← catches autofill
+            onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
             fullWidth
             margin="normal"
-            autoComplete="email"            // best practice
-            inputRef={emailRef}             // ← new
-            slotProps={{ inputLabel: { shrink: !!email } }}   // shrink if there’s text
-
+            autoComplete="email"
+            inputRef={emailRef}
+            slotProps={{ inputLabel: { shrink: !!email } }}
             sx={{
+              mb: '1rem',
               '& .MuiInputBase-input': {
                 fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
-                fontWeight: 'normal',
-                fontSize: '1rem',
+                fontSize: '1.7rem',
               },
               '& .MuiOutlinedInput-root': {
-                backgroundColor: 'white',
-                '& fieldset': {
-                  borderColor: 'transparent',
-                },
-                '&:hover fieldset': {
-                  borderColor: 'transparent',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: 'transparent',
-                },
+                backgroundColor: '#fff',
+                '& fieldset': { borderColor: 'transparent' },
+                '&:hover fieldset': { borderColor: 'transparent' },
+                '&.Mui-focused fieldset': { borderColor: 'transparent' },
               },
-              '& .MuiInputLabel-root': {
-                color: '#666',
-              },
-              marginBottom: '16px'
+              '& .MuiInputLabel-root': { color: '#666' },
             }}
           />
-          
+
           <TextField
             placeholder="Password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onInput={(e) => setPassword((e.target as HTMLInputElement).value)} // ← catches autofill
+            onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
             fullWidth
             margin="normal"
-            autoComplete="current-password"  // best practice
-            inputRef={passRef}              // ← new
-            slotProps={{ inputLabel: { shrink: !!email } }}   // shrink if there’s text
+            autoComplete="current-password"
+            inputRef={passRef}
+            slotProps={{ inputLabel: { shrink: !!password } }}
             sx={{
-              
+              mb: '1.5rem',
               '& .MuiOutlinedInput-root': {
-                backgroundColor: 'white',
-                '& fieldset': {
-                  borderColor: 'transparent',
-                },
-                '&:hover fieldset': {
-                  borderColor: 'transparent',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: 'transparent',
-                },
+                fontSize: '1.7rem',
+                backgroundColor: '#fff',
+                '& fieldset': { borderColor: 'transparent' },
+                '&:hover fieldset': { borderColor: 'transparent' },
+                '&.Mui-focused fieldset': { borderColor: 'transparent' },
               },
-              '& .MuiInputLabel-root': {
-                color: '#666',
-              },
-              marginBottom: '16px'
+              '& .MuiInputLabel-root': { color: '#666' },
             }}
           />
-          
-          <div style={{ 
-            textAlign: 'right', 
-            marginBottom: '32px'
-          }}>
+
+          <Box sx={{ textAlign: 'right', mb: '2rem' }}>
             <Button
               variant="text"
               onClick={() => setShowForgotModal(true)}
               sx={{
-                typography: 'h6',      // ← grabs theme.typography.h4 (font-size, weight, line-height…)
                 textTransform: 'none',
                 textDecoration: 'underline',
-                fontWeight: 'normal',
-                color: 'white',
-              }}
-              style={{ 
-                color: 'white',
-                textTransform: 'none',
-                textDecoration: 'underline'
+                color: '#fff',
+                fontSize: '1rem',
               }}
             >
               Forgot Password?
             </Button>
-          </div>
-          
+          </Box>
+
           <Button
             variant="contained"
             color="secondary"
             onClick={handleLogin}
             fullWidth
             sx={{
-              typography: 'h4',      // ← grabs theme.typography.h4 (font-size, weight, line-height…)
               textTransform: 'none',
-              color: 'white',
-            }}
-            style={{ 
-              padding: '12px',
-              fontSize: '20px',
-              fontWeight: 'bold'
+              color: '#fff',
+              py: '0.875rem',       // ~14px for comfy tap target at SCALE
+              fontSize: '2rem',  // 20px
+              fontWeight: 700,
+              borderRadius: '0.5rem',
             }}
           >
             Sign In
           </Button>
-          
+
           {error && (
-            <Typography 
-              color="error" 
-              align="center" 
-              style={{ 
-                marginTop: '16px',
-                color: '#ffebee'
-              }}
+            <Typography
+              align="center"
+              sx={{ mt: '1rem', color: '#ffebee', fontSize: '0.95rem' }}
             >
               {error}
             </Typography>
           )}
-        </div>
-      </div>
+        </Box>
+      </Box>
 
-      {/* Right Panel – Branding (2/3 width) */}
+      {/* Right Panel — Branding (2/3) */}
 <div
   style={{
     flex: 2,
     backgroundColor: '#2a2a2a',
-    position: 'relative',           // gives a reference for absolute children
+    position: 'relative',
   }}
 >
-  {/* Logo */}
+  {/* Main Content Centered */}
   <div
     style={{
       position: 'absolute',
-      top: 40,                      // 40 px down from the top edge
-      left: '50%',                  // halfway across
-      transform: 'translateX(-50%)',// pull back by half its width → horizontal center
-      width: 300,
-      height: 100,
-    }}
-  >
-    <Image
-      src="/Reboot Coaching Logo - White.png"
-      alt="Real Estate Reboot logo"
-      fill
-      style={{ objectFit: 'contain' }}
-    />
-  </div>
-
-  {/* Main Title */}
-  <div
-    style={{
-      position: 'absolute',
-      top: '50%',
+      top: '45%', // move up/down here
       left: '50%',
-      transform: 'translate(-50%, -50%)', // perfect center
+      transform: 'translate(-50%, -50%)',
       display: 'flex',
       flexDirection: 'column',
-      alignItems: 'center',
+      alignItems: 'center', // align text start with logo start
       textAlign: 'center',
     }}
   >
-    <Typography
-      variant="h1"
-      style={{
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: '90px',           // bumped up from 48 px
-        lineHeight: 1.15,
-        marginBottom: '16px',
-      }}
-    >
-      REAL ESTATE
-    </Typography>
-    <Typography
-      variant="h1"
-      style={{
-        color: 'white',
-        fontWeight: 'bold',
-        fontSize: '90px',
-        lineHeight: 1.15,
-        marginBottom: '16px',
-      }}
-    >
-      REBOOT
-    </Typography>
+    {/* Logo above text */}
+    <div style={{ width: 600, height: 240, marginBottom: 24 }}>
+      <Image
+        src="/Reboot Logo - Color.png"
+        alt="Reboot logo"
+        fill
+        style={{ objectFit: 'contain' }}
+        priority
+      />
+    </div>
+
+    {/* Member Hub title */}
     <Typography
       variant="h2"
       style={{
         color: '#5cbca8',
         fontWeight: 'bold',
-        fontSize: '40px',           // larger subtitle
+        fontSize: '9rem',
+        marginLeft: '1rem'
       }}
     >
-      MEMBER HUB
+      MEMBER&apos;S HUB
     </Typography>
   </div>
 </div>
 
 
       {/* Forgot Password Modal */}
-      <Dialog open={showForgotModal} onClose={() => {
-        setShowForgotModal(false);
-        setForgotEmail('');
-        setForgotError(null);
-        setForgotMessage(null);
-      }}>
+      <Dialog
+        open={showForgotModal}
+        onClose={() => {
+          setShowForgotModal(false);
+          setForgotEmail('');
+          setForgotError(null);
+          setForgotMessage(null);
+        }}
+      >
         <DialogTitle>Reset Password</DialogTitle>
         <DialogContent>
           <TextField
             label="Enter your email"
             value={forgotEmail}
-            onChange={e => setForgotEmail(e.target.value)}
+            onChange={(e) => setForgotEmail(e.target.value)}
             fullWidth
             margin="normal"
             disabled={forgotLoading}
           />
-          {forgotError && <Typography color="error" style={{ marginTop: 8 }}>{forgotError}</Typography>}
-          {forgotMessage && <Typography color="success.main" style={{ marginTop: 8 }}>{forgotMessage}</Typography>}
+          {forgotError && (
+            <Typography color="error" sx={{ mt: 1 }}>
+              {forgotError}
+            </Typography>
+          )}
+          {forgotMessage && (
+            <Typography color="success.main" sx={{ mt: 1 }}>
+              {forgotMessage}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
           <Button
@@ -309,14 +253,12 @@ export default function LoginPage() {
               setForgotLoading(true);
               setForgotError(null);
               setForgotMessage(null);
-              const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-                redirectTo: 'https://reboot-site.vercel.app/reset-password',
-              });
-              if (error) {
-                setForgotError(error.message);
-              } else {
-                setForgotMessage('If this email exists, a reset link has been sent.');
-              }
+              const { error } = await supabase.auth.resetPasswordForEmail(
+                forgotEmail,
+                { redirectTo: 'https://reboot-site.vercel.app/reset-password' }
+              );
+              if (error) setForgotError(error.message);
+              else setForgotMessage('If this email exists, a reset link has been sent.');
               setForgotLoading(false);
             }}
             disabled={forgotLoading || !forgotEmail}
@@ -325,16 +267,21 @@ export default function LoginPage() {
           >
             {forgotLoading ? 'Sending...' : 'Send Email'}
           </Button>
-          <Button onClick={() => {
-            setShowForgotModal(false);
-            setForgotEmail('');
-            setForgotError(null);
-            setForgotMessage(null);
-          }} disabled={forgotLoading} color="secondary" variant="outlined">
+          <Button
+            onClick={() => {
+              setShowForgotModal(false);
+              setForgotEmail('');
+              setForgotError(null);
+              setForgotMessage(null);
+            }}
+            disabled={forgotLoading}
+            color="secondary"
+            variant="outlined"
+          >
             Cancel
           </Button>
         </DialogActions>
       </Dialog>
-    </div>
+    </Box>
   );
 }

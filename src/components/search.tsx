@@ -7,25 +7,25 @@ export default function Search() {
     <section style={{ width: '100%', scrollSnapAlign: 'start' }}>
       {/* ─────────── Hero banner ─────────── */}
       <Box
-  sx={{
-    width: '100%',
-    height: { xs: 300, md: 400 },
-    backgroundImage: "url('/search-hero.png')",
-    backgroundSize: 'cover',      // scale until the box is filled
-    backgroundPosition: 'center', // crop top and bototm equally
-    backgroundRepeat: 'no-repeat',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    px: 2,
-  }}
->
+        sx={{
+          width: '100%',
+          height: { xs: '18.75rem', md: '25rem' }, // 300 / 400px
+          backgroundImage: "url('/search-hero.png')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          px: 2,
+        }}
+      >
         <Typography
           variant="h2"
           sx={{
             color: '#fff',
             fontWeight: 800,
-            fontSize: { xs: '4rem', md: '8rem' },
+            fontSize: { xs: 'clamp(2.5rem, 10vw, 4rem)', md: 'clamp(4rem, 6vw, 8rem)' },
             textAlign: 'center',
           }}
         >
@@ -50,16 +50,16 @@ export default function Search() {
             color: '#fff',
             fontWeight: 700,
             mb: 3,
-            fontSize: { xs: '1rem', md: '1.25rem' },
+            fontSize: { xs: '1.75rem', md: '2.5rem' }, // bigger for readability
           }}
         >
-          Type any keyword to find related reboot resources, tools &amp; Training
+          Type any keyword to find related reboot resources, tools &amp; training
         </Typography>
 
         {/* Search bar mock */}
         <Box
           sx={{
-            maxWidth: 800,
+            maxWidth: '90rem', // 800px
             mx: 'auto',
             position: 'relative',
           }}
@@ -69,13 +69,13 @@ export default function Search() {
               display: 'flex',
               alignItems: 'center',
               bgcolor: '#fff',
-              borderRadius: 50,
-              px: 3,
-              py: { xs: 1.5, md: 2 },
-              boxShadow: '0 3px 8px rgba(0,0,0,0.15)',
+              borderRadius: '3.125rem', // 50px
+              px: '1.5rem', // 24px
+              py: { xs: '0.75rem', md: '1rem' }, // 12 / 16px
+              boxShadow: '0 .1875rem .5rem rgba(0,0,0,0.15)', // 0 3px 8px
             }}
           >
-            <span style={{ fontSize: 24, marginRight: 12, color: '#666' }}>🔍</span>
+            <span style={{ fontSize: '2rem', marginRight: '0.75rem', color: '#666' }}>🔍</span>
             <input
               disabled
               placeholder="Search…"
@@ -83,7 +83,7 @@ export default function Search() {
                 flex: 1,
                 border: 'none',
                 outline: 'none',
-                fontSize: 18,
+                fontSize: '1.5rem', // 18px
                 background: 'transparent',
               }}
             />
@@ -95,54 +95,32 @@ export default function Search() {
             alt="Arrow"
             sx={{
               position: 'absolute',
-              top: -50,
-              right: -80,
-              height: 100,
+              top: '-3.125rem', // 50px
+              right: '-5rem', // 80px
+              height: '6.25rem', // 100px
               pointerEvents: 'none',
             }}
           />
-
         </Box>
 
-        {/* Results placeholder list */}
+        {/* Placeholder box for results */}
         <Box
           sx={{
-            maxWidth: 800,
+            maxWidth: '90rem', // 800px
             mx: 'auto',
             mt: 4,
             bgcolor: '#fff',
             borderRadius: 3,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-            maxHeight: 380,
-            overflowY: 'auto',
+            boxShadow: '0 .25rem .75rem rgba(0,0,0,0.2)',
+            height: '36rem', // 380px → original height
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
-          {[
-            'Hiring Your First Assistant',
-            'Second Part-Time Hire',
-            'Part-Time Assistant Hired',
-            'Ep 4 – Hiring a new Assistant [Coaching Replay]',
-            'Ep 9 – Hiring an Assistant & Choosing between two candidates [Coaching Replay]',
-            'Ep 12 – Hiring an Assistant – Should you hire full time & Should you overpay [Coaching Replay]',
-          ].map((text, i) => (
-            <Box
-              key={i}
-              sx={{
-                px: 2.5,
-                py: 1.5,
-                borderBottom: i === 5 ? 'none' : '1px solid #e0e0e0',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                bgcolor: i % 2 ? '#f7f7f7' : '#eaeaea',
-              }}
-            >
-              <span style={{ fontSize: 20 }}>📄</span>
-              <Typography sx={{ fontWeight: 500, fontSize: 15, textAlign: 'left' }}>
-                {text}
-              </Typography>
-            </Box>
-          ))}
+          <Typography sx={{ fontWeight: 600, fontSize: '5rem', color: '#333' }}>
+            Coming soon…
+          </Typography>
         </Box>
       </Box>
     </section>
