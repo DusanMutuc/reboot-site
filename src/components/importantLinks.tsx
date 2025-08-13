@@ -1,13 +1,15 @@
 'use client';
 
-import { Box, Link as MuiLink, Typography } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import { Box, Link as MuiLink, Typography, Alert } from '@mui/material';
+import { supabase } from '@/lib/supabaseClient';
 
 type LinkItem = { label: string; href?: string };
 
 const links: LinkItem[] = [
   { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://agentfromwithin.upcoach.com/' },
   { label: 'REBOOT CALENDAR', href: 'https://www.addevent.com/calendar/ez616853' },
-  { label: 'MOMENTUM COACH \nBOOKING LINK', href: 'https://api.leadconnectorhq.com/widget/bookings/assistant_on' },
+  { label: 'MOMENTUM COACH \nBOOKING LINK' },
   { label: 'REBOOT COACHING \nZOOM LINK', href: 'https://zoom.us/j/93233351653' },
   { label: 'ASSISTANT WORKROOM \nZOOM LINK', href: 'https://zoom.us/j/99652221215' },
   { label: 'MOMENTUM COACH 15 MIN CALL LINK' },
@@ -17,14 +19,51 @@ const links: LinkItem[] = [
   { label: 'FIND A REBOOT AGENT TO REFER YOUR CLIENTS' },
 ];
 
+const BOOKING_LABEL = 'MOMENTUM COACH \nBOOKING LINK';
+const CALL15_LABEL  = 'MOMENTUM COACH 15 MIN CALL LINK';
+const bookingIdx = links.findIndex(l => l.label === BOOKING_LABEL);
+const call15Idx  = links.findIndex(l => l.label === CALL15_LABEL);
+
 const iconNumbers = [5, 6, 7, 8, 8, 9, 10, 11, 12, 13];
 
-// px → rem conversions (16px base):
-// 80 → 5rem, 960 → 60rem, 110 → 6.875rem, 100 → 6.25rem, 120 → 7.5rem
-// 72 → 4.5rem, 32 → 2rem, 16 → 1rem, 60 → 3.75rem, 90 → 5.625rem
-// border 12px → 0.75rem, radius 40px → 2.5rem, shadow (4px/10px) → .25rem/.625rem
+function normalizeUrl(raw?: string | null): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  if (/^https?:\/\//i.test(t)) return t;
+  if (/^[\w.-]+\.[a-z]{2,}([/:].*)?$/i.test(t)) return `https://${t}`;
+  return t;
+}
 
 export default function ImportantLinks() {
+  const [m2Url, setM2Url] = useState<string | null>(null);
+  const [call15Url, setCall15Url] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      const { data } = await supabase.rpc('get_my_coach_links');
+      if (!mounted) return;
+
+      const row = Array.isArray(data) ? data[0] : data;
+      const m2 = normalizeUrl(row?.m2_booking_url ?? null);
+      const c15 = normalizeUrl(row?.call15_url ?? null);
+
+      setM2Url(m2);
+      setCall15Url(c15);
+    })();
+
+    return () => { mounted = false; };
+  }, []);
+
+  const resolvedLinks = useMemo(() => {
+    const out = links.map((item) => ({ ...item }));
+    if (bookingIdx >= 0) out[bookingIdx].href = m2Url ?? out[bookingIdx].href;
+    if (call15Idx  >= 0) out[call15Idx].href  = call15Url ?? out[call15Idx].href;
+    return out;
+  }, [m2Url, call15Url]);
+
   return (
     <section
       style={{
@@ -33,24 +72,21 @@ export default function ImportantLinks() {
         width: '100%',
       }}
     >
-      {/* ── Section title ──────────────────────────────── */}
       <Typography
         variant="h3"
         align="center"
         sx={{
           color: '#fff',
           fontWeight: 800,
-          pt: 6, // theme spacing-friendly
+          pt: 6,
           mb: 6,
           letterSpacing: 1.5,
-          // responsive, rem-based
           fontSize: { xs: 'clamp(2.25rem, 8vw, 4rem)', md: 'clamp(4rem, 6vw, 8rem)' },
         }}
       >
         COACHING LINKS
       </Typography>
 
-      {/* ── Links grid (CSS Grid) ──────────────────────── */}
       <Box
         sx={{
           maxWidth: '60rem',
@@ -61,11 +97,13 @@ export default function ImportantLinks() {
           gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
         }}
       >
-        {links.map(({ label, href }, i) => {
+        {resolvedLinks.map(({ label, href }, i) => {
           const isRight = i % 2 === 1;
+          const clickable = Boolean(href);
+
           return (
             <Box
-              key={label}
+              key={`${i}-${label}`}
               sx={{
                 display: 'flex',
                 flexDirection: isRight ? 'row-reverse' : 'row',
@@ -77,16 +115,14 @@ export default function ImportantLinks() {
                 borderRadius: '2.5rem',
                 border: '.75rem solid #d7d7d7',
                 boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
-                px: isRight
-                  ? '4.5rem 1rem 1rem 2rem' // R-heavy padding
-                  : '2rem 1rem 1rem 4.5rem', // L-heavy padding
+                px: isRight ? '4.5rem 1rem 1rem 2rem' : '2rem 1rem 1rem 4.5rem',
                 py: 1,
                 position: 'relative',
                 transition: 'transform .15s',
-                '&:hover': { transform: href ? 'scale(1.03)' : 'none' },
+                '&:hover': { transform: clickable ? 'scale(1.03)' : 'none' },
+                opacity: 1
               }}
             >
-              {/* icon */}
               <Box
                 component="img"
                 src={`/${iconNumbers[i]}.svg`}
@@ -102,8 +138,7 @@ export default function ImportantLinks() {
                 }}
               />
 
-              {/* label */}
-              {href ? (
+              {clickable ? (
                 <MuiLink
                   href={href}
                   target="_blank"
@@ -115,7 +150,7 @@ export default function ImportantLinks() {
                     px: 5,
                     flex: 1,
                     textAlign: 'center',
-                    fontSize: { xs: '1rem', md: '1.4rem' }, // rem-based already
+                    fontSize: { xs: '1rem', md: '1.4rem' },
                   }}
                 >
                   {label}
@@ -139,46 +174,41 @@ export default function ImportantLinks() {
         })}
       </Box>
 
-      {/* ── Refer-an-agent CTA ─────────────────────────── */}
       <Box sx={{ mt: 4, mb: 3, textAlign: 'center' }}>
         <Box
           sx={{
             display: 'flex',
-            flexDirection: 'row-reverse', // icon on right
+            flexDirection: 'row-reverse',
             alignItems: 'center',
             gap: 2,
-            height: '6.875rem', // same height as others
+            height: '6.875rem',
             bgcolor: '#fff',
             whiteSpace: 'pre-line',
             borderRadius: '2.5rem',
             border: '.75rem solid #d7d7d7',
             boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
-            px: '2rem 1rem 1rem 4.5rem', // same as "isRight" padding
+            px: '2rem 1rem 1rem 4.5rem',
             py: 1,
             position: 'relative',
             transition: 'transform .15s',
             '&:hover': { transform: 'scale(1.03)' },
-            maxWidth: '35rem', // match grid container width
+            maxWidth: '35rem',
             mx: 'auto',
           }}
         >
-          {/* icon */}
           <Box
             component="img"
             src="/14.svg"
             alt=""
             sx={{
-              width: '8rem', // match others
+              width: '8rem',
               height: '8rem',
-              flexShrink: 0,
               position: 'absolute',
-              marginRight: '-4.5rem', // match "isRight" margin
+              marginRight: '-4.5rem',
               marginTop: '-1rem',
               borderRadius: '50%',
             }}
           />
-
-          {/* label */}
           <Typography
             sx={{
               fontWeight: 'bolder',

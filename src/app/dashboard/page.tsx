@@ -1,55 +1,63 @@
 'use client';
 
-import { useLookerLink } from '@/hooks/useLookerLink';
+import { useEffect, useState } from 'react';
+import { Box } from '@mui/material';
+import TopNav from '@/components/topNav';
+import ImportantLinks from '@/components/importantLinks';
+import PodcastSection from '@/components/podcastSection';
+import Search from '@/components/search';
+import DashboardEmbed from '@/components/dashboardEmbed';
+import HelpSteps from '@/components/helpSteps';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
-import TopNav         from '@/components/topNav';
-import DashboardEmbed from '@/components/dashboardEmbed';
-import EventsCalendar from '@/components/eventsCalendar';
-import NewsPanel from '@/components/newsPanel';
-import PodcastSection from '@/components/podcastSection';
-import ImportantLinks from '@/components/importantLinks';
-import Search from '@/components/search';
-import HelpSteps from '@/components/helpSteps';
-import { Toolbar } from '@mui/material';
+import { useLookerLink } from '@/hooks/useLookerLink';
 
 export default function DashboardPage() {
   const { lookerLink, loading, error } = useLookerLink();
+  const [navH, setNavH] = useState(0);
+
+  useEffect(() => {
+    const el = document.getElementById('appbar');
+    if (!el) return;
+    const update = () => setNavH(el.offsetHeight || 0);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    window.addEventListener('resize', update);
+    return () => { ro.disconnect(); window.removeEventListener('resize', update); };
+  }, []);
 
   if (loading)     return <Loading />;
   if (error)       return <ErrorMessage message={error} />;
   if (!lookerLink) return <ErrorMessage message="No Looker Studio link found for your account." />;
+
+  const sectionOffsetStyle = { scrollMarginTop: `${navH}px` } as const;
+
   return (
     <>
-      {/* sticky nav bar */}
       <TopNav />
-      <Toolbar /> 
-      {/* each block wrapped in a <section id=""> */}
+      {/* Spacer exactly equal to the current nav height */}
+      <Box sx={{ height: navH }} />
 
-      <section id="links">
+      <section id="links" style={sectionOffsetStyle}>
         <ImportantLinks />
       </section>
-      
-      <section id="podcast">
+
+      <section id="podcast" style={sectionOffsetStyle}>
         <PodcastSection />
       </section>
-      
-      <section id="library">
+
+      <section id="library" style={sectionOffsetStyle}>
         <Search />
       </section>
-      
-      <section id="dashboard">
+
+      <section id="dashboard" style={sectionOffsetStyle}>
         <DashboardEmbed src={lookerLink!} />
       </section>
-      
-      <section id="help">
+
+      <section id="help" style={sectionOffsetStyle}>
         <HelpSteps />
       </section>
-
-
-
-
     </>
   );
-
 }

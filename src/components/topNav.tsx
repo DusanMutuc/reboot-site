@@ -28,95 +28,105 @@ export default function TopNav() {
   }, []);
 
   return (
-    <AppBar position="fixed" elevation={0} sx={{ bgcolor: '#000', py: 2, borderRadius: 0, left: 0, right: 0, width: '100%' }}>
+    <AppBar
+      id="appbar"
+      position="fixed"
+      elevation={0}
+      sx={{ bgcolor: '#000', py: 2, borderRadius: 0, left: 0, right: 0, width: '100%' }}
+    >
       <Toolbar
         disableGutters
         sx={{
           px: 3,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'relative', // for absolute centering
-          gap: 2,
+          justifyContent: 'center', // center the shrinking inner container
         }}
       >
-        {/* Left: title */}
-        <Typography
-          variant="h6"
-          sx={(theme) => ({
-            fontWeight: 900,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            whiteSpace: 'nowrap',
-            color: theme.palette.turquoise?.main || '#5cbca8',
-            mr: 2,
-            fontSize: { xs: '1.1rem', sm: '2rem', md: '3rem' },
-          })}
-        >
-          REBOOT MEMBER&apos;S HUB
-        </Typography>
-
-        {/* Middle: nav buttons — absolute centered, one row, no scroll */}
+        {/* Shrinking inner container: width equals the buttons' natural width */}
         <Box
           sx={{
-            position: 'absolute',
-            left: '50%',
-            transform: 'translateX(-50%)',
             display: 'inline-flex',
-            flexWrap: 'nowrap',
-            whiteSpace: 'nowrap',
-            alignItems: 'center',
-
-            // progressively tighter layout so it fits one line
-            gap: { xs: 2, sm: 3, md: 4, lg: 5 },
-
-            // keep clear of left/right areas (virtual gutters)
-            // tweak these if your title/logo change size
-            pl: { xs: 6, sm: 8, md: 10, lg: 12 },
-            pr: { xs: 6, sm: 8, md: 10, lg: 12 },
-            maxWidth: '100%',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 2,
+            width: 'max-content', // <-- key: shrink to content (the buttons row)
           }}
         >
-          {SECTIONS.map(({ id, label }) => {
-            const isActive = active === id;
-            return (
-              <Link key={id} href={`#${id}`} passHref>
-                <Button
-                  disableElevation
-                  sx={{
-                    px: { xs: 2.25, sm: 2.75, md: 3.5, lg: 4 },
-                    py: { xs: 1.2,  sm: 1.3,  md: 1.6,  lg: 1.8 },
-                    fontSize: { xs: '1.05rem', sm: '1.2rem', md: '1.4rem', lg: '1.6rem' },
-                    lineHeight: 1.2,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    whiteSpace: 'nowrap',
-                    fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
-                    bgcolor: isActive ? '#000 !important' : '#f1f1f1 !important',
-                    color: isActive ? '#fff !important' : '#000 !important',
-                    boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
-                    transition: 'all .15s',
-                    '&:hover': {
-                      bgcolor: isActive ? '#000 !important' : '#d0d0d0',
-                      color: isActive ? '#fff !important' : '#000',
-                      transform: 'translateY(-2px)',
-                    },
-                  }}
-                >
-                  {label}
-                </Button>
-              </Link>
-            );
-          })}
-        </Box>
+          {/* Top row: spans same width as buttons; title left, logo right */}
+          <Box
+            sx={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              width: '100%',
+              // optional small side padding to visually match button paddings:
+              // px: { xs: 1, sm: 1.5, md: 2 },
+            }}
+          >
+            <Typography
+              variant="h6"
+              sx={(theme) => ({
+                fontWeight: 900,
+                letterSpacing: 1,
+                textTransform: 'uppercase',
+                whiteSpace: 'nowrap',
+                color: theme.palette.turquoise?.main || '#5cbca8',
+                fontSize: { xs: '1.1rem', sm: '2rem', md: '3rem' },
+              })}
+            >
+              REBOOT MEMBER&apos;S HUB
+            </Typography>
 
-        {/* Right: logo */}
-        <Box
-          component="img"
-          src="/Reboot Logo - Color.png"
-          alt="Reboot logo"
-          sx={{ height: { xs: 28, sm: 36, md: 44 }, width: 'auto', ml: 2, display: 'block', flexShrink: 0 }}
-        />
+            <Box
+              component="img"
+              src="/Reboot Logo - Color.png"
+              alt="Reboot logo"
+              sx={{ height: { xs: 33, sm: 39, md: 45 }, width: 'auto' }}
+            />
+          </Box>
+
+          {/* Buttons row: centered with fixed gap; defines the container width */}
+          <Box
+            sx={{
+              display: 'inline-flex',
+              gap: { xs: 2, sm: 3, md: 4, lg: 5 },
+              whiteSpace: 'nowrap',
+              alignSelf: 'center',
+            }}
+          >
+            {SECTIONS.map(({ id, label }) => {
+              const isActive = active === id;
+              return (
+                <Link key={id} href={`#${id}`} passHref>
+                  <Button
+                    disableElevation
+                    sx={{
+                      px: { xs: 2.25, sm: 2.75, md: 3.5, lg: 4 },
+                      py: { xs: 1.2, sm: 1.3, md: 1.6, lg: 1.8 },
+                      fontSize: { xs: '1.05rem', sm: '1.2rem', md: '1.4rem', lg: '1.6rem' },
+                      lineHeight: 1.2,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                      fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
+                      bgcolor: isActive ? '#000 !important' : '#f1f1f1 !important',
+                      color: isActive ? '#fff !important' : '#000 !important',
+                      boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+                      transition: 'all .15s',
+                      '&:hover': {
+                        bgcolor: isActive ? '#000 !important' : '#d0d0d0',
+                        color: isActive ? '#fff !important' : '#000',
+                        transform: 'translateY(-2px)',
+                      },
+                    }}
+                  >
+                    {label}
+                  </Button>
+                </Link>
+              );
+            })}
+          </Box>
+        </Box>
       </Toolbar>
     </AppBar>
   );
