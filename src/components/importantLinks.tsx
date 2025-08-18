@@ -41,19 +41,36 @@ export default function ImportantLinks() {
 
   useEffect(() => {
     let mounted = true;
-
+  
     (async () => {
-      const { data } = await supabase.rpc('get_my_coach_links');
+  
+      const { data, error } = await supabase.rpc('get_my_coach_links');
+  
       if (!mounted) return;
-
+  
+      // Log the raw response for debugging
+      console.log('[coach links] rpc data:', data);
+      console.log('[coach links] rpc error:', error);
+  
+      if (error) {
+        console.error('get_my_coach_links error:', error);
+        setM2Url(null);
+        setCall15Url(null);
+        return;
+      }
+  
       const row = Array.isArray(data) ? data[0] : data;
-      const m2 = normalizeUrl(row?.m2_booking_url ?? null);
+      console.log('[coach links] chosen row:', row);
+  
+      const m2  = normalizeUrl(row?.m2_booking_url ?? null);
       const c15 = normalizeUrl(row?.call15_url ?? null);
-
+  
+      console.log('[coach links] normalized:', { m2, c15 });
+  
       setM2Url(m2);
       setCall15Url(c15);
     })();
-
+  
     return () => { mounted = false; };
   }, []);
 
