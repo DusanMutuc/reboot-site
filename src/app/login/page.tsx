@@ -13,18 +13,23 @@ import {
   DialogTitle,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 
 export default function LoginPage() {
   const router = useRouter();
+  const isMdUp = useMediaQuery('(min-width:900px)');
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotMessage, setForgotMessage] = useState<string | null>(null);
   const [forgotError, setForgotError] = useState<string | null>(null);
+
   const emailRef = useRef<HTMLInputElement>(null);
   const passRef  = useRef<HTMLInputElement>(null);
 
@@ -34,20 +39,13 @@ export default function LoginPage() {
     const email = (emailRef.current?.value || '').trim();
     const password = passRef.current?.value || '';
 
-    console.log('🔐 Starting login process for:', email);
-
-    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    const { data: authData, error: signInError } =
+      await supabase.auth.signInWithPassword({ email, password });
 
     if (signInError) {
-      console.error('❌ Sign-in error:', signInError);
       setError(signInError.message);
       return;
     }
-
-    console.log('✅ Sign-in successful, checking admin status...');
 
     const user = authData.user;
     if (!user) {
@@ -60,31 +58,270 @@ export default function LoginPage() {
         .from('user_roles')
         .select('user_id, role_id')
         .eq('user_id', user.id)
-        .eq('role_id', 1) // admin
+        .eq('role_id', 1)
         .maybeSingle();
 
-      console.log('📊 user_roles query result:', { data, error });
-
       if (error) {
-        console.error('❌ Admin check error:', error);
-        router.push('/dashboard'); // fallback
+        router.push('/dashboard');
         return;
       }
 
-      const isAdmin = !!data;
-      const redirectPath = isAdmin ? '/admin' : '/dashboard';
-
-      console.log(`🚀 Redirecting to: ${redirectPath} (isAdmin: ${isAdmin})`);
-      router.push(redirectPath);
-
+      router.push(data ? '/admin' : '/dashboard');
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
-      console.error('❌ Admin check failed:', e);
       setError(`Admin check failed: ${message}`);
-      router.push('/dashboard'); // Safe fallback
+      router.push('/dashboard');
     }
   };
 
+  /* ──────────────────────────
+     MOBILE (hero + teal form)
+     ────────────────────────── */
+  if (!isMdUp) {
+    return (
+      <Box sx={{ minHeight: '100vh', bgcolor: '#2a2a2a', display: 'flex', flexDirection: 'column' }}>
+        {/* Dark hero with logo + title */}
+        <Box
+          sx={{
+            flex: '0 0 70vh',
+            minHeight: 300,
+            maxHeight: 420,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            px: 2,
+            textAlign: 'center',
+          }}
+        >
+          <Box sx={{ position: 'relative', width: 260, height: 80, mb: 1 }}>
+            <Image
+              src="/Reboot Logo - Color.png"
+              alt="Reboot logo"
+              fill
+              style={{ objectFit: 'contain' }}
+              priority
+            />
+          </Box>
+
+          {/* REBOOT MEMBER'S HUB text in teal */}
+          <Typography
+            sx={{
+              color: '#5cbca8',
+              fontWeight: 800,
+              letterSpacing: 0.5,
+              textTransform: 'uppercase',
+              fontSize: 'clamp(1.5rem, 6.5vw, 2.25rem)',
+            }}
+          >
+            REBOOT MEMBER&apos;S HUB
+          </Typography>
+        </Box>
+
+        {/* Teal form section (inputs are individual white fields) */}
+        <Box
+          sx={{
+            flex: '1 1 auto',
+            bgcolor: '#5cbca8',
+            borderTopLeftRadius: '1.25rem',
+            borderTopRightRadius: '1.25rem',
+            mt: -12,                // gentle overlap into hero
+            pt: 3,
+            px: 2,
+            pb: 'max(1.25rem, env(safe-area-inset-bottom))',
+            boxShadow: '0 -8px 24px rgba(0,0,0,0.18)',
+          }}
+        >
+          <Box sx={{ maxWidth: 480, mx: 'auto' }}>
+            <Typography
+              variant="h6"
+              sx={{
+                color: '#fff',
+                fontWeight: 700,
+                mb: 2,
+                textAlign: 'center',
+                fontSize: '1.5rem',
+              }}
+            >
+              Login information
+            </Typography>
+
+            <TextField
+              placeholder="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
+              fullWidth
+              margin="normal"
+              autoComplete="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              inputRef={emailRef}
+              slotProps={{ inputLabel: { shrink: !!email } }}
+              sx={{
+                mb: '1rem',
+                '& .MuiInputBase-input': {
+                  fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+                  fontSize: '1rem',
+                },
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: '#fff',                 // ← individual white field
+                  borderRadius: '0.75rem',
+                  boxShadow: '0 .125rem .375rem rgba(0,0,0,0.15)',
+                  '& fieldset': { borderColor: 'transparent' },
+                  '&:hover fieldset': { borderColor: 'transparent' },
+                  '&.Mui-focused fieldset': { borderColor: 'transparent' },
+                },
+              }}
+            />
+
+            <TextField
+              placeholder="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
+              fullWidth
+              margin="normal"
+              autoComplete="current-password"
+              inputRef={passRef}
+              slotProps={{ inputLabel: { shrink: !!password } }}
+              sx={{
+                mb: 1.5,
+                '& .MuiOutlinedInput-root': {
+                  fontSize: '1rem',
+                  backgroundColor: '#fff',                 // ← individual white field
+                  borderRadius: '0.75rem',
+                  boxShadow: '0 .125rem .375rem rgba(0,0,0,0.15)',
+                  '& fieldset': { borderColor: 'transparent' },
+                  '&:hover fieldset': { borderColor: 'transparent' },
+                  '&.Mui-focused fieldset': { borderColor: 'transparent' },
+                },
+              }}
+            />
+
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+              <span /> {/* spacer to keep link at right */}
+              <Button
+                variant="text"
+                onClick={() => setShowForgotModal(true)}
+                sx={{
+                  p: 0,
+                  textTransform: 'none',
+                  textDecoration: 'underline',
+                  color: '#fff',       // on teal
+                  fontSize: '0.95rem',
+                }}
+              >
+                Forgot Password?
+              </Button>
+            </Box>
+
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleLogin}
+              fullWidth
+              sx={{
+                textTransform: 'none',
+                color: '#fff',
+                py: 1,
+                fontSize: '1.125rem',
+                fontWeight: 700,
+                borderRadius: '0.75rem',
+                boxShadow: '0 .1875rem .5rem rgba(0,0,0,0.25)',
+              }}
+            >
+              Sign In
+            </Button>
+
+            {error && (
+              <Typography align="center" sx={{ mt: 1, color: '#ffebee', fontSize: '0.95rem' }}>
+                {error}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+
+        {/* Forgot Password Modal (full-screen on phones) */}
+        <Dialog
+          open={showForgotModal}
+          fullScreen
+          onClose={() => {
+            setShowForgotModal(false);
+            setForgotEmail('');
+            setForgotError(null);
+            setForgotMessage(null);
+          }}
+        >
+          <DialogTitle>Reset Password</DialogTitle>
+          <DialogContent>
+            <TextField
+              label="Enter your email"
+              value={forgotEmail}
+              onChange={(e) => setForgotEmail(e.target.value)}
+              fullWidth
+              margin="normal"
+              disabled={forgotLoading}
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+            />
+            {forgotError && (
+              <Typography color="error" sx={{ mt: 1 }}>
+                {forgotError}
+              </Typography>
+            )}
+            {forgotMessage && (
+              <Typography color="success.main" sx={{ mt: 1 }}>
+                {forgotMessage}
+              </Typography>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={async () => {
+                setForgotLoading(true);
+                setForgotError(null);
+                setForgotMessage(null);
+                const { error } = await supabase.auth.resetPasswordForEmail(
+                  forgotEmail,
+                  { redirectTo: 'https://reboot-site.vercel.app/reset-password' }
+                );
+                if (error) setForgotError(error.message);
+                else setForgotMessage('If this email exists, a reset link has been sent.');
+                setForgotLoading(false);
+              }}
+              disabled={forgotLoading || !forgotEmail}
+              variant="contained"
+              color="primary"
+            >
+              {forgotLoading ? 'Sending...' : 'Send Email'}
+            </Button>
+            <Button
+              onClick={() => {
+                setShowForgotModal(false);
+                setForgotEmail('');
+                setForgotError(null);
+                setForgotMessage(null);
+              }}
+              disabled={forgotLoading}
+              color="secondary"
+              variant="outlined"
+            >
+              Cancel
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    );
+  }
+
+  /* ──────────────────────────
+     DESKTOP (unchanged)
+     ────────────────────────── */
   return (
     <Box
       sx={{
@@ -93,7 +330,7 @@ export default function LoginPage() {
         flexDirection: { xs: 'column', md: 'row' },
       }}
     >
-      {/* Left Panel — Login (1/3) */}
+      {/* Left Panel — Login (unchanged) */}
       <Box
         sx={{
           flex: { xs: 'unset', md: '1' },
@@ -206,7 +443,7 @@ export default function LoginPage() {
         </Box>
       </Box>
 
-      {/* Right Panel — Branding (2/3) */}
+      {/* Right Panel — Branding (unchanged) */}
       <div
         style={{
           flex: 2,
@@ -214,7 +451,6 @@ export default function LoginPage() {
           position: 'relative',
         }}
       >
-        {/* Main Content Centered */}
         <div
           style={{
             position: 'absolute',
@@ -227,7 +463,6 @@ export default function LoginPage() {
             textAlign: 'center',
           }}
         >
-          {/* Logo above text */}
           <div style={{ width: 600, height: 240, marginBottom: 24 }}>
             <Image
               src="/Reboot Logo - Color.png"
@@ -238,7 +473,6 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* Member Hub title */}
           <Typography
             variant="h2"
             style={{
@@ -253,7 +487,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Forgot Password Modal */}
+      {/* Forgot Password Modal (desktop) */}
       <Dialog
         open={showForgotModal}
         onClose={() => {
