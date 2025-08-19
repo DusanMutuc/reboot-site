@@ -79,7 +79,7 @@ export default function LoginPage() {
      ────────────────────────── */
   if (!isMdUp) {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: '#2a2a2a', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ minHeight: '100dvh', bgcolor: '#2a2a2a', display: 'flex', flexDirection: 'column' }}>
         {/* Dark hero with logo + title */}
         <Box
           sx={{
@@ -125,11 +125,13 @@ export default function LoginPage() {
             bgcolor: '#5cbca8',
             borderTopLeftRadius: '1.25rem',
             borderTopRightRadius: '1.25rem',
-            mt: -12,                // gentle overlap into hero
+            mt: -12,
             pt: 3,
             px: 2,
             pb: 'max(1.25rem, env(safe-area-inset-bottom))',
             boxShadow: '0 -8px 24px rgba(0,0,0,0.18)',
+            overflowY: 'auto',
+            WebkitOverflowScrolling: 'touch',
           }}
         >
           <Box sx={{ maxWidth: 480, mx: 'auto' }}>
