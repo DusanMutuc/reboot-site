@@ -1,4 +1,3 @@
-// app/api/admin/coach-rosters/route.ts
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
@@ -34,7 +33,7 @@ export async function GET() {
 
   // emails
   const emailMap = new Map<string, string>();
-  let page = 1, perPage = 1000;
+  let page = 1; const perPage = 1000;  // ← prefer-const
   for (;;) {
     const { data: u, error: e } = await supa.auth.admin.listUsers({ page, perPage });
     if (e) return NextResponse.json({ error: e.message }, { status: 400 });

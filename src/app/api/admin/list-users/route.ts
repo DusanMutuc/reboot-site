@@ -1,11 +1,10 @@
-// app/api/admin/list-users/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
 export async function GET(request: NextRequest) {
   console.log('📋 list-users: Starting request');
-  
+
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
 
@@ -31,7 +30,7 @@ export async function GET(request: NextRequest) {
 
   // Step 3: emails via Admin API
   const emailMap = new Map<string, string>();
-  let page = 1, perPage = 1000;
+  let page = 1; const perPage = 1000;  // ← prefer-const
   for (;;) {
     const { data: u, error: e } = await supa.auth.admin.listUsers({ page, perPage });
     if (e) return NextResponse.json({ error: e.message }, { status: 400 });

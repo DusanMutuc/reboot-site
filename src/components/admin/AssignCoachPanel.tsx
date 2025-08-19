@@ -50,8 +50,9 @@ export default function AssignCoachPanel() {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.statusText);
       setSnack({ open: true, message: 'Coach assigned.', severity: 'success' });
-    } catch (err: any) {
-      setSnack({ open: true, message: err.message || 'Error', severity: 'error' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error';
+      setSnack({ open: true, message, severity: 'error' });
     } finally {
       setBusy(false);
     }

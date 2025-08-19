@@ -5,7 +5,7 @@ import { getAdminClient } from '@/lib/supabaseAdmin';
 
 export async function GET(request: NextRequest) {
   console.log('🔍 is-admin check started');
-  
+
   try {
     // Create server client with proper cookie handling
     const supaSSR = createServerClient(
@@ -27,24 +27,27 @@ export async function GET(request: NextRequest) {
     );
 
     console.log('🔐 Getting user session...');
-    const { data: { user }, error: userErr } = await supaSSR.auth.getUser();
-    
+    const {
+      data: { user },
+      error: userErr,
+    } = await supaSSR.auth.getUser();
+
     if (userErr) {
       console.error('❌ User error:', userErr);
-      return NextResponse.json({ 
-        isAdmin: false, 
-        reason: 'user-error', 
+      return NextResponse.json({
+        isAdmin: false,
+        reason: 'user-error',
         error: userErr.message,
-        debug: true 
+        debug: true,
       });
     }
-    
+
     if (!user) {
       console.log('👤 No user found in session');
-      return NextResponse.json({ 
-        isAdmin: false, 
+      return NextResponse.json({
+        isAdmin: false,
         reason: 'no-user',
-        debug: true 
+        debug: true,
       });
     }
 
@@ -53,7 +56,7 @@ export async function GET(request: NextRequest) {
     // Use service role to check admin status
     const supaAdmin = getAdminClient();
     console.log('🔧 Using admin client to check user_roles table');
-    
+
     const { data, error } = await supaAdmin
       .from('user_roles')
       .select('user_id, role_id')
@@ -66,32 +69,35 @@ export async function GET(request: NextRequest) {
     if (error) {
       console.error('❌ Query error:', error);
       return NextResponse.json({
-        isAdmin: false, 
-        reason: 'query-error', 
+        isAdmin: false,
+        reason: 'query-error',
         error: error.message,
         debug: true,
-        userId: user.id
+        userId: user.id,
       });
     }
 
     const isAdmin = !!data;
     console.log(`✅ Admin check result: ${isAdmin} for user ${user.id}`);
 
-    return NextResponse.json({ 
-      isAdmin, 
+    return NextResponse.json({
+      isAdmin,
       debug: true,
       userId: user.id,
       userEmail: user.email,
-      roleData: data 
+      roleData: data,
     });
-    
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unexpected error';
     console.error('💥 Unexpected error in is-admin route:', error);
-    return NextResponse.json({
-      isAdmin: false, 
-      reason: 'unexpected-error', 
-      error: error.message,
-      debug: true 
-    }, { status: 500 });
+    return NextResponse.json(
+      {
+        isAdmin: false,
+        reason: 'unexpected-error',
+        error: message,
+        debug: true,
+      },
+      { status: 500 }
+    );
   }
 }

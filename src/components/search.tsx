@@ -9,7 +9,7 @@ export default function Search() {
       <Box
         sx={{
           width: '100%',
-          height: { xs: '20rem', md: '30rem' }, // smaller on phones
+          height: { xs: '20rem', md: '30rem' },
           backgroundImage: "url('/search-hero.png')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
@@ -51,22 +51,16 @@ export default function Search() {
             fontWeight: 700,
             mb: 3,
             fontSize: { xs: '1.25rem', md: '2rem' },
-            maxWidth: '38ch',          // comfy line length
+            maxWidth: '38ch',
             mx: 'auto',
-            textWrap: 'balance' as any // progressive enhancement
+            // removed textWrap: 'balance' to satisfy lint/TS
           }}
         >
           Type any keyword to find related Reboot resources, tools &amp; training
         </Typography>
 
         {/* Search bar mock (readOnly, touch-sized) */}
-        <Box
-          sx={{
-            maxWidth: '56rem',
-            mx: 'auto',
-            position: 'relative',
-          }}
-        >
+        <Box sx={{ maxWidth: '56rem', mx: 'auto', position: 'relative' }}>
           <Box
             sx={{
               display: 'flex',
@@ -80,24 +74,14 @@ export default function Search() {
               gap: 1,
             }}
           >
-            <span
-              aria-hidden
-              style={{ fontSize: '1.5rem', marginRight: '0.5rem', color: '#666' }}
-            >
+            <span aria-hidden style={{ fontSize: '1.5rem', marginRight: '0.5rem', color: '#666' }}>
               🔍
             </span>
 
             <InputBase
-              inputProps={{
-                readOnly: true,
-                'aria-label': 'Search',
-                role: 'searchbox',
-              }}
+              inputProps={{ readOnly: true, 'aria-label': 'Search', role: 'searchbox' }}
               placeholder="Search…"
-              sx={{
-                flex: 1,
-                fontSize: { xs: '1rem', md: '1.25rem' },
-              }}
+              sx={{ flex: 1, fontSize: { xs: '1rem', md: '1.25rem' } }}
             />
           </Box>
 
@@ -106,7 +90,7 @@ export default function Search() {
             src="/Website Arrow 2.png"
             alt=""
             sx={{
-              display: { xs: 'none', md: 'block' }, // hide on phones
+              display: { xs: 'none', md: 'block' },
               position: 'absolute',
               top: '-3.125rem',
               right: '-5rem',
@@ -125,7 +109,7 @@ export default function Search() {
             bgcolor: '#fff',
             borderRadius: 3,
             boxShadow: '0 .25rem .75rem rgba(0,0,0,0.2)',
-            minHeight: { xs: '12rem', md: '18rem', lg: '24rem' }, // no fixed height
+            minHeight: { xs: '12rem', md: '18rem', lg: '24rem' },
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

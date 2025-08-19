@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   AppBar, Toolbar, Button, Box, Typography,
-  IconButton, Drawer, List, ListItemButton, useMediaQuery
+  IconButton, Drawer, List, ListItemButton
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 
@@ -19,7 +19,6 @@ const SECTIONS = [
 export default function TopNav() {
   const [active, setActive] = useState<string>('dashboard');
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const isMdUp = useMediaQuery('(min-width:900px)'); // MUI md
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -54,7 +53,7 @@ export default function TopNav() {
               flexDirection: 'column',
               alignItems: 'stretch',
               gap: 2,
-              width: { xs: '100%', md: 'max-content' }, // md+: shrink to pill row width
+              width: { xs: '100%', md: 'max-content' },
             }}
           >
             {/* Header row — grid on mobile (logo | title | menu), flex on desktop (title ... logo) */}
@@ -77,7 +76,6 @@ export default function TopNav() {
                 sx={{
                   height: { xs: 28, sm: 32, md: 45 },
                   width: 'auto',
-                  // On desktop this sits at the right because the flex row is space-between
                   order: { xs: 0, md: 2 },
                 }}
               />
@@ -114,7 +112,7 @@ export default function TopNav() {
             {/* DESKTOP NAV (pills) — hidden on mobile */}
             <Box
               sx={{
-                display: { xs: 'none', md: 'flex' },
+                display: { xs: 'none', md: 'inline-flex' },
                 alignSelf: 'center',
                 gap: { md: 4, lg: 5 },
               }}
@@ -133,7 +131,8 @@ export default function TopNav() {
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         whiteSpace: 'nowrap',
-                        fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
+                        fontFamily:
+                          '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
                         bgcolor: isActive ? '#000 !important' : '#f1f1f1 !important',
                         color: isActive ? '#fff !important' : '#000 !important',
                         boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
@@ -165,14 +164,11 @@ export default function TopNav() {
         <List sx={{ pt: 2 }}>
           {SECTIONS.map(({ id, label }) => (
             <Link key={id} href={`#${id}`} passHref onClick={() => setDrawerOpen(false)}>
-              <ListItemButton sx={{ py: 2.25, px: 3 }}>
-                {label}
-              </ListItemButton>
+              <ListItemButton sx={{ py: 2.25, px: 3 }}>{label}</ListItemButton>
             </Link>
           ))}
         </List>
       </Drawer>
-
     </>
   );
 }

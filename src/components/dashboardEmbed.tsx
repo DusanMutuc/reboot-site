@@ -9,6 +9,11 @@ type Props = {
   title?: string;
 };
 
+type FullscreenCapableElement = HTMLDivElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+  msRequestFullscreen?: () => Promise<void> | void;
+};
+
 export default function DashboardEmbed({
   src,
   heroImage = '/graph.png',
@@ -18,20 +23,20 @@ export default function DashboardEmbed({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   const handleIframeLoad = useCallback(() => {
-    // If the iframe grabbed focus, drop it and restore where we were.
     iframeRef.current?.blur();
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, []);
 
   const goFullscreen = () => {
-    const el = wrapperRef.current;
+    const el = wrapperRef.current as FullscreenCapableElement | null;
     if (!el) return;
-    const req =
-      el.requestFullscreen ||
-      // Safari
-      (el as any).webkitRequestFullscreen ||
-      (el as any).msRequestFullscreen;
-    if (req) req.call(el);
+    if (el.requestFullscreen) {
+      el.requestFullscreen();
+    } else if (el.webkitRequestFullscreen) {
+      el.webkitRequestFullscreen();
+    } else if (el.msRequestFullscreen) {
+      el.msRequestFullscreen();
+    }
   };
 
   return (
@@ -40,7 +45,7 @@ export default function DashboardEmbed({
       <Box
         sx={{
           width: '100%',
-          height: { xs: '14rem', md: '25rem' }, // slightly shorter on phones
+          height: { xs: '14rem', md: '25rem' },
           backgroundImage: `url('${heroImage}')`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
@@ -63,7 +68,7 @@ export default function DashboardEmbed({
         </Typography>
       </Box>
 
-      {/* ── Mobile controls (helpful on phones) ───────────────────── */}
+      {/* ── Mobile controls ───────────────────── */}
       <Stack
         direction="row"
         spacing={1}
@@ -99,7 +104,7 @@ export default function DashboardEmbed({
           width: '100%',
           aspectRatio: '16 / 9',
           background: '#2a2a2a',
-          p: { xs: 0, md: '2.5rem' }, // no padding on phones; same look on desktop
+          p: { xs: 0, md: '2.5rem' },
         }}
       >
         {/* Portrait overlay hint (phones only). Hidden in landscape. */}
@@ -139,10 +144,8 @@ export default function DashboardEmbed({
           src={src}
           frameBorder="0"
           style={{ display: 'block' }}
-          // Fullscreen support:
           allow="fullscreen"
           allowFullScreen
-          // Keep sandboxed, but allow scripts/same-origin as needed for LS:
           sandbox="allow-scripts allow-same-origin allow-storage-access-by-user-activation allow-popups allow-popups-to-escape-sandbox"
           title="M2 Dashboard"
         />
