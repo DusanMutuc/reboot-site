@@ -1,4 +1,3 @@
-// lib/requireAdmin.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getAdminClient } from './supabaseAdmin';
@@ -6,7 +5,7 @@ import { getAdminClient } from './supabaseAdmin';
 export async function requireAdmin(request?: NextRequest) {
   try {
     let supaSSR;
-    
+
     if (request) {
       // If we have the request object, use it for cookies (preferred method)
       console.log('🔐 requireAdmin: Using NextRequest for cookies');
@@ -36,20 +35,20 @@ export async function requireAdmin(request?: NextRequest) {
 
     console.log('🔐 requireAdmin: Getting user session...');
     const { data: { user }, error: userErr } = await supaSSR.auth.getUser();
-    
+
     if (userErr) {
       console.error('❌ requireAdmin user error:', userErr);
-      return { 
-        ok: false as const, 
-        res: NextResponse.json({ error: 'Authentication failed', details: userErr.message }, { status: 401 }) 
+      return {
+        ok: false as const,
+        res: NextResponse.json({ error: 'Authentication failed', details: userErr.message }, { status: 401 })
       };
     }
-    
+
     if (!user) {
       console.log('👤 requireAdmin: No user found in session');
-      return { 
-        ok: false as const, 
-        res: NextResponse.json({ error: 'Unauthorized - No session' }, { status: 401 }) 
+      return {
+        ok: false as const,
+        res: NextResponse.json({ error: 'Unauthorized - No session' }, { status: 401 })
       };
     }
 
@@ -69,28 +68,29 @@ export async function requireAdmin(request?: NextRequest) {
 
     if (error) {
       console.error('❌ requireAdmin role check error:', error);
-      return { 
-        ok: false as const, 
-        res: NextResponse.json({ error: 'Role check failed', details: error.message }, { status: 500 }) 
+      return {
+        ok: false as const,
+        res: NextResponse.json({ error: 'Role check failed', details: error.message }, { status: 500 })
       };
     }
-    
+
     if (!row) {
       console.log('🚫 requireAdmin: User is not admin');
-      return { 
-        ok: false as const, 
-        res: NextResponse.json({ error: 'Forbidden - Admin required' }, { status: 403 }) 
+      return {
+        ok: false as const,
+        res: NextResponse.json({ error: 'Forbidden - Admin required' }, { status: 403 })
       };
     }
 
     console.log('✅ requireAdmin: Admin access granted');
     return { ok: true as const, user };
 
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('💥 requireAdmin unexpected error:', error);
-    return { 
-      ok: false as const, 
-      res: NextResponse.json({ error: 'Server error', details: error.message }, { status: 500 }) 
+    return {
+      ok: false as const,
+      res: NextResponse.json({ error: 'Server error', details: message }, { status: 500 })
     };
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -30,70 +30,67 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     setError(null);
-  
+
     const email = (emailRef.current?.value || '').trim();
     const password = passRef.current?.value || '';
-  
+
     console.log('🔐 Starting login process for:', email);
-  
-    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({ 
-      email, 
-      password 
+
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+      email,
+      password
     });
-    
+
     if (signInError) {
       console.error('❌ Sign-in error:', signInError);
       setError(signInError.message);
       return;
     }
-  
+
     console.log('✅ Sign-in successful, checking admin status...');
-    
+
     const user = authData.user;
     if (!user) {
       setError('No user data returned');
       return;
     }
-  
+
     try {
-      // Check admin status directly using the client with the fresh session
       const { data, error } = await supabase
         .from('user_roles')
         .select('user_id, role_id')
         .eq('user_id', user.id)
         .eq('role_id', 1) // admin
         .maybeSingle();
-  
+
       console.log('📊 user_roles query result:', { data, error });
-  
+
       if (error) {
         console.error('❌ Admin check error:', error);
-        // If we can't check admin status, default to dashboard
-        router.push('/dashboard');
+        router.push('/dashboard'); // fallback
         return;
       }
-  
+
       const isAdmin = !!data;
       const redirectPath = isAdmin ? '/admin' : '/dashboard';
-      
+
       console.log(`🚀 Redirecting to: ${redirectPath} (isAdmin: ${isAdmin})`);
       router.push(redirectPath);
-      
-    } catch (e: any) {
+
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
       console.error('❌ Admin check failed:', e);
-      setError(`Admin check failed: ${e?.message || e}`);
+      setError(`Admin check failed: ${message}`);
       router.push('/dashboard'); // Safe fallback
     }
   };
-  
-  
 
   return (
     <Box
       sx={{
         display: 'flex',
         minHeight: '100vh',
-        flexDirection: { xs: 'column', md: 'row' }, // stack on mobile
+        flexDirection: { xs: 'column', md: 'row' },
       }}
     >
       {/* Left Panel — Login (1/3) */}
@@ -104,10 +101,10 @@ export default function LoginPage() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          p: { xs: '1.5rem', md: '2.5rem' }, // 24 / 40px
+          p: { xs: '1.5rem', md: '2.5rem' },
         }}
       >
-        <Box sx={{ width: '100%', maxWidth: '40rem', color: '#fff' /* 400px */ }}>
+        <Box sx={{ width: '100%', maxWidth: '40rem', color: '#fff' }}>
           <Typography
             variant="h6"
             sx={{ mb: '2rem', fontWeight: 700, color: '#fff', fontSize: '2.5rem' }}
@@ -189,8 +186,8 @@ export default function LoginPage() {
             sx={{
               textTransform: 'none',
               color: '#fff',
-              py: '0.875rem',       // ~14px for comfy tap target at SCALE
-              fontSize: '2rem',  // 20px
+              py: '0.875rem',
+              fontSize: '2rem',
               fontWeight: 700,
               borderRadius: '0.5rem',
             }}
@@ -210,52 +207,51 @@ export default function LoginPage() {
       </Box>
 
       {/* Right Panel — Branding (2/3) */}
-<div
-  style={{
-    flex: 2,
-    backgroundColor: '#2a2a2a',
-    position: 'relative',
-  }}
->
-  {/* Main Content Centered */}
-  <div
-    style={{
-      position: 'absolute',
-      top: '45%', // move up/down here
-      left: '50%',
-      transform: 'translate(-50%, -50%)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center', // align text start with logo start
-      textAlign: 'center',
-    }}
-  >
-    {/* Logo above text */}
-    <div style={{ width: 600, height: 240, marginBottom: 24 }}>
-      <Image
-        src="/Reboot Logo - Color.png"
-        alt="Reboot logo"
-        fill
-        style={{ objectFit: 'contain' }}
-        priority
-      />
-    </div>
+      <div
+        style={{
+          flex: 2,
+          backgroundColor: '#2a2a2a',
+          position: 'relative',
+        }}
+      >
+        {/* Main Content Centered */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '45%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+          }}
+        >
+          {/* Logo above text */}
+          <div style={{ width: 600, height: 240, marginBottom: 24 }}>
+            <Image
+              src="/Reboot Logo - Color.png"
+              alt="Reboot logo"
+              fill
+              style={{ objectFit: 'contain' }}
+              priority
+            />
+          </div>
 
-    {/* Member Hub title */}
-    <Typography
-      variant="h2"
-      style={{
-        color: '#5cbca8',
-        fontWeight: 'bold',
-        fontSize: '9rem',
-        marginLeft: '1rem'
-      }}
-    >
-      MEMBER&apos;S HUB
-    </Typography>
-  </div>
-</div>
-
+          {/* Member Hub title */}
+          <Typography
+            variant="h2"
+            style={{
+              color: '#5cbca8',
+              fontWeight: 'bold',
+              fontSize: '9rem',
+              marginLeft: '1rem',
+            }}
+          >
+            MEMBER&apos;S HUB
+          </Typography>
+        </div>
+      </div>
 
       {/* Forgot Password Modal */}
       <Dialog
