@@ -15,7 +15,7 @@ export default function HelpSteps() {
   return (
     <section style={{ backgroundColor: 'white', width: '100%', scrollSnapAlign: 'start' }}>
       {/* ─────────── Full-width banner ─────────── */}
-      <Box sx={{ width: '100%', backgroundColor: '#5cbca8', py: '2.625rem' }}>
+      <Box sx={{ width: '100%', backgroundColor: '#5cbca8', py: '2.625rem'}}>
         <Box sx={{ maxWidth: '100rem', mx: 'auto', px: 3 }}>
           <Typography
             variant="h3"

@@ -25,7 +25,7 @@ export default function PodcastSection() {
       <Box
         sx={{
           width: '100%',
-          minHeight: { xs: '20vh', md: '20rem' }, // ↓ reduced
+          minHeight: { xs: '14vh', md: '25rem' }, // ↓ reduced
           backgroundImage: "url('/podcast-hero.png')",
           backgroundSize: 'cover',
           backgroundPosition: 'center top',

@@ -9,7 +9,7 @@ export default function Search() {
       <Box
         sx={{
           width: '100%',
-          height: { xs: '20rem', md: '30rem' },
+          height: { xs: '14rem', md: '25rem' },
           backgroundImage: "url('/search-hero.png')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
