@@ -29,23 +29,64 @@ export default function LoginPage() {
   const passRef  = useRef<HTMLInputElement>(null);
 
   const handleLogin = async () => {
-    const email = emailRef.current?.value || '';
+    setError(null);
+  
+    const email = (emailRef.current?.value || '').trim();
     const password = passRef.current?.value || '';
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
-    else router.push('/dashboard');
+  
+    console.log('🔐 Starting login process for:', email);
+  
+    const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({ 
+      email, 
+      password 
+    });
+    
+    if (signInError) {
+      console.error('❌ Sign-in error:', signInError);
+      setError(signInError.message);
+      return;
+    }
+  
+    console.log('✅ Sign-in successful, checking admin status...');
+    
+    const user = authData.user;
+    if (!user) {
+      setError('No user data returned');
+      return;
+    }
+  
+    try {
+      // Check admin status directly using the client with the fresh session
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('user_id, role_id')
+        .eq('user_id', user.id)
+        .eq('role_id', 1) // admin
+        .maybeSingle();
+  
+      console.log('📊 user_roles query result:', { data, error });
+  
+      if (error) {
+        console.error('❌ Admin check error:', error);
+        // If we can't check admin status, default to dashboard
+        router.push('/dashboard');
+        return;
+      }
+  
+      const isAdmin = !!data;
+      const redirectPath = isAdmin ? '/admin' : '/dashboard';
+      
+      console.log(`🚀 Redirecting to: ${redirectPath} (isAdmin: ${isAdmin})`);
+      router.push(redirectPath);
+      
+    } catch (e: any) {
+      console.error('❌ Admin check failed:', e);
+      setError(`Admin check failed: ${e?.message || e}`);
+      router.push('/dashboard'); // Safe fallback
+    }
   };
-
-  // capture autofill after mount
-  useEffect(() => {
-    const grab = () => {
-      setEmail(emailRef.current?.value || '');
-      setPassword(passRef.current?.value || '');
-    };
-    grab();
-    const id = setTimeout(grab, 400);
-    return () => clearTimeout(id);
-  }, []);
+  
+  
 
   return (
     <Box
