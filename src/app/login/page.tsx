@@ -170,8 +170,8 @@ export default function LoginPage() {
               sx={{
                 textTransform: 'none',
                 textDecoration: 'underline',
-                color: '#fff',
-                fontSize: '1rem',
+                color: '#fff !important',
+                fontSize: '1.5rem',
               }}
             >
               Forgot Password?
