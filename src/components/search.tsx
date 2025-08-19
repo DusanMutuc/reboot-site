@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, InputBase } from '@mui/material';
 
 export default function Search() {
   return (
@@ -9,7 +9,7 @@ export default function Search() {
       <Box
         sx={{
           width: '100%',
-          height: { xs: '18.75rem', md: '25rem' }, // 300 / 400px
+          height: { xs: '20rem', md: '30rem' }, // smaller on phones
           backgroundImage: "url('/search-hero.png')",
           backgroundSize: 'cover',
           backgroundPosition: 'center',
@@ -18,6 +18,7 @@ export default function Search() {
           alignItems: 'center',
           justifyContent: 'center',
           px: 2,
+          textAlign: 'center',
         }}
       >
         <Typography
@@ -25,8 +26,7 @@ export default function Search() {
           sx={{
             color: '#fff',
             fontWeight: 800,
-            fontSize: { xs: 'clamp(2.5rem, 10vw, 4rem)', md: 'clamp(4rem, 6vw, 8rem)' },
-            textAlign: 'center',
+            fontSize: { xs: 'clamp(2rem, 8vw, 3rem)', md: 'clamp(3.5rem, 6vw, 8rem)' },
           }}
         >
           REBOOT SEARCH ENGINE
@@ -37,8 +37,8 @@ export default function Search() {
       <Box
         sx={{
           bgcolor: '#5cbca8',
-          pt: 6,
-          pb: 10,
+          pt: { xs: 4, md: 6 },
+          pb: { xs: 6, md: 10 },
           px: { xs: 2, md: 6 },
           textAlign: 'center',
         }}
@@ -50,16 +50,19 @@ export default function Search() {
             color: '#fff',
             fontWeight: 700,
             mb: 3,
-            fontSize: { xs: '1.75rem', md: '2.5rem' }, // bigger for readability
+            fontSize: { xs: '1.25rem', md: '2rem' },
+            maxWidth: '38ch',          // comfy line length
+            mx: 'auto',
+            textWrap: 'balance' as any // progressive enhancement
           }}
         >
-          Type any keyword to find related reboot resources, tools &amp; training
+          Type any keyword to find related Reboot resources, tools &amp; training
         </Typography>
 
-        {/* Search bar mock */}
+        {/* Search bar mock (readOnly, touch-sized) */}
         <Box
           sx={{
-            maxWidth: '90rem', // 800px
+            maxWidth: '56rem',
             mx: 'auto',
             position: 'relative',
           }}
@@ -69,22 +72,31 @@ export default function Search() {
               display: 'flex',
               alignItems: 'center',
               bgcolor: '#fff',
-              borderRadius: '3.125rem', // 50px
-              px: '1.5rem', // 24px
-              py: { xs: '0.75rem', md: '1rem' }, // 12 / 16px
-              boxShadow: '0 .1875rem .5rem rgba(0,0,0,0.15)', // 0 3px 8px
+              borderRadius: '3.125rem',
+              px: { xs: '1rem', md: '1.5rem' },
+              py: 0,
+              minHeight: { xs: 48, md: 56 },
+              boxShadow: '0 .1875rem .5rem rgba(0,0,0,0.15)',
+              gap: 1,
             }}
           >
-            <span style={{ fontSize: '2rem', marginRight: '0.75rem', color: '#666' }}>🔍</span>
-            <input
-              disabled
+            <span
+              aria-hidden
+              style={{ fontSize: '1.5rem', marginRight: '0.5rem', color: '#666' }}
+            >
+              🔍
+            </span>
+
+            <InputBase
+              inputProps={{
+                readOnly: true,
+                'aria-label': 'Search',
+                role: 'searchbox',
+              }}
               placeholder="Search…"
-              style={{
+              sx={{
                 flex: 1,
-                border: 'none',
-                outline: 'none',
-                fontSize: '1.5rem', // 18px
-                background: 'transparent',
+                fontSize: { xs: '1rem', md: '1.25rem' },
               }}
             />
           </Box>
@@ -92,33 +104,42 @@ export default function Search() {
           <Box
             component="img"
             src="/Website Arrow 2.png"
-            alt="Arrow"
+            alt=""
             sx={{
+              display: { xs: 'none', md: 'block' }, // hide on phones
               position: 'absolute',
-              top: '-3.125rem', // 50px
-              right: '-5rem', // 80px
-              height: '6.25rem', // 100px
+              top: '-3.125rem',
+              right: '-5rem',
+              height: '6.25rem',
               pointerEvents: 'none',
             }}
           />
         </Box>
 
-        {/* Placeholder box for results */}
+        {/* Placeholder box for results (responsive) */}
         <Box
           sx={{
-            maxWidth: '90rem', // 800px
+            maxWidth: '56rem',
             mx: 'auto',
             mt: 4,
             bgcolor: '#fff',
             borderRadius: 3,
             boxShadow: '0 .25rem .75rem rgba(0,0,0,0.2)',
-            height: '36rem', // 380px → original height
+            minHeight: { xs: '12rem', md: '18rem', lg: '24rem' }, // no fixed height
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            px: 2,
+            textAlign: 'center',
           }}
         >
-          <Typography sx={{ fontWeight: 600, fontSize: '5rem', color: '#333' }}>
+          <Typography
+            sx={{
+              fontWeight: 600,
+              color: '#333',
+              fontSize: { xs: 'clamp(1.25rem, 5vw, 2rem)', md: 'clamp(2rem, 3.5vw, 3rem)' },
+            }}
+          >
             Coming soon…
           </Typography>
         </Box>

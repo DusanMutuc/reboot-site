@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Link as MuiLink, Typography, Alert } from '@mui/material';
+import NextLink from 'next/link';
+import {
+  Box,
+  Link as MuiLink,
+  Typography,
+} from '@mui/material';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { supabase } from '@/lib/supabaseClient';
 
 type LinkItem = { label: string; href?: string };
@@ -41,36 +47,21 @@ export default function ImportantLinks() {
 
   useEffect(() => {
     let mounted = true;
-  
     (async () => {
-  
       const { data, error } = await supabase.rpc('get_my_coach_links');
-  
       if (!mounted) return;
-  
-      // Log the raw response for debugging
-      console.log('[coach links] rpc data:', data);
-      console.log('[coach links] rpc error:', error);
-  
       if (error) {
         console.error('get_my_coach_links error:', error);
         setM2Url(null);
         setCall15Url(null);
         return;
       }
-  
       const row = Array.isArray(data) ? data[0] : data;
-      console.log('[coach links] chosen row:', row);
-  
       const m2  = normalizeUrl(row?.m2_booking_url ?? null);
       const c15 = normalizeUrl(row?.call15_url ?? null);
-  
-      console.log('[coach links] normalized:', { m2, c15 });
-  
       setM2Url(m2);
       setCall15Url(c15);
     })();
-  
     return () => { mounted = false; };
   }, []);
 
@@ -98,117 +89,194 @@ export default function ImportantLinks() {
           pt: 6,
           mb: 6,
           letterSpacing: 1.5,
-          fontSize: { xs: 'clamp(2.25rem, 8vw, 4rem)', md: 'clamp(4rem, 6vw, 8rem)' },
+          fontSize: { xs: 'clamp(2.25rem, 8vw, 3rem)', md: 'clamp(4rem, 6vw, 8rem)' },
         }}
       >
         COACHING LINKS
       </Typography>
 
+      {/* ───────────────────── MOBILE (xs–sm): LIST CARDS ───────────────────── */}
       <Box
         sx={{
-          maxWidth: '60rem',
+          display: { xs: 'grid', md: 'none' },
+          gridTemplateColumns: '1fr',
+          gap: 2,
+          maxWidth: '42rem',
           mx: 'auto',
           px: 2,
-          display: 'grid',
-          gap: 5,
-          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
         }}
       >
         {resolvedLinks.map(({ label, href }, i) => {
-          const isRight = i % 2 === 1;
-          const clickable = Boolean(href);
+  const clickable = Boolean(href);
 
-          return (
-            <Box
-              key={`${i}-${label}`}
-              sx={{
-                display: 'flex',
-                flexDirection: isRight ? 'row-reverse' : 'row',
-                alignItems: 'center',
-                gap: 2,
-                height: '6.875rem',
-                bgcolor: '#fff',
-                whiteSpace: 'pre-line',
-                borderRadius: '2.5rem',
-                border: '.75rem solid #d7d7d7',
-                boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
-                px: isRight ? '4.5rem 1rem 1rem 2rem' : '2rem 1rem 1rem 4.5rem',
-                py: 1,
-                position: 'relative',
-                transition: 'transform .15s',
-                '&:hover': { transform: clickable ? 'scale(1.03)' : 'none' },
-                opacity: 1
-              }}
-            >
-              <Box
-                component="img"
-                src={`/${iconNumbers[i]}.svg`}
-                alt=""
-                sx={{
-                  width: '6.25rem',
-                  height: '6.25rem',
-                  flexShrink: 0,
-                  position: 'absolute',
-                  marginLeft: isRight ? 0 : '-3.75rem',
-                  marginRight: isRight ? '-3.75rem' : 0,
-                  borderRadius: '50%',
-                }}
-              />
+  const commonSx = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    p: 1.5,
+    borderRadius: 2,
+    bgcolor: clickable ? '#fff' : '#f3f3f3',
+    color: '#000',
+    boxShadow: clickable ? '0 4px 12px rgba(0,0,0,.20)' : 'none',
+    textDecoration: 'none',
+    '@media (hover: hover)': {
+      '&:hover': { transform: clickable ? 'translateY(-1px)' : 'none' },
+    },
+    transition: 'transform .12s',
+  } as const;
 
-              {clickable ? (
-                <MuiLink
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  underline="none"
-                  sx={{
-                    fontWeight: 'bolder',
-                    color: '#000',
-                    px: 5,
-                    flex: 1,
-                    textAlign: 'center',
-                    fontSize: { xs: '1rem', md: '1.4rem' },
-                  }}
-                >
-                  {label}
-                </MuiLink>
-              ) : (
-                <Typography
-                  sx={{
-                    ml: 6,
-                    fontWeight: 'bolder',
-                    px: 5,
-                    flex: 1,
-                    textAlign: 'center',
-                    fontSize: { xs: '1rem', md: '1.4rem' },
-                  }}
-                >
-                  {label}
-                </Typography>
-              )}
-            </Box>
-          );
-        })}
+  const content = (
+    <>
+      <Box
+        component="img"
+        src={`/${iconNumbers[i]}.svg`}
+        alt=""
+        sx={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0 }}
+      />
+      <Typography
+        sx={{
+          whiteSpace: 'pre-line',
+          fontWeight: 800,
+          fontSize: '1rem',
+          lineHeight: 1.3,
+          flex: 1,
+        }}
+      >
+        {label}
+      </Typography>
+      {clickable && <ChevronRightIcon sx={{ flexShrink: 0, opacity: 0.5 }} aria-hidden />}
+    </>
+  );
+
+  return clickable ? (
+    <MuiLink
+      key={`m-${i}-${label}`}
+      component={NextLink}
+      href={href!}
+      target="_blank"
+      rel="noopener noreferrer"
+      underline="none"
+      aria-label={`Open ${label.replace(/\n/g, ' ')}`}
+      sx={commonSx}
+    >
+      {content}
+    </MuiLink>
+  ) : (
+    <Box key={`m-${i}-${label}`} aria-disabled sx={commonSx}>
+      {content}
+    </Box>
+  );
+})}
+
       </Box>
 
-      <Box sx={{ mt: 4, mb: 3, textAlign: 'center' }}>
+      {/* ───────────────────── DESKTOP (md+): ORIGINAL PILLS ───────────────────── */}
+      <Box
+        sx={{
+          display: { xs: 'none', md: 'grid' },
+          maxWidth: '60rem',
+          mx: 'auto',
+          px: 2,
+          gap: 5,
+          gridTemplateColumns: '1fr 1fr',
+        }}
+      >
+        {resolvedLinks.map(({ label, href }, i) => {
+  const isRight = i % 2 === 1;
+  const clickable = Boolean(href);
+
+  const pillSx = {
+    display: 'flex',
+    flexDirection: isRight ? 'row-reverse' : 'row',
+    alignItems: 'center',
+    gap: 2,
+    bgcolor: '#fff',
+    borderRadius: '2.5rem',
+    border: '.75rem solid #d7d7d7',
+    boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
+    position: 'relative',
+    p: 1,
+    pl: isRight ? 2 : 6,
+    pr: isRight ? 6 : 2,
+    minHeight: '6.875rem',
+    transition: 'transform .15s',
+    color: '#000',
+    textDecoration: 'none',
+    '@media (hover: hover)': {
+      '&:hover': { transform: clickable ? 'scale(1.03)' : 'none' },
+    },
+  } as const;
+
+  const content = (
+    <>
+      <Box
+        component="img"
+        src={`/${iconNumbers[i]}.svg`}
+        alt=""
+        sx={{
+          width: '6.25rem',
+          height: '6.25rem',
+          flexShrink: 0,
+          position: 'absolute',
+          left: isRight ? 'auto' : '-3.75rem',
+          right: isRight ? '-3.75rem' : 'auto',
+          borderRadius: '50%',
+        }}
+      />
+      <Typography
+        sx={{
+          whiteSpace: 'pre-line',
+          fontWeight: 'bolder',
+          px: 5,
+          flex: 1,
+          textAlign: 'center',
+          fontSize: '1.4rem',
+        }}
+      >
+        {label}
+      </Typography>
+    </>
+  );
+
+  return clickable ? (
+    <MuiLink
+      key={`d-${i}-${label}`}
+      component={NextLink}
+      href={href!}
+      target="_blank"
+      rel="noopener noreferrer"
+      underline="none"
+      sx={pillSx}
+    >
+      {content}
+    </MuiLink>
+  ) : (
+    <Box key={`d-${i}-${label}`} sx={pillSx}>
+      {content}
+    </Box>
+  );
+})}
+
+      </Box>
+
+      {/* Bottom referral card — unchanged, but you can give it the same mobile treatment later */}
+      <Box sx={{ mt: 4, mb: 3, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
         <Box
           sx={{
             display: 'flex',
             flexDirection: 'row-reverse',
             alignItems: 'center',
             gap: 2,
-            height: '6.875rem',
             bgcolor: '#fff',
-            whiteSpace: 'pre-line',
             borderRadius: '2.5rem',
             border: '.75rem solid #d7d7d7',
             boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
-            px: '2rem 1rem 1rem 4.5rem',
-            py: 1,
+            p: 1,
+            pl: 2,
+            pr: 6,
+            minHeight: '6.875rem',
             position: 'relative',
             transition: 'transform .15s',
-            '&:hover': { transform: 'scale(1.03)' },
             maxWidth: '35rem',
             mx: 'auto',
           }}
@@ -221,8 +289,8 @@ export default function ImportantLinks() {
               width: '8rem',
               height: '8rem',
               position: 'absolute',
-              marginRight: '-4.5rem',
-              marginTop: '-1rem',
+              right: '-4.5rem',
+              top: '-1rem',
               borderRadius: '50%',
             }}
           />
@@ -232,7 +300,7 @@ export default function ImportantLinks() {
               px: 5,
               flex: 1,
               textAlign: 'center',
-              fontSize: { xs: '1rem', md: '1.4rem' },
+              fontSize: '1.4rem',
             }}
           >
             REFER AN AGENT TO OUR PROGRAM
