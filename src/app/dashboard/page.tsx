@@ -40,7 +40,7 @@ export default function DashboardPage() {
       <Box sx={{ height: navH }} />
 
       <section id="links" style={sectionOffsetStyle}>
-        <ImportantLinks />
+        <ImportantLinks mode="user" />
       </section>
 
       <section id="podcast" style={sectionOffsetStyle}>

@@ -9,6 +9,9 @@ import AddUserForm from '@/components/admin/AddUserForm';
 import AssignCoachPanel from '@/components/admin/AssignCoachPanel';
 import CoachRosters from '@/components/admin/CoachRosters';
 import { ThemeProvider, CssBaseline } from '@mui/material';
+import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
+
+
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
   Box,
@@ -169,6 +172,7 @@ export default function AdminPage() {
             <Tab label="Add User" />
             <Tab label="Assign / Change Coach" />
             <Tab label="Coach Rosters" />
+            <Tab label="Resource Library" />
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -180,6 +184,10 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value={tab} index={2}>
               <CoachRosters />
+            </TabPanel>
+            <TabPanel value={tab} index={3}>
+              {/* New admin panel for resources */}
+              <ResourceLibraryAdmin />
             </TabPanel>
           </Box>
         </Paper>

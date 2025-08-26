@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   AppBar, Toolbar, Button, Box, Typography,
@@ -8,7 +7,9 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 
-const SECTIONS = [
+type Section = { id: string; label: string };
+
+const DEFAULT_SECTIONS: Section[] = [
   { id: 'links',     label: 'COACHING LINKS' },
   { id: 'podcast',   label: 'REPLAY PODCAST' },
   { id: 'library',   label: 'PROGRAM SEARCH ENGINE' },
@@ -16,8 +17,14 @@ const SECTIONS = [
   { id: 'help',      label: 'HOW TO GET HELP' },
 ];
 
-export default function TopNav() {
-  const [active, setActive] = useState<string>('dashboard');
+export default function TopNav({
+  sections = DEFAULT_SECTIONS,
+  title = "REBOOT MEMBER'S HUB",
+}: {
+  sections?: Section[];
+  title?: string;
+}) {
+  const [active, setActive] = useState<string>(sections[0]?.id ?? '');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -25,16 +32,27 @@ export default function TopNav() {
       entries => entries.forEach(e => e.isIntersecting && setActive(e.target.id)),
       { threshold: 0.25, rootMargin: '-40% 0px 0px 0px' }
     );
-    SECTIONS.forEach(({ id }) => {
+
+    sections.forEach(({ id }) => {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
+
     return () => observer.disconnect();
-  }, []);
+  }, [sections]);
+
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // keep the URL hash in sync without a full jump
+    history.replaceState(null, '', `#${id}`);
+  };
 
   return (
     <>
       <AppBar
+        id="appbar"
         position="fixed"
         elevation={0}
         sx={{ bgcolor: '#000', py: 2, borderRadius: 0, left: 0, right: 0, width: '100%' }}
@@ -68,7 +86,7 @@ export default function TopNav() {
                 minWidth: 0,
               }}
             >
-              {/* Logo (left on mobile, right on desktop due to element order + flex spacing) */}
+              {/* Logo */}
               <Box
                 component="img"
                 src="/Reboot Logo - Color.png"
@@ -80,7 +98,7 @@ export default function TopNav() {
                 }}
               />
 
-              {/* Title (center on mobile via grid, left on desktop via flex) */}
+              {/* Title */}
               <Typography
                 variant="h6"
                 sx={(theme) => ({
@@ -94,10 +112,10 @@ export default function TopNav() {
                   order: { xs: 1, md: 0 },
                 })}
               >
-                REBOOT MEMBER&apos;S HUB
+                {title}
               </Typography>
 
-              {/* Hamburger (only mobile) */}
+              {/* Hamburger (mobile) */}
               <Box sx={{ justifySelf: 'end', display: { xs: 'block', md: 'none' }, order: { xs: 2 } }}>
                 <IconButton
                   aria-label="Open menu"
@@ -109,7 +127,7 @@ export default function TopNav() {
               </Box>
             </Box>
 
-            {/* DESKTOP NAV (pills) — hidden on mobile */}
+            {/* DESKTOP NAV (pills) */}
             <Box
               sx={{
                 display: { xs: 'none', md: 'inline-flex' },
@@ -117,36 +135,36 @@ export default function TopNav() {
                 gap: { md: 4, lg: 5 },
               }}
             >
-              {SECTIONS.map(({ id, label }) => {
+              {sections.map(({ id, label }) => {
                 const isActive = active === id;
                 return (
-                  <Link key={id} href={`#${id}`} passHref>
-                    <Button
-                      disableElevation
-                      sx={{
-                        px: { md: 3.5, lg: 4 },
-                        py: { md: 1.6, lg: 1.8 },
-                        fontSize: { md: '1.4rem', lg: '1.6rem' },
-                        lineHeight: 1.2,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        whiteSpace: 'nowrap',
-                        fontFamily:
-                          '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
-                        bgcolor: isActive ? '#000 !important' : '#f1f1f1 !important',
-                        color: isActive ? '#fff !important' : '#000 !important',
-                        boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
-                        transition: 'all .15s',
-                        '&:hover': {
-                          bgcolor: isActive ? '#000 !important' : '#d0d0d0',
-                          color: isActive ? '#fff !important' : '#000',
-                          transform: 'translateY(-2px)',
-                        },
-                      }}
-                    >
-                      {label}
-                    </Button>
-                  </Link>
+                  <Button
+                    key={id}
+                    onClick={() => scrollTo(id)}
+                    disableElevation
+                    sx={{
+                      px: { md: 3.5, lg: 4 },
+                      py: { md: 1.6, lg: 1.8 },
+                      fontSize: { md: '1.4rem', lg: '1.6rem' },
+                      lineHeight: 1.2,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                      whiteSpace: 'nowrap',
+                      fontFamily:
+                        '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
+                      bgcolor: isActive ? '#000 !important' : '#f1f1f1 !important',
+                      color: isActive ? '#fff !important' : '#000 !important',
+                      boxShadow: '0 0 0 1px rgba(0,0,0,0.08)',
+                      transition: 'all .15s',
+                      '&:hover': {
+                        bgcolor: isActive ? '#000 !important' : '#d0d0d0',
+                        color: isActive ? '#fff !important' : '#000',
+                        transform: 'translateY(-2px)',
+                      },
+                    }}
+                  >
+                    {label}
+                  </Button>
                 );
               })}
             </Box>
@@ -162,10 +180,17 @@ export default function TopNav() {
         PaperProps={{ sx: { bgcolor: '#111', color: '#fff', width: 300 } }}
       >
         <List sx={{ pt: 2 }}>
-          {SECTIONS.map(({ id, label }) => (
-            <Link key={id} href={`#${id}`} passHref onClick={() => setDrawerOpen(false)}>
-              <ListItemButton sx={{ py: 2.25, px: 3 }}>{label}</ListItemButton>
-            </Link>
+          {sections.map(({ id, label }) => (
+            <ListItemButton
+              key={id}
+              sx={{ py: 2.25, px: 3 }}
+              onClick={() => {
+                scrollTo(id);
+                setDrawerOpen(false);
+              }}
+            >
+              {label}
+            </ListItemButton>
           ))}
         </List>
       </Drawer>
