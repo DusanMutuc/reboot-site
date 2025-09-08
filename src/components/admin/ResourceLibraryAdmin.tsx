@@ -493,22 +493,47 @@ function ResourceDialog({
         `)
         .eq('id', resourceId!)
         .single();
-      if (e2) throw e2;
+      // (after the refetch)
+if (e2) throw e2;
 
-      const mapped: ResourceRow = {
-        id: (r2 as any).id,
-        title: (r2 as any).title,
-        description: (r2 as any).description,
-        type: (r2 as any).type,
-        url: (r2 as any).url,
-        thumbnail: (r2 as any).thumbnail,
-        duration: (r2 as any).duration,
-        created_at: (r2 as any).created_at,
-        is_active: (r2 as any).is_active,
-        tags: (((r2 as any).resource_tags ?? []) as { tag: ResourceTag }[]).map((x) => x.tag),
-      };
+// ✅ Type the refetch row instead of using `any`
+type ResourceSelectRow = {
+  id: number;
+  title: string;
+  description: string | null;
+  type: ResourceType;
+  url: string;
+  thumbnail: string | null;
+  duration: number | null;
+  created_at: string;
+  is_active: boolean;
+  // Supabase join can yield tag as single or array depending on driver
+  resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
+};
 
-      onSaved(mapped);
+const r = r2 as ResourceSelectRow;
+
+// Normalize tags -> ResourceTag[]
+const tags: ResourceTag[] = (r.resource_tags ?? []).flatMap((x) => {
+  const t = (x as { tag: ResourceTag | ResourceTag[] }).tag;
+  return Array.isArray(t) ? t : [t];
+});
+
+const mapped: ResourceRow = {
+  id: r.id,
+  title: r.title,
+  description: r.description,
+  type: r.type,
+  url: r.url,
+  thumbnail: r.thumbnail,
+  duration: r.duration,
+  created_at: r.created_at,
+  is_active: r.is_active,
+  tags,
+};
+
+onSaved(mapped);
+
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Save failed');
     } finally {
