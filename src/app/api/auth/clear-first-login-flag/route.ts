@@ -32,9 +32,16 @@ export async function POST() {
       }
     );
 
-    const { data: { user }, error } = await supabase.auth.getUser();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
     if (error || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: res.headers });
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401, headers: res.headers }
+      );
     }
 
     // 4) Clear the app_metadata flag with the service-role admin client
@@ -42,13 +49,18 @@ export async function POST() {
     const { error: adminErr } = await admin.auth.admin.updateUserById(user.id, {
       app_metadata: { must_reset_password: false },
     });
+
     if (adminErr) {
-      return NextResponse.json({ error: adminErr.message }, { status: 400, headers: res.headers });
+      return NextResponse.json(
+        { error: adminErr.message },
+        { status: 400, headers: res.headers }
+      );
     }
 
     // 5) Return JSON while preserving any Set-Cookie from `res`
     return NextResponse.json({ ok: true }, { status: 200, headers: res.headers });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'Unknown error' }, { status: 500 });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

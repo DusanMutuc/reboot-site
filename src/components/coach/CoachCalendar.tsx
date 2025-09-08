@@ -25,8 +25,9 @@ export default function CoachCalendar() {
 
         if (error) throw error;
         setUrl((data?.m2_booking_url || '').trim() || null);
-      } catch (e: any) {
-        setErr(e.message || 'Failed to load calendar URL');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load calendar URL';
+        setErr(msg);
       } finally {
         setLoading(false);
       }

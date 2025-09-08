@@ -28,18 +28,24 @@ export async function middleware(req: NextRequest) {
   // Create a response we can mutate cookies on
   const res = NextResponse.next({ request: { headers: req.headers } });
 
-  // Manual cookie adapter (works across Next 14/15, SSR lib versions)
-  const cookieAdapter = {
-    get(name: string) {
+  // ✅ Type the cookie adapter (no `any`)
+  type CookiesAdapter = {
+    get(name: string): string | undefined;
+    set(name: string, value: string, options: CookieOptions): void;
+    remove(name: string, options: CookieOptions): void;
+  };
+
+  const cookieAdapter: CookiesAdapter = {
+    get(name) {
       return req.cookies.get(name)?.value;
     },
-    set(name: string, value: string, options: CookieOptions) {
+    set(name, value, options) {
       res.cookies.set({ name, value, ...options });
     },
-    remove(name: string, options: CookieOptions) {
+    remove(name, options) {
       res.cookies.set({ name, value: '', ...options, maxAge: 0 });
     },
-  } as any; // <-- quiets TS differences between SSR versions
+  };
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

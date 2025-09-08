@@ -30,10 +30,11 @@ export default function ResetPasswordPage() {
   const searchParams = useSearchParams();
 
   const supabase = useMemo(
-    () => createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    ),
+    () =>
+      createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      ),
     []
   );
 
@@ -63,19 +64,25 @@ export default function ResetPasswordPage() {
         }
 
         if (at && rt) {
-          const { error } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
+          const { error } = await supabase.auth.setSession({
+            access_token: at,
+            refresh_token: rt,
+          });
           if (error) throw new Error('Auth failed: ' + error.message);
         }
         if (!cancelled) setAuthenticating(false);
-      } catch (e: any) {
+      } catch (e: unknown) { // <-- changed from "any" to "unknown"
         if (!cancelled) {
-          setAuthError(e?.message ?? 'Authentication failed');
+          const msg = e instanceof Error ? e.message : 'Authentication failed';
+          setAuthError(msg);
           setAuthenticating(false);
         }
       }
     };
     run();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,7 +90,7 @@ export default function ResetPasswordPage() {
     setErr(null);
 
     if (pw1.length < 8) return setErr('Password must be at least 8 characters.');
-    if (pw1 !== pw2)   return setErr('Passwords do not match.');
+    if (pw1 !== pw2) return setErr('Passwords do not match.');
 
     setLoading(true);
 
@@ -95,7 +102,9 @@ export default function ResetPasswordPage() {
     }
 
     // 4) Try to clear first-login flag (if they were already signed in). If 401 (recovery case), ignore.
-    try { await fetch('/api/auth/clear-first-login-flag', { method: 'POST' }); } catch {}
+    try {
+      await fetch('/api/auth/clear-first-login-flag', { method: 'POST' });
+    } catch {}
 
     // 5) Refresh current session just in case
     await supabase.auth.refreshSession();
@@ -110,9 +119,20 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', padding: 16 }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#f5f5f5',
+        padding: 16,
+      }}
+    >
       <Paper elevation={6} style={{ padding: 32, width: '100%', maxWidth: 420 }}>
-        <Typography variant="h5" align="center" gutterBottom>Reset Password</Typography>
+        <Typography variant="h5" align="center" gutterBottom>
+          Reset Password
+        </Typography>
 
         {authenticating ? (
           <Stack spacing={2} alignItems="center" sx={{ py: 3 }}>
@@ -120,7 +140,9 @@ export default function ResetPasswordPage() {
             <Typography>Authenticating…</Typography>
           </Stack>
         ) : authError ? (
-          <Typography color="error" align="center">{authError}</Typography>
+          <Typography color="error" align="center">
+            {authError}
+          </Typography>
         ) : (
           <form onSubmit={handleSubmit}>
             <TextField
@@ -144,9 +166,20 @@ export default function ResetPasswordPage() {
               autoComplete="new-password"
             />
 
-            {err && <Typography color="error" align="center" sx={{ mt: 1 }}>{err}</Typography>}
+            {err && (
+              <Typography color="error" align="center" sx={{ mt: 1 }}>
+                {err}
+              </Typography>
+            )}
 
-            <Button type="submit" variant="contained" color="primary" fullWidth disabled={loading} sx={{ mt: 2 }}>
+            <Button
+              type="submit"
+              variant="contained"
+              color="primary"
+              fullWidth
+              disabled={loading}
+              sx={{ mt: 2 }}
+            >
               {loading ? 'Updating…' : 'Save & continue'}
             </Button>
           </form>

@@ -58,8 +58,9 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
         });
         if (error) throw error;
         setRows((data ?? []) as StudentRow[]);
-      } catch (e: any) {
-        setErr(e.message || 'Failed to load students');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load students';
+        setErr(msg);
       } finally {
         setLoading(false);
       }
@@ -103,8 +104,9 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
         if (error) throw error;
         const url = (data?.looker_link || '').trim();
         setStudentDashboard(url || null);
-      } catch (e: any) {
-        setDashErr(e.message || 'Failed to load student dashboard link');
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load student dashboard link';
+        setDashErr(msg);
       } finally {
         setBusy(false);
       }

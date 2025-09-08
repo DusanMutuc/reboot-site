@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import type { ReactElement } from 'react';
 import {
   Box, Stack, Typography, TextField, Select, MenuItem, FormControl, InputLabel,
   Button, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
-    Paper, Tooltip, Snackbar, Alert, CircularProgress
+  Paper, Tooltip, Snackbar, Alert, CircularProgress
 } from '@mui/material';
 import Grid from '@mui/material/Grid'; // Grid v2 (stable in MUI v6)
 import AddIcon from '@mui/icons-material/Add';
@@ -18,7 +18,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import OndemandVideoIcon from '@mui/icons-material/OndemandVideo';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
-import DescriptionIcon from '@mui/icons-material/Description';
+// import DescriptionIcon from '@mui/icons-material/Description'; // unused
 import ImageIcon from '@mui/icons-material/Image';
 import HeadphonesIcon from '@mui/icons-material/Headphones';
 import LinkIcon from '@mui/icons-material/Link';
@@ -91,6 +91,82 @@ export default function ResourceLibraryAdmin() {
     })();
   }, []);
 
+  // helpers to map shapes (typed inputs)
+  function mapRpcRowToResource(r: {
+    id: number;
+    title: string;
+    description: string | null;
+    type: ResourceType;
+    url: string;
+    thumbnail: string | null;
+    duration: number | null;
+    created_at: string;
+    tags?: { id: number; name: string; category: string | null }[];
+    score?: number | null;
+  }): ResourceRow {
+    return {
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      type: r.type,
+      url: r.url,
+      thumbnail: r.thumbnail,
+      duration: r.duration,
+      created_at: r.created_at,
+      is_active: true, // see note
+      tags: (r.tags ?? []).map((t) => ({ id: t.id, name: t.name, category: t.category })),
+      score: r.score ?? null,
+    };
+  }
+
+  function mapJoinedRowToResource(r: {
+    id: number;
+    title: string;
+    description: string | null;
+    type: ResourceType;
+    url: string;
+    thumbnail: string | null;
+    duration: number | null;
+    created_at: string;
+    is_active: boolean;
+    // Accept either single tag or array-of-tags per row
+    resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
+  }): ResourceRow {
+    // Normalize to ResourceTag[]
+    const tags: ResourceTag[] = (r.resource_tags ?? []).flatMap((x) => {
+      const t = (x as { tag: ResourceTag | ResourceTag[] }).tag;
+      return Array.isArray(t) ? t : [t];
+    });
+  
+    return {
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      type: r.type,
+      url: r.url,
+      thumbnail: r.thumbnail,
+      duration: r.duration,
+      created_at: r.created_at,
+      is_active: r.is_active,
+      tags,
+    };
+  }
+  
+
+  const sortPlain = useCallback((list: ResourceRow[], s: typeof sort) => {
+    const byTitle = (a: ResourceRow, b: ResourceRow) => a.title.localeCompare(b.title);
+    const byDur = (a: ResourceRow, b: ResourceRow) => (a.duration ?? 0) - (b.duration ?? 0);
+    switch (s) {
+      case 'alpha_asc': return [...list].sort(byTitle);
+      case 'alpha_desc': return [...list].sort((a,b)=>-byTitle(a,b));
+      case 'duration_asc': return [...list].sort(byDur);
+      case 'duration_desc': return [...list].sort((a,b)=>-byDur(a,b));
+      case 'date_asc': return list; // handled in query
+      case 'date_desc': return list; // handled in query
+      default: return list; // relevance handled in RPC
+    }
+  }, []);
+
   // search (admin sees all; we use RPC for ranking when q present, fallback to plain select when empty)
   useEffect(() => {
     let cancelled = false;
@@ -134,60 +210,14 @@ export default function ResourceLibraryAdmin() {
           // apply non-date/alpha sorts in JS for simplicity
           setRows(sortPlain(mapped, sort));
         }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Failed to fetch');
+      } catch (e: unknown) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to fetch');
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [debouncedQ, types, sort, mode]);
-
-  // helpers to map shapes
-  function mapRpcRowToResource(r: any): ResourceRow {
-    return {
-      id: r.id,
-      title: r.title,
-      description: r.description,
-      type: r.type,
-      url: r.url,
-      thumbnail: r.thumbnail,
-      duration: r.duration,
-      created_at: r.created_at,
-      is_active: true, // RPC returns only visible field set; admin policy allows all, but we didn’t include is_active; we’ll fetch on edit
-      tags: (r.tags ?? []).map((t: any) => ({ id: t.id, name: t.name, category: t.category })),
-      score: r.score,
-    };
-  }
-
-  function mapJoinedRowToResource(r: any): ResourceRow {
-    return {
-      id: r.id,
-      title: r.title,
-      description: r.description,
-      type: r.type,
-      url: r.url,
-      thumbnail: r.thumbnail,
-      duration: r.duration,
-      created_at: r.created_at,
-      is_active: r.is_active,
-      tags: (r.resource_tags ?? []).map((x: any) => x.tag),
-    };
-  }
-
-  function sortPlain(list: ResourceRow[], s: typeof sort) {
-    const byTitle = (a: ResourceRow, b: ResourceRow) => a.title.localeCompare(b.title);
-    const byDur = (a: ResourceRow, b: ResourceRow) => (a.duration ?? 0) - (b.duration ?? 0);
-    switch (s) {
-      case 'alpha_asc': return [...list].sort(byTitle);
-      case 'alpha_desc': return [...list].sort((a,b)=>-byTitle(a,b));
-      case 'duration_asc': return [...list].sort(byDur);
-      case 'duration_desc': return [...list].sort((a,b)=>-byDur(a,b));
-      case 'date_asc': return list; // handled in query
-      case 'date_desc': return list; // handled in query
-      default: return list; // relevance handled in RPC
-    }
-  }
+  }, [debouncedQ, types, sort, mode, sortPlain]);
 
   // open dialog
   const onCreate = () => { setEditing(null); setOpen(true); };
@@ -229,7 +259,7 @@ export default function ResourceLibraryAdmin() {
     const { data: u } = await supabase.auth.getUser();
     const userId = u?.user?.id;
     if (userId) {
-      supabase.from('resource_access').insert({ resource_id: row.id, user_id: userId }).then(()=>{});
+      void supabase.from('resource_access').insert({ resource_id: row.id, user_id: userId });
     }
     window.open(row.url, '_blank', 'noopener,noreferrer');
   };
@@ -264,7 +294,7 @@ export default function ResourceLibraryAdmin() {
 
           <FormControl size="small" sx={{ minWidth: 160 }}>
             <InputLabel>Sort</InputLabel>
-            <Select value={sort} label="Sort" onChange={(e) => setSort(e.target.value as any)}>
+            <Select value={sort} label="Sort" onChange={(e) => setSort(e.target.value as typeof sort)}>
               <MenuItem value="relevance">Relevance</MenuItem>
               <MenuItem value="date_desc">Newest</MenuItem>
               <MenuItem value="date_asc">Oldest</MenuItem>
@@ -277,7 +307,7 @@ export default function ResourceLibraryAdmin() {
 
           <FormControl size="small" sx={{ minWidth: 140 }}>
             <InputLabel>Fuzziness</InputLabel>
-            <Select value={mode} label="Fuzziness" onChange={(e) => setMode(e.target.value as any)}>
+            <Select value={mode} label="Fuzziness" onChange={(e) => setMode(e.target.value as typeof mode)}>
               <MenuItem value="strict">Strict</MenuItem>
               <MenuItem value="balanced">Balanced</MenuItem>
               <MenuItem value="loose">Loose</MenuItem>
@@ -354,7 +384,7 @@ export default function ResourceLibraryAdmin() {
         onClose={() => setOpen(false)}
         editing={editing}
         allTags={allTags}
-        onSaved={async (saved) => {
+        onSaved={async () => {
           setOpen(false);
           // refresh list quickly
           setSnack({ msg: editing ? 'Resource updated' : 'Resource created', severity: 'success' });
@@ -362,13 +392,13 @@ export default function ResourceLibraryAdmin() {
         }}
       />
 
-        {snack && (
+      {snack && (
         <Snackbar open autoHideDuration={3000} onClose={() => setSnack(null)}>
-            <Alert severity={snack.severity} onClose={() => setSnack(null)}>
+          <Alert severity={snack.severity} onClose={() => setSnack(null)}>
             {snack.msg}
-            </Alert>
+          </Alert>
         </Snackbar>
-        )}
+      )}
 
     </Box>
   );
@@ -421,7 +451,16 @@ function ResourceDialog({
       const tagIds = await ensureTags(selectedTags.map(t => t.name));
 
       let resourceId = editing?.id;
-      const payload: any = {
+      type ResourcePayload = {
+        title: string;
+        description: string | null;
+        type: ResourceType;
+        url: string;
+        thumbnail: string | null;
+        duration: number | null;
+        is_active: boolean;
+      };
+      const payload: ResourcePayload = {
         title,
         description: description || null,
         type,
@@ -435,7 +474,7 @@ function ResourceDialog({
         // Create
         const { data, error } = await supabase.from('resources').insert(payload).select('id').single();
         if (error) throw error;
-        resourceId = data!.id as number;
+        resourceId = (data as { id: number }).id;
       } else {
         // Update
         const { error } = await supabase.from('resources').update(payload).eq('id', resourceId);
@@ -456,22 +495,22 @@ function ResourceDialog({
         .single();
       if (e2) throw e2;
 
-      const mapped = {
-        id: r2.id,
-        title: r2.title,
-        description: r2.description,
-        type: r2.type,
-        url: r2.url,
-        thumbnail: r2.thumbnail,
-        duration: r2.duration,
-        created_at: r2.created_at,
-        is_active: r2.is_active,
-        tags: (r2.resource_tags ?? []).map((x: any) => x.tag),
-      } as ResourceRow;
+      const mapped: ResourceRow = {
+        id: (r2 as any).id,
+        title: (r2 as any).title,
+        description: (r2 as any).description,
+        type: (r2 as any).type,
+        url: (r2 as any).url,
+        thumbnail: (r2 as any).thumbnail,
+        duration: (r2 as any).duration,
+        created_at: (r2 as any).created_at,
+        is_active: (r2 as any).is_active,
+        tags: (((r2 as any).resource_tags ?? []) as { tag: ResourceTag }[]).map((x) => x.tag),
+      };
 
       onSaved(mapped);
-    } catch (e: any) {
-      setErr(e?.message ?? 'Save failed');
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -609,8 +648,8 @@ async function ensureTags(names: string[]): Promise<number[]> {
     for (const nm of toCreate) {
       const { data, error } = await supabase.from('tags').insert({ name: nm }).select('id').single();
       if (error) throw error;
-      createdIds.push(data!.id as number);
-      foundMap.set(nm, data!.id as number);
+      createdIds.push((data as { id: number }).id);
+      foundMap.set(nm, (data as { id: number }).id);
     }
   }
   return clean.map(nm => foundMap.get(nm)!).filter(Boolean);
@@ -621,7 +660,7 @@ async function syncResourceTags(resourceId: number, desiredTagIds: number[]) {
   // current
   const { data: links, error } = await supabase.from('resource_tags').select('tag_id').eq('resource_id', resourceId);
   if (error) throw error;
-  const currentIds = new Set<number>((links ?? []).map((x:any)=>x.tag_id));
+  const currentIds = new Set<number>((links ?? []).map((x: { tag_id: number }) => x.tag_id));
 
   const desired = new Set<number>(desiredTagIds);
   const toAdd = Array.from(desired).filter(id => !currentIds.has(id));
