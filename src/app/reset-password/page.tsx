@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 
@@ -11,6 +11,10 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
+
+// ✅ stop static prerender + caching (optional but safe)
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 // 1) If recovery link has #access_token=..., rewrite to query so searchParams can see it
 if (typeof window !== 'undefined' && window.location.hash.startsWith('#access_token=')) {
@@ -25,7 +29,8 @@ function parseHashParams(): URLSearchParams | null {
   return new URLSearchParams(window.location.hash.substring(1));
 }
 
-export default function ResetPasswordPage() {
+// ⬇️ Moved your existing component body into an inner component
+function ResetPasswordInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -71,7 +76,7 @@ export default function ResetPasswordPage() {
           if (error) throw new Error('Auth failed: ' + error.message);
         }
         if (!cancelled) setAuthenticating(false);
-      } catch (e: unknown) { // <-- changed from "any" to "unknown"
+      } catch (e: unknown) {
         if (!cancelled) {
           const msg = e instanceof Error ? e.message : 'Authentication failed';
           setAuthError(msg);
@@ -186,5 +191,14 @@ export default function ResetPasswordPage() {
         )}
       </Paper>
     </div>
+  );
+}
+
+// ✅ New default export: wrap in Suspense so useSearchParams is happy
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordInner />
+    </Suspense>
   );
 }

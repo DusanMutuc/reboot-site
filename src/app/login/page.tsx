@@ -16,9 +16,14 @@ import {
   useMediaQuery,
 } from '@mui/material';
 
+// ✅ stop static prerender + caching (optional but safe)
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default function LoginPage() {
   const router = useRouter();
-  const isMdUp = useMediaQuery('(min-width:900px)');
+  // ✅ avoid server access to window/document
+  const isMdUp = useMediaQuery('(min-width:900px)', { noSsr: true });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
