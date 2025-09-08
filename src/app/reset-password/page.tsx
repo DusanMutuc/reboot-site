@@ -1,126 +1,155 @@
 'use client';
 
-import { useState, Suspense, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '../../lib/supabaseClient';
+import { createBrowserClient } from '@supabase/ssr';
+
+// MUI (optional)
 import Paper from '@mui/material/Paper';
 import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
+import Stack from '@mui/material/Stack';
 
+// 1) If recovery link has #access_token=..., rewrite to query so searchParams can see it
 if (typeof window !== 'undefined' && window.location.hash.startsWith('#access_token=')) {
-  const hashParams = window.location.hash.substring(1); // remove '#'
+  const hashParams = window.location.hash.substring(1);
   const newUrl = window.location.pathname + '?' + hashParams;
   window.location.replace(newUrl);
 }
 
-export default function ResetPasswordPageWrapper() {
-  // Remove useEffect for hash-to-query logic
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ResetPasswordPage />
-    </Suspense>
-  );
+function parseHashParams(): URLSearchParams | null {
+  if (typeof window === 'undefined') return null;
+  if (!window.location.hash?.startsWith('#')) return null;
+  return new URLSearchParams(window.location.hash.substring(1));
 }
 
-function ResetPasswordPage() {
+export default function ResetPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+
+  const supabase = useMemo(
+    () => createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    ),
+    []
+  );
+
   const [authenticating, setAuthenticating] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  const accessToken = searchParams.get('access_token');
-  const refreshToken = searchParams.get('refresh_token');
+  const [pw1, setPw1] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  // Authenticate on mount if tokens are present
+  // 2) If email link provided tokens, set session; otherwise assume first-login (already signed in)
   useEffect(() => {
-    const authenticate = async () => {
-      if (accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-        if (error) {
-          setAuthError('Authentication failed: ' + error.message);
-        }
-      } else {
-        setAuthError('Missing token information in URL.');
-      }
-      setAuthenticating(false);
-    };
-    authenticate();
-    // Only run on mount or if tokens change
-  }, [accessToken, refreshToken]);
+    let cancelled = false;
+    const run = async () => {
+      try {
+        let at: string | null = searchParams.get('access_token');
+        let rt: string | null = searchParams.get('refresh_token');
 
-  const handleReset = async () => {
-    setError(null);
-    setSuccess(null);
-    if (!password || !confirmPassword) {
-      setError('Please fill in both fields.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+        // if tokens were only in hash (shouldn’t happen after rewrite, but safe)
+        if (!at || !rt) {
+          const hp = parseHashParams();
+          if (hp) {
+            at = at ?? hp.get('access_token');
+            rt = rt ?? hp.get('refresh_token');
+          }
+        }
+
+        if (at && rt) {
+          const { error } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
+          if (error) throw new Error('Auth failed: ' + error.message);
+        }
+        if (!cancelled) setAuthenticating(false);
+      } catch (e: any) {
+        if (!cancelled) {
+          setAuthError(e?.message ?? 'Authentication failed');
+          setAuthenticating(false);
+        }
+      }
+    };
+    run();
+    return () => { cancelled = true; };
+  }, [searchParams, supabase]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+
+    if (pw1.length < 8) return setErr('Password must be at least 8 characters.');
+    if (pw1 !== pw2)   return setErr('Passwords do not match.');
+
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    if (updateError) {
-      setError(updateError.message);
-    } else {
-      setSuccess('Password updated! You can now log in with your new password.');
-      setTimeout(() => router.push('/login'), 3000);
+
+    // 3) Update password
+    const { error: updateErr } = await supabase.auth.updateUser({ password: pw1 });
+    if (updateErr) {
+      setLoading(false);
+      return setErr(updateErr.message);
     }
+
+    // 4) Try to clear first-login flag (if they were already signed in). If 401 (recovery case), ignore.
+    try { await fetch('/api/auth/clear-first-login-flag', { method: 'POST' }); } catch {}
+
+    // 5) Refresh current session just in case
+    await supabase.auth.refreshSession();
+
     setLoading(false);
+
+    // 6) If this was an email recovery (tokens present), go to login; else go to dashboard
+    const cameViaRecovery =
+      !!searchParams.get('access_token') || !!searchParams.get('refresh_token');
+
+    router.replace(cameViaRecovery ? '/login' : '/dashboard');
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5' }}>
-      <Paper elevation={6} style={{ padding: 32, minWidth: 350, maxWidth: 400, width: '100%' }}>
-        <Typography variant="h4" align="center" gutterBottom>Reset Password</Typography>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5', padding: 16 }}>
+      <Paper elevation={6} style={{ padding: 32, width: '100%', maxWidth: 420 }}>
+        <Typography variant="h5" align="center" gutterBottom>Reset Password</Typography>
+
         {authenticating ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 32 }}>
+          <Stack spacing={2} alignItems="center" sx={{ py: 3 }}>
             <CircularProgress />
-            <Typography style={{ marginTop: 16 }}>Authenticating...</Typography>
-          </div>
+            <Typography>Authenticating…</Typography>
+          </Stack>
         ) : authError ? (
           <Typography color="error" align="center">{authError}</Typography>
         ) : (
-          <>
+          <form onSubmit={handleSubmit}>
             <TextField
               label="New password"
               type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
+              value={pw1}
+              onChange={(e) => setPw1(e.target.value)}
               fullWidth
               margin="normal"
               disabled={loading}
+              autoComplete="new-password"
             />
             <TextField
               label="Confirm new password"
               type="password"
-              value={confirmPassword}
-              onChange={e => setConfirmPassword(e.target.value)}
+              value={pw2}
+              onChange={(e) => setPw2(e.target.value)}
               fullWidth
               margin="normal"
               disabled={loading}
+              autoComplete="new-password"
             />
-            <Button
-              onClick={handleReset}
-              disabled={loading}
-              variant="contained"
-              color="primary"
-              fullWidth
-              style={{ marginTop: 16 }}
-            >
-              {loading ? 'Updating...' : 'Update Password'}
+
+            {err && <Typography color="error" align="center" sx={{ mt: 1 }}>{err}</Typography>}
+
+            <Button type="submit" variant="contained" color="primary" fullWidth disabled={loading} sx={{ mt: 2 }}>
+              {loading ? 'Updating…' : 'Save & continue'}
             </Button>
-            {error && <Typography color="error" align="center" style={{ marginTop: 12 }}>{error}</Typography>}
-            {success && <Typography color="success.main" align="center" style={{ marginTop: 12 }}>{success}</Typography>}
-          </>
+          </form>
         )}
       </Paper>
     </div>

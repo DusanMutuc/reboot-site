@@ -290,7 +290,7 @@ export default function LoginPage() {
                 setForgotMessage(null);
                 const { error } = await supabase.auth.resetPasswordForEmail(
                   forgotEmail,
-                  { redirectTo: 'https://reboot-site.vercel.app/reset-password' }
+                  { redirectTo: 'https://hub.rebootmembers.com/reset-password' }
                 );
                 if (error) setForgotError(error.message);
                 else setForgotMessage('If this email exists, a reset link has been sent.');
@@ -528,7 +528,7 @@ export default function LoginPage() {
               setForgotMessage(null);
               const { error } = await supabase.auth.resetPasswordForEmail(
                 forgotEmail,
-                { redirectTo: 'https://reboot-site.vercel.app/reset-password' }
+                { redirectTo: 'https://hub.rebootmembers.com/reset-password' }
               );
               if (error) setForgotError(error.message);
               else setForgotMessage('If this email exists, a reset link has been sent.');

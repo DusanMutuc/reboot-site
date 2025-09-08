@@ -1,0 +1,74 @@
+// src/middleware.ts
+import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
+
+const RESET_PATH = '/reset-password';
+const PUBLIC_PREFIXES = [
+  '/login',
+  '/signup',
+  RESET_PATH,
+  '/api/auth',        // allow clear-first-login-flag
+  '/auth',            // oauth callbacks if you have them
+  '/_next',
+  '/favicon.ico',
+  '/robots.txt',
+  '/sitemap.xml',
+  '/images',
+  '/api/webhooks',
+];
+
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+
+  // Allow public routes & assets
+  if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
+
+  // Create a response we can mutate cookies on
+  const res = NextResponse.next({ request: { headers: req.headers } });
+
+  // Manual cookie adapter (works across Next 14/15, SSR lib versions)
+  const cookieAdapter = {
+    get(name: string) {
+      return req.cookies.get(name)?.value;
+    },
+    set(name: string, value: string, options: CookieOptions) {
+      res.cookies.set({ name, value, ...options });
+    },
+    remove(name: string, options: CookieOptions) {
+      res.cookies.set({ name, value: '', ...options, maxAge: 0 });
+    },
+  } as any; // <-- quiets TS differences between SSR versions
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: cookieAdapter }
+  );
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  // Not logged in → redirect to login
+  if (!session) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('redirectTo', pathname);
+    return NextResponse.redirect(url);
+  }
+
+  // Must reset → force to reset page
+  if (session.user.app_metadata?.must_reset_password === true && pathname !== RESET_PATH) {
+    const url = req.nextUrl.clone();
+    url.pathname = RESET_PATH;
+    return NextResponse.redirect(url);
+  }
+
+  return res;
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+};

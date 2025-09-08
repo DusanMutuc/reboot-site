@@ -1,4 +1,3 @@
-// app/api/admin/create-user/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { requireAdmin } from '@/lib/requireAdmin';
@@ -43,13 +42,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Role not found' }, { status: 400 });
     }
 
-    // Create user
+    // Create user (temp password, confirmed), FORCE reset on first login
     console.log('👤 create-user: Creating auth user');
     const { data: created, error: authErr } = await supa.auth.admin.createUser({
       email,
       password: 'reboot',
       email_confirm: true,
       user_metadata: { first_name, last_name },
+      app_metadata: { must_reset_password: true }, // <— important
     });
     if (authErr) {
       console.error('❌ create-user: Auth creation error:', authErr);
