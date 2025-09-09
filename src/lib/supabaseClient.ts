@@ -4,6 +4,11 @@ import { createBrowserClient, type CookieOptions } from '@supabase/ssr';
 const isProd = process.env.NODE_ENV === 'production';
 
 function setCookie(name: string, value: string, options?: CookieOptions) {
+  // Check if we're on the client side
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+  
   const opts = { path: '/', sameSite: 'lax' as const, ...options };
   let str = `${name}=${value}; Path=${opts.path}; SameSite=${opts.sameSite}`;
   if (opts.maxAge) str += `; Max-Age=${opts.maxAge}`;
@@ -11,11 +16,23 @@ function setCookie(name: string, value: string, options?: CookieOptions) {
   if (isProd) str += `; Secure`;
   document.cookie = str;
 }
+
 function removeCookie(name: string, options?: CookieOptions) {
+  // Check if we're on the client side
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return;
+  }
+  
   const path = options?.path ?? '/';
   document.cookie = `${name}=; Path=${path}; Max-Age=0`;
 }
+
 function getCookie(name: string) {
+  // Check if we're on the client side
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return null;
+  }
+  
   const m = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return m?.[1];
 }

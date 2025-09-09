@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -13,14 +13,14 @@ import {
   DialogTitle,
   TextField,
   Typography,
-  useMediaQuery,
 } from '@mui/material';
-
 
 export default function LoginClient() {
   const router = useRouter();
-  // ✅ avoid server access to window/document
-  const isMdUp = useMediaQuery('(min-width:900px)', { noSsr: true });
+  
+  // Use useState and useEffect for hydration-safe responsive detection
+  const [isMdUp, setIsMdUp] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +33,21 @@ export default function LoginClient() {
   const [forgotError, setForgotError] = useState<string | null>(null);
 
   const emailRef = useRef<HTMLInputElement>(null);
-  const passRef  = useRef<HTMLInputElement>(null);
+  const passRef = useRef<HTMLInputElement>(null);
+
+  // Hydration-safe responsive detection
+  useEffect(() => {
+    setMounted(true);
+    
+    const checkIsDesktop = () => {
+      setIsMdUp(window.innerWidth >= 900);
+    };
+    
+    checkIsDesktop();
+    window.addEventListener('resize', checkIsDesktop);
+    
+    return () => window.removeEventListener('resize', checkIsDesktop);
+  }, []);
 
   const handleLogin = async () => {
     setError(null);
@@ -75,6 +89,21 @@ export default function LoginClient() {
       router.push('/dashboard');
     }
   };
+
+  // Prevent hydration mismatch by not rendering responsive content until mounted
+  if (!mounted) {
+    return (
+      <Box sx={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        bgcolor: '#2a2a2a'
+      }}>
+        <Typography sx={{ color: '#5cbca8' }}>Loading...</Typography>
+      </Box>
+    );
+  }
 
   /* ──────────────────────────
      MOBILE (hero + teal form)
@@ -171,7 +200,7 @@ export default function LoginClient() {
                   fontSize: '1rem',
                 },
                 '& .MuiOutlinedInput-root': {
-                  backgroundColor: '#fff',                 // ← individual white field
+                  backgroundColor: '#fff',
                   borderRadius: '0.75rem',
                   boxShadow: '0 .125rem .375rem rgba(0,0,0,0.15)',
                   '& fieldset': { borderColor: 'transparent' },
@@ -196,7 +225,7 @@ export default function LoginClient() {
                 mb: 1.5,
                 '& .MuiOutlinedInput-root': {
                   fontSize: '1rem',
-                  backgroundColor: '#fff',                 // ← individual white field
+                  backgroundColor: '#fff',
                   borderRadius: '0.75rem',
                   boxShadow: '0 .125rem .375rem rgba(0,0,0,0.15)',
                   '& fieldset': { borderColor: 'transparent' },
@@ -215,7 +244,7 @@ export default function LoginClient() {
                   p: 0,
                   textTransform: 'none',
                   textDecoration: 'underline',
-                  color: '#fff',       // on teal
+                  color: '#fff',
                   fontSize: '0.95rem',
                 }}
               >
