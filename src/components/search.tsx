@@ -71,7 +71,7 @@ export default function Search() {
   const [mode, setMode] = useState<'strict'|'balanced'|'loose'>('balanced');
 
   // Results/paging
-  const PAGE = 24;
+  const PAGE = 9;
   const [page, setPage] = useState(0);
   const [results, setResults] = useState<ResourceRow[]>([]);
   const [totalGuess, setTotalGuess] = useState<number | null>(null);
@@ -344,63 +344,92 @@ export default function Search() {
         )}
 
         {/* Results panel */}
-        <Box
-          sx={{
-            maxWidth: '72rem',
-            mx: 'auto',
-            mt: 4,
-            bgcolor: '#fff',
-            borderRadius: 3,
-            boxShadow: '0 .25rem .75rem rgba(0,0,0,0.2)',
-            p: { xs: 2, md: 3 },
-            textAlign: 'left',
-          }}
-        >
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-            <Typography sx={{ fontWeight: 700 }}>{resultCountText}</Typography>
-            {broadening && <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>Including broader matches…</Typography>}
-          </Stack>
+<Box
+  sx={{
+    maxWidth: '72rem',
+    mx: 'auto',
+    mt: 4,
+    bgcolor: '#fff',
+    borderRadius: 3,
+    boxShadow: '0 .25rem .75rem rgba(0,0,0,0.2)',
+    p: { xs: 2, md: 3 },
+    textAlign: 'left',
 
-          {error && (
-            <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
-          )}
+    // NEW: constrain height + create an internal scroll area
+    display: 'flex',
+    flexDirection: 'column',
+    maxHeight: { xs: '65vh', md: '70vh' },
+    overflow: 'hidden',
+  }}
+>
+  {/* Header (sticky) */}
+  <Stack
+    direction="row"
+    alignItems="center"
+    justifyContent="space-between"
+    sx={{
+      mb: 2,
+      position: 'sticky',
+      top: 0,
+      backgroundColor: '#fff',
+      zIndex: 1,
+      // subtle divider effect as it sticks
+      pb: 1,
+    }}
+  >
+    <Typography sx={{ fontWeight: 700 }}>{resultCountText}</Typography>
+    {broadening && (
+      <Typography color="text.secondary" sx={{ fontStyle: 'italic' }}>
+        Including broader matches…
+      </Typography>
+    )}
+  </Stack>
 
-          {loading && results.length === 0 && (
-            <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 160 }}>
-              <CircularProgress />
-              <Typography sx={{ mt: 2, color: 'text.secondary' }}>Searching…</Typography>
-            </Stack>
-          )}
+  {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
 
-          {!loading && results.length === 0 && (
-            <Box sx={{ textAlign: 'center', py: 6 }}>
-              <Typography sx={{ fontWeight: 700, mb: 1 }}>No results</Typography>
-              <Typography color="text.secondary">Try a different keyword, switch fuzziness to “Loose”, or click a suggested tag above.</Typography>
-            </Box>
-          )}
+  {loading && results.length === 0 && (
+    <Stack alignItems="center" justifyContent="center" sx={{ minHeight: 160 }}>
+      <CircularProgress />
+      <Typography sx={{ mt: 2, color: 'text.secondary' }}>Searching…</Typography>
+    </Stack>
+  )}
 
-          {/* Grid */}
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' },
-              gap: 2,
-            }}
-          >
-            {results.map((row) => (
-              <Box
-                key={row.id}
-                sx={{
-                  p: 2,
-                  border: '1px solid #eee',
-                  borderRadius: 2,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 1,
-                  transition: 'transform .12s ease, box-shadow .12s ease',
-                  '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 .5rem 1rem rgba(0,0,0,0.12)' },
-                }}
-              >
+  {!loading && results.length === 0 && (
+    <Box sx={{ textAlign: 'center', py: 6 }}>
+      <Typography sx={{ fontWeight: 700, mb: 1 }}>No results</Typography>
+      <Typography color="text.secondary">
+        Try a different keyword, switch fuzziness to “Loose”, or click a suggested tag above.
+      </Typography>
+    </Box>
+  )}
+
+  {/* Grid (scrollable area) */}
+  <Box
+    sx={{
+      display: 'grid',
+      gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' },
+      gap: 2,
+
+      // NEW: make only this part scroll
+      flex: 1,
+      overflowY: 'auto',
+      pr: 1, // keeps content off the scrollbar a bit
+    }}
+  >
+    {results.map((row) => (
+      <Box
+        key={row.id}
+        sx={{
+          p: 2,
+          border: '1px solid #eee',
+          borderRadius: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+          transition: 'transform .12s ease, box-shadow .12s ease',
+          '&:hover': { transform: 'translateY(-2px)', boxShadow: '0 .5rem 1rem rgba(0,0,0,0.12)' },
+        }}
+      >
                 {/* Thumbnail or type icon row */}
                 <Stack direction="row" alignItems="center" spacing={1}>
                   {TYPE_ICONS[row.type]}
