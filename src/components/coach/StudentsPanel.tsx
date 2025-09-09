@@ -117,7 +117,7 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
   if (error)   return <ErrorMessage message={error} />;
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto', my: 2 }}>
+    <Box sx={{ width: '100%', mx: 'auto', my: 2 }}>
       {/* Horizontal chooser */}
       <Box
         sx={{
@@ -127,6 +127,7 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
           overflowX: 'auto',
           pb: 1,
           mb: 2,
+          px: 2,
         }}
       >
         {sorted.map((s) => (

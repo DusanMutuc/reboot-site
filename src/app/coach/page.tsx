@@ -58,13 +58,13 @@ export default function CoachPage() {
         <Search />
       </section>
 
-      <section id="dashboard" style={sectionOffsetStyle}>
+      {/* <section id="dashboard" style={sectionOffsetStyle}>
         {coachingDashboardUrl
           ? <DashboardEmbed src={coachingDashboardUrl} />
           : <Alert severity="warning">No Coaching Dashboard URL set (NEXT_PUBLIC_COACHING_DASHBOARD_URL).</Alert>}
-      </section>
+      </section> */}
 
-      <section id="students" style={sectionOffsetStyle}>
+      <section id="dashboard" style={sectionOffsetStyle}>
         {/* courseId null ⇒ all active students; add a course picker later if you want */}
         <StudentsPanel courseId={null} />
       </section>

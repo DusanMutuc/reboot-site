@@ -143,9 +143,7 @@ export default function HelpSteps() {
 
       {/* ─────────── Footer ─────────── */}
       <Box sx={{ width: '100%', backgroundColor: '#2a2a2a', p: 3, mt: { xs: 4, md: '3.75rem' }, textAlign: 'center' }}>
-        <Typography variant="body2" sx={{ color: '#aaa', fontSize: 14 }}>
-          © 2025 Reboot • All rights reserved (placeholder text)
-        </Typography>
+        
       </Box>
     </section>
   );

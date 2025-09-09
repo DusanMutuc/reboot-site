@@ -51,44 +51,53 @@ export default function LoginClient() {
 
   const handleLogin = async () => {
     setError(null);
-
+  
     const email = (emailRef.current?.value || '').trim();
     const password = passRef.current?.value || '';
-
+  
     const { data: authData, error: signInError } =
       await supabase.auth.signInWithPassword({ email, password });
-
+  
     if (signInError) {
       setError(signInError.message);
       return;
     }
-
+  
     const user = authData.user;
     if (!user) {
       setError('No user data returned');
       return;
     }
-
+  
     try {
-      const { data, error } = await supabase
+      // 1 = admin, 2 = coach  (change if your IDs differ)
+      const { data: roles, error } = await supabase
         .from('user_roles')
-        .select('user_id, role_id')
+        .select('role_id')
         .eq('user_id', user.id)
-        .eq('role_id', 1)
-        .maybeSingle();
-
+        .in('role_id', [1, 2]); // fetch only relevant roles
+  
       if (error) {
         router.push('/dashboard');
         return;
       }
-
-      router.push(data ? '/admin' : '/dashboard');
+  
+      const ids = new Set((roles ?? []).map(r => r.role_id));
+  
+      if (ids.has(1)) {
+        router.push('/admin');
+      } else if (ids.has(2)) {
+        router.push('/coach');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
-      setError(`Admin check failed: ${message}`);
+      setError(`Role check failed: ${message}`);
       router.push('/dashboard');
     }
   };
+  
 
   // Prevent hydration mismatch by not rendering responsive content until mounted
   if (!mounted) {

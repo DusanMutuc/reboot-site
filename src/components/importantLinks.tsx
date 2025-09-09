@@ -16,20 +16,28 @@ type LinkItem = { label: string; href?: string };
 const BOOKING_LABEL = 'MOMENTUM COACH \nBOOKING LINK';
 const CALL15_LABEL  = 'MOMENTUM COACH 15 MIN CALL LINK';
 
+// New labels for coach mode additions
+const REFERRAL_PILL_LABEL = 'REFER AN AGENT TO OUR PROGRAM';
+const COACH_NOTES_LABEL   = 'COACHING NOTES';
+
 const baseLinks: LinkItem[] = [
   { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://agentfromwithin.upcoach.com/' },
   { label: 'REBOOT CALENDAR', href: 'https://www.addevent.com/calendar/ez616853' },
   { label: BOOKING_LABEL },
-  { label: 'REBOOT COACHING \nZOOM LINK', href: 'https://zoom.us/j/93233351653' },
-  { label: 'ASSISTANT WORKROOM \nZOOM LINK', href: 'https://zoom.us/j/99652221215' },
   { label: CALL15_LABEL },
+  { label: 'ASSISTANT WORKROOM \nZOOM LINK', href: 'https://zoom.us/j/99652221215' },
+  { label: 'REBOOT COACHING \nZOOM LINK', href: 'https://zoom.us/j/93233351653' },
   { label: 'ASSISTANT ONBOARDING', href: 'https://api.leadconnectorhq.com/widget/bookings/assistant_on' },
   { label: 'REBOOT SYSTEMS EXPLAINERS', href: 'https://vimeo.com/showcase/11715034' },
   { label: 'REBOOT FACEBOOK GROUP', href: 'https://www.facebook.com/groups/realestatereboot' },
   { label: 'FIND A REBOOT AGENT TO REFER YOUR CLIENTS' },
 ];
 
-const iconNumbers = [5, 6, 7, 8, 8, 9, 10, 11, 12, 13];
+// ICON MAPS
+// User mode (original 10)
+const iconNumbersUser = [5, 6, 7, 9, 8, 8, 10, 11, 12, 13];
+// Coach mode (12 total): the same 10 + 14 for Referral + 11 for Notes (feel free to swap)
+const iconNumbersCoach = [...iconNumbersUser, 14, 15];
 
 function normalizeUrl(raw?: string | null): string | null {
   if (!raw) return null;
@@ -50,6 +58,7 @@ type Props = {
 export default function ImportantLinks({ mode = 'user', courseId = null }: Props) {
   const [m2Url, setM2Url] = useState<string | null>(null);
   const [call15Url, setCall15Url] = useState<string | null>(null);
+  const [coachNotesUrl, setCoachNotesUrl] = useState<string | null>(null); // NEW
 
   useEffect(() => {
     let mounted = true;
@@ -62,7 +71,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
 
           const { data, error } = await supabase
             .from('coach_profiles')
-            .select('m2_booking_url, call15_url')
+            .select('m2_booking_url, call15_url, coaching_notes_url')
             .eq('user_id', user.id)
             .maybeSingle();
           if (error) throw error;
@@ -70,6 +79,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
           if (!mounted) return;
           setM2Url(normalizeUrl(data?.m2_booking_url ?? null));
           setCall15Url(normalizeUrl(data?.call15_url ?? null));
+          setCoachNotesUrl(normalizeUrl(data?.coaching_notes_url ?? null)); // NEW
         } else {
           // Regular user: use your existing get_my_coach(_course_id) function
           const { data, error } = await supabase.rpc('get_my_coach', {
@@ -77,30 +87,49 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
           });
           if (error) throw error;
 
-          // Function returns a single row; handle array/single defensively
           const row = Array.isArray(data) ? data[0] : data;
           if (!mounted) return;
           setM2Url(normalizeUrl(row?.m2_booking_url ?? null));
           setCall15Url(normalizeUrl(row?.call15_url ?? null));
+          setCoachNotesUrl(null); // not shown/used in user mode
         }
       } catch (e) {
         if (!mounted) return;
         console.error('ImportantLinks fetch error:', e);
         setM2Url(null);
         setCall15Url(null);
+        setCoachNotesUrl(null);
       }
     })();
     return () => { mounted = false; };
   }, [mode, courseId]);
 
-  const resolvedLinks = useMemo(() => {
-    const out = baseLinks.map((item) => ({ ...item }));
-    const bookingIdx = out.findIndex(l => l.label === BOOKING_LABEL);
-    const call15Idx  = out.findIndex(l => l.label === CALL15_LABEL);
-    if (bookingIdx >= 0) out[bookingIdx].href = m2Url   ?? out[bookingIdx].href;
-    if (call15Idx  >= 0) out[call15Idx].href  = call15Url ?? out[call15Idx].href;
-    return out;
-  }, [m2Url, call15Url]);
+  const { resolvedLinks, icons } = useMemo(() => {
+    // Start with the original 10
+    const items = baseLinks.map((item) => ({ ...item }));
+
+    // Fill in the two dynamic coach links if available
+    const bookingIdx = items.findIndex(l => l.label === BOOKING_LABEL);
+    const call15Idx  = items.findIndex(l => l.label === CALL15_LABEL);
+    if (bookingIdx >= 0) items[bookingIdx].href = m2Url    ?? items[bookingIdx].href;
+    if (call15Idx  >= 0) items[call15Idx].href  = call15Url ?? items[call15Idx].href;
+
+    if (mode === 'coach') {
+      // 1) Columnize the "Refer an agent..." pill: add it as a regular button
+      items.push({ label: REFERRAL_PILL_LABEL }); // no href provided (same behavior as before)
+
+      // 2) Add the Coaching Notes button (12th total)
+      items.push({ label: COACH_NOTES_LABEL, href: coachNotesUrl ?? undefined });
+    }
+
+    return {
+      resolvedLinks: items,
+      icons: mode === 'coach' ? iconNumbersCoach : iconNumbersUser,
+    };
+  }, [mode, m2Url, call15Url, coachNotesUrl]);
+
+  // Utility to pick the correct icon number per index (guards if arrays drift)
+  const iconForIndex = (i: number) => (icons[i] ?? icons[icons.length - 1]);
 
   return (
     <section
@@ -159,7 +188,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
             <>
               <Box
                 component="img"
-                src={`/${iconNumbers[i]}.svg`}
+                src={`/${iconForIndex(i)}.svg`}
                 alt=""
                 sx={{ width: 44, height: 44, borderRadius: '50%', flexShrink: 0 }}
               />
@@ -240,7 +269,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
             <>
               <Box
                 component="img"
-                src={`/${iconNumbers[i]}.svg`}
+                src={`/${iconForIndex(i)}.svg`}
                 alt=""
                 sx={{
                   width: '6.25rem',
@@ -287,54 +316,56 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
         })}
       </Box>
 
-      {/* Referral card unchanged */}
-      <Box sx={{ mt: 4, mb: 3, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            gap: 2,
-            bgcolor: '#fff',
-            borderRadius: '2.5rem',
-            border: '.75rem solid #d7d7d7',
-            boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
-            p: 1,
-            pl: 2,
-            pr: 6,
-            minHeight: '6.875rem',
-            position: 'relative',
-            transition: 'transform .15s',
-            maxWidth: '35rem',
-            mx: 'auto',
-          }}
-        >
+      {/* Referral pill remains ONLY in user mode (unchanged visual) */}
+      {mode !== 'coach' && (
+        <Box sx={{ mt: 4, mb: 3, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
           <Box
-            component="img"
-            src="/14.svg"
-            alt=""
             sx={{
-              width: '8rem',
-              height: '8rem',
-              position: 'absolute',
-              right: '-4.5rem',
-              top: '-1rem',
-              borderRadius: '50%',
-            }}
-          />
-          <Typography
-            sx={{
-              fontWeight: 'bolder',
-              px: 5,
-              flex: 1,
-              textAlign: 'center',
-              fontSize: '1.4rem',
+              display: 'flex',
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 2,
+              bgcolor: '#fff',
+              borderRadius: '2.5rem',
+              border: '.75rem solid #d7d7d7',
+              boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
+              p: 1,
+              pl: 2,
+              pr: 6,
+              minHeight: '6.875rem',
+              position: 'relative',
+              transition: 'transform .15s',
+              maxWidth: '35rem',
+              mx: 'auto',
             }}
           >
-            REFER AN AGENT TO OUR PROGRAM
-          </Typography>
+            <Box
+              component="img"
+              src="/14.svg"
+              alt=""
+              sx={{
+                width: '8rem',
+                height: '8rem',
+                position: 'absolute',
+                right: '-4.5rem',
+                top: '-1rem',
+                borderRadius: '50%',
+              }}
+            />
+            <Typography
+              sx={{
+                fontWeight: 'bolder',
+                px: 5,
+                flex: 1,
+                textAlign: 'center',
+                fontSize: '1.4rem',
+              }}
+            >
+              {REFERRAL_PILL_LABEL}
+            </Typography>
+          </Box>
         </Box>
-      </Box>
+      )}
     </section>
   );
 }
