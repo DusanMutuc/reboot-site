@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Paper, Typography, Alert } from '@mui/material';
+import { Box, Paper, Typography, Alert, Divider, Stack, Link as MuiLink } from '@mui/material';
 import DashboardEmbed from '@/components/dashboardEmbed';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
 import { supabase } from '@/lib/supabaseClient';
 
 type StudentRow = { user_id: string; full_name: string };
+type ContactInfo = { email: string | null; phone: string | null };
 
 function StudentChip({
   label,
@@ -45,9 +46,14 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+
   const [studentDashboard, setStudentDashboard] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dashErr, setDashErr] = useState<string | null>(null);
+
+  const [contact, setContact] = useState<ContactInfo | null>(null);
+  const [contactBusy, setContactBusy] = useState(false);
+  const [contactErr, setContactErr] = useState<string | null>(null);
 
   // Load roster
   useEffect(() => {
@@ -72,12 +78,14 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
     [rows]
   );
 
-  // Reset selection when course changes or roster changes
+  // Reset selection when course changes or roster size changes
   useEffect(() => {
     setSelectedId(null);
     setSelectedName(null);
     setStudentDashboard(null);
     setDashErr(null);
+    setContact(null);
+    setContactErr(null);
   }, [courseId, rows.length]);
 
   // Auto-select first student (optional UX)
@@ -109,6 +117,33 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
         setDashErr(msg);
       } finally {
         setBusy(false);
+      }
+    })();
+  }, [selectedId]);
+
+  // Fetch contact (email/phone) from auth via secure RPC
+  useEffect(() => {
+    if (!selectedId) return;
+    (async () => {
+      try {
+        setContactBusy(true);
+        setContactErr(null);
+        setContact(null);
+        const { data, error } = await supabase.rpc('get_user_contact', {
+          _user_id: selectedId,
+          _course_id: courseId ?? null,
+        });
+        
+        // data is [{ email, phone }] or null
+        const row = Array.isArray(data) ? data[0] : data;
+        const email = (row?.email ?? null) as string | null;
+        const phone = (row?.phone ?? null) as string | null;
+        setContact({ email, phone });
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Failed to load contact info';
+        setContactErr(msg);
+      } finally {
+        setContactBusy(false);
       }
     })();
   }, [selectedId]);
@@ -161,6 +196,38 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
             {!!studentDashboard && <DashboardEmbed src={studentDashboard} />}
             {!busy && !dashErr && !studentDashboard && (
               <Alert severity="warning">No Looker Studio link found for this student.</Alert>
+            )}
+
+            {/* Divider */}
+            <Divider sx={{ my: 2 }} />
+
+            {/* Contact info */}
+            <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '3.5rem' }}>
+              {selectedName ? `${selectedName} – Contact` : 'Contact'}
+            </Typography>
+
+            {contactBusy && <Loading />}
+            {contactErr && <ErrorMessage message={contactErr} />}
+
+            {!contactBusy && !contactErr && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>
+                <Box sx={{ minWidth: 240 }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '1.8rem' }}>Email</Typography>
+                  {contact?.email ? (
+                    <MuiLink sx={{ fontSize: '1.8rem' }} href={`mailto:${contact.email}`}>{contact.email}</MuiLink>
+                  ) : (
+                    <Typography variant="body1">—</Typography>
+                  )}
+                </Box>
+                <Box sx={{ minWidth: 200 }}>
+                  <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '1.8rem' }}>Phone</Typography>
+                  {contact?.phone ? (
+                    <MuiLink sx={{ fontSize: '1.8rem' }} href={`tel:${contact.phone}`}>{contact.phone}</MuiLink>
+                  ) : (
+                    <Typography variant="body1">—</Typography>
+                  )}
+                </Box>
+              </Stack>
             )}
           </>
         )}

@@ -11,6 +11,7 @@ import DashboardEmbed from '@/components/dashboardEmbed';
 import StudentsPanel from '@/components/coach/StudentsPanel';
 import CoachCalendar from '@/components/coach/CoachCalendar';
 import HelperContacts from '@/components/coach/HelperContacts';
+import CoachSchedule from '@/components/coach/CoachSchedule';
 
 export default function CoachPage() {
   const [navH, setNavH] = useState(0);
@@ -66,11 +67,13 @@ export default function CoachPage() {
 
       <section id="dashboard" style={sectionOffsetStyle}>
         {/* courseId null ⇒ all active students; add a course picker later if you want */}
-        <StudentsPanel courseId={null} />
+        <StudentsPanel courseId={2} />
       </section>
 
+      
+
       <section id="calendar" style={sectionOffsetStyle}>
-        <CoachCalendar />
+        <CoachSchedule />
       </section>
 
       <section id="help" style={sectionOffsetStyle}>
