@@ -58,8 +58,8 @@ export default function CoachSchedule() {
           // server echoes back a validated timezone; update local copy for formatting consistency
           setTz(data?.timezone || tz);
         }
-      } catch (e: any) {
-        if (isMounted) setErr(e?.message || 'Failed to load schedule');
+      } catch (e: unknown) {
+        if (isMounted) setErr((e as Error)?.message || 'Failed to load schedule');
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -88,10 +88,10 @@ export default function CoachSchedule() {
   const timeRange = (ev: ApiEvent) => {
     const start = new Date(ev.start);
     const end = new Date(ev.end);
-    // Display times in the browser’s locale/timezone
+    // Display times in the browser's locale/timezone
     const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
     return `${timeFmt.format(start)} – ${timeFmt.format(end)}`;
-    // If you’d rather show the timezone explicitly, append ` (${tz})`
+    // If you'd rather show the timezone explicitly, append ` (${tz})`
   };
 
   return (
@@ -102,7 +102,7 @@ export default function CoachSchedule() {
           value={days}
           exclusive
           size="small"
-          onChange={(_, v) => v && setDays(v)}
+          onChange={(_, v: 7 | 14 | null) => v && setDays(v)}
         >
           <ToggleButton value={7}>Next 7 days</ToggleButton>
           <ToggleButton value={14}>Next 14 days</ToggleButton>
