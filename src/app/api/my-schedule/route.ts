@@ -35,7 +35,7 @@ function toIsoUtc(v: unknown): string | null {
   return null;
 }
 
-async function getLoggedInUserId(req: NextRequest): Promise<string | null> {
+async function getLoggedInUserId(): Promise<string | null> {
   // Supabase SSR client wired to Next.js cookies
   const cookieStore = await cookies();
   const supabase = createServerClient(
@@ -46,10 +46,10 @@ async function getLoggedInUserId(req: NextRequest): Promise<string | null> {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options: any) {
+        set() {
           // Next.js App Router cookies are immutable per request; no-op is fine here.
         },
-        remove(name: string, options: any) {
+        remove() {
           // no-op
         },
       },
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest) {
     const tz = isValidIana(tzParam) ? tzParam : "UTC";
 
     // 1) Auth → user id
-    const userId = await getLoggedInUserId(req);
+    const userId = await getLoggedInUserId();
     if (!userId) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const payload = (await res.json()) as { events?: any[] } | any[];
+    const payload = (await res.json()) as { events?: unknown[] } | unknown[];
     const events = Array.isArray(payload) ? payload : payload?.events ?? [];
 
     // 5) (Optional) exclude specific calendarIds here if desired
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // 6) Normalize
-    const items = (events as any[])
+    const items = (events as Record<string, unknown>[])
       .filter((e) => !EXCLUDE.has(String(e.calendarId ?? "")))
       .map((e) => {
         const start = toIsoUtc(e.startTime ?? e.start ?? e.from);
@@ -166,9 +166,9 @@ export async function GET(req: NextRequest) {
           end,   // ISO UTC
           contact: {
             id: e.contactId ?? null,
-            name: e.contact?.name ?? null,
-            email: e.contact?.email ?? null,
-            phone: e.contact?.phone ?? null,
+            name: (e.contact as Record<string, unknown>)?.name ?? null,
+            email: (e.contact as Record<string, unknown>)?.email ?? null,
+            phone: (e.contact as Record<string, unknown>)?.phone ?? null,
           },
           location: e.address ?? e.meetingLocation ?? null, // Zoom link or other
         };
@@ -178,9 +178,9 @@ export async function GET(req: NextRequest) {
 
     // 7) Return viewer tz for consistent rendering client-side
     return NextResponse.json({ timezone: tz, items });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { message: "Unexpected error", detail: String(err?.message ?? err) },
+      { message: "Unexpected error", detail: String((err as Error)?.message ?? err) },
       { status: 500 }
     );
   }
