@@ -42,12 +42,23 @@ export default function TopNav({
   }, [sections]);
 
   const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // keep the URL hash in sync without a full jump
-    history.replaceState(null, '', `#${id}`);
-  };
+  const el = document.getElementById(id);
+  if (!el) return;
+  
+  // Calculate the AppBar height + some padding
+  const appBar = document.getElementById('appbar');
+  const offset = appBar ? appBar.offsetHeight : 120; // fallback to ~120px
+  
+  const elementPosition = el.getBoundingClientRect().top + window.pageYOffset;
+  const offsetPosition = elementPosition - offset;
+  
+  window.scrollTo({
+    top: offsetPosition,
+    behavior: 'smooth'
+  });
+  
+  history.replaceState(null, '', `#${id}`);
+};
 
   return (
     <>

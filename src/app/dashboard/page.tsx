@@ -36,8 +36,6 @@ export default function DashboardPage() {
   return (
     <>
       <TopNav />
-      {/* Spacer exactly equal to the current nav height */}
-      <Box sx={{ height: navH }} />
 
       <section id="links" style={sectionOffsetStyle}>
         <ImportantLinks mode="user" />
