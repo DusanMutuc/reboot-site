@@ -152,7 +152,7 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
   if (error)   return <ErrorMessage message={error} />;
 
   return (
-    <Box sx={{ width: '100%', mx: 'auto', my: 2 }}>
+    <Box sx={{ width: '100%', mx: 'auto', mt: 2,  borderRadius: 0 }}>
       {/* Horizontal chooser */}
       <Box
         sx={{
@@ -184,11 +184,11 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
       </Box>
 
       {/* Full-width dashboard */}
-      <Paper variant="outlined" sx={{ p: 2 }}>
+      <Paper variant="outlined" sx={{ p: 2, backgroundColor: '#2A2A2A', borderRadius: 0, borderWidth: 0, pb: 8 }}>
         {!selectedId && <Alert severity="info">Select a student to view their M2 Dashboard.</Alert>}
         {selectedId && (
           <>
-            <Typography variant="h6" sx={{ mb: 1.5 }}>
+            <Typography variant="h6" sx={{ mb: 1.5,ml:5, color: '#fff' }}>
               {selectedName ? `${selectedName} – M2 Dashboard` : 'Student M2 Dashboard'}
             </Typography>
             {busy && <Loading />}
@@ -198,11 +198,9 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
               <Alert severity="warning">No Looker Studio link found for this student.</Alert>
             )}
 
-            {/* Divider */}
-            <Divider sx={{ my: 2 }} />
 
             {/* Contact info */}
-            <Typography variant="subtitle1" sx={{ mb: 1, fontSize: '3.5rem' }}>
+            <Typography variant="subtitle1" sx={{ mb: 1,ml:5, fontSize: '3.5rem', color: '#fff' }}>
               {selectedName ? `${selectedName} – Contact` : 'Contact'}
             </Typography>
 
@@ -211,18 +209,18 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
 
             {!contactBusy && !contactErr && (
               <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>
-                <Box sx={{ minWidth: 240 }}>
-                  <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '1.8rem' }}>Email</Typography>
+                <Box sx={{ minWidth: 240, ml:5, }}>
+                  <Typography variant="body2" sx={{ color: '#f6f6f6', fontSize: '1.8rem' }}>Email</Typography>
                   {contact?.email ? (
-                    <MuiLink sx={{ fontSize: '1.8rem' }} href={`mailto:${contact.email}`}>{contact.email}</MuiLink>
+                    <MuiLink sx={{ fontSize: '1.8rem', color: '#f6f6f6' }} href={`mailto:${contact.email}`}>{contact.email}</MuiLink>
                   ) : (
                     <Typography variant="body1">—</Typography>
                   )}
                 </Box>
                 <Box sx={{ minWidth: 200 }}>
-                  <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '1.8rem' }}>Phone</Typography>
+                  <Typography variant="body2" sx={{ color: '#f6f6f6', fontSize: '1.8rem' }}>Phone</Typography>
                   {contact?.phone ? (
-                    <MuiLink sx={{ fontSize: '1.8rem' }} href={`tel:${contact.phone}`}>{contact.phone}</MuiLink>
+                    <MuiLink sx={{ fontSize: '1.8rem', color: '#f6f6f6' }} href={`tel:${contact.phone}`}>{contact.phone}</MuiLink>
                   ) : (
                     <Typography variant="body1">—</Typography>
                   )}

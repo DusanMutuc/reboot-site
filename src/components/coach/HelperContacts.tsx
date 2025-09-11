@@ -4,7 +4,8 @@ import { Box, Paper, Typography, Divider } from '@mui/material';
 
 export default function HelperContacts() {
   return (
-    <Paper variant="outlined" sx={{ p: 2, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{backgroundColor: '#2a2a2a', paddingTop: 10}}>
+    <Paper variant="outlined" sx={{ p: 2, maxWidth: 900, mx: 'auto', }}>
       <Typography variant="h6" sx={{ mb: 1 }}>Quick Contacts</Typography>
       <Divider sx={{ mb: 2 }} />
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
@@ -24,5 +25,6 @@ export default function HelperContacts() {
         </Box>
       </Box>
     </Paper>
+    </Box>
   );
 }

@@ -95,18 +95,53 @@ export default function CoachSchedule() {
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto' }}>
+    <Box sx={{ width: '100%', backgroundColor: '#2A2A2A' }}>
+    <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', backgroundColor: '#2A2A2A' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2 }}>
-        <Typography variant="h5" fontWeight={700}>Your Schedule</Typography>
+        <Typography color="#ffffff" variant="h1" fontWeight={700}>Your Schedule</Typography>
         <ToggleButtonGroup
-          value={days}
-          exclusive
-          size="small"
-          onChange={(_, v: 7 | 14 | null) => v && setDays(v)}
-        >
-          <ToggleButton value={7}>Next 7 days</ToggleButton>
-          <ToggleButton value={14}>Next 14 days</ToggleButton>
-        </ToggleButtonGroup>
+  value={days}
+  exclusive
+  size="small"
+  onChange={(_, v: 7 | 14 | null) => v && setDays(v)}
+>
+  <ToggleButton
+    value={7}
+    sx={{
+      color: '#fff',                  // text color
+      borderColor: '#fff',            // border color
+      '&.Mui-selected': {
+        backgroundColor: '#555',      // background when active
+        color: '#fff',                // keep text white
+        borderColor: '#fff',
+      },
+      '&:hover': {
+        backgroundColor: '#444',      // hover background
+      },
+    }}
+  >
+    Next 7 days
+  </ToggleButton>
+
+  <ToggleButton
+    value={14}
+    sx={{
+      color: '#fff',
+      borderColor: '#fff',
+      '&.Mui-selected': {
+        backgroundColor: '#555',
+        color: '#fff',
+        borderColor: '#fff',
+      },
+      '&:hover': {
+        backgroundColor: '#444',
+      },
+    }}
+  >
+    Next 14 days
+  </ToggleButton>
+</ToggleButtonGroup>
+
       </Box>
 
       {loading && (
@@ -125,8 +160,8 @@ export default function CoachSchedule() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {Object.entries(groups).map(([dayLabel, list]) => (
             <Box key={dayLabel}>
-              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600 }}>{dayLabel}</Typography>
-              <Box sx={{ display: 'grid', gap: 1.5 }}>
+              <Typography variant="subtitle1" sx={{ mb: 1.5, fontWeight: 600, color: '#fff' }}>{dayLabel}</Typography>
+              <Box sx={{ display: 'grid', gap: 3 }}>
                 {list.map(ev => (
                   <Card key={ev.id} variant="outlined">
                     <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -176,6 +211,7 @@ export default function CoachSchedule() {
           ))}
         </Box>
       )}
+    </Box>
     </Box>
   );
 }
