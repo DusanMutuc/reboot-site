@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Box, Paper, Typography, Autocomplete, TextField,
-  Alert, Snackbar
+  Alert, Snackbar, Checkbox, FormControlLabel
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 
@@ -16,6 +16,7 @@ export default function AssignCoachPanel() {
   const [user, setUser] = useState<Person | null>(null);
   const [coach, setCoach] = useState<Person | null>(null);
   const [busy, setBusy] = useState(false);
+  const [replace, setReplace] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   });
@@ -45,11 +46,11 @@ export default function AssignCoachPanel() {
       const res = await fetch('/api/admin/assign-coach', {
         method: 'POST',
         headers: { 'content-type':'application/json' },
-        body: JSON.stringify({ user_id: user.id, coach_id: coach.id, replace: true })
+        body: JSON.stringify({ user_id: user.id, coach_id: coach.id, replace })
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.statusText);
-      setSnack({ open: true, message: 'Coach assigned.', severity: 'success' });
+      setSnack({ open: true, message: replace ? 'Coach replaced.' : 'Coach assigned.', severity: 'success' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error';
       setSnack({ open: true, message, severity: 'error' });
@@ -61,7 +62,7 @@ export default function AssignCoachPanel() {
   return (
     <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
       <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-        Assign / Replace Coach
+        Assign Coach
       </Typography>
 
       <Box sx={{ display: 'grid', gap: 2, maxWidth: 760 }}>
@@ -77,6 +78,15 @@ export default function AssignCoachPanel() {
           onChange={(_, v) => setCoach(v)}
           renderInput={(params) => <TextField {...params} label="Select coach…" />}
         />
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={replace}
+              onChange={(e) => setReplace(e.target.checked)}
+            />
+          }
+          label="Replace existing coach"
+        />
 
         <LoadingButton
           variant="contained"
@@ -84,11 +94,11 @@ export default function AssignCoachPanel() {
           loading={busy}
           disabled={!user || !coach}
         >
-          Assign / Replace
+          Assign
         </LoadingButton>
 
         <Alert severity="info">
-          Replaces the user’s current active coach (if any).
+          Adds the coach alongside any current coaches. Check &quot;replace existing coach&quot; to remove them first.
         </Alert>
       </Box>
 
