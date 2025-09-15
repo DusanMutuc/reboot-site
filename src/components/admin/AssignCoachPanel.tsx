@@ -1,13 +1,16 @@
 // components/admin/AssignCoachPanel.tsx
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Paper, Typography, Autocomplete, TextField,
-  Alert, Snackbar, Checkbox, FormControlLabel
+  Alert, Snackbar, Checkbox, FormControlLabel,
+  IconButton, CircularProgress
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
+import CloseIcon from '@mui/icons-material/Close';
 
 type Person = { id: string; name: string; email: string };
+type CoachResponse = Partial<Person> & { id: string };
 async function getJSON<T>(url: string): Promise<T> { const r = await fetch(url); return r.json(); }
 
 export default function AssignCoachPanel() {
@@ -17,6 +20,9 @@ export default function AssignCoachPanel() {
   const [coach, setCoach] = useState<Person | null>(null);
   const [busy, setBusy] = useState(false);
   const [replace, setReplace] = useState(false);
+  const [currentCoaches, setCurrentCoaches] = useState<Person[]>([]);
+  const [loadingCoaches, setLoadingCoaches] = useState(false);
+  const [removingCoachIds, setRemovingCoachIds] = useState<string[]>([]);
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success'
   });
@@ -39,6 +45,33 @@ export default function AssignCoachPanel() {
     [coaches]
   );
 
+  const loadCurrentCoaches = useCallback(async (userId: string, opts?: { silent?: boolean }) => {
+    setLoadingCoaches(true);
+    try {
+      const res = await fetch(`/api/admin/assign-coach?user_id=${encodeURIComponent(userId)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || res.statusText);
+      const items: CoachResponse[] = Array.isArray(data?.items) ? data.items : [];
+      setCurrentCoaches(items.map((item) => ({ id: item.id, name: item.name ?? '', email: item.email ?? '' })));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load current coaches';
+      if (!opts?.silent) {
+        setSnack({ open: true, message, severity: 'error' });
+      }
+      throw err;
+    } finally {
+      setLoadingCoaches(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setCurrentCoaches([]);
+      return;
+    }
+    loadCurrentCoaches(user.id).catch(() => {});
+  }, [user?.id, loadCurrentCoaches]);
+
   async function assign() {
     if (!user || !coach) return;
     setBusy(true);
@@ -50,6 +83,7 @@ export default function AssignCoachPanel() {
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.statusText);
+      await loadCurrentCoaches(user.id, { silent: true }).catch(() => {});
       setSnack({ open: true, message: replace ? 'Coach replaced.' : 'Coach assigned.', severity: 'success' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error';
@@ -59,47 +93,112 @@ export default function AssignCoachPanel() {
     }
   }
 
+  async function removeCoach(coachId: string) {
+    if (!user) return;
+    setRemovingCoachIds((prev) => prev.includes(coachId) ? prev : [...prev, coachId]);
+    try {
+      const res = await fetch(`/api/admin/assign-coach?user_id=${encodeURIComponent(user.id)}&coach_id=${encodeURIComponent(coachId)}`, {
+        method: 'DELETE'
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || res.statusText);
+      setCurrentCoaches((prev) => prev.filter((c) => c.id !== coachId));
+      setSnack({ open: true, message: 'Coach removed.', severity: 'success' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Error removing coach';
+      setSnack({ open: true, message, severity: 'error' });
+    } finally {
+      setRemovingCoachIds((prev) => prev.filter((id) => id !== coachId));
+    }
+  }
+
   return (
     <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
       <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
         Assign Coach
       </Typography>
 
-      <Box sx={{ display: 'grid', gap: 2, maxWidth: 760 }}>
-        <Autocomplete
-          options={userOptions}
-          value={user}
-          onChange={(_, v) => setUser(v)}
-          renderInput={(params) => <TextField {...params} label="Select user…" />}
-        />
-        <Autocomplete
-          options={coachOptions}
-          value={coach}
-          onChange={(_, v) => setCoach(v)}
-          renderInput={(params) => <TextField {...params} label="Select coach…" />}
-        />
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={replace}
-              onChange={(e) => setReplace(e.target.checked)}
-            />
-          }
-          label="Replace existing coach"
-        />
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: 'stretch' }}>
+        <Box sx={{ display: 'grid', gap: 2, width: { xs: '100%', md: 360 } }}>
+          <Autocomplete
+            options={userOptions}
+            value={user}
+            onChange={(_, v) => setUser(v)}
+            renderInput={(params) => <TextField {...params} label="Select user…" />}
+          />
+          <Autocomplete
+            options={coachOptions}
+            value={coach}
+            onChange={(_, v) => setCoach(v)}
+            renderInput={(params) => <TextField {...params} label="Select coach…" />}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={replace}
+                onChange={(e) => setReplace(e.target.checked)}
+              />
+            }
+            label="Replace existing coach"
+          />
 
-        <LoadingButton
-          variant="contained"
-          onClick={assign}
-          loading={busy}
-          disabled={!user || !coach}
-        >
-          Assign
-        </LoadingButton>
+          <LoadingButton
+            variant="contained"
+            onClick={assign}
+            loading={busy}
+            disabled={!user || !coach}
+          >
+            Assign
+          </LoadingButton>
 
-        <Alert severity="info">
-          Adds the coach alongside any current coaches. Check &quot;replace existing coach&quot; to remove them first.
-        </Alert>
+          <Alert severity="info">
+            Adds the coach alongside any current coaches. Check &quot;replace existing coach&quot; to remove them first.
+          </Alert>
+        </Box>
+
+        <Box sx={{ flex: 1, minWidth: { xs: '100%', md: 280 } }}>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+            Current coaches
+          </Typography>
+
+          {!user ? (
+            <Alert severity="info">Select a user to view their current coaches.</Alert>
+          ) : loadingCoaches ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : currentCoaches.length === 0 ? (
+            <Alert severity="info">No active coaches assigned.</Alert>
+          ) : (
+            <Box sx={{ display: 'grid', gap: 1 }}>
+              {currentCoaches.map((c) => {
+                const removing = removingCoachIds.includes(c.id);
+                return (
+                  <Paper key={c.id} variant="outlined" sx={{ px: 2, py: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                      <Box>
+                        <Typography variant="body1" fontWeight={500}>
+                          {c.name || 'Unnamed coach'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {c.email || 'No email available'}
+                        </Typography>
+                      </Box>
+                      <IconButton
+                        aria-label={`Remove ${c.name || 'coach'}`}
+                        onClick={() => removeCoach(c.id)}
+                        disabled={removing}
+                        size="small"
+                      >
+                        {removing ? <CircularProgress size={18} /> : <CloseIcon fontSize="small" />}
+                      </IconButton>
+                    </Box>
+                  </Paper>
+                );
+              })}
+            </Box>
+          )}
+        </Box>
       </Box>
 
       <Snackbar
