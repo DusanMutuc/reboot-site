@@ -10,6 +10,7 @@ import AssignCoachPanel from '@/components/admin/AssignCoachPanel';
 import CoachRosters from '@/components/admin/CoachRosters';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
+import AdminActionRequired from '@/components/admin/AdminActionRequired';
 
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
@@ -173,6 +174,7 @@ export default function AdminPage() {
             <Tab label="Assign / Change Coach" />
             <Tab label="Coach Rosters" />
             <Tab label="Resource Library" />
+            <Tab label="Action Required" />
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -188,6 +190,9 @@ export default function AdminPage() {
             <TabPanel value={tab} index={3}>
               {/* New admin panel for resources */}
               <ResourceLibraryAdmin />
+            </TabPanel>
+            <TabPanel value={tab} index={4}>
+              <AdminActionRequired />
             </TabPanel>
           </Box>
         </Paper>
