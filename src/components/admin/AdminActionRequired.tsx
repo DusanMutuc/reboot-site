@@ -295,11 +295,12 @@ export default function AdminActionRequired() {
 
     setSavingDetails(true);
     try {
+      const phoneInputValue = detailsForm.phone?.trim() ?? '';
       const payload = {
         first_name: detailsForm.first_name.trim(),
         last_name: detailsForm.last_name.trim(),
         looker_link: trimmedLooker,
-        phone: detailsForm.phone.trim(),
+        phone: phoneInputValue.length > 0 ? phoneInputValue : null,
       };
       const res = await fetch(`/api/admin/users/${encodeURIComponent(userDetails.id)}`, {
         method: 'PATCH',
@@ -349,10 +350,10 @@ export default function AdminActionRequired() {
         return sortSummaries([...prev, nextItem]);
       });
 
-      const phoneValue = data.phone?.trim() ?? '';
+      const nextPhoneValue = data.phone?.trim() ?? '';
       setMissingPhone((prev) => {
         const idx = prev.findIndex((item) => item.id === data.id);
-        if (phoneValue) {
+        if (nextPhoneValue) {
           if (idx === -1) return prev;
           const next = [...prev];
           next.splice(idx, 1);
@@ -362,7 +363,7 @@ export default function AdminActionRequired() {
           id: data.id,
           name,
           email: data.email,
-          phone: phoneValue ? phoneValue : null,
+          phone: nextPhoneValue.length > 0 ? nextPhoneValue : null,
         };
         if (idx !== -1) {
           const next = [...prev];
