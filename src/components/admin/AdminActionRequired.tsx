@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import Autocomplete from '@mui/material/Autocomplete';
 import { LoadingButton } from '@mui/lab';
+import { supabase } from '../../lib/supabaseClient';
 
 type Course = { id: number; name: string; start_date: string | null };
 type UserSummary = { id: string; name: string; email: string };
@@ -382,14 +383,22 @@ export default function AdminActionRequired() {
 
   async function sendResetEmail() {
     if (!userDetails?.id) return;
+    const email = userDetails.email?.trim();
+    if (!email) {
+      setSnack({ open: true, message: 'User does not have an email address on file.', severity: 'error' });
+      return;
+    }
     setSendingReset(true);
     try {
-      const res = await fetch(`/api/admin/users/${encodeURIComponent(userDetails.id)}/reset-password`, {
-        method: 'POST',
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'https://hub.rebootmembers.com/reset-password',
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || res.statusText);
-      setSnack({ open: true, message: 'Password reset email sent', severity: 'success' });
+      if (error) throw new Error(error.message);
+      setSnack({
+        open: true,
+        message: 'If this email exists, a reset link has been sent.',
+        severity: 'success',
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to send password reset email';
       setSnack({ open: true, message, severity: 'error' });
