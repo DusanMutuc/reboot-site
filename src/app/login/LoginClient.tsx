@@ -14,7 +14,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-
+import rebootLogo from '/public/Reboot Logo - Color.png'; // Add this import
 export default function LoginClient() {
   const router = useRouter();
   
@@ -135,12 +135,12 @@ export default function LoginClient() {
           }}
         >
           <Box sx={{ position: 'relative', width: 260, height: 80, mb: 1 }}>
-            <Image
-              src="/Reboot Logo - Color.png"
-              alt="Reboot logo"
-              fill
-              style={{ objectFit: 'contain' }}
-              priority
+            <Image 
+              src={rebootLogo} 
+              alt="Reboot logo" 
+              fill 
+              style={{ objectFit: 'contain' }} 
+              priority 
             />
           </Box>
 
@@ -506,12 +506,12 @@ export default function LoginClient() {
           }}
         >
           <div style={{ width: 600, height: 240, marginBottom: 24 }}>
-            <Image
-              src="/Reboot Logo - Color.png"
-              alt="Reboot logo"
-              fill
-              style={{ objectFit: 'contain' }}
-              priority
+            <Image 
+              src={rebootLogo} 
+              alt="Reboot logo" 
+              fill 
+              style={{ objectFit: 'contain' }} 
+              priority 
             />
           </div>
 
