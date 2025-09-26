@@ -1017,6 +1017,8 @@ export default function Search() {
         _q: debouncedQ,
         _types: _typesArg,
         _tag_ids: selectedTagIds.length ? selectedTagIds : null,
+        _duration: durationFilter ?? null,
+        _date_range: dateRange && dateRange !== 'all' ? dateRange : null,
         _sort: sort,
         _limit: PAGE,
         _offset: page * PAGE,
@@ -1073,7 +1075,7 @@ export default function Search() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQ, _typesArg, selectedTagIds, sort, page, mode]);
+  }, [debouncedQ, _typesArg, selectedTagIds, durationFilter, dateRange, sort, page, mode]);
 
   const toggleType = (type: ResourceRow['type']) => {
     setPage(0);
