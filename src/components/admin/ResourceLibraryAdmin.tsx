@@ -170,6 +170,13 @@ export default function ResourceLibraryAdmin() {
     }
   }, []);
 
+  useEffect(() => {
+    const trimmed = debouncedQ.trim();
+    if (!trimmed && sort === 'relevance') setSort('date_desc');
+    if (trimmed && sort === 'date_desc') setSort('relevance');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ]);
+
   // search (admin sees all; we use RPC for ranking when q present, fallback to plain select when empty)
   useEffect(() => {
     let cancelled = false;
@@ -178,12 +185,14 @@ export default function ResourceLibraryAdmin() {
       try {
         const _types = types.length ? types : null;
         if (debouncedQ.trim()) {
+          const supportedRpcSorts = new Set(['relevance', 'date_desc', 'date_asc']);
+          const rpcSort = supportedRpcSorts.has(sort) ? sort : 'relevance';
           // RPC search (admins see inactive too via RLS)
           const { data, error } = await supabase.rpc('search_resources', {
             _q: debouncedQ,
             _types,
             _tag_ids: null,
-            _sort: sort,
+            _sort: rpcSort,
             _limit: 200,
             _offset: 0,
             _mode: mode,
@@ -191,7 +200,8 @@ export default function ResourceLibraryAdmin() {
           if (error) throw error;
           if (cancelled) return;
           const mapped = (data ?? []).map(mapRpcRowToResource);
-          setRows(mapped);
+          const needsClientSort = !supportedRpcSorts.has(sort);
+          setRows(needsClientSort ? sortPlain(mapped, sort) : mapped);
         } else {
           // Plain select when q is empty; order by sort
           let query = supabase
