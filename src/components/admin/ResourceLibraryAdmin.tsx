@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import type { ReactElement } from 'react';
 import {
   Box, Stack, Typography, TextField, Select, MenuItem, FormControl, InputLabel,
@@ -27,6 +27,14 @@ import { supabase } from '@/lib/supabaseClient';
 
 type ResourceType = 'video' | 'podcast' | 'pdf' | 'document' | 'audio' | 'image' | 'link';
 type ResourceState = 'draft' | 'published' | 'archived';
+type SortValue =
+  | 'relevance'
+  | 'date_desc'
+  | 'date_asc'
+  | 'alpha_asc'
+  | 'alpha_desc'
+  | 'duration_asc'
+  | 'duration_desc';
 type ResourceTag = { id: number; name: string; category: string | null };
 type ResourceRow = {
   id: number;
@@ -53,6 +61,7 @@ const TYPE_ICONS: Record<ResourceType, ReactElement> = {
 };
 
 const ALL_TYPES: ResourceType[] = ['video','podcast','pdf','document','audio','image','link'];
+const SUPPORTED_RPC_SORTS: ReadonlySet<SortValue> = new Set(['relevance', 'date_desc', 'date_asc']);
 
 function useDebounced<T>(value: T, delay = 250) {
   const [debounced, setDebounced] = useState(value);
@@ -65,7 +74,7 @@ export default function ResourceLibraryAdmin() {
   const [q, setQ] = useState('');
   const debouncedQ = useDebounced(q);
   const [types, setTypes] = useState<ResourceType[]>([]);
-  const [sort, setSort] = useState<'relevance'|'date_desc'|'date_asc'|'alpha_asc'|'alpha_desc'|'duration_asc'|'duration_desc'>('date_desc');
+  const [sort, setSort] = useState<SortValue>('date_desc');
   const [mode, setMode] = useState<'strict'|'balanced'|'loose'>('balanced');
 
   // data
@@ -155,7 +164,7 @@ export default function ResourceLibraryAdmin() {
   }
   
 
-  const sortPlain = useCallback((list: ResourceRow[], s: typeof sort) => {
+  const sortPlain = useCallback((list: ResourceRow[], s: SortValue) => {
     const byTitle = (a: ResourceRow, b: ResourceRow) => a.title.localeCompare(b.title);
     const byDur = (a: ResourceRow, b: ResourceRow) => (a.duration ?? 0) - (b.duration ?? 0);
     const byDate = (a: ResourceRow, b: ResourceRow) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -170,6 +179,9 @@ export default function ResourceLibraryAdmin() {
     }
   }, []);
 
+  const _typesArg = useMemo(() => (types.length ? types : null), [types]);
+  const runningRef = useRef(0);
+
   useEffect(() => {
     const trimmed = debouncedQ.trim();
     if (!trimmed && sort === 'relevance') setSort('date_desc');
@@ -180,30 +192,32 @@ export default function ResourceLibraryAdmin() {
   // search (admin sees all; we use RPC for ranking when q present, fallback to plain select when empty)
   useEffect(() => {
     let cancelled = false;
+    const runId = ++runningRef.current;
     (async () => {
-      setLoading(true); setError(null);
+      setLoading(true);
+      setError(null);
       try {
-        const _types = types.length ? types : null;
-        if (debouncedQ.trim()) {
-          const supportedRpcSorts = new Set(['relevance', 'date_desc', 'date_asc']);
-          const rpcSort = supportedRpcSorts.has(sort) ? sort : 'relevance';
-          // RPC search (admins see inactive too via RLS)
-          const { data, error } = await supabase.rpc('search_resources', {
-            _q: debouncedQ,
-            _types,
+        const trimmed = debouncedQ.trim();
+        if (trimmed) {
+          const rpcSort = SUPPORTED_RPC_SORTS.has(sort) ? sort : 'relevance';
+          const args = {
+            _q: trimmed,
+            _types: _typesArg,
             _tag_ids: null,
+            _duration: null,
+            _date_range: null,
             _sort: rpcSort,
             _limit: 200,
             _offset: 0,
             _mode: mode,
-          });
+          } as const;
+          const { data, error } = await supabase.rpc('search_resources', args);
+          if (cancelled || runId !== runningRef.current) return;
           if (error) throw error;
-          if (cancelled) return;
           const mapped = (data ?? []).map(mapRpcRowToResource);
-          const needsClientSort = !supportedRpcSorts.has(sort);
+          const needsClientSort = !SUPPORTED_RPC_SORTS.has(sort);
           setRows(needsClientSort ? sortPlain(mapped, sort) : mapped);
         } else {
-          // Plain select when q is empty; order by sort
           let query = supabase
             .from('resources')
             .select(`
@@ -212,25 +226,29 @@ export default function ResourceLibraryAdmin() {
                 tag:tags ( id, name, category )
               )
             `)
-            .order(sort === 'date_asc' ? 'created_at' : 'created_at', { ascending: sort === 'date_asc' });
+            .order('created_at', { ascending: sort === 'date_asc' });
 
-          if (_types) query = query.in('type', _types);
+          if (_typesArg) query = query.in('type', _typesArg);
 
           const { data, error } = await query.limit(200);
+          if (cancelled || runId !== runningRef.current) return;
           if (error) throw error;
-          if (cancelled) return;
           const mapped = (data ?? []).map(mapJoinedRowToResource);
-          // apply non-date/alpha sorts in JS for simplicity
           setRows(sortPlain(mapped, sort));
         }
       } catch (e: unknown) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to fetch');
+        if (!cancelled && runId === runningRef.current) {
+          console.error(e);
+          setError(e instanceof Error ? e.message : 'Failed to fetch');
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && runId === runningRef.current) {
+          setLoading(false);
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [debouncedQ, types, sort, mode, sortPlain]);
+  }, [debouncedQ, _typesArg, sort, mode, sortPlain]);
 
   // open dialog
   const onCreate = () => { setEditing(null); setOpen(true); };
@@ -314,7 +332,7 @@ export default function ResourceLibraryAdmin() {
 
           <FormControl size="small" sx={{ minWidth: 160 }}>
             <InputLabel>Sort</InputLabel>
-            <Select value={sort} label="Sort" onChange={(e) => setSort(e.target.value as typeof sort)}>
+            <Select value={sort} label="Sort" onChange={(e) => setSort(e.target.value as SortValue)}>
               <MenuItem value="relevance">Relevance</MenuItem>
               <MenuItem value="date_desc">Newest</MenuItem>
               <MenuItem value="date_asc">Oldest</MenuItem>
