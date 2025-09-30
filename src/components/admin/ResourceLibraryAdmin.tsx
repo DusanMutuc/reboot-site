@@ -72,7 +72,7 @@ function useDebounced<T>(value: T, delay = 250) {
 export default function ResourceLibraryAdmin() {
   // query controls
   const [q, setQ] = useState('');
-  const debouncedQ = useDebounced(q, 400);
+  const debouncedQ = useDebounced(q);
   const [types, setTypes] = useState<ResourceType[]>([]);
   const [sort, setSort] = useState<SortValue>('date_desc');
   const [mode, setMode] = useState<'strict'|'balanced'|'loose'>('balanced');
@@ -200,8 +200,8 @@ export default function ResourceLibraryAdmin() {
         const trimmed = debouncedQ.trim();
         if (trimmed) {
           const rpcSort = SUPPORTED_RPC_SORTS.has(sort) ? sort : 'relevance';
-          const args = {
-            _q: trimmed,
+          const args: Record<string, unknown> = {
+            _q: debouncedQ,
             _types: _typesArg,
             _tag_ids: null,
             _duration: null,
@@ -210,7 +210,7 @@ export default function ResourceLibraryAdmin() {
             _limit: 200,
             _offset: 0,
             _mode: mode,
-          } as const;
+          };
           const { data, error } = await supabase.rpc('search_resources', args);
           if (cancelled || runId !== runningRef.current) return;
           if (error) throw error;
