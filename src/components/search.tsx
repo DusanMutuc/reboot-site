@@ -771,7 +771,6 @@ type ResultGridCardProps = {
   onSelectTag: (tag: ResourceTag) => void;
   selectedTagIds: number[];
 };
-
 function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: ResultGridCardProps) {
   const theme = useTheme();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -785,6 +784,8 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
     setMenuAnchor(null);
   };
 
+
+
   return (
     <Paper
       elevation={0}
@@ -794,7 +795,7 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
         border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
         display: 'flex',
         flexDirection: 'column',
-        gap: 1,
+        height: '100%', // Make all cards same height
         transition: 'transform 0.18s ease, box-shadow 0.18s ease',
         cursor: 'pointer',
         '&:hover': {
@@ -825,15 +826,28 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
         {row.duration ? <Chip label={formatDuration(row.duration)} size="small" sx={{ ml: 'auto' }} /> : null}
       </Stack>
 
-      <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-        {row.title}
-      </Typography>
+      <Tooltip title={row.title} placement="top">
+        <Typography 
+          variant="subtitle1" 
+          sx={{ 
+            fontWeight: 700,
+            mb: 1,
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            cursor: 'help'
+          }}
+        >
+          {row.title}
+        </Typography>
+      </Tooltip>
 
-      <Typography variant="body2" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Added {new Date(row.created_at).toLocaleDateString()}
       </Typography>
 
-      <Stack direction="row" spacing={0.5} flexWrap="wrap">
+      <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ flex: 1, mb: 2 }}>
         {(row.tags || []).map((tag) => (
           <Chip
             key={tag.id}
@@ -849,49 +863,51 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
         ))}
       </Stack>
 
-      <Divider sx={{ my: 1 }} />
-
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Button
-          size="small"
-          variant="outlined"
-          endIcon={<OpenInNewIcon fontSize="small" />}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpenResource(row);
-          }}
-        >
-          Open ↗
-        </Button>
-        <IconButton
-          size="small"
-          aria-label="More actions"
-          onClick={(event) => {
-            event.stopPropagation();
-            setMenuAnchor(event.currentTarget);
-          }}
-        >
-          <MoreVertIcon fontSize="small" />
-        </IconButton>
-        <Menu
-          anchorEl={menuAnchor}
-          open={Boolean(menuAnchor)}
-          onClose={() => setMenuAnchor(null)}
-          onClick={(event) => event.stopPropagation()}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          <MenuItem
-            onClick={() => {
-              setMenuAnchor(null);
+      {/* Actions section - docked to bottom */}
+      <Box sx={{ mt: 'auto' }}>
+        <Divider sx={{ mb: 2 }} />
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Button
+            size="small"
+            variant="outlined"
+            endIcon={<OpenInNewIcon fontSize="small" />}
+            onClick={(event) => {
+              event.stopPropagation();
               onOpenResource(row);
             }}
           >
-            Open in new tab
-          </MenuItem>
-          <MenuItem onClick={handleCopy}>Copy link</MenuItem>
-        </Menu>
-      </Stack>
+            Open ↗
+          </Button>
+          <IconButton
+            size="small"
+            aria-label="More actions"
+            onClick={(event) => {
+              event.stopPropagation();
+              setMenuAnchor(event.currentTarget);
+            }}
+          >
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={() => setMenuAnchor(null)}
+            onClick={(event) => event.stopPropagation()}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null);
+                onOpenResource(row);
+              }}
+            >
+              Open in new tab
+            </MenuItem>
+            <MenuItem onClick={handleCopy}>Copy link</MenuItem>
+          </Menu>
+        </Stack>
+      </Box>
     </Paper>
   );
 }
