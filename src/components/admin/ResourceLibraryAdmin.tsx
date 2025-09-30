@@ -26,6 +26,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import { supabase } from '@/lib/supabaseClient';
 
 type ResourceType = 'video' | 'podcast' | 'pdf' | 'document' | 'audio' | 'image' | 'link';
+type ResourceState = 'draft' | 'published' | 'archived';
 type ResourceTag = { id: number; name: string; category: string | null };
 type ResourceRow = {
   id: number;
@@ -36,9 +37,9 @@ type ResourceRow = {
   thumbnail: string | null;
   duration: number | null;
   created_at: string;
-  is_active: boolean;
-  tags: ResourceTag[];      // denormalized for UI
-  score?: number | null;    // from RPC
+  state: ResourceState;
+  tags: ResourceTag[]; // denormalized for UI
+  score?: number | null; // from RPC
 };
 
 const TYPE_ICONS: Record<ResourceType, ReactElement> = {
@@ -101,6 +102,7 @@ export default function ResourceLibraryAdmin() {
     thumbnail: string | null;
     duration: number | null;
     created_at: string;
+    state?: ResourceState | null;
     tags?: { id: number; name: string; category: string | null }[];
     score?: number | null;
   }): ResourceRow {
@@ -113,7 +115,7 @@ export default function ResourceLibraryAdmin() {
       thumbnail: r.thumbnail,
       duration: r.duration,
       created_at: r.created_at,
-      is_active: true, // see note
+      state: (r.state ?? 'published') as ResourceState,
       tags: (r.tags ?? []).map((t) => ({ id: t.id, name: t.name, category: t.category })),
       score: r.score ?? null,
     };
@@ -128,7 +130,7 @@ export default function ResourceLibraryAdmin() {
     thumbnail: string | null;
     duration: number | null;
     created_at: string;
-    is_active: boolean;
+    state: ResourceState;
     // Accept either single tag or array-of-tags per row
     resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
   }): ResourceRow {
@@ -147,7 +149,7 @@ export default function ResourceLibraryAdmin() {
       thumbnail: r.thumbnail,
       duration: r.duration,
       created_at: r.created_at,
-      is_active: r.is_active,
+      state: r.state,
       tags,
     };
   }
@@ -156,13 +158,14 @@ export default function ResourceLibraryAdmin() {
   const sortPlain = useCallback((list: ResourceRow[], s: typeof sort) => {
     const byTitle = (a: ResourceRow, b: ResourceRow) => a.title.localeCompare(b.title);
     const byDur = (a: ResourceRow, b: ResourceRow) => (a.duration ?? 0) - (b.duration ?? 0);
+    const byDate = (a: ResourceRow, b: ResourceRow) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     switch (s) {
       case 'alpha_asc': return [...list].sort(byTitle);
       case 'alpha_desc': return [...list].sort((a,b)=>-byTitle(a,b));
       case 'duration_asc': return [...list].sort(byDur);
       case 'duration_desc': return [...list].sort((a,b)=>-byDur(a,b));
-      case 'date_asc': return list; // handled in query
-      case 'date_desc': return list; // handled in query
+      case 'date_asc': return [...list].sort(byDate);
+      case 'date_desc': return [...list].sort((a,b)=>-byDate(a,b));
       default: return list; // relevance handled in RPC
     }
   }, []);
@@ -194,7 +197,7 @@ export default function ResourceLibraryAdmin() {
           let query = supabase
             .from('resources')
             .select(`
-              id, title, description, type, url, thumbnail, duration, created_at, is_active,
+              id, title, description, type, url, thumbnail, duration, created_at, state,
               resource_tags (
                 tag:tags ( id, name, category )
               )
@@ -222,11 +225,11 @@ export default function ResourceLibraryAdmin() {
   // open dialog
   const onCreate = () => { setEditing(null); setOpen(true); };
   const onEdit = async (row: ResourceRow) => {
-    // fetch the full row for is_active and tag IDs
+    // fetch the full row for state and tag IDs
     const { data, error } = await supabase
       .from('resources')
       .select(`
-        id, title, description, type, url, thumbnail, duration, created_at, is_active,
+        id, title, description, type, url, thumbnail, duration, created_at, state,
         resource_tags ( tag_id )
       `)
       .eq('id', row.id)
@@ -234,7 +237,7 @@ export default function ResourceLibraryAdmin() {
     if (error) { setSnack({ msg: error.message, severity: 'error' }); return; }
     setEditing({
       ...row,
-      is_active: data?.is_active ?? true,
+      state: (data?.state as ResourceState | undefined) ?? row.state,
       tags: row.tags,
     });
     setOpen(true);
@@ -248,10 +251,17 @@ export default function ResourceLibraryAdmin() {
     setSnack({ msg: 'Resource deleted', severity: 'success' });
   };
 
-  const onToggleActive = async (row: ResourceRow) => {
-    const { data, error } = await supabase.from('resources').update({ is_active: !row.is_active }).eq('id', row.id).select('is_active').maybeSingle();
+  const onToggleState = async (row: ResourceRow) => {
+    const nextState: ResourceState = row.state === 'published' ? 'draft' : 'published';
+    const { data, error } = await supabase
+      .from('resources')
+      .update({ state: nextState })
+      .eq('id', row.id)
+      .select('state')
+      .maybeSingle();
     if (error) { setSnack({ msg: error.message, severity: 'error' }); return; }
-    setRows(prev => prev.map(x => x.id === row.id ? { ...x, is_active: data?.is_active ?? x.is_active } : x));
+    const resolved = (data?.state as ResourceState | undefined) ?? nextState;
+    setRows(prev => prev.map(x => x.id === row.id ? { ...x, state: resolved } : x));
   };
 
   const onOpen = async (row: ResourceRow) => {
@@ -337,9 +347,13 @@ export default function ResourceLibraryAdmin() {
                     {TYPE_ICONS[r.type]}
                     <Typography variant="overline">{r.type.toUpperCase()}</Typography>
                     <Box sx={{ ml: 'auto' }}>
-                      <Tooltip title={r.is_active ? 'Active' : 'Inactive'}>
-                        <IconButton size="small" onClick={() => onToggleActive(r)}>
-                          {r.is_active ? <ToggleOnIcon color="success" /> : <ToggleOffIcon color="disabled" />}
+                      <Tooltip title={`State: ${r.state}`}>
+                        <IconButton size="small" onClick={() => onToggleState(r)}>
+                          {r.state === 'published' ? (
+                            <ToggleOnIcon color="success" />
+                          ) : (
+                            <ToggleOffIcon color={r.state === 'archived' ? 'error' : 'disabled'} />
+                          )}
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Open">
@@ -359,6 +373,7 @@ export default function ResourceLibraryAdmin() {
 
                   <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: .5 }}>
                     {r.tags?.map(t => <Chip key={t.id} label={`#${t.name}`} size="small" />)}
+                    <Chip label={r.state} size="small" color={r.state === 'published' ? 'success' : r.state === 'archived' ? 'error' : 'default'} />
                   </Stack>
 
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 'auto' }}>
@@ -384,11 +399,14 @@ export default function ResourceLibraryAdmin() {
         onClose={() => setOpen(false)}
         editing={editing}
         allTags={allTags}
-        onSaved={async () => {
+        onSaved={(updated) => {
           setOpen(false);
-          // refresh list quickly
           setSnack({ msg: editing ? 'Resource updated' : 'Resource created', severity: 'success' });
-          setQ(prev => prev); // trigger effect indirectly if needed
+          setRows(prev => {
+            const exists = prev.some(x => x.id === updated.id);
+            const next = exists ? prev.map(x => (x.id === updated.id ? updated : x)) : [...prev, updated];
+            return sortPlain(next, sort);
+          });
         }}
       />
 
@@ -431,7 +449,7 @@ function ResourceDialog({
   const [thumbnail, setThumbnail] = useState(editing?.thumbnail ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [duration, setDuration] = useState<string>(editing?.duration?.toString() ?? '');
-  const [isActive, setIsActive] = useState<boolean>(editing?.is_active ?? true);
+  const [stateValue, setStateValue] = useState<ResourceState>(editing?.state ?? 'published');
   const [selectedTags, setSelectedTags] = useState<ResourceTag[]>(editing?.tags ?? []);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string|null>(null);
@@ -439,7 +457,7 @@ function ResourceDialog({
   useEffect(() => {
     setTitle(editing?.title ?? ''); setType(editing?.type ?? 'video'); setUrl(editing?.url ?? '');
     setThumbnail(editing?.thumbnail ?? ''); setDescription(editing?.description ?? '');
-    setDuration(editing?.duration?.toString() ?? ''); setIsActive(editing?.is_active ?? true);
+    setDuration(editing?.duration?.toString() ?? ''); setStateValue(editing?.state ?? 'published');
     setSelectedTags(editing?.tags ?? []);
   }, [editing]);
 
@@ -458,7 +476,7 @@ function ResourceDialog({
         url: string;
         thumbnail: string | null;
         duration: number | null;
-        is_active: boolean;
+        state: ResourceState;
       };
       const payload: ResourcePayload = {
         title,
@@ -467,7 +485,7 @@ function ResourceDialog({
         url,
         thumbnail: thumbnail || null,
         duration: duration ? Math.max(0, parseInt(duration,10) || 0) : null,
-        is_active: isActive,
+        state: stateValue,
       };
 
       if (!resourceId) {
@@ -488,7 +506,7 @@ function ResourceDialog({
       const { data: r2, error: e2 } = await supabase
         .from('resources')
         .select(`
-          id, title, description, type, url, thumbnail, duration, created_at, is_active,
+          id, title, description, type, url, thumbnail, duration, created_at, state,
           resource_tags ( tag:tags ( id, name, category ) )
         `)
         .eq('id', resourceId!)
@@ -506,7 +524,7 @@ type ResourceSelectRow = {
   thumbnail: string | null;
   duration: number | null;
   created_at: string;
-  is_active: boolean;
+  state: ResourceState;
   // Supabase join can yield tag as single or array depending on driver
   resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
 };
@@ -528,7 +546,7 @@ const mapped: ResourceRow = {
   thumbnail: r.thumbnail,
   duration: r.duration,
   created_at: r.created_at,
-  is_active: r.is_active,
+  state: r.state,
   tags,
 };
 
@@ -571,14 +589,16 @@ onSaved(mapped);
               placeholder="Select or create tags…"
             />
           </FormControl>
-          <FormControl>
+          <FormControl fullWidth>
+            <InputLabel>State</InputLabel>
             <Select
-              value={isActive ? 'active' : 'inactive'}
-              onChange={(e)=>setIsActive(e.target.value === 'active')}
-              displayEmpty
+              label="State"
+              value={stateValue}
+              onChange={(e)=>setStateValue(e.target.value as ResourceState)}
             >
-              <MenuItem value="active">Active (visible to members)</MenuItem>
-              <MenuItem value="inactive">Inactive (hidden to members)</MenuItem>
+              <MenuItem value="published">Published (visible to members)</MenuItem>
+              <MenuItem value="draft">Draft (hidden from members)</MenuItem>
+              <MenuItem value="archived">Archived</MenuItem>
             </Select>
           </FormControl>
         </Stack>
