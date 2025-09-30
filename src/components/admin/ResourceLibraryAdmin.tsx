@@ -72,7 +72,7 @@ function useDebounced<T>(value: T, delay = 250) {
 export default function ResourceLibraryAdmin() {
   // query controls
   const [q, setQ] = useState('');
-  const debouncedQ = useDebounced(q);
+  const debouncedQ = useDebounced(q, 400);
   const [types, setTypes] = useState<ResourceType[]>([]);
   const [sort, setSort] = useState<SortValue>('date_desc');
   const [mode, setMode] = useState<'strict'|'balanced'|'loose'>('balanced');
