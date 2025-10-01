@@ -238,6 +238,7 @@ function SearchBar({
               ) {
                 event.preventDefault();
                 const trimmedValue = value.trim();
+                setDropdownOpen(false);
                 if (trimmedValue) {
                   onSubmit(trimmedValue);
                 }
