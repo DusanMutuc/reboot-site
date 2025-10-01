@@ -30,7 +30,7 @@ const baseLinks: LinkItem[] = [
   { label: 'ASSISTANT ONBOARDING', href: 'https://api.leadconnectorhq.com/widget/bookings/assistant_on' },
   { label: 'REBOOT SYSTEMS EXPLAINERS', href: 'https://vimeo.com/showcase/11715034' },
   { label: 'REBOOT FACEBOOK GROUP', href: 'https://www.facebook.com/groups/realestatereboot' },
-  { label: 'FIND A REBOOT AGENT TO REFER YOUR CLIENTS' },
+  { label: 'FIND A REBOOT AGENT TO REFER YOUR CLIENTS', href: 'https://rebootmembers.com/legends' },
 ];
 
 // ICON MAPS
