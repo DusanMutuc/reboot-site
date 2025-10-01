@@ -38,7 +38,7 @@ import OndemandVideoIcon from '@mui/icons-material/OndemandVideo';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import ImageIcon from '@mui/icons-material/Image';
 import HeadphonesIcon from '@mui/icons-material/Headphones';
-import LinkIcon from '@mui/icons-material/Link';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GridViewIcon from '@mui/icons-material/GridView';
@@ -70,7 +70,17 @@ const TYPE_ICONS: Record<ResourceRow['type'], ReactElement> = {
   document: <InsertDriveFileIcon fontSize="small" />,
   audio: <HeadphonesIcon fontSize="small" />,
   image: <ImageIcon fontSize="small" />,
-  link: <LinkIcon fontSize="small" />,
+  link: <MenuBookIcon fontSize="small" />,
+};
+
+const TYPE_LABELS: Record<ResourceRow['type'], string> = {
+  video: 'VIDEO',
+  podcast: 'PODCAST',
+  pdf: 'PDF',
+  document: 'DOCUMENT',
+  audio: 'AUDIO',
+  image: 'IMAGE',
+  link: 'Library',
 };
 
 function formatDuration(totalSeconds?: number | null) {
@@ -473,11 +483,12 @@ function FilterChips({
         >
           {ALL_TYPES.map((type) => {
             const count = typeCounts[type];
+            const baseLabel = TYPE_LABELS[type] ?? type.toUpperCase();
             return (
               <Chip
                 key={type}
                 icon={TYPE_ICONS[type]}
-                label={count ? `${type.toUpperCase()} (${count})` : type.toUpperCase()}
+                label={count ? `${baseLabel} (${count})` : baseLabel}
                 onClick={() => toggleType(type)}
                 color={selectedTypes.has(type) ? 'primary' : 'default'}
                 variant={selectedTypes.has(type) ? 'filled' : 'outlined'}
@@ -859,7 +870,7 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
           {TYPE_ICONS[row.type]}
         </Box>
         <Typography variant="overline" sx={{ letterSpacing: 1 }}>
-          {row.type.toUpperCase()}
+          {TYPE_LABELS[row.type] ?? row.type.toUpperCase()}
         </Typography>
         {row.duration ? <Chip label={formatDuration(row.duration)} size="small" sx={{ ml: 'auto' }} /> : null}
       </Stack>
