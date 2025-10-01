@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Typography,
@@ -38,7 +38,7 @@ import OndemandVideoIcon from '@mui/icons-material/OndemandVideo';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import ImageIcon from '@mui/icons-material/Image';
 import HeadphonesIcon from '@mui/icons-material/Headphones';
-import LinkIcon from '@mui/icons-material/Link';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import GridViewIcon from '@mui/icons-material/GridView';
@@ -70,7 +70,17 @@ const TYPE_ICONS: Record<ResourceRow['type'], ReactElement> = {
   document: <InsertDriveFileIcon fontSize="small" />,
   audio: <HeadphonesIcon fontSize="small" />,
   image: <ImageIcon fontSize="small" />,
-  link: <LinkIcon fontSize="small" />,
+  link: <MenuBookIcon fontSize="small" />,
+};
+
+const TYPE_LABELS: Record<ResourceRow['type'], string> = {
+  video: 'VIDEO',
+  podcast: 'PODCAST',
+  pdf: 'PDF',
+  document: 'DOCUMENT',
+  audio: 'AUDIO',
+  image: 'IMAGE',
+  link: 'Library',
 };
 
 function formatDuration(totalSeconds?: number | null) {
@@ -105,6 +115,7 @@ type DurationFilter = 'short' | 'medium' | 'long' | null;
 type DateFilter = '30' | '90' | 'all' | null;
 
 const STORAGE_KEY_RECENT = 'reboot.search.recent';
+const MAX_RECENT_SEARCHES = 5;
 const EMPTY_SUGGESTIONS = ['Templates', 'Replays', 'Assistant'];
 const DURATION_OPTIONS: { label: string; value: NonNullable<DurationFilter> }[] = [
   { label: '<10m', value: 'short' },
@@ -117,11 +128,31 @@ const DATE_RANGE_OPTIONS: { label: string; value: NonNullable<DateFilter> }[] = 
   { label: 'All time', value: 'all' },
 ];
 
+function formatRecentSearches(items: string[]) {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const item of items) {
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(trimmed);
+    if (result.length >= MAX_RECENT_SEARCHES) break;
+  }
+  return result;
+}
+
+function mergeRecentSearches(newEntry: string | null, existing: string[]) {
+  return formatRecentSearches(newEntry ? [newEntry, ...existing] : existing);
+}
+
 type SearchBarProps = {
   value: string;
   onChange: (value: string) => void;
   onClear: () => void;
   onSelectRecent: (value: string) => void;
+  onSubmit: (value: string) => void;
   onSelectTag: (tag: ResourceTag) => void;
   recentSearches: string[];
   popularTags: ResourceTag[];
@@ -136,6 +167,7 @@ function SearchBar({
   onChange,
   onClear,
   onSelectRecent,
+  onSubmit,
   onSelectTag,
   recentSearches,
   popularTags,
@@ -206,6 +238,22 @@ function SearchBar({
             inputRef={inputRef}
             value={value}
             onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (
+                event.key === 'Enter' &&
+                !event.shiftKey &&
+                !event.ctrlKey &&
+                !event.altKey &&
+                !event.metaKey
+              ) {
+                event.preventDefault();
+                const trimmedValue = value.trim();
+                setDropdownOpen(false);
+                if (trimmedValue) {
+                  onSubmit(trimmedValue);
+                }
+              }
+            }}
             onFocus={() => setDropdownOpen(true)}
             placeholder="Search resources, tags, creators…"
             inputProps={{ 'aria-label': 'Search', role: 'searchbox' }}
@@ -435,11 +483,12 @@ function FilterChips({
         >
           {ALL_TYPES.map((type) => {
             const count = typeCounts[type];
+            const baseLabel = TYPE_LABELS[type] ?? type.toUpperCase();
             return (
               <Chip
                 key={type}
                 icon={TYPE_ICONS[type]}
-                label={count ? `${type.toUpperCase()} (${count})` : type.toUpperCase()}
+                label={count ? `${baseLabel} (${count})` : baseLabel}
                 onClick={() => toggleType(type)}
                 color={selectedTypes.has(type) ? 'primary' : 'default'}
                 variant={selectedTypes.has(type) ? 'filled' : 'outlined'}
@@ -821,7 +870,7 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
           {TYPE_ICONS[row.type]}
         </Box>
         <Typography variant="overline" sx={{ letterSpacing: 1 }}>
-          {row.type.toUpperCase()}
+          {TYPE_LABELS[row.type] ?? row.type.toUpperCase()}
         </Typography>
         {row.duration ? <Chip label={formatDuration(row.duration)} size="small" sx={{ ml: 'auto' }} /> : null}
       </Stack>
@@ -984,6 +1033,25 @@ export default function Search() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
 
+  const updateRecentSearches = useCallback((rawValue: string) => {
+    const trimmed = rawValue.trim();
+    if (!trimmed) return;
+    setRecentSearches((prev) => {
+      const next = mergeRecentSearches(trimmed, prev);
+      if (next.length === prev.length && next.every((item, index) => item === prev[index])) {
+        return prev;
+      }
+      if (typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(next));
+        } catch (err) {
+          console.error(err);
+        }
+      }
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     if (isMobile) setViewMode('list');
   }, [isMobile]);
@@ -994,7 +1062,13 @@ export default function Search() {
       const stored = window.localStorage.getItem(STORAGE_KEY_RECENT);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setRecentSearches(parsed.filter((item) => typeof item === 'string'));
+        if (Array.isArray(parsed)) {
+          const sanitized = formatRecentSearches(
+            parsed.filter((item): item is string => typeof item === 'string'),
+          );
+          setRecentSearches(sanitized);
+          window.localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(sanitized));
+        }
       }
     } catch (err) {
       console.error(err);
@@ -1002,17 +1076,8 @@ export default function Search() {
   }, []);
 
   useEffect(() => {
-    const trimmed = debouncedQ.trim();
-    if (!trimmed) return;
-    setRecentSearches((prev) => {
-      if (prev[0]?.toLowerCase() === trimmed.toLowerCase()) return prev;
-      const next = [trimmed, ...prev.filter((item) => item.toLowerCase() !== trimmed.toLowerCase())].slice(0, 5);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(STORAGE_KEY_RECENT, JSON.stringify(next));
-      }
-      return next;
-    });
-  }, [debouncedQ]);
+    updateRecentSearches(debouncedQ);
+  }, [debouncedQ, updateRecentSearches]);
 
   useEffect(() => {
     if (!debouncedQ.trim() && sort === 'relevance') setSort('date_desc');
@@ -1188,6 +1253,13 @@ export default function Search() {
   const handleSelectSuggestion = (value: string) => {
     setQ(value);
     setPage(0);
+    updateRecentSearches(value);
+  };
+
+  const handleSubmitSearch = (query: string) => {
+    setQ(query);
+    setPage(0);
+    updateRecentSearches(query);
   };
 
   return (
@@ -1202,6 +1274,7 @@ export default function Search() {
           }}
           onClear={clearQuery}
           onSelectRecent={handleSelectSuggestion}
+          onSubmit={handleSubmitSearch}
           onSelectTag={onClickTag}
           recentSearches={recentSearches}
           popularTags={popularTags}
