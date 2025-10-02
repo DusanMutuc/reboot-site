@@ -25,14 +25,14 @@ type NodeChildRow = {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { identifier: string } }
+  { params }: { params: { courseId: string } }
 ) {
-  const { identifier } = params;
-  console.log('🎓 course detail GET:', identifier);
+  const { courseId } = params;
+  console.log('🎓 course detail GET:', courseId);
 
   try {
     const supa = await getServerAnonClient();
-    const isNumeric = /^\d+$/.test(identifier);
+    const isNumeric = /^\d+$/.test(courseId);
 
     let query = supa
       .from('content_nodes')
@@ -41,9 +41,9 @@ export async function GET(
       .eq('state', 'published');
 
     if (isNumeric) {
-      query = query.eq('id', Number.parseInt(identifier, 10));
+      query = query.eq('id', Number.parseInt(courseId, 10));
     } else {
-      query = query.eq('slug', identifier);
+      query = query.eq('slug', courseId);
     }
 
     const { data: course, error } = await query.maybeSingle();
