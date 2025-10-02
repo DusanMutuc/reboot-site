@@ -79,6 +79,7 @@ type SnackbarState = {
 } | null;
 
 const DEFAULT_NODE_STATES = ['draft', 'published', 'archived'] as const;
+const DEFAULT_NODE_TYPES = ['course', 'lesson', 'chapter', 'collection', 'playlist'] as const;
 
 type NodeFormState = {
   title: string;
@@ -155,11 +156,6 @@ const emptyBlockForm: BlockFormState = {
   notes: '',
 };
 
-interface NodeOptionsResponse {
-  states?: string[];
-  node_types?: string[];
-}
-
 export default function CourseNodeManager() {
   const [nodes, setNodes] = useState<ContentNode[]>([]);
   const [loadingNodes, setLoadingNodes] = useState(false);
@@ -178,8 +174,8 @@ export default function CourseNodeManager() {
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [blockForm, setBlockForm] = useState<BlockFormState>({ ...emptyBlockForm });
   const [blockDialogMode, setBlockDialogMode] = useState<'create' | 'edit'>('create');
-  const [nodeStates, setNodeStates] = useState<string[]>([...DEFAULT_NODE_STATES]);
-  const [nodeTypes, setNodeTypes] = useState<string[]>([]);
+  const nodeStates = DEFAULT_NODE_STATES;
+  const nodeTypes = DEFAULT_NODE_TYPES;
 
   const sortedBlocks = useMemo(() => {
     return [...blocks].sort((a, b) => a.position - b.position);
@@ -195,26 +191,6 @@ export default function CourseNodeManager() {
         .some((value) => value!.toLowerCase().includes(term));
     });
   }, [nodes, filter, stateFilter]);
-
-  const loadNodeOptions = useCallback(async () => {
-    try {
-      const data = await requestJson<NodeOptionsResponse>('/api/admin/course-builder/nodes/options');
-      if (Array.isArray(data.states) && data.states.length > 0) {
-        setNodeStates(Array.from(new Set(data.states)).sort());
-      } else {
-        setNodeStates([...DEFAULT_NODE_STATES]);
-      }
-      if (Array.isArray(data.node_types)) {
-        setNodeTypes(Array.from(new Set(data.node_types)).sort());
-      } else {
-        setNodeTypes([]);
-      }
-    } catch (err) {
-      console.error('Failed to load node options', err);
-      setNodeStates([...DEFAULT_NODE_STATES]);
-      setNodeTypes([]);
-    }
-  }, []);
 
   const loadNodes = useCallback(async () => {
     setLoadingNodes(true);
@@ -264,10 +240,6 @@ export default function CourseNodeManager() {
     },
     []
   );
-
-  useEffect(() => {
-    void loadNodeOptions();
-  }, [loadNodeOptions]);
 
   useEffect(() => {
     if (stateFilter !== 'all' && !nodeStates.includes(stateFilter)) {
@@ -653,21 +625,20 @@ export default function CourseNodeManager() {
                         value={nodeForm.node_type}
                         onChange={handleNodeTypeChange}
                         displayEmpty
-                        disabled={nodeTypes.length === 0}
                         renderValue={(selected) => {
                           if (typeof selected === 'string' && selected) {
                             return selected;
                           }
                           return (
                             <Box component="span" sx={{ color: 'text.secondary' }}>
-                              {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                              Select node type
                             </Box>
                           );
                         }}
                       >
                         <MenuItem value="" disabled>
                           <Box component="span" sx={{ color: 'text.secondary' }}>
-                            {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                            Select node type
                           </Box>
                         </MenuItem>
                         {nodeTypes.map((type) => (
@@ -859,21 +830,20 @@ export default function CourseNodeManager() {
                 value={newNodeForm.node_type}
                 onChange={handleCreateNodeTypeChange}
                 displayEmpty
-                disabled={nodeTypes.length === 0}
                 renderValue={(selected) => {
                   if (typeof selected === 'string' && selected) {
                     return selected;
                   }
                   return (
                     <Box component="span" sx={{ color: 'text.secondary' }}>
-                      {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                      Select node type
                     </Box>
                   );
                 }}
               >
                 <MenuItem value="" disabled>
                   <Box component="span" sx={{ color: 'text.secondary' }}>
-                    {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                    Select node type
                   </Box>
                 </MenuItem>
                 {nodeTypes.map((type) => (
