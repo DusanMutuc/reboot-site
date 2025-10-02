@@ -20,7 +20,7 @@ function parseNodeId(value: string) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -28,7 +28,8 @@ export async function GET(
   }
 
   try {
-    const nodeId = parseNodeId(params.nodeId);
+    const { nodeId: nodeIdParam } = await context.params;
+    const nodeId = parseNodeId(nodeIdParam);
     const subtree = await fetchNodeSubtree(nodeId);
     return NextResponse.json({ subtree });
   } catch (error: unknown) {
@@ -38,7 +39,7 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -46,7 +47,8 @@ export async function PATCH(
   }
 
   try {
-    const nodeId = parseNodeId(params.nodeId);
+    const { nodeId: nodeIdParam } = await context.params;
+    const nodeId = parseNodeId(nodeIdParam);
     const body = await request.json();
     const updates = body?.updates ?? body;
 
@@ -98,7 +100,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -106,7 +108,8 @@ export async function DELETE(
   }
 
   try {
-    const nodeId = parseNodeId(params.nodeId);
+    const { nodeId: nodeIdParam } = await context.params;
+    const nodeId = parseNodeId(nodeIdParam);
 
     const subtree = await fetchNodeSubtree(nodeId);
     const stats = collectSubtreeStats(subtree);

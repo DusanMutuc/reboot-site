@@ -10,7 +10,7 @@ import {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -18,9 +18,10 @@ export async function POST(
   }
 
   try {
-    const nodeId = Number(params.nodeId);
-    if (!Number.isFinite(nodeId) || nodeId <= 0) {
-      throw new CourseBuilderError('Invalid node id', 400, { value: params.nodeId });
+    const { nodeId } = await context.params;
+    const nodeIdNumber = Number(nodeId);
+    if (!Number.isFinite(nodeIdNumber) || nodeIdNumber <= 0) {
+      throw new CourseBuilderError('Invalid node id', 400, { value: nodeId });
     }
 
     const body = await request.json();
@@ -73,7 +74,7 @@ export async function POST(
       const { data: existing, error } = await adminClient
         .from('content_blocks')
         .select('position')
-        .eq('node_id', nodeId)
+        .eq('node_id', nodeIdNumber)
         .order('position', { ascending: false })
         .limit(1);
 
@@ -85,7 +86,7 @@ export async function POST(
     }
 
     const insertPayload = {
-      node_id: nodeId,
+      node_id: nodeIdNumber,
       block_type: block.block_type,
       position,
       text_md: block.text_md ?? null,
@@ -106,7 +107,7 @@ export async function POST(
       throw new CourseBuilderError('Failed to create content block', 500, { details: insertError.message });
     }
 
-    const subtree = await fetchNodeSubtree(nodeId);
+    const subtree = await fetchNodeSubtree(nodeIdNumber);
     return NextResponse.json({ subtree });
   } catch (error: unknown) {
     return handleCourseBuilderError(error);

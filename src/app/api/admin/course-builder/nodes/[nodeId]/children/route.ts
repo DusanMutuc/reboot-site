@@ -20,7 +20,7 @@ function parseId(value: unknown, field: string) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -28,7 +28,8 @@ export async function POST(
   }
 
   try {
-    const parentId = parseId(params.nodeId, 'parent_id');
+    const { nodeId } = await context.params;
+    const parentId = parseId(nodeId, 'parent_id');
     const body = await request.json();
 
     const childId = parseId(body?.child_id, 'child_id');

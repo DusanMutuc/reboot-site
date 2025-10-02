@@ -19,7 +19,7 @@ function parseBlockId(value: string) {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { blockId: string } },
+  context: { params: Promise<{ blockId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -27,7 +27,8 @@ export async function PATCH(
   }
 
   try {
-    const blockId = parseBlockId(params.blockId);
+    const { blockId: blockIdParam } = await context.params;
+    const blockId = parseBlockId(blockIdParam);
     const existing = await fetchBlockById(blockId);
     const body = await request.json();
     const updates = body?.updates ?? body;
@@ -141,7 +142,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { blockId: string } },
+  context: { params: Promise<{ blockId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -149,7 +150,8 @@ export async function DELETE(
   }
 
   try {
-    const blockId = parseBlockId(params.blockId);
+    const { blockId: blockIdParam } = await context.params;
+    const blockId = parseBlockId(blockIdParam);
     const existing = await fetchBlockById(blockId);
 
     const { error } = await adminClient

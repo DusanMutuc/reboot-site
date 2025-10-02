@@ -9,7 +9,7 @@ import {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -17,9 +17,10 @@ export async function PATCH(
   }
 
   try {
-    const parentId = Number(params.nodeId);
+    const { nodeId } = await context.params;
+    const parentId = Number(nodeId);
     if (!Number.isFinite(parentId) || parentId <= 0) {
-      throw new CourseBuilderError('Invalid node id', 400, { value: params.nodeId });
+      throw new CourseBuilderError('Invalid node id', 400, { value: nodeId });
     }
 
     const body = await request.json();

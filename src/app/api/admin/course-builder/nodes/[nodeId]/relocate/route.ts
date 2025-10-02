@@ -12,7 +12,7 @@ import {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -20,33 +20,34 @@ export async function PATCH(
   }
 
   try {
-    const nodeId = Number(params.nodeId);
-    if (!Number.isFinite(nodeId) || nodeId <= 0) {
-      throw new CourseBuilderError('Invalid node id', 400, { value: params.nodeId });
+    const { nodeId } = await context.params;
+    const nodeIdNumber = Number(nodeId);
+    if (!Number.isFinite(nodeIdNumber) || nodeIdNumber <= 0) {
+      throw new CourseBuilderError('Invalid node id', 400, { value: nodeId });
     }
 
     const body = await request.json();
     const newParentIdValue = body?.new_parent_id ?? body?.parent_id ?? null;
     const positionValue = body?.position;
 
-    const currentEdge = await getParentEdge(nodeId);
+    const currentEdge = await getParentEdge(nodeIdNumber);
 
     if (newParentIdValue == null) {
       if (!currentEdge) {
-        return NextResponse.json({ subtree: await fetchNodeSubtree(nodeId), previousParentSubtree: null });
+        return NextResponse.json({ subtree: await fetchNodeSubtree(nodeIdNumber), previousParentSubtree: null });
       }
 
       const { error: deleteEdgeError } = await adminClient
         .from('node_children')
         .delete()
         .eq('parent_id', currentEdge.parent_id)
-        .eq('child_id', nodeId);
+        .eq('child_id', nodeIdNumber);
 
       if (deleteEdgeError) {
         throw new CourseBuilderError('Failed to detach node', 500, { details: deleteEdgeError.message });
       }
 
-      const nodeSubtree = await fetchNodeSubtree(nodeId);
+      const nodeSubtree = await fetchNodeSubtree(nodeIdNumber);
       let previousParentSubtree = null;
       if (currentEdge) {
         previousParentSubtree = await fetchNodeSubtree(currentEdge.parent_id);
@@ -60,11 +61,11 @@ export async function PATCH(
       throw new CourseBuilderError('Invalid new_parent_id', 400, { value: newParentIdValue });
     }
 
-    if (newParentId === nodeId) {
+    if (newParentId === nodeIdNumber) {
       throw new CourseBuilderError('A node cannot become its own parent', 400);
     }
 
-    const nodeSubtree = await fetchNodeSubtree(nodeId);
+    const nodeSubtree = await fetchNodeSubtree(nodeIdNumber);
     const descendantIds = new Set(flattenSubtreeIds(nodeSubtree));
 
     if (descendantIds.has(newParentId)) {
@@ -93,7 +94,7 @@ export async function PATCH(
 
     const edgePayload = {
       parent_id: parent.id,
-      child_id: nodeId,
+      child_id: nodeIdNumber,
       position,
       is_required: body?.is_required ?? currentEdge?.is_required ?? true,
       label: body?.label ?? currentEdge?.label ?? null,
@@ -113,7 +114,7 @@ export async function PATCH(
         .from('node_children')
         .delete()
         .eq('parent_id', currentEdge.parent_id)
-        .eq('child_id', nodeId);
+        .eq('child_id', nodeIdNumber);
 
       if (deleteOldEdgeError) {
         throw new CourseBuilderError('Failed to remove node from previous parent', 500, {

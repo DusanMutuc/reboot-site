@@ -9,7 +9,7 @@ import {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { nodeId: string } },
+  context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
@@ -17,9 +17,10 @@ export async function PATCH(
   }
 
   try {
-    const nodeId = Number(params.nodeId);
-    if (!Number.isFinite(nodeId) || nodeId <= 0) {
-      throw new CourseBuilderError('Invalid node id', 400, { value: params.nodeId });
+    const { nodeId } = await context.params;
+    const nodeIdNumber = Number(nodeId);
+    if (!Number.isFinite(nodeIdNumber) || nodeIdNumber <= 0) {
+      throw new CourseBuilderError('Invalid node id', 400, { value: nodeId });
     }
 
     const body = await request.json();
@@ -55,7 +56,7 @@ export async function PATCH(
 
       const row: Record<string, unknown> = {
         id: blockId,
-        node_id: nodeId,
+        node_id: nodeIdNumber,
         position,
       };
 
@@ -70,7 +71,7 @@ export async function PATCH(
     const { data: existing, error: existingError } = await adminClient
       .from('content_blocks')
       .select('id')
-      .eq('node_id', nodeId);
+      .eq('node_id', nodeIdNumber);
 
     if (existingError) {
       throw new CourseBuilderError('Failed to load current blocks', 500, { details: existingError.message });
@@ -94,7 +95,7 @@ export async function PATCH(
       throw new CourseBuilderError('Failed to reorder blocks', 500, { details: upsertError.message });
     }
 
-    const subtree = await fetchNodeSubtree(nodeId);
+    const subtree = await fetchNodeSubtree(nodeIdNumber);
     return NextResponse.json({ subtree });
   } catch (error: unknown) {
     return handleCourseBuilderError(error);
