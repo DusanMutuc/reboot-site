@@ -10,10 +10,6 @@ import {
   handleCourseBuilderError,
 } from '@/lib/courseBuilder';
 
-type RouteContext = {
-  params: { nodeId: string };
-};
-
 function parseNodeId(value: string) {
   const id = Number(value);
   if (!Number.isFinite(id) || id <= 0) {
@@ -22,14 +18,17 @@ function parseNodeId(value: string) {
   return id;
 }
 
-export async function GET(request: NextRequest, context: RouteContext) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { nodeId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const nodeId = parseNodeId(context.params.nodeId);
+    const nodeId = parseNodeId(params.nodeId);
     const subtree = await fetchNodeSubtree(nodeId);
     return NextResponse.json({ subtree });
   } catch (error: unknown) {
@@ -37,14 +36,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { nodeId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const nodeId = parseNodeId(context.params.nodeId);
+    const nodeId = parseNodeId(params.nodeId);
     const body = await request.json();
     const updates = body?.updates ?? body;
 
@@ -94,14 +96,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { nodeId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const nodeId = parseNodeId(context.params.nodeId);
+    const nodeId = parseNodeId(params.nodeId);
 
     const subtree = await fetchNodeSubtree(nodeId);
     const stats = collectSubtreeStats(subtree);

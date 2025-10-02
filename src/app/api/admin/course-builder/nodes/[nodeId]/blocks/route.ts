@@ -8,20 +8,19 @@ import {
   validateBlockPayload,
 } from '@/lib/courseBuilder';
 
-type RouteContext = {
-  params: { nodeId: string };
-};
-
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { nodeId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const nodeId = Number(context.params.nodeId);
+    const nodeId = Number(params.nodeId);
     if (!Number.isFinite(nodeId) || nodeId <= 0) {
-      throw new CourseBuilderError('Invalid node id', 400, { value: context.params.nodeId });
+      throw new CourseBuilderError('Invalid node id', 400, { value: params.nodeId });
     }
 
     const body = await request.json();

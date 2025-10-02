@@ -9,10 +9,6 @@ import {
   validateBlockPayload,
 } from '@/lib/courseBuilder';
 
-type RouteContext = {
-  params: { blockId: string };
-};
-
 function parseBlockId(value: string) {
   const id = Number(value);
   if (!Number.isFinite(id) || id <= 0) {
@@ -21,14 +17,17 @@ function parseBlockId(value: string) {
   return id;
 }
 
-export async function PATCH(request: NextRequest, context: RouteContext) {
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: { blockId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const blockId = parseBlockId(context.params.blockId);
+    const blockId = parseBlockId(params.blockId);
     const existing = await fetchBlockById(blockId);
     const body = await request.json();
     const updates = body?.updates ?? body;
@@ -140,14 +139,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   }
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: { blockId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const blockId = parseBlockId(context.params.blockId);
+    const blockId = parseBlockId(params.blockId);
     const existing = await fetchBlockById(blockId);
 
     const { error } = await adminClient

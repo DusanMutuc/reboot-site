@@ -10,10 +10,6 @@ import {
   validateNodeRelationship,
 } from '@/lib/courseBuilder';
 
-type RouteContext = {
-  params: { nodeId: string };
-};
-
 function parseId(value: unknown, field: string) {
   const id = Number(value);
   if (!Number.isFinite(id) || id <= 0) {
@@ -22,14 +18,17 @@ function parseId(value: unknown, field: string) {
   return id;
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
+export async function POST(
+  request: NextRequest,
+  { params }: { params: { nodeId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const parentId = parseId(context.params.nodeId, 'parent_id');
+    const parentId = parseId(params.nodeId, 'parent_id');
     const body = await request.json();
 
     const childId = parseId(body?.child_id, 'child_id');
