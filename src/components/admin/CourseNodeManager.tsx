@@ -33,6 +33,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import type { SelectChangeEvent } from '@mui/material/Select';
 
 interface ContentNode {
   id: number;
@@ -77,14 +78,14 @@ type SnackbarState = {
   severity: 'success' | 'error' | 'info';
 } | null;
 
-const NODE_STATES = ['draft', 'published', 'archived'] as const;
+const DEFAULT_NODE_STATES = ['draft', 'published', 'archived'] as const;
 
 type NodeFormState = {
   title: string;
   node_type: string;
   slug: string;
   description: string;
-  state: (typeof NODE_STATES)[number];
+  state: string;
   hero_image: string;
   icon: string;
   objectives: string;
@@ -127,9 +128,7 @@ function mapNodeToForm(node: ContentNode): NodeFormState {
     node_type: node.node_type ?? '',
     slug: node.slug ?? '',
     description: node.description ?? '',
-    state: (NODE_STATES.includes(node.state as (typeof NODE_STATES)[number])
-      ? (node.state as (typeof NODE_STATES)[number])
-      : 'draft'),
+    state: node.state ?? 'draft',
     hero_image: node.hero_image ?? '',
     icon: node.icon ?? '',
     objectives: node.objectives ?? '',
@@ -156,6 +155,11 @@ const emptyBlockForm: BlockFormState = {
   notes: '',
 };
 
+interface NodeOptionsResponse {
+  states?: string[];
+  node_types?: string[];
+}
+
 export default function CourseNodeManager() {
   const [nodes, setNodes] = useState<ContentNode[]>([]);
   const [loadingNodes, setLoadingNodes] = useState(false);
@@ -166,7 +170,7 @@ export default function CourseNodeManager() {
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [blocksLoading, setBlocksLoading] = useState(false);
   const [filter, setFilter] = useState('');
-  const [stateFilter, setStateFilter] = useState<'all' | (typeof NODE_STATES)[number]>('all');
+  const [stateFilter, setStateFilter] = useState<'all' | string>('all');
   const [snackbar, setSnackbar] = useState<SnackbarState>(null);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -174,6 +178,8 @@ export default function CourseNodeManager() {
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [blockForm, setBlockForm] = useState<BlockFormState>({ ...emptyBlockForm });
   const [blockDialogMode, setBlockDialogMode] = useState<'create' | 'edit'>('create');
+  const [nodeStates, setNodeStates] = useState<string[]>([...DEFAULT_NODE_STATES]);
+  const [nodeTypes, setNodeTypes] = useState<string[]>([]);
 
   const sortedBlocks = useMemo(() => {
     return [...blocks].sort((a, b) => a.position - b.position);
@@ -189,6 +195,26 @@ export default function CourseNodeManager() {
         .some((value) => value!.toLowerCase().includes(term));
     });
   }, [nodes, filter, stateFilter]);
+
+  const loadNodeOptions = useCallback(async () => {
+    try {
+      const data = await requestJson<NodeOptionsResponse>('/api/admin/course-builder/nodes/options');
+      if (Array.isArray(data.states) && data.states.length > 0) {
+        setNodeStates(Array.from(new Set(data.states)).sort());
+      } else {
+        setNodeStates([...DEFAULT_NODE_STATES]);
+      }
+      if (Array.isArray(data.node_types)) {
+        setNodeTypes(Array.from(new Set(data.node_types)).sort());
+      } else {
+        setNodeTypes([]);
+      }
+    } catch (err) {
+      console.error('Failed to load node options', err);
+      setNodeStates([...DEFAULT_NODE_STATES]);
+      setNodeTypes([]);
+    }
+  }, []);
 
   const loadNodes = useCallback(async () => {
     setLoadingNodes(true);
@@ -240,6 +266,16 @@ export default function CourseNodeManager() {
   );
 
   useEffect(() => {
+    void loadNodeOptions();
+  }, [loadNodeOptions]);
+
+  useEffect(() => {
+    if (stateFilter !== 'all' && !nodeStates.includes(stateFilter)) {
+      setStateFilter('all');
+    }
+  }, [nodeStates, stateFilter]);
+
+  useEffect(() => {
     loadNodes();
   }, [loadNodes]);
 
@@ -262,11 +298,14 @@ export default function CourseNodeManager() {
       setNodeForm((prev) => ({ ...prev, [field]: value }));
     };
 
-  const handleNodeStateChange = (
-    event: React.ChangeEvent<{ value: unknown }> | React.ChangeEvent<HTMLTextAreaElement | HTMLInputElement>
-  ) => {
-    const value = event.target.value as NodeFormState['state'];
+  const handleNodeStateChange = (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
     setNodeForm((prev) => ({ ...prev, state: value }));
+  };
+
+  const handleNodeTypeChange = (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
+    setNodeForm((prev) => ({ ...prev, node_type: value }));
   };
 
   const saveNodeChanges = async () => {
@@ -329,9 +368,14 @@ export default function CourseNodeManager() {
       setNewNodeForm((prev) => ({ ...prev, [field]: value }));
     };
 
-  const handleCreateStateChange = (event: React.ChangeEvent<{ value: unknown }>) => {
-    const value = event.target.value as NodeFormState['state'];
+  const handleCreateStateChange = (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
     setNewNodeForm((prev) => ({ ...prev, state: value }));
+  };
+
+  const handleCreateNodeTypeChange = (event: SelectChangeEvent<string>) => {
+    const value = event.target.value;
+    setNewNodeForm((prev) => ({ ...prev, node_type: value }));
   };
 
   const createNode = async () => {
@@ -501,7 +545,7 @@ export default function CourseNodeManager() {
                 onChange={(event) => setStateFilter(event.target.value as typeof stateFilter)}
               >
                 <MenuItem value="all">All</MenuItem>
-                {NODE_STATES.map((state) => (
+                {nodeStates.map((state) => (
                   <MenuItem key={state} value={state}>
                     {state}
                   </MenuItem>
@@ -601,13 +645,38 @@ export default function CourseNodeManager() {
                       fullWidth
                       required
                     />
-                    <TextField
-                      label="Node Type"
-                      value={nodeForm.node_type}
-                      onChange={handleNodeFieldChange('node_type')}
-                      fullWidth
-                      required
-                    />
+                    <FormControl fullWidth required>
+                      <InputLabel id="node-type-label">Node Type</InputLabel>
+                      <Select
+                        labelId="node-type-label"
+                        label="Node Type"
+                        value={nodeForm.node_type}
+                        onChange={handleNodeTypeChange}
+                        displayEmpty
+                        disabled={nodeTypes.length === 0}
+                        renderValue={(selected) => {
+                          if (typeof selected === 'string' && selected) {
+                            return selected;
+                          }
+                          return (
+                            <Box component="span" sx={{ color: 'text.secondary' }}>
+                              {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                            </Box>
+                          );
+                        }}
+                      >
+                        <MenuItem value="" disabled>
+                          <Box component="span" sx={{ color: 'text.secondary' }}>
+                            {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                          </Box>
+                        </MenuItem>
+                        {nodeTypes.map((type) => (
+                          <MenuItem key={type} value={type}>
+                            {type}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
                     <TextField
                       label="Slug"
                       value={nodeForm.slug}
@@ -622,7 +691,7 @@ export default function CourseNodeManager() {
                         value={nodeForm.state}
                         onChange={handleNodeStateChange}
                       >
-                        {NODE_STATES.map((state) => (
+                        {nodeStates.map((state) => (
                           <MenuItem key={state} value={state}>
                             {state}
                           </MenuItem>
@@ -782,13 +851,38 @@ export default function CourseNodeManager() {
               required
               fullWidth
             />
-            <TextField
-              label="Node Type"
-              value={newNodeForm.node_type}
-              onChange={handleCreateFieldChange('node_type')}
-              required
-              fullWidth
-            />
+            <FormControl fullWidth required>
+              <InputLabel id="new-node-type-label">Node Type</InputLabel>
+              <Select
+                labelId="new-node-type-label"
+                label="Node Type"
+                value={newNodeForm.node_type}
+                onChange={handleCreateNodeTypeChange}
+                displayEmpty
+                disabled={nodeTypes.length === 0}
+                renderValue={(selected) => {
+                  if (typeof selected === 'string' && selected) {
+                    return selected;
+                  }
+                  return (
+                    <Box component="span" sx={{ color: 'text.secondary' }}>
+                      {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                    </Box>
+                  );
+                }}
+              >
+                <MenuItem value="" disabled>
+                  <Box component="span" sx={{ color: 'text.secondary' }}>
+                    {nodeTypes.length === 0 ? 'No node types available' : 'Select node type'}
+                  </Box>
+                </MenuItem>
+                {nodeTypes.map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
             <TextField
               label="Slug"
               value={newNodeForm.slug}
@@ -803,7 +897,7 @@ export default function CourseNodeManager() {
                 value={newNodeForm.state}
                 onChange={handleCreateStateChange}
               >
-                {NODE_STATES.map((state) => (
+                {nodeStates.map((state) => (
                   <MenuItem key={state} value={state}>
                     {state}
                   </MenuItem>
