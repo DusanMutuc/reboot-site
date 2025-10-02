@@ -1,21 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerAnonClient } from '@/lib/supabaseServer';
 
-function parseId(value: string | string[] | undefined) {
-  if (!value || Array.isArray(value)) return null;
-  const num = Number.parseInt(value, 10);
+type Params = {
+  params: Promise<{
+    courseId?: string | string[] | undefined;
+    lessonId?: string | string[] | undefined;
+  }>;
+};
+
+async function resolveNumericId(context: Params, key: 'courseId' | 'lessonId') {
+  const rawParams = await context.params;
+  const value = rawParams?.[key];
+  const stringValue = Array.isArray(value) ? value[0] : value;
+  if (!stringValue) return null;
+  const num = Number.parseInt(stringValue, 10);
   return Number.isFinite(num) ? num : null;
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { courseId: string; lessonId: string } }
-) {
-  console.log('🎓 lesson blocks GET:', params.courseId, params.lessonId);
+export async function GET(request: NextRequest, context: Params) {
+  const courseId = await resolveNumericId(context, 'courseId');
+  const lessonId = await resolveNumericId(context, 'lessonId');
+
+  console.log('🎓 lesson blocks GET:', courseId, lessonId);
 
   try {
-    const courseId = parseId(params.courseId);
-    const lessonId = parseId(params.lessonId);
     if (!courseId || !lessonId) {
       return NextResponse.json({ error: 'Invalid courseId or lessonId' }, { status: 400 });
     }

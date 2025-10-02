@@ -2,22 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
-function parseId(value: string | string[] | undefined) {
-  if (!value || Array.isArray(value)) return null;
+type Params = {
+  params: Promise<{ nodeId?: string | string[] | undefined }>;
+};
+
+async function resolveNodeId(context: Params) {
+  const rawParams = await context.params;
+  const value = Array.isArray(rawParams?.nodeId) ? rawParams?.nodeId[0] : rawParams?.nodeId;
+  if (!value) return null;
   const num = Number.parseInt(value, 10);
   return Number.isFinite(num) ? num : null;
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { nodeId: string } }
-) {
-  console.log('🧱 admin-node-children GET: start', params.nodeId);
+export async function GET(request: NextRequest, context: Params) {
+  const nodeId = await resolveNodeId(context);
+
+  console.log('🧱 admin-node-children GET: start', nodeId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
 
-  const nodeId = parseId(params.nodeId);
   if (!nodeId) {
     return NextResponse.json({ error: 'Invalid nodeId' }, { status: 400 });
   }
@@ -39,16 +43,14 @@ export async function GET(
   return NextResponse.json({ items: data ?? [] });
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { nodeId: string } }
-) {
-  console.log('🧱 admin-node-children POST: start', params.nodeId);
+export async function POST(request: NextRequest, context: Params) {
+  const nodeId = await resolveNodeId(context);
+
+  console.log('🧱 admin-node-children POST: start', nodeId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
 
-  const nodeId = parseId(params.nodeId);
   if (!nodeId) {
     return NextResponse.json({ error: 'Invalid nodeId' }, { status: 400 });
   }
@@ -138,16 +140,14 @@ export async function POST(
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { nodeId: string } }
-) {
-  console.log('🧱 admin-node-children PATCH: start', params.nodeId);
+export async function PATCH(request: NextRequest, context: Params) {
+  const nodeId = await resolveNodeId(context);
+
+  console.log('🧱 admin-node-children PATCH: start', nodeId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
 
-  const nodeId = parseId(params.nodeId);
   if (!nodeId) {
     return NextResponse.json({ error: 'Invalid nodeId' }, { status: 400 });
   }

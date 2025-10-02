@@ -2,23 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
-function parseId(value: string | string[] | undefined) {
-  if (!value || Array.isArray(value)) return null;
-  const num = Number.parseInt(value, 10);
+type Params = {
+  params: Promise<{
+    nodeId?: string | string[] | undefined;
+    blockId?: string | string[] | undefined;
+  }>;
+};
+
+async function resolveNumericId(context: Params, key: 'nodeId' | 'blockId') {
+  const rawParams = await context.params;
+  const value = rawParams?.[key];
+  const stringValue = Array.isArray(value) ? value[0] : value;
+  if (!stringValue) return null;
+
+  const num = Number.parseInt(stringValue, 10);
   return Number.isFinite(num) ? num : null;
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { nodeId: string; blockId: string } }
-) {
-  console.log('📦 admin-node-block PATCH:', params.nodeId, params.blockId);
+export async function PATCH(request: NextRequest, context: Params) {
+  const nodeId = await resolveNumericId(context, 'nodeId');
+  const blockId = await resolveNumericId(context, 'blockId');
+
+  console.log('📦 admin-node-block PATCH:', nodeId, blockId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
-
-  const nodeId = parseId(params.nodeId);
-  const blockId = parseId(params.blockId);
 
   if (!nodeId || !blockId) {
     return NextResponse.json({ error: 'Invalid nodeId or blockId' }, { status: 400 });
@@ -77,17 +85,14 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { nodeId: string; blockId: string } }
-) {
-  console.log('📦 admin-node-block DELETE:', params.nodeId, params.blockId);
+export async function DELETE(request: NextRequest, context: Params) {
+  const nodeId = await resolveNumericId(context, 'nodeId');
+  const blockId = await resolveNumericId(context, 'blockId');
+
+  console.log('📦 admin-node-block DELETE:', nodeId, blockId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
-
-  const nodeId = parseId(params.nodeId);
-  const blockId = parseId(params.blockId);
 
   if (!nodeId || !blockId) {
     return NextResponse.json({ error: 'Invalid nodeId or blockId' }, { status: 400 });

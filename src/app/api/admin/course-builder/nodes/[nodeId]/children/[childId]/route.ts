@@ -2,23 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
-function parseId(value: string | string[] | undefined) {
-  if (!value || Array.isArray(value)) return null;
-  const num = Number.parseInt(value, 10);
+type Params = {
+  params: Promise<{
+    nodeId?: string | string[] | undefined;
+    childId?: string | string[] | undefined;
+  }>;
+};
+
+async function resolveNumericId(context: Params, key: 'nodeId' | 'childId') {
+  const rawParams = await context.params;
+  const value = rawParams?.[key];
+  const stringValue = Array.isArray(value) ? value[0] : value;
+  if (!stringValue) return null;
+
+  const num = Number.parseInt(stringValue, 10);
   return Number.isFinite(num) ? num : null;
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { nodeId: string; childId: string } }
-) {
-  console.log('🧱 admin-node-child PATCH:', params.nodeId, params.childId);
+export async function PATCH(request: NextRequest, context: Params) {
+  const nodeId = await resolveNumericId(context, 'nodeId');
+  const childId = await resolveNumericId(context, 'childId');
+
+  console.log('🧱 admin-node-child PATCH:', nodeId, childId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
-
-  const nodeId = parseId(params.nodeId);
-  const childId = parseId(params.childId);
 
   if (!nodeId || !childId) {
     return NextResponse.json({ error: 'Invalid nodeId or childId' }, { status: 400 });
@@ -63,17 +71,14 @@ export async function PATCH(
   }
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: { nodeId: string; childId: string } }
-) {
-  console.log('🧱 admin-node-child DELETE:', params.nodeId, params.childId);
+export async function DELETE(request: NextRequest, context: Params) {
+  const nodeId = await resolveNumericId(context, 'nodeId');
+  const childId = await resolveNumericId(context, 'childId');
+
+  console.log('🧱 admin-node-child DELETE:', nodeId, childId);
 
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
-
-  const nodeId = parseId(params.nodeId);
-  const childId = parseId(params.childId);
 
   if (!nodeId || !childId) {
     return NextResponse.json({ error: 'Invalid nodeId or childId' }, { status: 400 });

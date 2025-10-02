@@ -23,15 +23,27 @@ type NodeChildRow = {
   } | null;
 };
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { courseId: string } }
-) {
-  const { courseId } = params;
+type Params = {
+  params: Promise<{ courseId?: string | string[] | undefined }>;
+};
+
+async function resolveCourseIdentifier(context: Params) {
+  const rawParams = await context.params;
+  const value = Array.isArray(rawParams?.courseId) ? rawParams?.courseId[0] : rawParams?.courseId;
+  return typeof value === 'string' ? value : null;
+}
+
+export async function GET(request: NextRequest, context: Params) {
+  const courseId = await resolveCourseIdentifier(context);
   console.log('🎓 course detail GET:', courseId);
 
   try {
     const supa = await getServerAnonClient();
+
+    if (!courseId) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+
     const isNumeric = /^\d+$/.test(courseId);
 
     let query = supa
