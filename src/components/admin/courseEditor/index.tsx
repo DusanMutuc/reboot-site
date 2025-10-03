@@ -670,13 +670,13 @@ function CourseEditorInner() {
   );
 
   const handleTextChange = useCallback(
-    (blockId: number, markdown: string) => {
+    (blockId: number, html: string) => {
       if (blockId < 0) {
-        pendingTextDrafts.current.set(blockId, markdown);
+        pendingTextDrafts.current.set(blockId, html);
         return;
       }
       pendingTextDrafts.current.delete(blockId);
-      queueBlockUpdate(blockId, { text_md: markdown });
+      queueBlockUpdate(blockId, { text_md: html });
     },
     [queueBlockUpdate],
   );

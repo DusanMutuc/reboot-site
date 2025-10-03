@@ -14,7 +14,7 @@ import BlockShell from './BlockShell';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { BlockRenderer } from '@/components/course/BlockRenderer';
 import BlockDndContext from '../dnd/dndContext';
-import TipTapMarkdownEditor from '../text/TipTapMarkdownEditor';
+import TipTapHtmlEditor from '../text/TipTapHtmlEditor';
 
 export type CanvasProps = {
   subtree: NodeSubtree | null;
@@ -27,7 +27,7 @@ export type CanvasProps = {
   onExitEdit: () => void;
   onInsertBlock: (position: number, type: BlockType) => void;
   onReorderBlocks: (blocks: ContentBlock[]) => void;
-  onChangeText: (blockId: number, markdown: string) => void;
+  onChangeText: (blockId: number, html: string) => void;
 };
 
 export default function Canvas({
@@ -193,9 +193,9 @@ export default function Canvas({
                         }}
                       >
                         {block.block_type === 'text' && isEditing && canEditBlocks ? (
-                          <TipTapMarkdownEditor
+                          <TipTapHtmlEditor
                             value={block.text_md ?? ''}
-                            onChange={(markdown) => onChangeText(block.id, markdown)}
+                            onChange={(html) => onChangeText(block.id, html)}
                             onBlur={() => onExitEdit()}
                             onEscape={() => onExitEdit()}
                             autoFocus

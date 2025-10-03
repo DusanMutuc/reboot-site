@@ -30,6 +30,7 @@ export type ContentBlock = {
   node_id: number;
   block_type: BlockType;
   position: number;
+  /** Stores sanitized HTML (legacy name kept for API compatibility). */
   text_md: string | null;
   resource_id: number | null;
   start_ms: number | null;

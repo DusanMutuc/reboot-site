@@ -10,20 +10,19 @@ import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import LinkIcon from '@mui/icons-material/Link';
 import CodeIcon from '@mui/icons-material/Code';
-import { EditorContent, useEditor, type Editor } from '@tiptap/react';
+import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
-import Markdown from '@tiptap/extension-markdown';
 
-type TipTapMarkdownEditorProps = {
+type TipTapHtmlEditorProps = {
   value: string;
-  onChange: (markdown: string) => void;
+  onChange: (html: string) => void;
   onBlur?: () => void;
   onEscape?: () => void;
   autoFocus?: boolean;
 };
 
-export default function TipTapMarkdownEditor({ value, onChange, onBlur, onEscape, autoFocus }: TipTapMarkdownEditorProps) {
+export default function TipTapHtmlEditor({ value, onChange, onBlur, onEscape, autoFocus }: TipTapHtmlEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -36,9 +35,6 @@ export default function TipTapMarkdownEditor({ value, onChange, onBlur, onEscape
         autolink: true,
         linkOnPaste: true,
       }),
-      Markdown.configure({
-        html: false,
-      }),
     ],
     autofocus: autoFocus ? 'end' : false,
     editorProps: {
@@ -47,18 +43,21 @@ export default function TipTapMarkdownEditor({ value, onChange, onBlur, onEscape
       },
     },
     onUpdate({ editor }) {
-      onChange(getMarkdown(editor));
+      const html = editor.getHTML();
+      onChange(html === '<p></p>' ? '' : html);
     },
   });
 
   useEffect(() => {
     if (!editor) return;
-    const current = getMarkdown(editor);
+    const current = editor.getHTML();
+    const normalizedCurrent = current === '<p></p>' ? '' : current;
     const nextValue = value ?? '';
-    if (current === nextValue) {
+    if (normalizedCurrent === nextValue) {
       return;
     }
-    setMarkdown(editor, nextValue);
+    const content = nextValue.trim() ? nextValue : '<p></p>';
+    editor.commands.setContent(content, false);
   }, [editor, value]);
 
   useEffect(() => {
@@ -195,20 +194,4 @@ function ToolbarButton({ tooltip, onClick, active, children }: ToolbarButtonProp
       </IconButton>
     </Tooltip>
   );
-}
-
-function getMarkdown(editor: Editor) {
-  const storage = (editor.storage as Record<string, unknown>).markdown as
-    | { getMarkdown?: () => string }
-    | undefined;
-  return storage?.getMarkdown?.() ?? '';
-}
-
-function setMarkdown(editor: Editor, markdown: string) {
-  const commands = editor.commands as unknown as { setMarkdown?: (value: string) => void };
-  if (commands.setMarkdown) {
-    commands.setMarkdown(markdown);
-    return;
-  }
-  editor.commands.setContent(markdown);
 }

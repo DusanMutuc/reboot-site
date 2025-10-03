@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import DOMPurify from 'dompurify';
 import { Box, Button, Card, CardContent, CardMedia, Divider, Stack, Typography } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -34,137 +35,6 @@ export type BlockRendererProps = {
   block: RenderableBlock;
   resource: RenderableResource | null;
 };
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function applyInlineFormatting(value: string) {
-  return escapeHtml(value)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>');
-}
-
-function renderMarkdownToElements(markdown: string) {
-  const lines = markdown.split(/\r?\n/);
-  const elements: React.ReactNode[] = [];
-  let paragraph: string[] = [];
-  let bullet: string[] = [];
-  let ordered: string[] = [];
-
-  const flushParagraph = () => {
-    if (paragraph.length === 0) return;
-    const text = paragraph.join(' ');
-    elements.push(
-      <Typography
-        key={`p-${elements.length}`}
-        component="p"
-        sx={{ mb: 2, '&:last-of-type': { mb: 0 } }}
-        dangerouslySetInnerHTML={{ __html: applyInlineFormatting(text) }}
-      />,
-    );
-    paragraph = [];
-  };
-
-  const flushBullet = () => {
-    if (bullet.length === 0) return;
-    elements.push(
-      <Box component="ul" key={`ul-${elements.length}`} sx={{ pl: 3, mb: 2 }}>
-        {bullet.map((item, idx) => (
-          <Box
-            component="li"
-            key={`ul-item-${elements.length}-${idx}`}
-            dangerouslySetInnerHTML={{ __html: applyInlineFormatting(item) }}
-          />
-        ))}
-      </Box>,
-    );
-    bullet = [];
-  };
-
-  const flushOrdered = () => {
-    if (ordered.length === 0) return;
-    elements.push(
-      <Box component="ol" key={`ol-${elements.length}`} sx={{ pl: 3, mb: 2 }}>
-        {ordered.map((item, idx) => (
-          <Box
-            component="li"
-            key={`ol-item-${elements.length}-${idx}`}
-            dangerouslySetInnerHTML={{ __html: applyInlineFormatting(item) }}
-          />
-        ))}
-      </Box>,
-    );
-    ordered = [];
-  };
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      flushParagraph();
-      flushBullet();
-      flushOrdered();
-      continue;
-    }
-
-    const headingMatch = trimmed.match(/^(#{1,3})\s+(.*)$/);
-    if (headingMatch) {
-      flushParagraph();
-      flushBullet();
-      flushOrdered();
-      const level = headingMatch[1].length;
-      const content = headingMatch[2];
-      const variant = level === 1 ? 'h4' : level === 2 ? 'h5' : 'h6';
-      elements.push(
-        <Typography
-          key={`heading-${elements.length}`}
-          variant={variant as 'h4' | 'h5' | 'h6'}
-          sx={{ mt: elements.length === 0 ? 0 : 3, mb: 1.5 }}
-          dangerouslySetInnerHTML={{ __html: applyInlineFormatting(content) }}
-        />,
-      );
-      continue;
-    }
-
-    if (/^[-*]\s+/.test(trimmed)) {
-      flushParagraph();
-      flushOrdered();
-      bullet.push(trimmed.replace(/^[-*]\s+/, ''));
-      continue;
-    }
-
-    const orderedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
-    if (orderedMatch) {
-      flushParagraph();
-      flushBullet();
-      ordered.push(orderedMatch[2]);
-      continue;
-    }
-
-    paragraph.push(trimmed);
-  }
-
-  flushParagraph();
-  flushBullet();
-  flushOrdered();
-
-  if (elements.length === 0) {
-    return [
-      <Typography
-        key="empty"
-        component="p"
-        sx={{ mb: 0 }}
-        dangerouslySetInnerHTML={{ __html: applyInlineFormatting(markdown) }}
-      />,
-    ];
-  }
-
-  return elements;
-}
 
 function formatDuration(seconds: number | null) {
   if (!seconds || Number.isNaN(seconds)) return null;
@@ -416,8 +286,8 @@ export function BlockRenderer({ block, resource }: BlockRendererProps) {
   }
 
   if (block.block_type === 'text') {
-    const markdown = block.text_md ?? '';
-    if (!markdown.trim()) {
+    const html = (block.text_md ?? '').trim();
+    if (!html) {
       return (
         <Card variant="outlined">
           <CardContent>
@@ -432,7 +302,37 @@ export function BlockRenderer({ block, resource }: BlockRendererProps) {
       );
     }
 
-    return <Stack spacing={1.5}>{renderMarkdownToElements(markdown)}</Stack>;
+    return (
+      <Box
+        sx={{
+          '& h1, & h2, & h3, & h4, & h5, & h6': {
+            fontWeight: 600,
+            mt: 3,
+            '&:first-of-type': { mt: 0 },
+          },
+          '& p': {
+            mb: 2,
+            '&:last-of-type': { mb: 0 },
+          },
+          '& ul, & ol': {
+            pl: 3,
+            mb: 2,
+            '&:last-of-type': { mb: 0 },
+          },
+          '& li': {
+            mb: 1,
+            '&:last-of-type': { mb: 0 },
+          },
+          '& code': {
+            fontFamily: 'monospace',
+            backgroundColor: 'action.hover',
+            px: 0.5,
+            borderRadius: 1,
+          },
+        }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
+      />
+    );
   }
 
   if (!resource) {
