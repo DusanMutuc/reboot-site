@@ -100,7 +100,6 @@ function renderMarkdownToElements(markdown: string) {
       </Box>,
     );
     ordered = [];
-    orderedIndex = 0;
   };
 
   for (const line of lines) {
@@ -334,16 +333,23 @@ function PdfPreview({ resource }: { resource: RenderableResource }) {
             <PictureAsPdfIcon fontSize="small" />
             <Typography variant="subtitle1">{resource.title}</Typography>
           </Stack>
-          <Button
-            variant="outlined"
-            size="small"
-            endIcon={<OpenInNewIcon fontSize="small" />}
-            href={resource.url ?? undefined}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open PDF
-          </Button>
+          {resource.url ? (
+            <Button
+              component="a"
+              variant="outlined"
+              size="small"
+              endIcon={<OpenInNewIcon fontSize="small" />}
+              href={resource.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open PDF
+            </Button>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              PDF resource missing URL.
+            </Typography>
+          )}
         </Stack>
       </CardContent>
     </Card>
@@ -381,16 +387,23 @@ function LinkPreview({ resource }: { resource: RenderableResource }) {
             <InsertLinkIcon fontSize="small" />
             <Typography variant="subtitle1">{resource.title}</Typography>
           </Stack>
-          <Button
-            variant="outlined"
-            size="small"
-            endIcon={<OpenInNewIcon fontSize="small" />}
-            href={resource.url ?? undefined}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open link
-          </Button>
+          {resource.url ? (
+            <Button
+              component="a"
+              variant="outlined"
+              size="small"
+              endIcon={<OpenInNewIcon fontSize="small" />}
+              href={resource.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open link
+            </Button>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Link resource missing URL.
+            </Typography>
+          )}
         </Stack>
       </CardContent>
     </Card>
