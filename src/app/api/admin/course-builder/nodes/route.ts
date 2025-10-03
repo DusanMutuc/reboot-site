@@ -8,6 +8,86 @@ import {
   validateNodeRelationship,
 } from '@/lib/courseBuilder';
 
+async function fetchRootNodeIds(nodeType?: string) {
+  let query = adminClient
+    .from('content_nodes')
+    .select('id, node_type, title')
+    .order('title', { ascending: true });
+
+  if (nodeType) {
+    query = query.eq('node_type', nodeType);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new CourseBuilderError('Failed to load content nodes', 500, {
+      details: error.message,
+    });
+  }
+
+  return (data ?? []) as { id: number; node_type: string; title: string }[];
+}
+
+async function searchNodes(term: string | null) {
+  const trimmed = term?.trim();
+  let query = adminClient
+    .from('content_nodes')
+    .select('id,title,node_type,state,slug')
+    .order('updated_at', { ascending: false })
+    .limit(50);
+
+  if (trimmed && trimmed.length > 0) {
+    query = query.ilike('title', `%${trimmed}%`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new CourseBuilderError('Failed to search nodes', 500, {
+      details: error.message,
+    });
+  }
+
+  return (data ?? []) as Array<{
+    id: number;
+    title: string;
+    node_type: string;
+    state: string | null;
+    slug: string | null;
+  }>;
+}
+
+export async function GET(request: NextRequest) {
+  const guard = await requireAdmin(request);
+  if (!guard.ok) {
+    return guard.res;
+  }
+
+  try {
+    const url = new URL(request.url);
+    const mode = url.searchParams.get('mode');
+
+    if (mode === 'search') {
+      const nodes = await searchNodes(url.searchParams.get('q'));
+      return NextResponse.json({ nodes });
+    }
+
+    const rootType = url.searchParams.get('rootType') ?? undefined;
+    const ids = await fetchRootNodeIds(rootType);
+
+    const subtrees = [] as Awaited<ReturnType<typeof fetchNodeSubtree>>[];
+    for (const row of ids) {
+      const subtree = await fetchNodeSubtree(row.id);
+      subtrees.push(subtree);
+    }
+
+    return NextResponse.json({ subtrees });
+  } catch (error: unknown) {
+    return handleCourseBuilderError(error);
+  }
+}
+
 export async function POST(request: NextRequest) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {

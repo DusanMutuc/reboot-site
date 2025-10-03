@@ -11,6 +11,7 @@ import CoachRosters from '@/components/admin/CoachRosters';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
 import AdminActionRequired from '@/components/admin/AdminActionRequired';
+import CourseBuilderAdmin from '@/components/admin/CourseBuilderAdmin';
 
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
@@ -174,6 +175,7 @@ export default function AdminPage() {
             <Tab label="Assign / Change Coach" />
             <Tab label="Coach Rosters" />
             <Tab label="Resource Library" />
+            <Tab label="Course Builder" />
             <Tab label="Action Required" />
           </Tabs>
 
@@ -192,6 +194,9 @@ export default function AdminPage() {
               <ResourceLibraryAdmin />
             </TabPanel>
             <TabPanel value={tab} index={4}>
+              <CourseBuilderAdmin />
+            </TabPanel>
+            <TabPanel value={tab} index={5}>
               <AdminActionRequired />
             </TabPanel>
           </Box>
