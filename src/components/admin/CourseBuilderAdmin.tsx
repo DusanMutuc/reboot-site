@@ -706,6 +706,29 @@ export default function CourseBuilderAdmin() {
     setDeleteDialog((prev) => ({ ...prev, subtree: prev.subtree }));
   }, [deleteDialog.open, deleteDialog.subtree]);
 
+  const ensureResource = useCallback(
+    async (resourceId: number) => {
+      if (resourceCache[resourceId]) {
+        return resourceCache[resourceId];
+      }
+      const { data, error: fetchError } = await supabase
+        .from('resources')
+        .select('id,title,type,state,thumbnail,duration,url')
+        .eq('id', resourceId)
+        .maybeSingle();
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+      if (data) {
+        const row = data as ResourceRow;
+        setResourceCache((prev) => ({ ...prev, [resourceId]: row }));
+        return row;
+      }
+      return null;
+    },
+    [resourceCache],
+  );
+
   useEffect(() => {
     if (!selectedSubtree) return;
     const resourceIds = selectedSubtree.blocks
@@ -884,29 +907,6 @@ export default function CourseBuilderAdmin() {
       }
     },
     [completeSaving, failSaving, startSaving],
-  );
-
-  const ensureResource = useCallback(
-    async (resourceId: number) => {
-      if (resourceCache[resourceId]) {
-        return resourceCache[resourceId];
-      }
-      const { data, error: fetchError } = await supabase
-        .from('resources')
-        .select('id,title,type,state,thumbnail,duration,url')
-        .eq('id', resourceId)
-        .maybeSingle();
-      if (fetchError) {
-        throw new Error(fetchError.message);
-      }
-      if (data) {
-        const row = data as ResourceRow;
-        setResourceCache((prev) => ({ ...prev, [resourceId]: row }));
-        return row;
-      }
-      return null;
-    },
-    [resourceCache],
   );
 
   const flushBlockUpdate = useCallback(
