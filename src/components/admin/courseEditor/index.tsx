@@ -306,35 +306,6 @@ function CourseEditorInner() {
     };
   }, []);
 
-  useEffect(() => {
-    const pending = pendingBlockRef.current;
-    if (!pending) return;
-    const candidate = sortedBlocks.find((block) => {
-      if (block.block_type !== pending.type) return false;
-      if (block.position !== pending.position) return false;
-      if (pending.type === 'asset' && pending.resourceId != null) {
-        return block.resource_id === pending.resourceId && block.id > 0;
-      }
-      return block.id > 0;
-    });
-    if (!candidate) return;
-    pendingBlockRef.current = null;
-    setSelectedBlockId((prev) => (prev === pending.tempId ? candidate.id : prev));
-    setEditingBlockId((prev) => {
-      if (prev === pending.tempId) {
-        return pending.type === 'text' ? candidate.id : null;
-      }
-      return prev;
-    });
-    if (pending.type === 'text') {
-      const draft = pendingTextDrafts.current.get(pending.tempId);
-      if (draft != null && draft !== candidate.text_md) {
-        queueBlockUpdate(candidate.id, { text_md: draft });
-      }
-      pendingTextDrafts.current.delete(pending.tempId);
-    }
-  }, [queueBlockUpdate, setEditingBlockId, setSelectedBlockId, sortedBlocks]);
-
   const startSaving = useCallback((message?: string) => {
     setSavingState('saving', message ?? 'Saving…');
     if (saveTimerRef.current) {
@@ -455,6 +426,35 @@ function CourseEditorInner() {
     },
     [flushBlockUpdate],
   );
+
+  useEffect(() => {
+    const pending = pendingBlockRef.current;
+    if (!pending) return;
+    const candidate = sortedBlocks.find((block) => {
+      if (block.block_type !== pending.type) return false;
+      if (block.position !== pending.position) return false;
+      if (pending.type === 'asset' && pending.resourceId != null) {
+        return block.resource_id === pending.resourceId && block.id > 0;
+      }
+      return block.id > 0;
+    });
+    if (!candidate) return;
+    pendingBlockRef.current = null;
+    setSelectedBlockId((prev) => (prev === pending.tempId ? candidate.id : prev));
+    setEditingBlockId((prev) => {
+      if (prev === pending.tempId) {
+        return pending.type === 'text' ? candidate.id : null;
+      }
+      return prev;
+    });
+    if (pending.type === 'text') {
+      const draft = pendingTextDrafts.current.get(pending.tempId);
+      if (draft != null && draft !== candidate.text_md) {
+        queueBlockUpdate(candidate.id, { text_md: draft });
+      }
+      pendingTextDrafts.current.delete(pending.tempId);
+    }
+  }, [queueBlockUpdate, setEditingBlockId, setSelectedBlockId, sortedBlocks]);
 
   const flushNodeUpdate = useCallback(
     async (nodeId: number) => {
