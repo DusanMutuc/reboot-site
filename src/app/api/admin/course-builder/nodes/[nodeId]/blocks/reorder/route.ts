@@ -70,26 +70,59 @@ export async function PATCH(
 
     const { data: existing, error: existingError } = await adminClient
       .from('content_blocks')
-      .select('id')
+      .select(
+        'id, node_id, block_type, text_md, resource_id, start_ms, end_ms, label, notes, settings, data',
+      )
       .eq('node_id', nodeIdNumber);
 
     if (existingError) {
       throw new CourseBuilderError('Failed to load current blocks', 500, { details: existingError.message });
     }
 
-    const existingIds = new Set(existing?.map((row) => row.id));
+    const existingMap = new Map<number, NonNullable<typeof existing>[number]>();
+    for (const row of existing ?? []) {
+      existingMap.set(row.id, row);
+    }
 
     for (const blockId of blockIds) {
-      if (!existingIds.has(blockId)) {
+      if (!existingMap.has(blockId)) {
         throw new CourseBuilderError('One or more blocks do not belong to this node', 400, {
           block_id: blockId,
         });
       }
     }
 
+    const mergedPayload = payload.map((row) => {
+      const base = existingMap.get(row.id as number);
+      if (!base) {
+        return row;
+      }
+      const merged = {
+        id: row.id,
+        node_id: row.node_id,
+        block_type: base.block_type,
+        text_md: base.text_md,
+        resource_id: base.resource_id,
+        start_ms: base.start_ms,
+        end_ms: base.end_ms,
+        label: base.label,
+        notes: base.notes,
+        settings: base.settings,
+        data: base.data,
+        position: row.position,
+      } as Record<string, unknown>;
+
+      if ('label' in row) merged.label = row.label;
+      if ('notes' in row) merged.notes = row.notes;
+      if ('settings' in row) merged.settings = row.settings;
+      if ('data' in row) merged.data = row.data;
+
+      return merged;
+    });
+
     const { error: upsertError } = await adminClient
       .from('content_blocks')
-      .upsert(payload, { onConflict: 'id' });
+      .upsert(mergedPayload, { onConflict: 'id' });
 
     if (upsertError) {
       throw new CourseBuilderError('Failed to reorder blocks', 500, { details: upsertError.message });

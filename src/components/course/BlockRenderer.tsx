@@ -197,24 +197,51 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
   const isYoutube = lower.includes('youtube.com') || lower.includes('youtu.be');
   const isVimeo = lower.includes('vimeo.com');
 
+  const frameWrapper = (
+    src: string,
+    allow: string,
+    title: string,
+  ) => (
+    <Box
+      sx={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: 860,
+        mx: 'auto',
+        borderRadius: 2,
+        overflow: 'hidden',
+        bgcolor: 'common.black',
+        pb: '56.25%',
+        height: 0,
+      }}
+    >
+      <Box
+        component="iframe"
+        title={title}
+        src={src}
+        allow={allow}
+        allowFullScreen
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+      />
+    </Box>
+  );
+
   if (isYoutube) {
-    const url = new URL(resource.url);
-    let videoId = url.searchParams.get('v');
-    if (!videoId && lower.includes('youtu.be')) {
-      videoId = resource.url.split('/').pop() ?? '';
-    }
-    if (videoId) {
-      return (
-        <Box sx={{ position: 'relative', pb: '56.25%', height: 0, borderRadius: 2, overflow: 'hidden' }}>
-          <iframe
-            title={resource.title}
-            src={`https://www.youtube.com/embed/${videoId}`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
-          />
-        </Box>
-      );
+    try {
+      const url = new URL(resource.url);
+      let videoId = url.searchParams.get('v');
+      if (!videoId && lower.includes('youtu.be')) {
+        videoId = resource.url.split('/').pop() ?? '';
+      }
+      if (videoId) {
+        return frameWrapper(
+          `https://www.youtube.com/embed/${videoId}`,
+          'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+          resource.title,
+        );
+      }
+    } catch {
+      // fall back to card preview below
     }
   }
 
@@ -222,16 +249,10 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
     const segments = resource.url.split('/');
     const id = segments[segments.length - 1];
     if (id) {
-      return (
-        <Box sx={{ position: 'relative', pb: '56.25%', height: 0, borderRadius: 2, overflow: 'hidden' }}>
-          <iframe
-            title={resource.title}
-            src={`https://player.vimeo.com/video/${id}`}
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
-          />
-        </Box>
+      return frameWrapper(
+        `https://player.vimeo.com/video/${id}`,
+        'autoplay; fullscreen; picture-in-picture',
+        resource.title,
       );
     }
   }
@@ -239,7 +260,12 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
   return (
     <Card variant="outlined">
       {resource.thumbnail && (
-        <CardMedia component="img" image={resource.thumbnail} alt={resource.title} sx={{ maxHeight: 360 }} />
+        <CardMedia
+          component="img"
+          image={resource.thumbnail}
+          alt={resource.title}
+          sx={{ maxHeight: 320, objectFit: 'cover' }}
+        />
       )}
       <CardContent>
         <Stack spacing={1}>

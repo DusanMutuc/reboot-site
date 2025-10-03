@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import {
   Alert,
@@ -69,6 +69,7 @@ import type { RenderableResource } from '@/components/course/BlockRenderer';
 export type NodeType = 'course' | 'lesson' | 'chapter' | 'collection' | 'playlist';
 export type NodeState = 'draft' | 'published' | 'archived';
 export type BlockType = 'text' | 'asset' | 'divider';
+type BlockSpacing = 'compact' | 'normal' | 'spacious';
 
 type ContentNode = {
   id: number;
@@ -107,6 +108,46 @@ type ContentBlock = {
   settings: Record<string, unknown> | null;
   data: Record<string, unknown> | null;
 };
+
+const BLOCK_SPACING_VALUES: Record<BlockSpacing, number> = {
+  compact: 12,
+  normal: 24,
+  spacious: 40,
+};
+
+function readBlockSetting(block: ContentBlock | null | undefined, key: string) {
+  if (!block || !block.settings || typeof block.settings !== 'object') {
+    return undefined;
+  }
+
+  return (block.settings as Record<string, unknown>)[key];
+}
+
+function getBlockSpacingSetting(block: ContentBlock | null | undefined): BlockSpacing {
+  const raw = readBlockSetting(block, 'spacing');
+  if (raw === 'compact' || raw === 'spacious' || raw === 'normal') {
+    return raw;
+  }
+  return 'normal';
+}
+
+function getBlockSpacingPixels(block: ContentBlock | null | undefined): number {
+  return BLOCK_SPACING_VALUES[getBlockSpacingSetting(block)];
+}
+
+function applySpacingSetting(
+  settings: Record<string, unknown> | null,
+  spacing: BlockSpacing,
+): Record<string, unknown> | null {
+  const next = { ...(settings ?? {}) };
+  if (spacing === 'normal') {
+    delete next.spacing;
+  } else {
+    next.spacing = spacing;
+  }
+
+  return Object.keys(next).length > 0 ? next : null;
+}
 
 type NodeSubtree = {
   node: ContentNode;
@@ -619,6 +660,7 @@ export default function CourseBuilderAdmin() {
   const nodeUpdateQueue = useRef(new Map<number, Partial<ContentNode>>());
   const nodeDebounceTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const optimisticSnapshot = useRef<NodeSubtree[] | null>(null);
+  const lastNodeIdRef = useRef<number | null>(null);
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [editingState, setEditingState] = useState<{ blockId: number; mode: 'edit' | 'preview' } | null>(null);
@@ -681,8 +723,10 @@ export default function CourseBuilderAdmin() {
   useEffect(() => {
     if (!selectedSubtree) {
       setNodeDraft(null);
+      lastNodeIdRef.current = null;
       return;
     }
+
     setNodeDraft({
       title: selectedSubtree.node.title ?? '',
       slug: selectedSubtree.node.slug ?? '',
@@ -693,10 +737,15 @@ export default function CourseBuilderAdmin() {
       objectives: selectedSubtree.node.objectives ?? '',
       metadata: selectedSubtree.node.metadata ? JSON.stringify(selectedSubtree.node.metadata, null, 2) : '',
     });
-    setPanelMode('node');
-    setSelectedBlockId(null);
-    setMetadataError(null);
-    setEditingState(null);
+
+    const nodeId = selectedSubtree.node.id;
+    if (lastNodeIdRef.current !== nodeId) {
+      setPanelMode('node');
+      setSelectedBlockId(null);
+      setMetadataError(null);
+      setEditingState(null);
+      lastNodeIdRef.current = nodeId;
+    }
   }, [selectedSubtree]);
 
   useEffect(() => {
@@ -1104,6 +1153,28 @@ export default function CourseBuilderAdmin() {
     [runMutation, selectedBlockId],
   );
 
+  const dropGapForIndex = useCallback(
+    (index: number) => {
+      const before = sortedBlocks[index - 1] ?? null;
+      const after = sortedBlocks[index] ?? null;
+
+      if (!before && !after) {
+        return getBlockSpacingPixels(null);
+      }
+
+      if (!before) {
+        return getBlockSpacingPixels(after) / 2;
+      }
+
+      if (!after) {
+        return getBlockSpacingPixels(before) / 2;
+      }
+
+      return (getBlockSpacingPixels(before) + getBlockSpacingPixels(after)) / 2;
+    },
+    [sortedBlocks],
+  );
+
   const handleCreateBlock = useCallback(
     async (nodeId: number, block: Partial<ContentBlock> & { block_type: BlockType }, position: number) => {
       const beforeIds = findSubtree(trees, nodeId)?.blocks.map((row) => row.id) ?? [];
@@ -1418,18 +1489,22 @@ export default function CourseBuilderAdmin() {
   };
 
   const renderDropZone = (index: number) => {
+    const gap = dropGapForIndex(index);
+
+    if (previewMode) {
+      return <Box key={`drop-${index}`} sx={{ height: gap, width: '100%' }} />;
+    }
+
     const before = sortedBlocks[index - 1];
     const after = sortedBlocks[index];
     const showIndicator = dragState.overIndex === index;
     const showButton =
-      !previewMode &&
-      (showIndicator || hoveredBlockId === before?.id || hoveredBlockId === after?.id || (sortedBlocks.length === 0 && index === 0));
+      showIndicator || hoveredBlockId === before?.id || hoveredBlockId === after?.id || (sortedBlocks.length === 0 && index === 0);
 
     return (
       <Box
         key={`drop-${index}`}
         onDragOver={(event) => {
-          if (previewMode) return;
           event.preventDefault();
           setDragState((prev) => ({ ...prev, overIndex: index }));
         }}
@@ -1437,7 +1512,6 @@ export default function CourseBuilderAdmin() {
           setDragState((prev) => ({ ...prev, overIndex: prev.overIndex === index ? null : prev.overIndex }))
         }
         onDrop={(event) => {
-          if (previewMode) return;
           event.preventDefault();
           if (dragState.blockId != null) {
             void handleReorderBlocksToIndex(dragState.blockId, index);
@@ -1446,40 +1520,39 @@ export default function CourseBuilderAdmin() {
         }}
         sx={{
           position: 'relative',
-          height: 32,
-          my: 1,
+          height: Math.max(16, gap),
+          my: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          width: '100%',
         }}
       >
-        {!previewMode && (
-          <Fade in={showButton} timeout={120}>
-            <IconButton
-              size="small"
-              color="primary"
-              sx={{
-                bgcolor: 'background.paper',
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: 3,
-                opacity: showButton ? 1 : 0,
-                pointerEvents: showButton ? 'auto' : 'none',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  bgcolor: 'primary.main',
-                  color: 'primary.contrastText',
-                },
-              }}
-              onClick={(event) => {
-                event.stopPropagation();
-                setInsertMenu({ anchor: event.currentTarget, index });
-              }}
-            >
-              <AddIcon fontSize="small" />
-            </IconButton>
-          </Fade>
-        )}
+        <Fade in={showButton} timeout={120} unmountOnExit>
+          <IconButton
+            size="small"
+            color="primary"
+            sx={{
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              boxShadow: 3,
+              opacity: showButton ? 1 : 0,
+              pointerEvents: showButton ? 'auto' : 'none',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                bgcolor: 'primary.main',
+                color: 'primary.contrastText',
+              },
+            }}
+            onClick={(event) => {
+              event.stopPropagation();
+              setInsertMenu({ anchor: event.currentTarget, index });
+            }}
+          >
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Fade>
         {showIndicator && (
           <Box
             sx={{
@@ -1503,6 +1576,13 @@ export default function CourseBuilderAdmin() {
     const editingMode = editingState?.blockId === block.id ? editingState.mode : 'preview';
     const showHandle = !previewMode;
     const showControls = !previewMode;
+    const spacingSetting = getBlockSpacingSetting(block);
+    const paddingY =
+      spacingSetting === 'compact'
+        ? { xs: 1.5, md: 2 }
+        : spacingSetting === 'spacious'
+        ? { xs: 3, md: 3.5 }
+        : { xs: 2, md: 2.75 };
 
     return (
       <Box
@@ -1511,15 +1591,18 @@ export default function CourseBuilderAdmin() {
           position: 'relative',
           borderRadius: 3,
           border: '1px solid',
-          borderColor: isSelected ? 'primary.main' : hoveredBlockId === block.id ? 'divider' : 'transparent',
-          boxShadow: isSelected
-            ? '0 0 0 3px rgba(25, 118, 210, 0.12)'
-            : hoveredBlockId === block.id
-            ? '0 18px 32px rgba(15, 23, 42, 0.12)'
-            : 'none',
+          borderColor: isSelected ? 'primary.main' : previewMode ? 'transparent' : hoveredBlockId === block.id ? 'divider' : 'transparent',
+          boxShadow:
+            previewMode && !isSelected
+              ? 'none'
+              : isSelected
+              ? '0 0 0 3px rgba(25, 118, 210, 0.12)'
+              : hoveredBlockId === block.id
+              ? '0 12px 24px rgba(15, 23, 42, 0.12)'
+              : 'none',
           backgroundColor: 'background.paper',
           px: { xs: 2, md: 3 },
-          py: { xs: 2.5, md: 3.5 },
+          py: paddingY,
           cursor: previewMode ? 'default' : block.block_type === 'text' ? 'text' : 'pointer',
           transition: 'box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease',
           '&:hover .block-controls': { opacity: previewMode ? 0 : 1 },
@@ -1799,9 +1882,6 @@ export default function CourseBuilderAdmin() {
                 >
                   <Stack spacing={0.5}>
                     <Typography variant="h6">{selectedSubtree.node.title ?? 'Untitled node'}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {selectedSubtree.node.node_type}
-                    </Typography>
                   </Stack>
                   <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', md: 'center' }}>
                     <ToggleButtonGroup
@@ -1853,18 +1933,20 @@ export default function CourseBuilderAdmin() {
                       {savingMessage}
                     </Typography>
                   </Stack>
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      variant="contained"
-                      startIcon={<AddIcon />}
-                      disabled={!canEditBlocks || previewMode}
-                      onClick={(event) => {
-                        setInsertMenu({ anchor: event.currentTarget, index: sortedBlocks.length });
-                      }}
-                    >
-                      Add block
-                    </Button>
-                  </Stack>
+                  {!previewMode && (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        disabled={!canEditBlocks}
+                        onClick={(event) => {
+                          setInsertMenu({ anchor: event.currentTarget, index: sortedBlocks.length });
+                        }}
+                      >
+                        Add block
+                      </Button>
+                    </Stack>
+                  )}
                 </Stack>
               </Stack>
             ) : (
@@ -1884,13 +1966,13 @@ export default function CourseBuilderAdmin() {
                 }}
               >
                 {canEditBlocks ? (
-                  <Stack spacing={2.5}>
+                  <Stack spacing={0}>
                     {renderDropZone(0)}
                     {sortedBlocks.map((block, index) => (
-                      <Stack key={block.id} spacing={2.5}>
+                      <Fragment key={block.id}>
                         {renderBlockCard(block)}
                         {renderDropZone(index + 1)}
-                      </Stack>
+                      </Fragment>
                     ))}
                     {sortedBlocks.length === 0 && (
                       <Alert severity="info" sx={{ mt: 2 }}>
@@ -2024,6 +2106,31 @@ export default function CourseBuilderAdmin() {
                 {selectedBlock.block_type === 'divider' && (
                   <Alert severity="info">Divider blocks create spacing between sections and have no extra settings.</Alert>
                 )}
+
+                <Divider />
+
+                <Stack spacing={1}>
+                  <Typography variant="subtitle2">Spacing</Typography>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={getBlockSpacingSetting(selectedBlock)}
+                    onChange={(_, value) => {
+                      if (!value) return;
+                      const nextSettings = applySpacingSetting(selectedBlock.settings, value as BlockSpacing);
+                      queueBlockUpdate(selectedBlock.id, { settings: nextSettings });
+                    }}
+                  >
+                    <ToggleButton value="compact">Compact</ToggleButton>
+                    <ToggleButton value="normal">Normal</ToggleButton>
+                    <ToggleButton value="spacious">Spacious</ToggleButton>
+                  </ToggleButtonGroup>
+                  <Typography variant="caption" color="text.secondary">
+                    Adjust the breathing room above and below this block.
+                  </Typography>
+                </Stack>
+
+                <Divider />
 
                 <Button
                   color="error"
