@@ -1,11 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MouseEvent, ReactElement } from 'react';
+import type { MouseEvent } from 'react';
 import {
   Alert,
   Box,
   Button,
+  Card,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
@@ -16,22 +18,17 @@ import {
   FormControl,
   IconButton,
   InputLabel,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
   Menu,
   MenuItem,
   Paper,
   Select,
   Snackbar,
   Stack,
-  Tab,
-  Tabs,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
-  Checkbox,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -41,26 +38,31 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import EditIcon from '@mui/icons-material/Edit';
-import SaveIcon from '@mui/icons-material/Save';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ArticleIcon from '@mui/icons-material/Article';
 import LayersIcon from '@mui/icons-material/Layers';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
+import StorageIcon from '@mui/icons-material/Storage';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule';
-import PreviewIcon from '@mui/icons-material/Preview';
+import EditIcon from '@mui/icons-material/Edit';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import StorageIcon from '@mui/icons-material/Storage';
-import { supabase } from '@/lib/supabaseClient';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
-type NodeType = 'course' | 'lesson' | 'chapter' | 'collection' | 'playlist';
-type NodeState = 'draft' | 'published' | 'archived';
-type BlockType = 'text' | 'asset' | 'divider';
+import { supabase } from '@/lib/supabaseClient';
+import { BlockRenderer } from '@/components/course/BlockRenderer';
+
+import type { RenderableResource } from '@/components/course/BlockRenderer';
+
+export type NodeType = 'course' | 'lesson' | 'chapter' | 'collection' | 'playlist';
+export type NodeState = 'draft' | 'published' | 'archived';
+export type BlockType = 'text' | 'asset' | 'divider';
 
 type ContentNode = {
   id: number;
@@ -125,7 +127,7 @@ type ResourceRow = {
   url: string | null;
 };
 
-const NODE_ICONS: Partial<Record<NodeType, ReactElement>> = {
+const NODE_ICONS: Partial<Record<NodeType, JSX.Element>> = {
   course: <MenuBookIcon fontSize="small" />,
   lesson: <ArticleIcon fontSize="small" />,
   chapter: <LayersIcon fontSize="small" />,
@@ -133,7 +135,7 @@ const NODE_ICONS: Partial<Record<NodeType, ReactElement>> = {
   playlist: <PlaylistPlayIcon fontSize="small" />,
 };
 
-const BLOCK_ICONS: Record<BlockType, ReactElement> = {
+const BLOCK_ICONS: Record<BlockType, JSX.Element> = {
   text: <TextFieldsIcon fontSize="small" />,
   asset: <VideoLibraryIcon fontSize="small" />,
   divider: <HorizontalRuleIcon fontSize="small" />,
@@ -161,10 +163,7 @@ function cloneSubtree(subtree: NodeSubtree): NodeSubtree {
   };
 }
 
-function replaceSubtree(
-  tree: NodeSubtree,
-  updated: NodeSubtree,
-): { next: NodeSubtree; replaced: boolean } {
+function replaceSubtree(tree: NodeSubtree, updated: NodeSubtree): { next: NodeSubtree; replaced: boolean } {
   if (tree.node.id === updated.node.id) {
     return { next: updated, replaced: true };
   }
@@ -312,6 +311,43 @@ function collectStats(subtree: NodeSubtree) {
   };
 }
 
+function updateBlockDraft(subtree: NodeSubtree, blockId: number, updates: Partial<ContentBlock>): NodeSubtree {
+  const blocks = subtree.blocks.map((block) => (block.id === blockId ? { ...block, ...updates } : block));
+  const children = subtree.children.map((child) => ({
+    edge: { ...child.edge },
+    subtree: updateBlockDraft(child.subtree, blockId, updates),
+  }));
+  return {
+    node: { ...subtree.node },
+    blocks,
+    children,
+  };
+}
+
+function updateBlockAcrossTree(list: NodeSubtree[], blockId: number, updates: Partial<ContentBlock>) {
+  return list.map((tree) => updateBlockDraft(tree, blockId, updates));
+}
+
+function updateNodeDraft(subtree: NodeSubtree, nodeId: number, updates: Partial<ContentNode>): NodeSubtree {
+  const node = subtree.node.id === nodeId ? { ...subtree.node, ...updates } : { ...subtree.node };
+  const children = subtree.children.map((child) => ({
+    edge: { ...child.edge },
+    subtree: updateNodeDraft(child.subtree, nodeId, updates),
+  }));
+  return {
+    node,
+    blocks: subtree.blocks.map((block) => ({ ...block })),
+    children,
+  };
+}
+
+function updateNodeAcrossTree(list: NodeSubtree[], nodeId: number, updates: Partial<ContentNode>) {
+  return list.map((tree) => updateNodeDraft(tree, nodeId, updates));
+}
+
+function sortBlocks(blocks: ContentBlock[]) {
+  return [...blocks].sort((a, b) => a.position - b.position);
+}
 type TreeNodeProps = {
   subtree: NodeSubtree;
   level: number;
@@ -383,7 +419,6 @@ function TreeNode({ subtree, level, expanded, toggle, onSelect, selectedId, sear
     </Box>
   );
 }
-
 type ResourcePickerProps = {
   open: boolean;
   onClose: () => void;
@@ -441,189 +476,71 @@ function ResourcePickerDialog({ open, onClose, onSelect }: ResourcePickerProps) 
             InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1 }} /> }}
           />
           {loading && (
-            <Stack direction="row" spacing={1} alignItems="center">
-              <CircularProgress size={18} />
-              <Typography variant="body2">Loading resources…</Typography>
+            <Stack alignItems="center" spacing={2} sx={{ py: 4 }}>
+              <CircularProgress size={24} />
+              <Typography variant="body2" color="text.secondary">
+                Loading resources…
+              </Typography>
             </Stack>
           )}
           {error && <Alert severity="error">{error}</Alert>}
-          <List dense>
-            {rows.map((row) => (
-              <ListItem
-                key={row.id}
-                secondaryAction={
-                  <IconButton
-                    edge="end"
-                    disabled={!row.url}
-                    onClick={() => {
-                      if (row.url) {
-                        window.open(row.url, '_blank', 'noopener,noreferrer');
-                      }
-                    }}
-                  >
-                    <OpenInNewIcon fontSize="small" />
-                  </IconButton>
-                }
-                onClick={() => {
-                  onSelect(row);
-                  onClose();
-                }}
-              >
-                <ListItemText
-                  primary={row.title}
-                  secondary={[row.type, row.state].filter(Boolean).join(' · ')}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Stack>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
-  );
-}
-
-type BlockEditorState = {
-  mode: 'create' | 'edit';
-  block: ContentBlock | null;
-  type: BlockType;
-  text_md: string;
-  resource: ResourceRow | null;
-  label: string;
-  start_ms: string;
-  end_ms: string;
-  notes: string;
-  preview: boolean;
-};
-
-const EMPTY_BLOCK: BlockEditorState = {
-  mode: 'create',
-  block: null,
-  type: 'text',
-  text_md: '',
-  resource: null,
-  label: '',
-  start_ms: '',
-  end_ms: '',
-  notes: '',
-  preview: false,
-};
-
-type BlockEditorProps = {
-  open: boolean;
-  onClose: () => void;
-  state: BlockEditorState;
-  onChange: (next: BlockEditorState) => void;
-  onSelectResource: () => void;
-  onSubmit: () => void;
-};
-
-function BlockEditorDialog({ open, onClose, state, onChange, onSelectResource, onSubmit }: BlockEditorProps) {
-  const canSave =
-    state.type === 'divider' ||
-    (state.type === 'text' && state.text_md.trim().length > 0) ||
-    (state.type === 'asset' && state.resource);
-
-  return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
-      <DialogTitle>{state.mode === 'create' ? 'Add block' : 'Edit block'}</DialogTitle>
-      <DialogContent dividers>
-        <Stack spacing={3}>
-          <FormControl fullWidth>
-            <InputLabel id="block-type">Block type</InputLabel>
-            <Select
-              labelId="block-type"
-              label="Block type"
-              value={state.type}
-              onChange={(event) =>
-                onChange({ ...state, type: event.target.value as BlockType, resource: null })
-              }
-            >
-              <MenuItem value="text">Text</MenuItem>
-              <MenuItem value="asset">Resource</MenuItem>
-              <MenuItem value="divider">Divider</MenuItem>
-            </Select>
-          </FormControl>
-
-          {state.type === 'text' && (
-            <Stack spacing={1}>
-              <TextField
-                multiline
-                minRows={6}
-                label="Markdown"
-                value={state.text_md}
-                onChange={(event) => onChange({ ...state, text_md: event.target.value })}
-              />
-              <Button startIcon={<PreviewIcon />} onClick={() => onChange({ ...state, preview: !state.preview })}>
-                {state.preview ? 'Hide preview' : 'Show preview'}
-              </Button>
-              {state.preview && (
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography sx={{ whiteSpace: 'pre-wrap' }}>{state.text_md || 'Nothing to preview yet.'}</Typography>
-                </Paper>
-              )}
-            </Stack>
-          )}
-
-          {state.type === 'asset' && (
+          {!loading && !error && (
             <Stack spacing={2}>
-              <Button variant="outlined" startIcon={<SearchIcon />} onClick={onSelectResource}>
-                {state.resource ? 'Change resource' : 'Select resource'}
-              </Button>
-              {state.resource && (
-                <Paper variant="outlined" sx={{ p: 2 }}>
-                  <Typography variant="subtitle1">{state.resource.title}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {[state.resource.type, state.resource.state].filter(Boolean).join(' · ')}
-                  </Typography>
-                </Paper>
+              {rows.map((row) => (
+                <Card
+                  key={row.id}
+                  variant="outlined"
+                  sx={{ cursor: 'pointer' }}
+                  onClick={() => {
+                    onSelect(row);
+                    onClose();
+                  }}
+                >
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ p: 2 }}>
+                    {row.thumbnail && (
+                      <Box
+                        component="img"
+                        src={row.thumbnail}
+                        alt={row.title}
+                        sx={{ width: 120, borderRadius: 1, objectFit: 'cover' }}
+                      />
+                    )}
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="subtitle1">{row.title}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {[row.type, row.state].filter(Boolean).join(' · ')}
+                      </Typography>
+                      {row.url && (
+                        <Button
+                          size="small"
+                          endIcon={<OpenInNewIcon fontSize="small" />}
+                          href={row.url ?? undefined}
+                          target="_blank"
+                          rel="noreferrer"
+                          sx={{ mt: 1 }}
+                        >
+                          Open resource
+                        </Button>
+                      )}
+                    </Box>
+                  </Stack>
+                </Card>
+              ))}
+              {rows.length === 0 && (
+                <Typography variant="body2" color="text.secondary" align="center">
+                  No resources found. Try a different search term.
+                </Typography>
               )}
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
-                <TextField
-                  label="Start (ms)"
-                  value={state.start_ms}
-                  onChange={(event) => onChange({ ...state, start_ms: event.target.value })}
-                />
-                <TextField
-                  label="End (ms)"
-                  value={state.end_ms}
-                  onChange={(event) => onChange({ ...state, end_ms: event.target.value })}
-                />
-              </Stack>
-              <TextField
-                label="Label"
-                value={state.label}
-                onChange={(event) => onChange({ ...state, label: event.target.value })}
-              />
-              <TextField
-                label="Notes"
-                value={state.notes}
-                onChange={(event) => onChange({ ...state, notes: event.target.value })}
-              />
             </Stack>
-          )}
-
-          {state.type === 'divider' && (
-            <Alert severity="info" icon={<HorizontalRuleIcon fontSize="small" />}>
-              Divider blocks do not include additional content.
-            </Alert>
           )}
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button startIcon={<CloseIcon />} onClick={onClose}>
-          Cancel
-        </Button>
-        <Button startIcon={<SaveIcon />} variant="contained" disabled={!canSave} onClick={onSubmit}>
-          Save
-        </Button>
+        <Button onClick={onClose} startIcon={<CloseIcon />}>Close</Button>
       </DialogActions>
     </Dialog>
   );
 }
-
 type SnackbarState = { message: string; severity: 'success' | 'error' | 'info' } | null;
 
 type DeleteDialogState = {
@@ -643,35 +560,67 @@ type DuplicateDialogState = {
   nodeId: number | null;
 };
 
+type SearchResultsState = {
+  loading: boolean;
+  rows: ContentNode[];
+  error?: string | null;
+};
+
+type SavingState = 'idle' | 'saving' | 'saved' | 'error';
+
+type NodeDraft = {
+  title: string;
+  slug: string;
+  description: string;
+  state: NodeState;
+  hero_image: string;
+  icon: string;
+  objectives: string;
+  metadata: string;
+};
 export default function CourseBuilderAdmin() {
   const [trees, setTrees] = useState<NodeSubtree[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rules, setRules] = useState<NodeEdgeRule[]>([]);
-  const [panelTab, setPanelTab] = useState(0);
   const [snack, setSnack] = useState<SnackbarState>(null);
-  const [detailsForm, setDetailsForm] = useState({
-    title: '',
-    slug: '',
-    description: '',
-    state: 'draft' as NodeState,
-    hero_image: '',
-    icon: '',
-    objectives: '',
-    metadata: '',
-  });
-  const [blockEditor, setBlockEditor] = useState<BlockEditorState>(EMPTY_BLOCK);
-  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
-  const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [menuNodeId, setMenuNodeId] = useState<number | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>({ open: false, nodeId: null, subtree: null });
   const [addChildDialog, setAddChildDialog] = useState<AddChildDialogState>({ open: false, parentId: null, mode: 'create' });
   const [duplicateDialog, setDuplicateDialog] = useState<DuplicateDialogState>({ open: false, nodeId: null });
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [menuNodeId, setMenuNodeId] = useState<number | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResultsState>({ loading: false, rows: [] });
+  const [newChildType, setNewChildType] = useState<string>('lesson');
+  const [newChildTitle, setNewChildTitle] = useState('');
+  const [attachQuery, setAttachQuery] = useState('');
+  const [panelMode, setPanelMode] = useState<'node' | 'block'>('node');
+  const [propertiesOpen, setPropertiesOpen] = useState(true);
+  const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
+  const [resourceDialogMode, setResourceDialogMode] = useState<
+    { type: 'insert'; nodeId: number; index: number } | { type: 'update'; blockId: number }
+  | null>(null);
+  const [insertMenu, setInsertMenu] = useState<{ anchor: HTMLElement; index: number } | null>(null);
+  const [dragState, setDragState] = useState<{ blockId: number | null; overIndex: number | null }>({
+    blockId: null,
+    overIndex: null,
+  });
+  const [resourceCache, setResourceCache] = useState<Record<number, ResourceRow>>({});
+  const [savingState, setSavingState] = useState<SavingState>('idle');
+  const [savingMessage, setSavingMessage] = useState('All changes saved');
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blockUpdateQueue = useRef(new Map<number, Partial<ContentBlock>>());
+  const blockDebounceTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const nodeUpdateQueue = useRef(new Map<number, Partial<ContentNode>>());
+  const nodeDebounceTimers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   const optimisticSnapshot = useRef<NodeSubtree[] | null>(null);
+  const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
+  const [showMarkdownPreview, setShowMarkdownPreview] = useState(true);
+  const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -699,6 +648,7 @@ export default function CourseBuilderAdmin() {
       setRules(rulesPayload.rules ?? []);
       const first = treePayload.subtrees?.[0]?.node.id ?? null;
       setSelectedId(first);
+      setSelectedBlockId(null);
       setExpanded(new Set(treePayload.subtrees.map((subtree) => subtree.node.id)));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load data';
@@ -717,9 +667,22 @@ export default function CourseBuilderAdmin() {
     return findSubtree(trees, selectedId);
   }, [trees, selectedId]);
 
+  const sortedBlocks = useMemo(() => {
+    if (!selectedSubtree) return [];
+    return sortBlocks(selectedSubtree.blocks);
+  }, [selectedSubtree]);
+
+  const selectedBlock = useMemo(() => {
+    if (selectedBlockId == null || !selectedSubtree) return null;
+    return selectedSubtree.blocks.find((block) => block.id === selectedBlockId) ?? null;
+  }, [selectedBlockId, selectedSubtree]);
+
   useEffect(() => {
-    if (!selectedSubtree) return;
-    setDetailsForm({
+    if (!selectedSubtree) {
+      setNodeDraft(null);
+      return;
+    }
+    setNodeDraft({
       title: selectedSubtree.node.title ?? '',
       slug: selectedSubtree.node.slug ?? '',
       description: selectedSubtree.node.description ?? '',
@@ -729,8 +692,124 @@ export default function CourseBuilderAdmin() {
       objectives: selectedSubtree.node.objectives ?? '',
       metadata: selectedSubtree.node.metadata ? JSON.stringify(selectedSubtree.node.metadata, null, 2) : '',
     });
-    setPanelTab(0);
+    setPanelMode('node');
+    setSelectedBlockId(null);
+    setMetadataError(null);
+    setShowMarkdownPreview(true);
+    setEditingBlockId(null);
   }, [selectedSubtree]);
+
+  useEffect(() => {
+    if (!deleteDialog.open || !deleteDialog.subtree) {
+      return;
+    }
+    setDeleteDialog((prev) => ({ ...prev, subtree: prev.subtree }));
+  }, [deleteDialog.open, deleteDialog.subtree]);
+
+  useEffect(() => {
+    if (!selectedSubtree) return;
+    const resourceIds = selectedSubtree.blocks
+      .filter((block) => block.block_type === 'asset' && block.resource_id)
+      .map((block) => block.resource_id!)
+      .filter((id, index, arr) => arr.indexOf(id) === index);
+
+    for (const id of resourceIds) {
+      if (!resourceCache[id]) {
+        void ensureResource(id);
+      }
+    }
+  }, [selectedSubtree, resourceCache, ensureResource]);
+
+  useEffect(() => {
+    if (addChildDialog.open && addChildDialog.mode === 'attach' && addChildDialog.parentId != null) {
+      setSearchResults((prev) => ({ ...prev, loading: true, error: null }));
+      const controller = new AbortController();
+      const load = async () => {
+        try {
+          const res = await fetch(
+            `/api/admin/course-builder/nodes?search=${encodeURIComponent(attachQuery)}&excludeParent=${addChildDialog.parentId}`,
+            { signal: controller.signal },
+          );
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to search nodes' }));
+            throw new Error(body.error ?? 'Failed to search nodes');
+          }
+          const data = (await res.json()) as { subtrees: NodeSubtree[] };
+          const rows = (data.subtrees ?? []).map((subtree) => subtree.node);
+          setSearchResults({ loading: false, rows });
+        } catch (err) {
+          if (controller.signal.aborted) return;
+          const message = err instanceof Error ? err.message : 'Failed to search nodes';
+          setSearchResults({ loading: false, rows: [], error: message });
+        }
+      };
+      void load();
+      return () => controller.abort();
+    }
+    if (!addChildDialog.open) {
+      setSearchResults({ loading: false, rows: [] });
+    }
+  }, [addChildDialog, attachQuery]);
+
+  const deleteStats = useMemo(() => {
+    return deleteDialog.subtree ? collectStats(deleteDialog.subtree) : null;
+  }, [deleteDialog.subtree]);
+
+  const availableChildTypes = useMemo(() => {
+    if (!selectedSubtree) return [] as string[];
+    return rules
+      .filter((rule) => rule.parent_type === selectedSubtree.node.node_type && rule.child_kind === 'node')
+      .map((rule) => rule.child_type);
+  }, [rules, selectedSubtree]);
+
+  useEffect(() => {
+    if (addChildDialog.open && addChildDialog.mode === 'create') {
+      setNewChildType(availableChildTypes[0] ?? 'lesson');
+      setNewChildTitle('');
+    }
+  }, [addChildDialog.open, addChildDialog.mode, availableChildTypes]);
+
+  const startSaving = useCallback((message?: string) => {
+    setSavingState('saving');
+    setSavingMessage(message ?? 'Saving…');
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, []);
+
+  const completeSaving = useCallback((message?: string) => {
+    setSavingState('saved');
+    setSavingMessage(message ?? 'Changes saved');
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      setSavingState('idle');
+      setSavingMessage('All changes saved');
+    }, 2000);
+  }, []);
+
+  const failSaving = useCallback((message?: string) => {
+    setSavingState('error');
+    setSavingMessage(message ?? 'Failed to save changes');
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const blockTimers = blockDebounceTimers.current;
+    const nodeTimers = nodeDebounceTimers.current;
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+      blockTimers.forEach((timer) => clearTimeout(timer));
+      nodeTimers.forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
   const toggleExpand = useCallback((id: number) => {
     setExpanded((prev) => {
@@ -754,7 +833,12 @@ export default function CourseBuilderAdmin() {
   const runMutation = useCallback(
     async (
       request: () => Promise<NodeSubtree | { subtree?: NodeSubtree; parentSubtree?: NodeSubtree | null }>,
-      options: { message?: string; optimistic?: (prev: NodeSubtree[]) => NodeSubtree[] } = {},
+      options: {
+        optimistic?: (prev: NodeSubtree[]) => NodeSubtree[];
+        message?: string;
+        savingMessage?: string;
+        silent?: boolean;
+      } = {},
     ) => {
       if (options.optimistic) {
         setTrees((prev) => {
@@ -763,89 +847,536 @@ export default function CourseBuilderAdmin() {
         });
       }
 
+      startSaving(options.savingMessage);
+
       try {
         const payload = await request();
         setTrees((prev) => {
-          let next = prev;
           if ('subtree' in payload && payload.subtree) {
-            next = mergeSubtree(next, payload.subtree);
-          } else if ('node' in payload) {
-            next = mergeSubtree(next, payload as NodeSubtree);
+            return mergeSubtree(prev, payload.subtree);
           }
-          if ('parentSubtree' in payload && payload.parentSubtree) {
-            next = mergeSubtree(next, payload.parentSubtree);
+          if ('parentSubtree' in payload) {
+            const parentSubtree = payload.parentSubtree;
+            if (!parentSubtree) {
+              return removeSubtree(prev, payload.subtree?.node.id ?? -1);
+            }
+            return mergeSubtree(prev.filter((tree) => tree.node.id !== parentSubtree.node.id), parentSubtree);
           }
-          return next;
+          return mergeSubtree(prev, payload as NodeSubtree);
         });
-        if (options.message) setSnack({ message: options.message, severity: 'success' });
+        if (options.message) {
+          setSnack({ message: options.message, severity: 'success' });
+        }
+        completeSaving();
+        optimisticSnapshot.current = null;
+        return payload;
       } catch (err) {
         if (optimisticSnapshot.current) {
           setTrees(optimisticSnapshot.current);
         }
         optimisticSnapshot.current = null;
-        const message = err instanceof Error ? err.message : 'Action failed';
-        setSnack({ message, severity: 'error' });
+        const message = err instanceof Error ? err.message : 'Failed to save changes';
+        failSaving(message);
+        if (!options.silent) {
+          setSnack({ message, severity: 'error' });
+        }
         throw err;
-      } finally {
-        optimisticSnapshot.current = null;
       }
     },
-    [],
+    [completeSaving, failSaving, startSaving],
   );
 
-  const [newChildType, setNewChildType] = useState<string>('lesson');
-  const [newChildTitle, setNewChildTitle] = useState('');
-
-  const allowedChildTypes = useMemo(() => {
-    if (!selectedSubtree) return [] as string[];
-    return Array.from(
-      new Set(
-        rules
-          .filter((rule) => rule.parent_type === selectedSubtree.node.node_type && rule.child_kind === 'node')
-          .map((rule) => rule.child_type),
-      ),
-    );
-  }, [rules, selectedSubtree]);
-
-  const availableChildTypes = useMemo(
-    () => (addChildDialog.parentId ? allowedChildTypes : ['course']),
-    [addChildDialog.parentId, allowedChildTypes],
-  );
-
-  const [searchResults, setSearchResults] = useState<{ loading: boolean; rows: ContentNode[] }>({
-    loading: false,
-    rows: [],
-  });
-
-  const fetchSearch = useCallback(async (term: string) => {
-    setSearchResults({ loading: true, rows: [] });
-    try {
-      const res = await fetch(`/api/admin/course-builder/nodes?mode=search&q=${encodeURIComponent(term)}`);
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({ error: 'Failed to search nodes' }));
-        throw new Error(body.error ?? 'Failed to search nodes');
+  const ensureResource = useCallback(
+    async (resourceId: number) => {
+      if (resourceCache[resourceId]) {
+        return resourceCache[resourceId];
       }
-      const payload = (await res.json()) as { nodes: ContentNode[] };
-      setSearchResults({ loading: false, rows: payload.nodes ?? [] });
-    } catch (err) {
-      console.error(err);
-      setSearchResults({ loading: false, rows: [] });
-    }
+      const { data, error: fetchError } = await supabase
+        .from('resources')
+        .select('id,title,type,state,thumbnail,duration,url')
+        .eq('id', resourceId)
+        .maybeSingle();
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+      if (data) {
+        const row = data as ResourceRow;
+        setResourceCache((prev) => ({ ...prev, [resourceId]: row }));
+        return row;
+      }
+      return null;
+    },
+    [resourceCache],
+  );
+
+  const flushBlockUpdate = useCallback(
+    async (blockId: number) => {
+      const pending = blockUpdateQueue.current.get(blockId);
+      if (!pending) return;
+      blockUpdateQueue.current.delete(blockId);
+      const timer = blockDebounceTimers.current.get(blockId);
+      if (timer) {
+        clearTimeout(timer);
+        blockDebounceTimers.current.delete(blockId);
+      }
+
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/blocks/${blockId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: pending }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to update block' }));
+            throw new Error(body.error ?? 'Failed to update block');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { silent: true },
+      );
+    },
+    [runMutation],
+  );
+
+  const queueBlockUpdate = useCallback(
+    (blockId: number, updates: Partial<ContentBlock>, options: { debounce?: boolean } = { debounce: true }) => {
+      setTrees((prev) => {
+        if (!optimisticSnapshot.current) {
+          optimisticSnapshot.current = prev.map((tree) => cloneSubtree(tree));
+        }
+        return updateBlockAcrossTree(prev, blockId, updates);
+      });
+      const current = blockUpdateQueue.current.get(blockId) ?? {};
+      blockUpdateQueue.current.set(blockId, { ...current, ...updates });
+
+      if (options.debounce) {
+        const existing = blockDebounceTimers.current.get(blockId);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => {
+          void flushBlockUpdate(blockId);
+        }, 800);
+        blockDebounceTimers.current.set(blockId, timer);
+      } else {
+        void flushBlockUpdate(blockId);
+      }
+    },
+    [flushBlockUpdate],
+  );
+
+  const flushNodeUpdate = useCallback(
+    async (nodeId: number) => {
+      const pending = nodeUpdateQueue.current.get(nodeId);
+      if (!pending) return;
+      nodeUpdateQueue.current.delete(nodeId);
+      const timer = nodeDebounceTimers.current.get(nodeId);
+      if (timer) {
+        clearTimeout(timer);
+        nodeDebounceTimers.current.delete(nodeId);
+      }
+
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates: pending }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to update node' }));
+            throw new Error(body.error ?? 'Failed to update node');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { silent: true },
+      );
+    },
+    [runMutation],
+  );
+
+  const queueNodeUpdate = useCallback(
+    (nodeId: number, updates: Partial<ContentNode>, options: { debounce?: boolean } = { debounce: true }) => {
+      setTrees((prev) => {
+        if (!optimisticSnapshot.current) {
+          optimisticSnapshot.current = prev.map((tree) => cloneSubtree(tree));
+        }
+        return updateNodeAcrossTree(prev, nodeId, updates);
+      });
+      const current = nodeUpdateQueue.current.get(nodeId) ?? {};
+      nodeUpdateQueue.current.set(nodeId, { ...current, ...updates });
+
+      if (options.debounce) {
+        const existing = nodeDebounceTimers.current.get(nodeId);
+        if (existing) clearTimeout(existing);
+        const timer = setTimeout(() => {
+          void flushNodeUpdate(nodeId);
+        }, 800);
+        nodeDebounceTimers.current.set(nodeId, timer);
+      } else {
+        void flushNodeUpdate(nodeId);
+      }
+    },
+    [flushNodeUpdate],
+  );
+
+  const handleSelectBlock = useCallback((blockId: number) => {
+    setSelectedBlockId(blockId);
+    setPanelMode('block');
+    setPropertiesOpen(true);
+    setEditingBlockId(null);
   }, []);
 
-  useEffect(() => {
-    if (addChildDialog.open && addChildDialog.mode === 'create') {
-      setNewChildType(availableChildTypes[0] ?? 'course');
-      setNewChildTitle('');
-    }
-    if (!addChildDialog.open) {
-      setSearchResults({ loading: false, rows: [] });
-    }
-  }, [addChildDialog, availableChildTypes]);
+  const handleReorderBlocksToIndex = useCallback(
+    async (blockId: number, targetIndex: number) => {
+      if (!selectedSubtree) return;
+      const ordered = sortBlocks(selectedSubtree.blocks);
+      const currentIndex = ordered.findIndex((block) => block.id === blockId);
+      if (currentIndex === -1) return;
 
-  const deleteStats = useMemo(() => {
-    return deleteDialog.subtree ? collectStats(deleteDialog.subtree) : null;
-  }, [deleteDialog.subtree]);
+      const nextOrder = [...ordered];
+      const [moved] = nextOrder.splice(currentIndex, 1);
+      let insertIndex = targetIndex;
+      if (targetIndex > currentIndex) {
+        insertIndex = Math.max(0, targetIndex - 1);
+      }
+      insertIndex = Math.min(Math.max(insertIndex, 0), nextOrder.length);
+      nextOrder.splice(insertIndex, 0, moved);
+
+      const withPositions = nextOrder.map((block, index) => ({ ...block, position: index }));
+      const updates = withPositions.map((block) => ({ block_id: block.id, position: block.position }));
+
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${selectedSubtree.node.id}/blocks/reorder`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to reorder blocks' }));
+            throw new Error(body.error ?? 'Failed to reorder blocks');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        {
+          optimistic: (prev) => {
+            const snapshot = prev.map((tree) => cloneSubtree(tree));
+            const target = findSubtree(snapshot, selectedSubtree.node.id);
+            if (target) {
+              target.blocks = withPositions;
+            }
+            return snapshot;
+          },
+          silent: true,
+        },
+      );
+    },
+    [runMutation, selectedSubtree],
+  );
+
+  const handleDeleteBlock = useCallback(
+    async (blockId: number) => {
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/blocks/${blockId}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to delete block' }));
+            throw new Error(body.error ?? 'Failed to delete block');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { message: 'Block deleted' },
+      );
+      if (selectedBlockId === blockId) {
+        setSelectedBlockId(null);
+        setPanelMode('node');
+      }
+    },
+    [runMutation, selectedBlockId],
+  );
+
+  const handleCreateBlock = useCallback(
+    async (nodeId: number, block: Partial<ContentBlock> & { block_type: BlockType }, position: number) => {
+      const beforeIds = findSubtree(trees, nodeId)?.blocks.map((row) => row.id) ?? [];
+      const payload = await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/blocks`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ block: { ...block, position } }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to create block' }));
+            throw new Error(body.error ?? 'Failed to create block');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { message: 'Block created', savingMessage: 'Creating block…' },
+      );
+
+      const subtree = 'subtree' in payload && payload.subtree ? payload.subtree : (payload as NodeSubtree);
+      const newBlock = subtree.blocks.find((row) => !beforeIds.includes(row.id));
+      if (newBlock) {
+        setSelectedBlockId(newBlock.id);
+        setPanelMode('block');
+        setPropertiesOpen(true);
+        setEditingBlockId(newBlock.id);
+      }
+    },
+    [runMutation, trees],
+  );
+
+  const handleAddBlockAt = useCallback(
+    (index: number, type: BlockType) => {
+      if (!selectedSubtree) return;
+      setInsertMenu(null);
+      if (type === 'asset') {
+        setResourceDialogMode({ type: 'insert', nodeId: selectedSubtree.node.id, index });
+        setResourceDialogOpen(true);
+        return;
+      }
+
+      const baseText = 'Start writing your content…';
+      const payload: Partial<ContentBlock> & { block_type: BlockType } =
+        type === 'text'
+          ? { block_type: 'text', text_md: baseText }
+          : { block_type: 'divider' };
+      void handleCreateBlock(selectedSubtree.node.id, payload, index);
+    },
+    [handleCreateBlock, selectedSubtree],
+  );
+
+  const handleResourceSelected = useCallback(
+    (resource: ResourceRow) => {
+      setResourceCache((prev) => ({ ...prev, [resource.id]: resource }));
+      if (!resourceDialogMode) return;
+      if (resourceDialogMode.type === 'insert') {
+        void handleCreateBlock(
+          resourceDialogMode.nodeId,
+          { block_type: 'asset', resource_id: resource.id },
+          resourceDialogMode.index,
+        );
+      } else if (resourceDialogMode.type === 'update') {
+        queueBlockUpdate(resourceDialogMode.blockId, { resource_id: resource.id }, { debounce: false });
+      }
+      setResourceDialogMode(null);
+      setResourceDialogOpen(false);
+    },
+    [handleCreateBlock, queueBlockUpdate, resourceDialogMode],
+  );
+
+  const handleNodeFieldChange = useCallback(
+    (field: keyof NodeDraft, value: string) => {
+      if (!selectedSubtree) return;
+      setNodeDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
+      const nodeId = selectedSubtree.node.id;
+      if (field === 'metadata') {
+        if (!value.trim()) {
+          setMetadataError(null);
+          queueNodeUpdate(nodeId, { metadata: null });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(value);
+          setMetadataError(null);
+          queueNodeUpdate(nodeId, { metadata: parsed });
+        } catch {
+          setMetadataError('Metadata must be valid JSON');
+        }
+        return;
+      }
+
+      if (field === 'state') {
+        queueNodeUpdate(nodeId, { state: value as NodeState }, { debounce: false });
+        return;
+      }
+
+      const mapped: Partial<ContentNode> = {
+        [field]: value ? value : null,
+      } as Partial<ContentNode>;
+      queueNodeUpdate(nodeId, mapped);
+    },
+    [queueNodeUpdate, selectedSubtree],
+  );
+
+  const handleAddChild = useCallback(
+    async (parentId: number | null, payload: { node_type: string; title: string }) => {
+      await runMutation(
+        async () => {
+          const res = await fetch('/api/admin/course-builder/nodes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ node: payload, parent: parentId ? { parent_id: parentId } : null }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to create node' }));
+            throw new Error(body.error ?? 'Failed to create node');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { message: 'Node created', savingMessage: 'Creating node…' },
+      );
+    },
+    [runMutation],
+  );
+
+  const handleAttachExisting = useCallback(
+    async (parentId: number, childId: number) => {
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ child_id: childId }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to attach child' }));
+            throw new Error(body.error ?? 'Failed to attach child');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { message: 'Child attached' },
+      );
+    },
+    [runMutation],
+  );
+
+  const handleDuplicate = useCallback(
+    async (nodeId: number, parentId: number | null) => {
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/duplicate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parent: parentId ? { parent_id: parentId } : null }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to duplicate node' }));
+            throw new Error(body.error ?? 'Failed to duplicate node');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { message: 'Node duplicated', savingMessage: 'Duplicating node…' },
+      );
+    },
+    [runMutation],
+  );
+
+  const handleRemoveChild = useCallback(
+    async (parentId: number, childId: number) => {
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children/${childId}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to remove child' }));
+            throw new Error(body.error ?? 'Failed to remove child');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { message: 'Child removed' },
+      );
+    },
+    [runMutation],
+  );
+
+  const handleDeleteNode = useCallback(
+    async (nodeId: number) => {
+      const parentEdge = findParentEdge(trees, nodeId);
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to delete node' }));
+            throw new Error(body.error ?? 'Failed to delete node');
+          }
+          return (await res.json()) as { parentSubtree: NodeSubtree | null };
+        },
+        {
+          message: 'Node deleted',
+          optimistic: (prev) => removeSubtree(prev, nodeId),
+        },
+      );
+      setSelectedId(parentEdge ? parentEdge.parent_id : null);
+      setSelectedBlockId(null);
+      setPanelMode('node');
+    },
+    [runMutation, trees],
+  );
+
+  const handleReorderChild = useCallback(
+    async (parentId: number, childId: number, direction: 'up' | 'down') => {
+      const parent = findSubtree(trees, parentId);
+      if (!parent) return;
+      const children = [...parent.children].sort((a, b) => a.edge.position - b.edge.position);
+      const index = children.findIndex((child) => child.edge.child_id === childId);
+      const swapWith = direction === 'up' ? index - 1 : index + 1;
+      if (swapWith < 0 || swapWith >= children.length) return;
+
+      const reordered = [...children];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(swapWith, 0, moved);
+
+      const updates = reordered.map((child, idx) => ({ child_id: child.edge.child_id, position: idx }));
+
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children/reorder`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updates }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to reorder children' }));
+            throw new Error(body.error ?? 'Failed to reorder children');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        {
+          optimistic: (prev) => {
+            const snapshot = prev.map((tree) => cloneSubtree(tree));
+            const target = findSubtree(snapshot, parentId);
+            if (target) {
+              target.children = reordered.map((child, idx) => ({
+                edge: { ...child.edge, position: idx },
+                subtree: child.subtree,
+              }));
+            }
+            return snapshot;
+          },
+        },
+      );
+    },
+    [runMutation, trees],
+  );
+
+  const handleUpdateChild = useCallback(
+    async (parentId: number, child: NodeSubtree['children'][number], updates: Partial<NodeChild>) => {
+      await runMutation(
+        async () => {
+          const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children/reorder`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              updates: [
+                {
+                  child_id: child.edge.child_id,
+                  position: child.edge.position,
+                  ...updates,
+                },
+              ],
+            }),
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: 'Failed to update child' }));
+            throw new Error(body.error ?? 'Failed to update child');
+          }
+          return (await res.json()) as { subtree: NodeSubtree };
+        },
+        { silent: true },
+      );
+    },
+    [runMutation],
+  );
 
   if (loading) {
     return (
@@ -871,32 +1402,193 @@ export default function CourseBuilderAdmin() {
     );
   }
 
-  return (
-    <Stack direction={{ xs: 'column', lg: 'row' }} spacing={3}>
-      <Paper sx={{ flexBasis: 320, flexShrink: 0, p: 2 }} variant="outlined">
-        <Stack spacing={2}>
-          <TextField
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search nodes"
-            InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1 }} /> }}
-          />
-          <Stack direction="row" spacing={1}>
-            <Button
-              fullWidth
-              startIcon={<AddIcon />}
-              onClick={() => setAddChildDialog({ open: true, parentId: null, mode: 'create' })}
-            >
-              Add Course
-            </Button>
-            <Tooltip title="Refresh">
-              <IconButton onClick={() => void loadData()}>
-                <RefreshIcon />
+  const canEditBlocks = !!selectedSubtree && selectedSubtree.children.length === 0;
+  const resourceForBlock = (block: ContentBlock): RenderableResource | null => {
+    if (!block.resource_id) return null;
+    return resourceCache[block.resource_id] ?? null;
+  };
+
+  const renderDropZone = (index: number) => (
+    <Box
+      key={`drop-${index}`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setDragState((prev) => ({ ...prev, overIndex: index }));
+      }}
+      onDragLeave={() => setDragState((prev) => ({ ...prev, overIndex: prev.overIndex === index ? null : prev.overIndex }))}
+      onDrop={(event) => {
+        event.preventDefault();
+        if (dragState.blockId != null) {
+          void handleReorderBlocksToIndex(dragState.blockId, index);
+        }
+        setDragState({ blockId: null, overIndex: null });
+      }}
+      sx={{
+        position: 'relative',
+        my: 1,
+        display: 'flex',
+        justifyContent: 'center',
+      }}
+    >
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<AddIcon />}
+        onClick={(event) => {
+          setInsertMenu({ anchor: event.currentTarget, index });
+        }}
+      >
+        Add block
+      </Button>
+      {dragState.overIndex === index && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: 12,
+            right: 12,
+            height: 2,
+            bgcolor: 'primary.main',
+          }}
+        />
+      )}
+    </Box>
+  );
+
+  const renderBlockCard = (block: ContentBlock, index: number) => {
+    const isSelected = selectedBlockId === block.id;
+    const isText = block.block_type === 'text';
+    const isEditing = editingBlockId === block.id;
+    return (
+      <Box
+        key={block.id}
+        sx={{
+          position: 'relative',
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: isSelected ? 'primary.main' : 'transparent',
+          bgcolor: isSelected ? 'action.hover' : 'background.paper',
+          px: 4,
+          py: 3,
+          transition: 'border-color 0.2s ease, background-color 0.2s ease',
+          '&:hover .block-controls': { opacity: 1 },
+          cursor: 'pointer',
+        }}
+        draggable
+        onDragStart={(event) => {
+          event.dataTransfer.effectAllowed = 'move';
+          setDragState({ blockId: block.id, overIndex: null });
+        }}
+        onDragEnd={() => setDragState({ blockId: null, overIndex: null })}
+        onClick={() => handleSelectBlock(block.id)}
+      >
+        <Box
+          className="block-handle"
+          sx={{
+            position: 'absolute',
+            left: 12,
+            top: 16,
+            opacity: 0.4,
+            display: 'flex',
+            alignItems: 'center',
+            '&:hover': { opacity: 1 },
+          }}
+        >
+          <DragIndicatorIcon fontSize="small" />
+        </Box>
+        <Stack direction="row" spacing={1} className="block-controls" sx={{ position: 'absolute', right: 12, top: 12, opacity: 0 }}>
+          {isText && (
+            <Tooltip title={isEditing ? 'Stop editing' : 'Edit inline'}>
+              <IconButton
+                size="small"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setEditingBlockId(isEditing ? null : block.id);
+                }}
+              >
+                <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-          </Stack>
-          <Divider />
-          <Box sx={{ maxHeight: 600, overflowY: 'auto', pr: 1 }}>
+          )}
+          <Tooltip title="Delete block">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleDeleteBlock(block.id);
+              }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+        <Stack spacing={2}>
+          <Chip
+            size="small"
+            icon={BLOCK_ICONS[block.block_type]}
+            label={`${block.block_type.toUpperCase()} · #${index + 1}`}
+            variant="outlined"
+            sx={{ alignSelf: 'flex-start' }}
+          />
+          {block.label && (
+            <Typography variant="subtitle2" color="text.secondary">
+              {block.label}
+            </Typography>
+          )}
+          {isText && isEditing ? (
+            <TextField
+              multiline
+              minRows={6}
+              value={block.text_md ?? ''}
+              onChange={(event) => queueBlockUpdate(block.id, { text_md: event.target.value })}
+              onBlur={() => setEditingBlockId(null)}
+              autoFocus
+            />
+          ) : (
+            <BlockRenderer block={block} resource={resourceForBlock(block)} />
+          )}
+        </Stack>
+      </Box>
+    );
+  };
+
+  return (
+    <>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: {
+            xs: '1fr',
+            lg: propertiesOpen ? '260px minmax(0,1fr) 320px' : '260px minmax(0,1fr)',
+          },
+          alignItems: 'start',
+        }}
+      >
+        <Paper variant="outlined" sx={{ p: 2, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+          <Stack spacing={2}>
+            <TextField
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search nodes"
+              InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1 }} /> }}
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                fullWidth
+                startIcon={<AddIcon />}
+                onClick={() => setAddChildDialog({ open: true, parentId: null, mode: 'create' })}
+              >
+                Add Course
+              </Button>
+              <Tooltip title="Refresh">
+                <IconButton onClick={() => void loadData()}>
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+            <Divider />
             {trees.map((tree) => (
               <TreeNode
                 key={tree.node.id}
@@ -904,383 +1596,400 @@ export default function CourseBuilderAdmin() {
                 level={0}
                 expanded={expanded}
                 toggle={toggleExpand}
-                onSelect={setSelectedId}
+                onSelect={(id) => {
+                  setSelectedId(id);
+                  setPanelMode('node');
+                  setSelectedBlockId(null);
+                }}
                 selectedId={selectedId}
                 search={search}
                 onMenu={handleMenu}
               />
             ))}
-          </Box>
-        </Stack>
-      </Paper>
+          </Stack>
+        </Paper>
 
-      <Paper sx={{ flex: 1, p: 3 }} variant="outlined">
-        {selectedSubtree ? (
-          <Stack spacing={2}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center">
-              <Typography variant="h6">{selectedSubtree.node.title ?? 'Untitled node'}</Typography>
-              <Tabs value={panelTab} onChange={(_, value) => setPanelTab(value)}>
-                <Tab label="Details" />
-                <Tab label="Children" />
-                <Tab label="Content Blocks" />
-              </Tabs>
+        <Stack spacing={2} sx={{ minHeight: 'calc(100vh - 200px)' }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            {selectedSubtree ? (
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between">
+                <Stack spacing={0.5}>
+                  <Typography variant="h6">{selectedSubtree.node.title ?? 'Untitled node'}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {selectedSubtree.node.node_type}
+                  </Typography>
+                </Stack>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'stretch', md: 'center' }}>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={nodeDraft?.state ?? selectedSubtree.node.state}
+                    onChange={(_, value) => value && handleNodeFieldChange('state', value)}
+                  >
+                    <ToggleButton value="draft">Draft</ToggleButton>
+                    <ToggleButton value="published">Published</ToggleButton>
+                    <ToggleButton value="archived">Archived</ToggleButton>
+                  </ToggleButtonGroup>
+                  <Button variant="outlined" onClick={() => { setPanelMode('node'); setPropertiesOpen(true); }}>
+                    Node details
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<TextFieldsIcon />}
+                    disabled={!canEditBlocks}
+                    onClick={() => {
+                      if (!selectedSubtree) return;
+                      handleAddBlockAt(sortedBlocks.length, 'text');
+                    }}
+                    sx={{ display: { xs: 'none', md: 'inline-flex' } }}
+                  >
+                    Quick text block
+                  </Button>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {savingState === 'saving' && <CircularProgress size={16} />}
+                    {savingState === 'saved' && <CheckCircleOutlineIcon color="success" fontSize="small" />}
+                    {savingState === 'error' && <ErrorOutlineIcon color="error" fontSize="small" />}
+                    <Typography variant="caption" color="text.secondary">
+                      {savingMessage}
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </Stack>
+            ) : (
+              <Typography color="text.secondary">Select a node to begin editing.</Typography>
+            )}
+          </Paper>
+
+          <Paper variant="outlined" sx={{ p: 3, flex: 1, overflowY: 'auto' }}>
+            {selectedSubtree ? (
+              <Box sx={{ maxWidth: 820, mx: 'auto' }}>
+                {canEditBlocks ? (
+                  <Stack spacing={2}>
+                    {renderDropZone(0)}
+                    {sortedBlocks.map((block, index) => (
+                      <Stack key={block.id} spacing={2}>
+                        {renderBlockCard(block, index)}
+                        {renderDropZone(index + 1)}
+                      </Stack>
+                    ))}
+                    {sortedBlocks.length === 0 && (
+                      <Alert severity="info" sx={{ mt: 2 }}>
+                        This node has no content blocks yet. Use the add buttons to get started.
+                      </Alert>
+                    )}
+                  </Stack>
+                ) : (
+                  <Alert severity="info">
+                    Content blocks are available only for nodes without child nodes. Select a lesson or chapter leaf node to edit blocks.
+                  </Alert>
+                )}
+              </Box>
+            ) : (
+              <Typography color="text.secondary">Select a node from the tree to preview its content.</Typography>
+            )}
+          </Paper>
+        </Stack>
+
+        {propertiesOpen && (
+          <Paper variant="outlined" sx={{ p: 3, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+              <Typography variant="subtitle1">
+                {panelMode === 'block' && selectedBlock ? 'Block properties' : 'Node details'}
+              </Typography>
+              <Tooltip title="Collapse panel">
+                <IconButton size="small" onClick={() => setPropertiesOpen(false)}>
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </Stack>
 
-            {panelTab === 0 && (
+            {panelMode === 'block' && selectedBlock ? (
               <Stack spacing={2}>
-                <TextField
-                  label="Title"
-                  value={detailsForm.title}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, title: event.target.value }))}
-                />
-                <TextField
-                  label="Slug"
-                  value={detailsForm.slug}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, slug: event.target.value }))}
-                />
-                <TextField
-                  label="Description"
-                  multiline
-                  minRows={3}
-                  value={detailsForm.description}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, description: event.target.value }))}
-                />
-                <FormControl fullWidth>
-                  <InputLabel id="state-select">State</InputLabel>
-                  <Select
-                    labelId="state-select"
-                    label="State"
-                    value={detailsForm.state}
-                    onChange={(event) =>
-                      setDetailsForm((prev) => ({ ...prev, state: event.target.value as NodeState }))
-                    }
-                  >
-                    <MenuItem value="draft">Draft</MenuItem>
-                    <MenuItem value="published">Published</MenuItem>
-                    <MenuItem value="archived">Archived</MenuItem>
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Hero image URL"
-                  value={detailsForm.hero_image}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, hero_image: event.target.value }))}
-                />
-                <TextField
-                  label="Icon"
-                  value={detailsForm.icon}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, icon: event.target.value }))}
-                />
-                <TextField
-                  label="Objectives"
-                  multiline
-                  minRows={3}
-                  value={detailsForm.objectives}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, objectives: event.target.value }))}
-                />
-                <TextField
-                  label="Metadata (JSON)"
-                  multiline
-                  minRows={4}
-                  value={detailsForm.metadata}
-                  onChange={(event) => setDetailsForm((prev) => ({ ...prev, metadata: event.target.value }))}
-                />
-                <Button startIcon={<SaveIcon />} variant="contained" onClick={async () => {
-                  if (!selectedSubtree) return;
-                  if (detailsForm.state === 'published') {
-                    const unmet = selectedSubtree.children.filter(
-                      (child) => (child.edge.is_required ?? true) && child.subtree.node.state !== 'published',
-                    );
-                    if (unmet.length > 0) {
-                      setSnack({
-                        message: 'Publish required children before publishing this node.',
-                        severity: 'error',
-                      });
-                      return;
-                    }
-                  }
+                <Typography variant="subtitle2">Block #{selectedBlock.position + 1}</Typography>
+                {selectedBlock.block_type === 'text' && (
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Button
+                        variant={showMarkdownPreview ? 'outlined' : 'contained'}
+                        size="small"
+                        onClick={() => setShowMarkdownPreview((prev) => !prev)}
+                      >
+                        {showMarkdownPreview ? 'Edit raw markdown' : 'Show preview'}
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={() => {
+                          setEditingBlockId(selectedBlock.id);
+                          setPanelMode('block');
+                        }}
+                      >
+                        Edit inline
+                      </Button>
+                    </Stack>
+                    {!showMarkdownPreview ? (
+                      <TextField
+                        multiline
+                        minRows={8}
+                        value={selectedBlock.text_md ?? ''}
+                        onChange={(event) => queueBlockUpdate(selectedBlock.id, { text_md: event.target.value })}
+                      />
+                    ) : (
+                      <BlockRenderer block={selectedBlock} resource={null} />
+                    )}
+                  </Stack>
+                )}
 
-                  let metadata: Record<string, unknown> | null = null;
-                  if (detailsForm.metadata.trim()) {
-                    try {
-                      metadata = JSON.parse(detailsForm.metadata);
-                    } catch {
-                      setSnack({ message: 'Metadata must be valid JSON', severity: 'error' });
-                      return;
-                    }
-                  }
+                {selectedBlock.block_type === 'asset' && (
+                  <Stack spacing={2}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SearchIcon />}
+                      onClick={() => {
+                        setResourceDialogMode({ type: 'update', blockId: selectedBlock.id });
+                        setResourceDialogOpen(true);
+                      }}
+                    >
+                      {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
+                    </Button>
+                    {selectedBlock.resource_id && (
+                      <Card variant="outlined" sx={{ p: 2 }}>
+                        <Typography variant="subtitle1">
+                          {resourceForBlock(selectedBlock)?.title ?? `Resource #${selectedBlock.resource_id}`}
+                        </Typography>
+                        {resourceForBlock(selectedBlock)?.url && (
+                          <Button
+                            size="small"
+                            endIcon={<OpenInNewIcon fontSize="small" />}
+                            href={resourceForBlock(selectedBlock)?.url ?? undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            sx={{ mt: 1 }}
+                          >
+                            Open resource
+                          </Button>
+                        )}
+                      </Card>
+                    )}
+                    <TextField
+                      label="Caption"
+                      value={selectedBlock.label ?? ''}
+                      onChange={(event) => queueBlockUpdate(selectedBlock.id, { label: event.target.value || null })}
+                    />
+                    <Stack direction="row" spacing={1}>
+                      <TextField
+                        label="Start (ms)"
+                        value={selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : ''}
+                        onChange={(event) => {
+                          const parsed = Number(event.target.value);
+                          if (Number.isNaN(parsed) || parsed < 0) {
+                            queueBlockUpdate(selectedBlock.id, { start_ms: null });
+                          } else {
+                            queueBlockUpdate(selectedBlock.id, { start_ms: parsed });
+                          }
+                        }}
+                      />
+                      <TextField
+                        label="End (ms)"
+                        value={selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : ''}
+                        onChange={(event) => {
+                          const parsed = Number(event.target.value);
+                          if (Number.isNaN(parsed) || parsed < 0) {
+                            queueBlockUpdate(selectedBlock.id, { end_ms: null });
+                          } else {
+                            queueBlockUpdate(selectedBlock.id, { end_ms: parsed });
+                          }
+                        }}
+                      />
+                    </Stack>
+                  </Stack>
+                )}
 
-                  const payload: Record<string, unknown> = {
-                    title: detailsForm.title,
-                    slug: detailsForm.slug || null,
-                    description: detailsForm.description || null,
-                    state: detailsForm.state,
-                    hero_image: detailsForm.hero_image || null,
-                    icon: detailsForm.icon || null,
-                    objectives: detailsForm.objectives || null,
-                    metadata,
-                  };
+                {selectedBlock.block_type === 'divider' && (
+                  <Alert severity="info">Divider blocks have no configurable properties.</Alert>
+                )}
 
-                  try {
-                    await runMutation(async () => {
-                      const res = await fetch(`/api/admin/course-builder/nodes/${selectedSubtree.node.id}`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ updates: payload }),
-                      });
-                      if (!res.ok) {
-                        const body = await res.json().catch(() => ({ error: 'Failed to update node' }));
-                        throw new Error(body.error ?? 'Failed to update node');
-                      }
-                      return (await res.json()) as { subtree: NodeSubtree };
-                    }, { message: 'Node updated' });
-                  } catch (err) {
-                    console.error(err);
-                  }
-                }}>
-                  Save changes
+                <Button
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => void handleDeleteBlock(selectedBlock.id)}
+                >
+                  Delete block
                 </Button>
               </Stack>
-            )}
-
-            {panelTab === 1 && (
-              <Stack spacing={2}>
-                <Stack direction="row" spacing={1}>
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'create' })}
-                  >
-                    Create child
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'attach' })}
-                  >
-                    Add existing
-                  </Button>
+            ) : selectedSubtree && nodeDraft ? (
+              <Stack spacing={3}>
+                <Stack spacing={2}>
+                  <TextField
+                    label="Title"
+                    value={nodeDraft.title}
+                    onChange={(event) => handleNodeFieldChange('title', event.target.value)}
+                  />
+                  <TextField
+                    label="Slug"
+                    value={nodeDraft.slug}
+                    onChange={(event) => handleNodeFieldChange('slug', event.target.value)}
+                  />
+                  <TextField
+                    label="Description"
+                    multiline
+                    minRows={3}
+                    value={nodeDraft.description}
+                    onChange={(event) => handleNodeFieldChange('description', event.target.value)}
+                  />
+                  <TextField
+                    label="Hero image URL"
+                    value={nodeDraft.hero_image}
+                    onChange={(event) => handleNodeFieldChange('hero_image', event.target.value)}
+                  />
+                  <TextField
+                    label="Icon"
+                    value={nodeDraft.icon}
+                    onChange={(event) => handleNodeFieldChange('icon', event.target.value)}
+                  />
+                  <TextField
+                    label="Objectives"
+                    multiline
+                    minRows={3}
+                    value={nodeDraft.objectives}
+                    onChange={(event) => handleNodeFieldChange('objectives', event.target.value)}
+                  />
+                  <TextField
+                    label="Metadata (JSON)"
+                    multiline
+                    minRows={4}
+                    value={nodeDraft.metadata}
+                    onChange={(event) => handleNodeFieldChange('metadata', event.target.value)}
+                    error={!!metadataError}
+                    helperText={metadataError ?? 'Provide structured metadata for this node'}
+                  />
                 </Stack>
-                <List>
+
+                <Divider />
+
+                <Stack spacing={1} direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle2">Children</Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      size="small"
+                      startIcon={<AddIcon />}
+                      onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'create' })}
+                    >
+                      Add child
+                    </Button>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'attach' })}
+                    >
+                      Attach existing
+                    </Button>
+                  </Stack>
+                </Stack>
+
+                <Stack spacing={1.5}>
                   {selectedSubtree.children
                     .slice()
                     .sort((a, b) => a.edge.position - b.edge.position)
                     .map((child, index, arr) => (
-                      <ListItem
-                        key={child.subtree.node.id}
-                        secondaryAction={
-                          <Stack direction="row" spacing={1}>
-                            <Tooltip title="Move up">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={index === 0}
-                                  onClick={() =>
-                                    handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'up')
-                                  }
-                                >
-                                  <ArrowUpwardIcon fontSize="small" />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                            <Tooltip title="Move down">
-                              <span>
-                                <IconButton
-                                  size="small"
-                                  disabled={index === arr.length - 1}
-                                  onClick={() =>
-                                    handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'down')
-                                  }
-                                >
-                                  <ArrowDownwardIcon fontSize="small" />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                            <Tooltip title="Remove child">
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleRemoveChild(selectedSubtree.node.id, child.edge.child_id)}
-                              >
-                                <DeleteIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Stack>
-                        }
-                      >
-                        <ListItemIcon>
-                          {NODE_ICONS[child.subtree.node.node_type] ?? <StorageIcon fontSize="small" />}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={child.subtree.node.title ?? 'Untitled'}
-                          secondary={`${child.subtree.node.node_type} · position ${child.edge.position}`}
-                        />
-                        <Checkbox
-                          checked={child.edge.is_required ?? true}
-                          onChange={(event) =>
-                            handleUpdateChild(selectedSubtree.node.id, child, {
-                              is_required: event.target.checked,
-                            })
-                          }
-                          inputProps={{ 'aria-label': 'Required child toggle' }}
-                        />
-                      </ListItem>
-                    ))}
-                </List>
-              </Stack>
-            )}
-
-            {panelTab === 2 && (
-              <Stack spacing={2}>
-                {selectedSubtree.children.length > 0 ? (
-                  <Alert severity="info">
-                    Content blocks are available only for nodes without child nodes.
-                  </Alert>
-                ) : (
-                  <>
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        startIcon={<TextFieldsIcon />}
-                        onClick={() => {
-                          setBlockEditor({ ...EMPTY_BLOCK, type: 'text' });
-                          setBlockDialogOpen(true);
-                        }}
-                      >
-                        Add Text
-                      </Button>
-                      <Button
-                        startIcon={<VideoLibraryIcon />}
-                        onClick={() => {
-                          setBlockEditor({ ...EMPTY_BLOCK, type: 'asset' });
-                          setBlockDialogOpen(true);
-                        }}
-                      >
-                        Add Resource
-                      </Button>
-                      <Button
-                        startIcon={<HorizontalRuleIcon />}
-                        onClick={() => {
-                          setBlockEditor({ ...EMPTY_BLOCK, type: 'divider' });
-                          setBlockDialogOpen(true);
-                        }}
-                      >
-                        Add Divider
-                      </Button>
-                    </Stack>
-                    <List>
-                      {selectedSubtree.blocks
-                        .slice()
-                        .sort((a, b) => a.position - b.position)
-                        .map((block, index, arr) => (
-                          <ListItem
-                            key={block.id}
-                            secondaryAction={
-                              <Stack direction="row" spacing={1}>
-                                <Tooltip title="Move up">
-                                  <span>
-                                    <IconButton
-                                      size="small"
-                                      disabled={index === 0}
-                                      onClick={() =>
-                                        handleReorderBlocks(selectedSubtree.node.id, selectedSubtree.blocks, block.id, 'up')
-                                      }
-                                    >
-                                      <ArrowUpwardIcon fontSize="small" />
-                                    </IconButton>
-                                  </span>
-                                </Tooltip>
-                                <Tooltip title="Move down">
-                                  <span>
-                                    <IconButton
-                                      size="small"
-                                      disabled={index === arr.length - 1}
-                                      onClick={() =>
-                                        handleReorderBlocks(
-                                          selectedSubtree.node.id,
-                                          selectedSubtree.blocks,
-                                          block.id,
-                                          'down',
-                                        )
-                                      }
-                                    >
-                                      <ArrowDownwardIcon fontSize="small" />
-                                    </IconButton>
-                                  </span>
-                                </Tooltip>
-                                <Tooltip title="Edit block">
+                      <Paper key={child.edge.child_id} variant="outlined" sx={{ p: 2 }}>
+                        <Stack spacing={1.5}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Stack spacing={0.5}>
+                              <Typography variant="subtitle2">{child.subtree.node.title ?? `Node #${child.subtree.node.id}`}</Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {child.subtree.node.node_type}
+                              </Typography>
+                            </Stack>
+                            <Stack direction="row" spacing={1} alignItems="center">
+                              <Tooltip title="Move up">
+                                <span>
                                   <IconButton
                                     size="small"
-                                    onClick={() => {
-                                      setBlockEditor({
-                                        mode: 'edit',
-                                        block,
-                                        type: block.block_type,
-                                        text_md: block.text_md ?? '',
-                                        resource: block.resource_id
-                                          ? {
-                                              id: block.resource_id,
-                                              title: `Resource #${block.resource_id}`,
-                                              type: null,
-                                              state: null,
-                                              thumbnail: null,
-                                              duration: null,
-                                              url: null,
-                                            }
-                                          : null,
-                                        label: block.label ?? '',
-                                        start_ms: block.start_ms != null ? String(block.start_ms) : '',
-                                        end_ms: block.end_ms != null ? String(block.end_ms) : '',
-                                        notes: block.notes ?? '',
-                                        preview: false,
-                                      });
-                                      setBlockDialogOpen(true);
-                                    }}
+                                    disabled={index === 0}
+                                    onClick={() => handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'up')}
                                   >
-                                    <EditIcon fontSize="small" />
+                                    <ArrowUpwardIcon fontSize="small" />
                                   </IconButton>
-                                </Tooltip>
-                                <Tooltip title="Delete block">
-                                  <IconButton size="small" color="error" onClick={() => handleDeleteBlock(block.id)}>
-                                    <DeleteIcon fontSize="small" />
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Move down">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    disabled={index === arr.length - 1}
+                                    onClick={() => handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'down')}
+                                  >
+                                    <ArrowDownwardIcon fontSize="small" />
                                   </IconButton>
-                                </Tooltip>
-                              </Stack>
-                            }
-                          >
-                            <ListItemIcon>{BLOCK_ICONS[block.block_type]}</ListItemIcon>
-                            <ListItemText
-                              primary={`${block.block_type} #${block.position}`}
-                              secondary={
-                                block.block_type === 'text'
-                                  ? (block.text_md ?? '').slice(0, 80)
-                                  : block.block_type === 'asset'
-                                  ? `Resource ${block.resource_id ?? 'unknown'}`
-                                  : 'Divider'
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Remove child">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => void handleRemoveChild(selectedSubtree.node.id, child.edge.child_id)}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
+                          </Stack>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Checkbox
+                              checked={child.edge.is_required ?? true}
+                              onChange={(event) =>
+                                void handleUpdateChild(selectedSubtree.node.id, child, {
+                                  is_required: event.target.checked,
+                                })
                               }
+                              size="small"
                             />
-                          </ListItem>
-                        ))}
-                    </List>
-                  </>
-                )}
+                            <Typography variant="body2">Required for progression</Typography>
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    ))}
+                  {selectedSubtree.children.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      This node has no children.
+                    </Typography>
+                  )}
+                </Stack>
               </Stack>
+            ) : (
+              <Typography color="text.secondary">Select a node to edit details.</Typography>
             )}
-          </Stack>
-        ) : (
-          <Typography color="text.secondary">Select a node from the tree to start editing.</Typography>
+          </Paper>
         )}
-      </Paper>
+      </Box>
+
+      {!propertiesOpen && (
+        <Box sx={{ position: 'fixed', bottom: 24, right: 24 }}>
+          <Button variant="contained" onClick={() => setPropertiesOpen(true)}>
+            Open properties
+          </Button>
+        </Box>
+      )}
 
       <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={closeMenu}>
         <MenuItem
           onClick={() => {
             if (!menuNodeId) return;
-            const node = findSubtree(trees, menuNodeId);
             closeMenu();
             setAddChildDialog({ open: true, parentId: menuNodeId, mode: 'create' });
-            if (node) {
-              setSelectedId(node.node.id);
-            }
           }}
         >
           <AddIcon fontSize="small" sx={{ mr: 1 }} /> Add child
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (!menuNodeId) return;
+            closeMenu();
+            setAddChildDialog({ open: true, parentId: menuNodeId, mode: 'attach' });
+          }}
+        >
+          <SearchIcon fontSize="small" sx={{ mr: 1 }} /> Attach existing
         </MenuItem>
         <MenuItem
           onClick={() => {
@@ -1301,47 +2010,38 @@ export default function CourseBuilderAdmin() {
         >
           <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
         </MenuItem>
-        <Divider />
-        {(['draft', 'published', 'archived'] as NodeState[]).map((state) => (
-          <MenuItem
-            key={state}
-            onClick={async () => {
-              if (!menuNodeId) return;
-              closeMenu();
-              try {
-                await runMutation(async () => {
-                  const res = await fetch(`/api/admin/course-builder/nodes/${menuNodeId}`, {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ updates: { state } }),
-                  });
-                  if (!res.ok) {
-                    const body = await res.json().catch(() => ({ error: 'Failed to update state' }));
-                    throw new Error(body.error ?? 'Failed to update state');
-                  }
-                  return (await res.json()) as { subtree: NodeSubtree };
-                }, { message: 'State updated' });
-              } catch (err) {
-                console.error(err);
-              }
-            }}
-          >
-            Set {state}
-          </MenuItem>
-        ))}
+      </Menu>
+
+      <Menu
+        anchorEl={insertMenu?.anchor}
+        open={!!insertMenu}
+        onClose={() => setInsertMenu(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <MenuItem onClick={() => insertMenu && handleAddBlockAt(insertMenu.index, 'text')}>
+          <TextFieldsIcon fontSize="small" sx={{ mr: 1 }} /> Text block
+        </MenuItem>
+        <MenuItem onClick={() => insertMenu && handleAddBlockAt(insertMenu.index, 'asset')}>
+          <VideoLibraryIcon fontSize="small" sx={{ mr: 1 }} /> Resource block
+        </MenuItem>
+        <MenuItem onClick={() => insertMenu && handleAddBlockAt(insertMenu.index, 'divider')}>
+          <HorizontalRuleIcon fontSize="small" sx={{ mr: 1 }} /> Divider
+        </MenuItem>
       </Menu>
 
       <Dialog
         open={deleteDialog.open && !!deleteDialog.subtree}
         onClose={() => setDeleteDialog({ open: false, nodeId: null, subtree: null })}
+        fullWidth
+        maxWidth="sm"
       >
         <DialogTitle>Delete node</DialogTitle>
         <DialogContent dividers>
           {deleteStats ? (
             <Stack spacing={2}>
               <Alert severity="warning">
-                Deleting <strong>{deleteDialog.subtree!.node.title ?? 'this node'}</strong> will also remove the
-                following:
+                Deleting <strong>{deleteDialog.subtree!.node.title ?? 'this node'}</strong> will also remove the following:
               </Alert>
               <Stack spacing={1}>
                 {deleteStats.nodes.map(({ type, count }) => (
@@ -1354,7 +2054,7 @@ export default function CourseBuilderAdmin() {
               <Alert severity="error">This action cannot be undone.</Alert>
             </Stack>
           ) : (
-            <CircularProgress size={20} />
+            <CircularProgress size={24} />
           )}
         </DialogContent>
         <DialogActions>
@@ -1406,47 +2106,52 @@ export default function CourseBuilderAdmin() {
           ) : (
             <Stack spacing={2}>
               <TextField
-                label="Search by title"
-                onChange={(event) => void fetchSearch(event.target.value)}
-                InputProps={{ startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1 }} /> }}
+                label="Search nodes"
+                value={attachQuery}
+                onChange={(event) => setAttachQuery(event.target.value)}
               />
               {searchResults.loading && <CircularProgress size={20} />}
-              <List>
-                {searchResults.rows.map((row) => (
-                  <ListItem
-                    key={row.id}
-                    onClick={() => {
-                      if (!addChildDialog.parentId) return;
-                      void handleAttachExisting(addChildDialog.parentId, row.id);
-                      setAddChildDialog({ open: false, parentId: null, mode: 'create' });
-                    }}
-                  >
-                    <ListItemText primary={row.title} secondary={`${row.node_type} · ${row.state}`} />
-                  </ListItem>
-                ))}
-              </List>
+              {searchResults.error && <Alert severity="error">{searchResults.error}</Alert>}
+              {!searchResults.loading && !searchResults.error && (
+                <Stack spacing={1}>
+                  {searchResults.rows.map((row) => (
+                    <Button
+                      key={row.id}
+                      variant="outlined"
+                      onClick={() => {
+                        if (!addChildDialog.parentId) return;
+                        void handleAttachExisting(addChildDialog.parentId, row.id);
+                        setAddChildDialog({ open: false, parentId: null, mode: 'create' });
+                      }}
+                    >
+                      {row.title ?? `Node #${row.id}`} ({row.node_type})
+                    </Button>
+                  ))}
+                  {searchResults.rows.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      No nodes found.
+                    </Typography>
+                  )}
+                </Stack>
+              )}
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAddChildDialog({ open: false, parentId: null, mode: 'create' })}>Cancel</Button>
-          {addChildDialog.mode === 'create' && (
+          {addChildDialog.mode === 'create' ? (
             <Button
               variant="contained"
-              disabled={!newChildTitle.trim() || availableChildTypes.length === 0}
+              disabled={!newChildTitle.trim()}
               onClick={() => {
-                const parentId = addChildDialog.parentId;
-                if (!newChildTitle.trim()) {
-                  setSnack({ message: 'Provide a title for the new node.', severity: 'error' });
-                  return;
-                }
-                void handleAddChild(parentId, { node_type: newChildType, title: newChildTitle.trim() });
+                if (addChildDialog.mode !== 'create') return;
+                void handleAddChild(addChildDialog.parentId, { node_type: newChildType, title: newChildTitle });
                 setAddChildDialog({ open: false, parentId: null, mode: 'create' });
               }}
             >
               Create
             </Button>
-          )}
+          ) : null}
         </DialogActions>
       </Dialog>
 
@@ -1457,18 +2162,16 @@ export default function CourseBuilderAdmin() {
         <DialogTitle>Duplicate node</DialogTitle>
         <DialogContent dividers>
           <Typography>
-            Duplicate this node and optionally attach it to the same parent. The copy will inherit the entire
-            subtree.
+            Duplicate this node and attach the copy to the same parent?
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDuplicateDialog({ open: false, nodeId: null })}>Cancel</Button>
           <Button
-            variant="contained"
             onClick={() => {
               if (!duplicateDialog.nodeId) return;
-              const parentEdge = findParentEdge(trees, duplicateDialog.nodeId);
-              void handleDuplicate(duplicateDialog.nodeId, parentEdge?.parent_id ?? null);
+              const parent = findParentEdge(trees, duplicateDialog.nodeId);
+              void handleDuplicate(duplicateDialog.nodeId, parent ? parent.parent_id : null);
               setDuplicateDialog({ open: false, nodeId: null });
             }}
           >
@@ -1479,48 +2182,11 @@ export default function CourseBuilderAdmin() {
 
       <ResourcePickerDialog
         open={resourceDialogOpen}
-        onClose={() => setResourceDialogOpen(false)}
-        onSelect={(resource) =>
-          setBlockEditor((prev) => ({
-            ...prev,
-            resource,
-          }))
-        }
-      />
-
-      <BlockEditorDialog
-        open={blockDialogOpen}
-        onClose={() => setBlockDialogOpen(false)}
-        state={blockEditor}
-        onChange={setBlockEditor}
-        onSelectResource={() => setResourceDialogOpen(true)}
-        onSubmit={() => {
-          if (!selectedSubtree) return;
-          if (blockEditor.mode === 'create') {
-            const base: Partial<ContentBlock> & { block_type: BlockType } = {
-              block_type: blockEditor.type,
-              text_md: blockEditor.type === 'text' ? blockEditor.text_md : undefined,
-              resource_id: blockEditor.type === 'asset' ? blockEditor.resource?.id ?? null : null,
-              label: blockEditor.label || null,
-              start_ms: blockEditor.start_ms ? Number(blockEditor.start_ms) : null,
-              end_ms: blockEditor.end_ms ? Number(blockEditor.end_ms) : null,
-              notes: blockEditor.notes || null,
-            };
-            void handleCreateBlock(selectedSubtree.node.id, base);
-          } else if (blockEditor.block) {
-            const updates: Partial<ContentBlock> = {
-              block_type: blockEditor.type,
-              text_md: blockEditor.type === 'text' ? blockEditor.text_md : null,
-              resource_id: blockEditor.type === 'asset' ? blockEditor.resource?.id ?? null : null,
-              label: blockEditor.label || null,
-              start_ms: blockEditor.start_ms ? Number(blockEditor.start_ms) : null,
-              end_ms: blockEditor.end_ms ? Number(blockEditor.end_ms) : null,
-              notes: blockEditor.notes || null,
-            };
-            void handleUpdateBlock(blockEditor.block.id, updates);
-          }
-          setBlockDialogOpen(false);
+        onClose={() => {
+          setResourceDialogOpen(false);
+          setResourceDialogMode(null);
         }}
+        onSelect={handleResourceSelected}
       />
 
       <Snackbar
@@ -1535,263 +2201,6 @@ export default function CourseBuilderAdmin() {
           </Alert>
         )}
       </Snackbar>
-    </Stack>
+    </>
   );
-
-  async function handleAddChild(parentId: number | null, payload: { node_type: string; title: string }) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch('/api/admin/course-builder/nodes', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ node: payload, parent: parentId ? { parent_id: parentId } : null }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to create node' }));
-          throw new Error(body.error ?? 'Failed to create node');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Node created' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleAttachExisting(parentId: number, childId: number) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ child_id: childId }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to attach child' }));
-          throw new Error(body.error ?? 'Failed to attach child');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Child attached' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleDuplicate(nodeId: number, parentId: number | null) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/duplicate`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parent: parentId ? { parent_id: parentId } : null }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to duplicate node' }));
-          throw new Error(body.error ?? 'Failed to duplicate node');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Node duplicated' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleRemoveChild(parentId: number, childId: number) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children/${childId}`, {
-          method: 'DELETE',
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to remove child' }));
-          throw new Error(body.error ?? 'Failed to remove child');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Child removed' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleDeleteNode(nodeId: number) {
-    const parentEdge = findParentEdge(trees, nodeId);
-    try {
-      await runMutation(
-        async () => {
-          const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}`, { method: 'DELETE' });
-          if (!res.ok) {
-            const body = await res.json().catch(() => ({ error: 'Failed to delete node' }));
-            throw new Error(body.error ?? 'Failed to delete node');
-          }
-          const payload = (await res.json()) as { parentSubtree: NodeSubtree | null };
-          if (!payload.parentSubtree) {
-            setTrees((prev) => removeSubtree(prev, nodeId));
-          }
-          return payload;
-        },
-        { message: 'Node deleted', optimistic: (prev) => removeSubtree(prev, nodeId) },
-      );
-      setSelectedId(parentEdge ? parentEdge.parent_id : null);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleReorderChild(parentId: number, childId: number, direction: 'up' | 'down') {
-    const parent = findSubtree(trees, parentId);
-    if (!parent) return;
-    const children = [...parent.children].sort((a, b) => a.edge.position - b.edge.position);
-    const index = children.findIndex((child) => child.edge.child_id === childId);
-    const swapWith = direction === 'up' ? index - 1 : index + 1;
-    if (swapWith < 0 || swapWith >= children.length) return;
-
-    const reordered = [...children];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(swapWith, 0, moved);
-
-    const updates = reordered.map((child, idx) => ({ child_id: child.edge.child_id, position: idx }));
-
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children/reorder`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to reorder children' }));
-          throw new Error(body.error ?? 'Failed to reorder children');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, {
-        optimistic: (prev) => {
-          const snapshot = prev.map((tree) => cloneSubtree(tree));
-          const target = findSubtree(snapshot, parentId);
-          if (target) {
-            target.children = reordered.map((child, idx) => ({
-              edge: { ...child.edge, position: idx },
-              subtree: child.subtree,
-            }));
-          }
-          return snapshot;
-        },
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleUpdateChild(parentId: number, child: NodeSubtree['children'][number], updates: Partial<NodeChild>) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/children/reorder`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            updates: [
-              {
-                child_id: child.edge.child_id,
-                position: child.edge.position,
-                ...updates,
-              },
-            ],
-          }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to update child' }));
-          throw new Error(body.error ?? 'Failed to update child');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleCreateBlock(nodeId: number, block: Partial<ContentBlock> & { block_type: BlockType }) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/blocks`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ block }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to create block' }));
-          throw new Error(body.error ?? 'Failed to create block');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Block created' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleUpdateBlock(blockId: number, updates: Partial<ContentBlock>) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/blocks/${blockId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to update block' }));
-          throw new Error(body.error ?? 'Failed to update block');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Block updated' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleDeleteBlock(blockId: number) {
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/blocks/${blockId}`, { method: 'DELETE' });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to delete block' }));
-          throw new Error(body.error ?? 'Failed to delete block');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      }, { message: 'Block deleted' });
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleReorderBlocks(
-    nodeId: number,
-    blocks: ContentBlock[],
-    blockId: number,
-    direction: 'up' | 'down',
-  ) {
-    const sorted = [...blocks].sort((a, b) => a.position - b.position);
-    const index = sorted.findIndex((block) => block.id === blockId);
-    const swapWith = direction === 'up' ? index - 1 : index + 1;
-    if (swapWith < 0 || swapWith >= sorted.length) return;
-
-    const reordered = [...sorted];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(swapWith, 0, moved);
-
-    const updates = reordered.map((block, idx) => ({ block_id: block.id, position: idx }));
-
-    try {
-      await runMutation(async () => {
-        const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/blocks/reorder`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: 'Failed to reorder blocks' }));
-          throw new Error(body.error ?? 'Failed to reorder blocks');
-        }
-        return (await res.json()) as { subtree: NodeSubtree };
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  }
 }
