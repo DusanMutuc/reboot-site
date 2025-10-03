@@ -122,6 +122,7 @@ type ResourceRow = {
   state: string | null;
   thumbnail: string | null;
   duration: number | null;
+  url: string | null;
 };
 
 const NODE_ICONS: Partial<Record<NodeType, ReactElement>> = {
@@ -402,7 +403,7 @@ function ResourcePickerDialog({ open, onClose, onSelect }: ResourcePickerProps) 
       try {
         let request = supabase
           .from('resources')
-          .select('id,title,type,state,thumbnail,duration')
+          .select('id,title,type,state,thumbnail,duration,url')
           .order('updated_at', { ascending: false })
           .limit(50);
         const trimmed = term.trim();
@@ -451,7 +452,15 @@ function ResourcePickerDialog({ open, onClose, onSelect }: ResourcePickerProps) 
               <ListItem
                 key={row.id}
                 secondaryAction={
-                  <IconButton edge="end" onClick={() => window.open(`/resources/${row.id}`, '_blank')}>
+                  <IconButton
+                    edge="end"
+                    disabled={!row.url}
+                    onClick={() => {
+                      if (row.url) {
+                        window.open(row.url, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                  >
                     <OpenInNewIcon fontSize="small" />
                   </IconButton>
                 }
@@ -1212,6 +1221,7 @@ export default function CourseBuilderAdmin() {
                                               state: null,
                                               thumbnail: null,
                                               duration: null,
+                                              url: null,
                                             }
                                           : null,
                                         label: block.label ?? '',
