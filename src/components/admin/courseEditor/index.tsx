@@ -184,6 +184,17 @@ function sortBlocks(blocks: ContentBlock[]) {
   return [...blocks].sort((a, b) => a.position - b.position);
 }
 
+const EMPTY_HTML_PLACEHOLDER = '<p></p>';
+const ALT_EMPTY_HTML_PLACEHOLDER = '<p><br></p>';
+
+function normalizeHtmlContent(html: string | null | undefined) {
+  const trimmed = (html ?? '').trim();
+  if (!trimmed || trimmed === EMPTY_HTML_PLACEHOLDER || trimmed === ALT_EMPTY_HTML_PLACEHOLDER) {
+    return EMPTY_HTML_PLACEHOLDER;
+  }
+  return html ?? EMPTY_HTML_PLACEHOLDER;
+}
+
 function CourseEditorInner() {
   const {
     selectedNodeId,
@@ -449,8 +460,11 @@ function CourseEditorInner() {
     });
     if (pending.type === 'text') {
       const draft = pendingTextDrafts.current.get(pending.tempId);
-      if (draft != null && draft !== candidate.text_md) {
-        queueBlockUpdate(candidate.id, { text_md: draft });
+      if (draft != null) {
+        const normalized = normalizeHtmlContent(draft);
+        if (normalized !== candidate.text_md) {
+          queueBlockUpdate(candidate.id, { text_md: normalized });
+        }
       }
       pendingTextDrafts.current.delete(pending.tempId);
     }
@@ -614,7 +628,9 @@ function CourseEditorInner() {
       }
 
       const payload: Partial<ContentBlock> & { block_type: BlockType } =
-        type === 'text' ? { block_type: 'text', text_md: '' } : { block_type: 'divider' };
+        type === 'text'
+          ? { block_type: 'text', text_md: normalizeHtmlContent('') }
+          : { block_type: 'divider' };
       const tempId = -Date.now();
       const optimisticBlock = buildOptimisticBlock(nodeId, type, tempId, position, payload);
       pendingBlockRef.current = { tempId, position, type };
@@ -671,12 +687,13 @@ function CourseEditorInner() {
 
   const handleTextChange = useCallback(
     (blockId: number, html: string) => {
+      const normalized = normalizeHtmlContent(html);
       if (blockId < 0) {
         pendingTextDrafts.current.set(blockId, html);
         return;
       }
       pendingTextDrafts.current.delete(blockId);
-      queueBlockUpdate(blockId, { text_md: html });
+      queueBlockUpdate(blockId, { text_md: normalized });
     },
     [queueBlockUpdate],
   );
@@ -1126,7 +1143,7 @@ function buildOptimisticBlock(
     node_id: nodeId,
     block_type: type,
     position,
-    text_md: type === 'text' ? base.text_md ?? '' : null,
+    text_md: type === 'text' ? normalizeHtmlContent(base.text_md) : null,
     resource_id: type === 'asset' ? base.resource_id ?? null : null,
     start_ms: base.start_ms ?? null,
     end_ms: base.end_ms ?? null,
