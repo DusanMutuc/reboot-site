@@ -18,7 +18,7 @@ import type {
 } from '@/types/course';
 import Canvas from './Canvas/Canvas';
 import Tree from './Sidebar/Tree';
-import Properties, { type NodeDraft, type PropertiesTab } from './Sidebar/Properties';
+import Properties, { type NodeDraft } from './Sidebar/Properties';
 import Toolbar from './Toolbar/Toolbar';
 import {
   attachChild,
@@ -188,10 +188,12 @@ function CourseEditorInner() {
   const {
     selectedNodeId,
     selectedBlockId,
+    editingBlockId,
     savingState,
     savingMessage,
     setSelectedNodeId,
     setSelectedBlockId,
+    setEditingBlockId,
     setSavingState,
   } = useEditorStore();
 
@@ -204,7 +206,6 @@ function CourseEditorInner() {
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState(false);
-  const [propertiesTab, setPropertiesTab] = useState<PropertiesTab>('details');
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
   const [snack, setSnack] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -233,6 +234,8 @@ function CourseEditorInner() {
   const nodeDebounceTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const optimisticSnapshot = useRef<NodeSubtree[] | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingBlockRef = useRef<{ tempId: number; position: number; type: BlockType; resourceId?: number } | null>(null);
+  const pendingTextDrafts = useRef<Map<number, string>>(new Map());
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -244,6 +247,7 @@ function CourseEditorInner() {
       const first = subtrees[0]?.node.id ?? null;
       setSelectedNodeId(first);
       setSelectedBlockId(null);
+      setEditingBlockId(null);
       setExpanded(new Set(subtrees.map((tree) => tree.node.id)));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load data';
@@ -266,6 +270,11 @@ function CourseEditorInner() {
     if (!selectedSubtree) return [] as ContentBlock[];
     return sortBlocks(selectedSubtree.blocks);
   }, [selectedSubtree]);
+
+  const selectedBlock = useMemo(() => {
+    if (selectedBlockId == null) return null;
+    return sortedBlocks.find((block) => block.id === selectedBlockId) ?? null;
+  }, [sortedBlocks, selectedBlockId]);
 
   useEffect(() => {
     if (!selectedSubtree) {
@@ -296,6 +305,35 @@ function CourseEditorInner() {
       nodeTimers.forEach((timer) => clearTimeout(timer));
     };
   }, []);
+
+  useEffect(() => {
+    const pending = pendingBlockRef.current;
+    if (!pending) return;
+    const candidate = sortedBlocks.find((block) => {
+      if (block.block_type !== pending.type) return false;
+      if (block.position !== pending.position) return false;
+      if (pending.type === 'asset' && pending.resourceId != null) {
+        return block.resource_id === pending.resourceId && block.id > 0;
+      }
+      return block.id > 0;
+    });
+    if (!candidate) return;
+    pendingBlockRef.current = null;
+    setSelectedBlockId((prev) => (prev === pending.tempId ? candidate.id : prev));
+    setEditingBlockId((prev) => {
+      if (prev === pending.tempId) {
+        return pending.type === 'text' ? candidate.id : null;
+      }
+      return prev;
+    });
+    if (pending.type === 'text') {
+      const draft = pendingTextDrafts.current.get(pending.tempId);
+      if (draft != null && draft !== candidate.text_md) {
+        queueBlockUpdate(candidate.id, { text_md: draft });
+      }
+      pendingTextDrafts.current.delete(pending.tempId);
+    }
+  }, [queueBlockUpdate, setEditingBlockId, setSelectedBlockId, sortedBlocks]);
 
   const startSaving = useCallback((message?: string) => {
     setSavingState('saving', message ?? 'Saving…');
@@ -542,22 +580,33 @@ function CourseEditorInner() {
   );
 
   const handleCreateBlock = useCallback(
-    async (nodeId: number, block: Partial<ContentBlock> & { block_type: BlockType }, position: number) => {
+    async (
+      nodeId: number,
+      block: Partial<ContentBlock> & { block_type: BlockType },
+      position: number,
+      options: { optimisticBlock?: ContentBlock; suppressToast?: boolean } = {},
+    ) => {
       await runMutation(
         async () => {
           const subtree = await createBlock(nodeId, { ...block, position });
           return { subtree };
         },
-        { message: 'Block created', savingMessage: 'Creating block…' },
+        {
+          optimistic: options.optimisticBlock
+            ? (prev) => insertBlockIntoForest(prev, nodeId, options.optimisticBlock!)
+            : undefined,
+          savingMessage: 'Creating block…',
+          message: options.suppressToast ? undefined : 'Block created',
+        },
       );
     },
     [runMutation],
   );
 
-  const handleAddBlock = useCallback(
-    (type: BlockType) => {
+  const handleInsertBlock = useCallback(
+    (position: number, type: BlockType) => {
       if (!selectedSubtree) return;
-      const position = sortedBlocks.length;
+      const nodeId = selectedSubtree.node.id;
       if (type === 'asset') {
         setResourceDialogMode({ type: 'insert', index: position });
         setResourceDialogOpen(true);
@@ -565,10 +614,24 @@ function CourseEditorInner() {
       }
 
       const payload: Partial<ContentBlock> & { block_type: BlockType } =
-        type === 'text' ? { block_type: 'text', text_md: 'Start writing here…' } : { block_type: 'divider' };
-      void handleCreateBlock(selectedSubtree.node.id, payload, position);
+        type === 'text' ? { block_type: 'text', text_md: '' } : { block_type: 'divider' };
+      const tempId = -Date.now();
+      const optimisticBlock = buildOptimisticBlock(nodeId, type, tempId, position, payload);
+      pendingBlockRef.current = { tempId, position, type };
+      setSelectedBlockId(tempId);
+      if (type === 'text') {
+        setEditingBlockId(tempId);
+      }
+      void handleCreateBlock(nodeId, payload, position, { optimisticBlock, suppressToast: true }).catch(() => {
+        if (pendingBlockRef.current?.tempId === tempId) {
+          pendingBlockRef.current = null;
+        }
+        pendingTextDrafts.current.delete(tempId);
+        setSelectedBlockId((prev) => (prev === tempId ? null : prev));
+        setEditingBlockId((prev) => (prev === tempId ? null : prev));
+      });
     },
-    [handleCreateBlock, selectedSubtree, sortedBlocks],
+    [handleCreateBlock, pendingTextDrafts, selectedSubtree, setEditingBlockId, setSelectedBlockId],
   );
 
   const handleDeleteBlock = useCallback(
@@ -580,36 +643,42 @@ function CourseEditorInner() {
         },
         { message: 'Block deleted' },
       );
-      if (selectedBlockId === blockId) {
-        setSelectedBlockId(null);
-      }
+      setSelectedBlockId((prev) => (prev === blockId ? null : prev));
+      setEditingBlockId((prev) => (prev === blockId ? null : prev));
     },
-    [runMutation, selectedBlockId, setSelectedBlockId],
+    [runMutation, setEditingBlockId, setSelectedBlockId],
   );
 
-  const handleReorderBlock = useCallback(
-    async (blockId: number, direction: 'up' | 'down') => {
+  const handleReorderBlocks = useCallback(
+    (orderedBlocks: ContentBlock[]) => {
       if (!selectedSubtree) return;
-      const ordered = sortBlocks(selectedSubtree.blocks);
-      const currentIndex = ordered.findIndex((block) => block.id === blockId);
-      if (currentIndex === -1) return;
-      const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-      if (targetIndex < 0 || targetIndex >= ordered.length) return;
-
-      const nextOrder = [...ordered];
-      const [moved] = nextOrder.splice(currentIndex, 1);
-      nextOrder.splice(targetIndex, 0, moved);
-      const updates = nextOrder.map((block, index) => ({ block_id: block.id, position: index }));
-
-      await runMutation(
+      const nodeId = selectedSubtree.node.id;
+      const normalized = orderedBlocks.map((block, index) => ({ ...block, position: index }));
+      const updates = normalized.map((block) => ({ block_id: block.id, position: block.position }));
+      void runMutation(
         async () => {
-          const subtree = await reorderBlocks(selectedSubtree.node.id, updates);
+          const subtree = await reorderBlocks(nodeId, updates);
           return { subtree };
         },
-        { silent: true },
+        {
+          optimistic: (prev) => reorderBlocksInForest(prev, nodeId, normalized),
+          silent: true,
+        },
       );
     },
     [runMutation, selectedSubtree],
+  );
+
+  const handleTextChange = useCallback(
+    (blockId: number, markdown: string) => {
+      if (blockId < 0) {
+        pendingTextDrafts.current.set(blockId, markdown);
+        return;
+      }
+      pendingTextDrafts.current.delete(blockId);
+      queueBlockUpdate(blockId, { text_md: markdown });
+    },
+    [queueBlockUpdate],
   );
 
   const handleDeleteNode = useCallback(
@@ -742,11 +811,16 @@ function CourseEditorInner() {
   );
 
   const handleSelectBlock = useCallback(
-    (block: ContentBlock) => {
+    (block: ContentBlock | null) => {
+      if (!block) {
+        setSelectedBlockId(null);
+        setEditingBlockId(null);
+        return;
+      }
       setSelectedBlockId(block.id);
-      setPropertiesTab('blocks');
+      setEditingBlockId(null);
     },
-    [setSelectedBlockId],
+    [setEditingBlockId, setSelectedBlockId],
   );
 
   const handleResourceSelected = useCallback(
@@ -755,18 +829,38 @@ function CourseEditorInner() {
       if (!resourceDialogMode) return;
       if (resourceDialogMode.type === 'insert') {
         if (!selectedSubtree) return;
-        void handleCreateBlock(
-          selectedSubtree.node.id,
-          { block_type: 'asset', resource_id: resource.id },
-          resourceDialogMode.index ?? sortedBlocks.length,
-        );
+        const position = resourceDialogMode.index ?? sortedBlocks.length;
+        const nodeId = selectedSubtree.node.id;
+        const tempId = -Date.now();
+        const payload: Partial<ContentBlock> & { block_type: BlockType } = {
+          block_type: 'asset',
+          resource_id: resource.id,
+        };
+        const optimisticBlock = buildOptimisticBlock(nodeId, 'asset', tempId, position, payload);
+        pendingBlockRef.current = { tempId, position, type: 'asset', resourceId: resource.id };
+        setSelectedBlockId(tempId);
+        setEditingBlockId((prev) => (prev === tempId ? null : prev));
+        void handleCreateBlock(nodeId, payload, position, { optimisticBlock, suppressToast: true }).catch(() => {
+          if (pendingBlockRef.current?.tempId === tempId) {
+            pendingBlockRef.current = null;
+          }
+          setSelectedBlockId((prev) => (prev === tempId ? null : prev));
+        });
       } else if (resourceDialogMode.type === 'update' && resourceDialogMode.blockId) {
         queueBlockUpdate(resourceDialogMode.blockId, { resource_id: resource.id }, { debounce: false });
       }
       setResourceDialogMode(null);
       setResourceDialogOpen(false);
     },
-    [handleCreateBlock, queueBlockUpdate, resourceDialogMode, selectedSubtree, sortedBlocks],
+    [
+      handleCreateBlock,
+      queueBlockUpdate,
+      resourceDialogMode,
+      selectedSubtree,
+      setEditingBlockId,
+      setSelectedBlockId,
+      sortedBlocks,
+    ],
   );
 
   useEffect(() => {
@@ -823,10 +917,14 @@ function CourseEditorInner() {
             setPreviewMode(value);
             if (value) {
               setSelectedBlockId(null);
+              setEditingBlockId(null);
             }
           }}
           onStateChange={(state) => handleStateChange(state)}
-          onShowDetails={() => setPropertiesTab('details')}
+          onShowDetails={() => {
+            setSelectedBlockId(null);
+            setEditingBlockId(null);
+          }}
         />
         <Box
           sx={{
@@ -847,6 +945,7 @@ function CourseEditorInner() {
               onSelect={(id) => {
                 setSelectedNodeId(id);
                 setSelectedBlockId(null);
+                setEditingBlockId(null);
               }}
               onContextMenu={(event, nodeId) => {
                 setMenuAnchor(event.currentTarget as HTMLElement);
@@ -859,7 +958,13 @@ function CourseEditorInner() {
               subtree={selectedSubtree}
               resources={resourceCache}
               selectedBlockId={selectedBlockId}
+              editingBlockId={editingBlockId}
               onSelectBlock={handleSelectBlock}
+              onStartEdit={(blockId) => setEditingBlockId(blockId)}
+              onExitEdit={() => setEditingBlockId(null)}
+              onInsertBlock={handleInsertBlock}
+              onReorderBlocks={handleReorderBlocks}
+              onChangeText={handleTextChange}
               previewMode={previewMode}
             />
           </Box>
@@ -875,21 +980,13 @@ function CourseEditorInner() {
               onReorderChild={(childId, direction) => selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)}
               onUpdateChild={(childId, updates) => selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)}
               onRemoveChild={(childId) => selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)}
-              selectedBlockId={selectedBlockId}
-              onSelectBlock={(blockId) => {
-                if (blockId == null) {
-                  setSelectedBlockId(null);
-                } else {
-                  const block = sortedBlocks.find((row) => row.id === blockId);
-                  if (block) {
-                    handleSelectBlock(block);
-                  }
-                }
+              selectedBlock={selectedBlock}
+              onClearBlockSelection={() => {
+                setSelectedBlockId(null);
+                setEditingBlockId(null);
               }}
-              onAddBlock={handleAddBlock}
-              onQueueBlockUpdate={queueBlockUpdate}
+              onUpdateBlock={(blockId, updates, options) => queueBlockUpdate(blockId, updates, options)}
               onDeleteBlock={handleDeleteBlock}
-              onReorderBlock={(blockId, direction) => void handleReorderBlock(blockId, direction)}
               onOpenResourcePicker={(mode, blockId) => {
                 if (!selectedSubtree) return;
                 setResourceDialogMode({ type: mode, blockId });
@@ -898,8 +995,6 @@ function CourseEditorInner() {
               resources={resourceCache}
               savingState={savingState}
               savingMessage={savingMessage}
-              tab={propertiesTab}
-              onTabChange={(value) => setPropertiesTab(value)}
               availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
             />
           </Box>
@@ -1016,6 +1111,84 @@ function updateBlockDraft(subtree: NodeSubtree, blockId: number, updates: Partia
     node: { ...subtree.node },
     blocks,
     children,
+  };
+}
+
+function buildOptimisticBlock(
+  nodeId: number,
+  type: BlockType,
+  id: number,
+  position: number,
+  base: Partial<ContentBlock> & { block_type: BlockType },
+): ContentBlock {
+  return {
+    id,
+    node_id: nodeId,
+    block_type: type,
+    position,
+    text_md: type === 'text' ? base.text_md ?? '' : null,
+    resource_id: type === 'asset' ? base.resource_id ?? null : null,
+    start_ms: base.start_ms ?? null,
+    end_ms: base.end_ms ?? null,
+    label: base.label ?? null,
+    notes: base.notes ?? null,
+    settings: base.settings ?? null,
+    data: base.data ?? null,
+  };
+}
+
+function insertBlockIntoForest(forest: NodeSubtree[], nodeId: number, block: ContentBlock) {
+  return forest.map((tree) => insertBlockIntoTree(tree, nodeId, block));
+}
+
+function insertBlockIntoTree(subtree: NodeSubtree, nodeId: number, block: ContentBlock): NodeSubtree {
+  if (subtree.node.id === nodeId) {
+    const blocks = [...subtree.blocks.map((existing) => ({ ...existing }))];
+    blocks.splice(block.position, 0, { ...block });
+    const normalized = blocks.map((item, index) => ({ ...item, position: index }));
+    return {
+      node: { ...subtree.node },
+      blocks: normalized,
+      children: subtree.children.map((child) => ({
+        edge: { ...child.edge },
+        subtree: cloneSubtree(child.subtree),
+      })),
+    };
+  }
+
+  return {
+    node: { ...subtree.node },
+    blocks: subtree.blocks.map((existing) => ({ ...existing })),
+    children: subtree.children.map((child) => ({
+      edge: { ...child.edge },
+      subtree: insertBlockIntoTree(child.subtree, nodeId, block),
+    })),
+  };
+}
+
+function reorderBlocksInForest(forest: NodeSubtree[], nodeId: number, orderedBlocks: ContentBlock[]) {
+  return forest.map((tree) => reorderBlocksInTree(tree, nodeId, orderedBlocks));
+}
+
+function reorderBlocksInTree(subtree: NodeSubtree, nodeId: number, orderedBlocks: ContentBlock[]): NodeSubtree {
+  if (subtree.node.id === nodeId) {
+    return {
+      node: { ...subtree.node },
+      blocks: orderedBlocks.map((block) => ({ ...block })),
+      children: subtree.children.map((child) => ({
+        edge: { ...child.edge },
+        subtree: cloneSubtree(child.subtree),
+      })),
+    };
+  }
+
+  return {
+    node: { ...subtree.node },
+    blocks: subtree.blocks.map((block) => ({ ...block })),
+    children: subtree.children.map((child) => ({
+      edge: { ...child.edge },
+      subtree: reorderBlocksInTree(child.subtree, nodeId, orderedBlocks),
+    })),
   };
 }
 
