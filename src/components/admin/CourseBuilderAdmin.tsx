@@ -15,7 +15,9 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  Fade,
   FormControl,
+  FormControlLabel,
   IconButton,
   InputLabel,
   Menu,
@@ -27,8 +29,12 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Switch,
   Tooltip,
   Typography,
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -133,12 +139,6 @@ const NODE_ICONS: Partial<Record<NodeType, JSX.Element>> = {
   chapter: <LayersIcon fontSize="small" />,
   collection: <CollectionsBookmarkIcon fontSize="small" />,
   playlist: <PlaylistPlayIcon fontSize="small" />,
-};
-
-const BLOCK_ICONS: Record<BlockType, JSX.Element> = {
-  text: <TextFieldsIcon fontSize="small" />,
-  asset: <VideoLibraryIcon fontSize="small" />,
-  divider: <HorizontalRuleIcon fontSize="small" />,
 };
 
 const STATE_COLORS: Record<NodeState, 'default' | 'success' | 'warning'> = {
@@ -608,6 +608,8 @@ export default function CourseBuilderAdmin() {
     blockId: null,
     overIndex: null,
   });
+  const [hoveredBlockId, setHoveredBlockId] = useState<number | null>(null);
+  const [previewMode, setPreviewMode] = useState(false);
   const [resourceCache, setResourceCache] = useState<Record<number, ResourceRow>>({});
   const [savingState, setSavingState] = useState<SavingState>('idle');
   const [savingMessage, setSavingMessage] = useState('All changes saved');
@@ -619,8 +621,7 @@ export default function CourseBuilderAdmin() {
   const optimisticSnapshot = useRef<NodeSubtree[] | null>(null);
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [showMarkdownPreview, setShowMarkdownPreview] = useState(true);
-  const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
+  const [editingState, setEditingState] = useState<{ blockId: number; mode: 'edit' | 'preview' } | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -695,8 +696,7 @@ export default function CourseBuilderAdmin() {
     setPanelMode('node');
     setSelectedBlockId(null);
     setMetadataError(null);
-    setShowMarkdownPreview(true);
-    setEditingBlockId(null);
+    setEditingState(null);
   }, [selectedSubtree]);
 
   useEffect(() => {
@@ -1019,11 +1019,19 @@ export default function CourseBuilderAdmin() {
     [flushNodeUpdate],
   );
 
-  const handleSelectBlock = useCallback((blockId: number) => {
-    setSelectedBlockId(blockId);
+  const handleSelectBlock = useCallback((block: ContentBlock, options?: { inlineEdit?: boolean }) => {
+    setSelectedBlockId(block.id);
     setPanelMode('block');
     setPropertiesOpen(true);
-    setEditingBlockId(null);
+    setEditingState((prev) => {
+      if (options?.inlineEdit && block.block_type === 'text') {
+        return { blockId: block.id, mode: prev?.blockId === block.id ? prev.mode : 'edit' };
+      }
+      if (prev?.blockId === block.id) {
+        return prev;
+      }
+      return null;
+    });
   }, []);
 
   const handleReorderBlocksToIndex = useCallback(
@@ -1090,6 +1098,7 @@ export default function CourseBuilderAdmin() {
       if (selectedBlockId === blockId) {
         setSelectedBlockId(null);
         setPanelMode('node');
+        setEditingState(null);
       }
     },
     [runMutation, selectedBlockId],
@@ -1120,7 +1129,7 @@ export default function CourseBuilderAdmin() {
         setSelectedBlockId(newBlock.id);
         setPanelMode('block');
         setPropertiesOpen(true);
-        setEditingBlockId(newBlock.id);
+        setEditingState({ blockId: newBlock.id, mode: 'edit' });
       }
     },
     [runMutation, trees],
@@ -1408,145 +1417,314 @@ export default function CourseBuilderAdmin() {
     return resourceCache[block.resource_id] ?? null;
   };
 
-  const renderDropZone = (index: number) => (
-    <Box
-      key={`drop-${index}`}
-      onDragOver={(event) => {
-        event.preventDefault();
-        setDragState((prev) => ({ ...prev, overIndex: index }));
-      }}
-      onDragLeave={() => setDragState((prev) => ({ ...prev, overIndex: prev.overIndex === index ? null : prev.overIndex }))}
-      onDrop={(event) => {
-        event.preventDefault();
-        if (dragState.blockId != null) {
-          void handleReorderBlocksToIndex(dragState.blockId, index);
+  const renderDropZone = (index: number) => {
+    const before = sortedBlocks[index - 1];
+    const after = sortedBlocks[index];
+    const showIndicator = dragState.overIndex === index;
+    const showButton =
+      !previewMode &&
+      (showIndicator || hoveredBlockId === before?.id || hoveredBlockId === after?.id || (sortedBlocks.length === 0 && index === 0));
+
+    return (
+      <Box
+        key={`drop-${index}`}
+        onDragOver={(event) => {
+          if (previewMode) return;
+          event.preventDefault();
+          setDragState((prev) => ({ ...prev, overIndex: index }));
+        }}
+        onDragLeave={() =>
+          setDragState((prev) => ({ ...prev, overIndex: prev.overIndex === index ? null : prev.overIndex }))
         }
-        setDragState({ blockId: null, overIndex: null });
-      }}
-      sx={{
-        position: 'relative',
-        my: 1,
-        display: 'flex',
-        justifyContent: 'center',
-      }}
-    >
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={<AddIcon />}
-        onClick={(event) => {
-          setInsertMenu({ anchor: event.currentTarget, index });
+        onDrop={(event) => {
+          if (previewMode) return;
+          event.preventDefault();
+          if (dragState.blockId != null) {
+            void handleReorderBlocksToIndex(dragState.blockId, index);
+          }
+          setDragState({ blockId: null, overIndex: null });
+        }}
+        sx={{
+          position: 'relative',
+          height: 32,
+          my: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        Add block
-      </Button>
-      {dragState.overIndex === index && (
-        <Box
-          sx={{
-            position: 'absolute',
-            top: '50%',
-            left: 12,
-            right: 12,
-            height: 2,
-            bgcolor: 'primary.main',
-          }}
-        />
-      )}
-    </Box>
-  );
+        {!previewMode && (
+          <Fade in={showButton} timeout={120}>
+            <IconButton
+              size="small"
+              color="primary"
+              sx={{
+                bgcolor: 'background.paper',
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: 3,
+                opacity: showButton ? 1 : 0,
+                pointerEvents: showButton ? 'auto' : 'none',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                },
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setInsertMenu({ anchor: event.currentTarget, index });
+              }}
+            >
+              <AddIcon fontSize="small" />
+            </IconButton>
+          </Fade>
+        )}
+        {showIndicator && (
+          <Box
+            sx={{
+              position: 'absolute',
+              left: 32,
+              right: 32,
+              height: 2,
+              bgcolor: 'primary.main',
+              borderRadius: 1,
+            }}
+          />
+        )}
+      </Box>
+    );
+  };
 
-  const renderBlockCard = (block: ContentBlock, index: number) => {
+  const renderBlockCard = (block: ContentBlock) => {
     const isSelected = selectedBlockId === block.id;
-    const isText = block.block_type === 'text';
-    const isEditing = editingBlockId === block.id;
+    const resource = resourceForBlock(block);
+    const isEditing = editingState?.blockId === block.id;
+    const editingMode = editingState?.blockId === block.id ? editingState.mode : 'preview';
+    const showHandle = !previewMode;
+    const showControls = !previewMode;
+
     return (
       <Box
         key={block.id}
         sx={{
           position: 'relative',
-          borderRadius: 2,
+          borderRadius: 3,
           border: '1px solid',
-          borderColor: isSelected ? 'primary.main' : 'transparent',
-          bgcolor: isSelected ? 'action.hover' : 'background.paper',
-          px: 4,
-          py: 3,
-          transition: 'border-color 0.2s ease, background-color 0.2s ease',
-          '&:hover .block-controls': { opacity: 1 },
-          cursor: 'pointer',
+          borderColor: isSelected ? 'primary.main' : hoveredBlockId === block.id ? 'divider' : 'transparent',
+          boxShadow: isSelected
+            ? '0 0 0 3px rgba(25, 118, 210, 0.12)'
+            : hoveredBlockId === block.id
+            ? '0 18px 32px rgba(15, 23, 42, 0.12)'
+            : 'none',
+          backgroundColor: 'background.paper',
+          px: { xs: 2, md: 3 },
+          py: { xs: 2.5, md: 3.5 },
+          cursor: previewMode ? 'default' : block.block_type === 'text' ? 'text' : 'pointer',
+          transition: 'box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease',
+          '&:hover .block-controls': { opacity: previewMode ? 0 : 1 },
+          '&:hover .block-handle': { opacity: previewMode ? 0 : 0.9 },
+          '&:hover .block-overlay': { opacity: previewMode ? 0 : 1 },
         }}
-        draggable
+        draggable={!previewMode}
         onDragStart={(event) => {
+          if (previewMode) return;
           event.dataTransfer.effectAllowed = 'move';
           setDragState({ blockId: block.id, overIndex: null });
         }}
         onDragEnd={() => setDragState({ blockId: null, overIndex: null })}
-        onClick={() => handleSelectBlock(block.id)}
+        onMouseEnter={() => setHoveredBlockId(block.id)}
+        onMouseLeave={() => setHoveredBlockId((prev) => (prev === block.id ? null : prev))}
+        onClick={() => {
+          if (previewMode) return;
+          handleSelectBlock(block, { inlineEdit: block.block_type === 'text' });
+        }}
       >
-        <Box
-          className="block-handle"
-          sx={{
-            position: 'absolute',
-            left: 12,
-            top: 16,
-            opacity: 0.4,
-            display: 'flex',
-            alignItems: 'center',
-            '&:hover': { opacity: 1 },
-          }}
-        >
-          <DragIndicatorIcon fontSize="small" />
-        </Box>
-        <Stack direction="row" spacing={1} className="block-controls" sx={{ position: 'absolute', right: 12, top: 12, opacity: 0 }}>
-          {isText && (
-            <Tooltip title={isEditing ? 'Stop editing' : 'Edit inline'}>
+        {showHandle && (
+          <Box
+            className="block-handle"
+            sx={{
+              position: 'absolute',
+              left: -36,
+              top: 18,
+              opacity: isSelected ? 0.9 : 0,
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'opacity 0.2s ease',
+            }}
+          >
+            <DragIndicatorIcon fontSize="small" color="action" />
+          </Box>
+        )}
+        {showControls && (
+          <Stack
+            direction="row"
+            spacing={1}
+            className="block-controls"
+            sx={{
+              position: 'absolute',
+              right: 12,
+              top: 12,
+              opacity: isSelected ? 1 : 0,
+              transition: 'opacity 0.2s ease',
+            }}
+          >
+            {block.block_type === 'asset' && (
+              <Tooltip title="Change resource">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setResourceDialogMode({ type: 'update', blockId: block.id });
+                      setResourceDialogOpen(true);
+                    }}
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+            <Tooltip title="Delete block">
               <IconButton
                 size="small"
+                color="error"
                 onClick={(event) => {
                   event.stopPropagation();
-                  setEditingBlockId(isEditing ? null : block.id);
+                  void handleDeleteBlock(block.id);
                 }}
               >
-                <EditIcon fontSize="small" />
+                <DeleteIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-          )}
-          <Tooltip title="Delete block">
-            <IconButton
-              size="small"
-              color="error"
-              onClick={(event) => {
-                event.stopPropagation();
-                void handleDeleteBlock(block.id);
-              }}
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Stack>
+          </Stack>
+        )}
+
         <Stack spacing={2}>
-          <Chip
-            size="small"
-            icon={BLOCK_ICONS[block.block_type]}
-            label={`${block.block_type.toUpperCase()} · #${index + 1}`}
-            variant="outlined"
-            sx={{ alignSelf: 'flex-start' }}
-          />
-          {block.label && (
-            <Typography variant="subtitle2" color="text.secondary">
-              {block.label}
-            </Typography>
-          )}
-          {isText && isEditing ? (
-            <TextField
-              multiline
-              minRows={6}
-              value={block.text_md ?? ''}
-              onChange={(event) => queueBlockUpdate(block.id, { text_md: event.target.value })}
-              onBlur={() => setEditingBlockId(null)}
-              autoFocus
-            />
+          {block.block_type === 'text' ? (
+            <Stack spacing={1.5}>
+              {isEditing && (
+                <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={editingMode}
+                    onChange={(_, value) => {
+                      if (!value) return;
+                      setEditingState({ blockId: block.id, mode: value });
+                    }}
+                  >
+                    <ToggleButton value="edit">Write</ToggleButton>
+                    <ToggleButton value="preview">Preview</ToggleButton>
+                  </ToggleButtonGroup>
+                  <Button
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setEditingState(null);
+                    }}
+                  >
+                    Done
+                  </Button>
+                </Stack>
+              )}
+              {isEditing && editingMode === 'edit' ? (
+                <TextField
+                  multiline
+                  minRows={6}
+                  autoFocus
+                  value={block.text_md ?? ''}
+                  onChange={(event) => queueBlockUpdate(block.id, { text_md: event.target.value })}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleSelectBlock(block, { inlineEdit: true });
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.stopPropagation();
+                      setEditingState(null);
+                    }
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      fontSize: '1.05rem',
+                      lineHeight: 1.6,
+                      px: 1.5,
+                      py: 1.5,
+                    },
+                  }}
+                />
+              ) : (
+                <Box
+                  sx={{ position: 'relative' }}
+                  onClick={(event) => {
+                    if (previewMode) return;
+                    event.stopPropagation();
+                    handleSelectBlock(block, { inlineEdit: true });
+                  }}
+                >
+                  <BlockRenderer block={block} resource={resource} />
+                </Box>
+              )}
+            </Stack>
+          ) : block.block_type === 'asset' ? (
+            <Box sx={{ position: 'relative' }}>
+              <BlockRenderer block={block} resource={resource} />
+              {!previewMode && (
+                <Box
+                  className="block-overlay"
+                  sx={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    justifyContent: 'space-between',
+                    opacity: isSelected || hoveredBlockId === block.id ? 1 : 0,
+                    transition: 'opacity 0.2s ease',
+                    background: 'linear-gradient(180deg, rgba(17, 25, 40, 0) 40%, rgba(17, 25, 40, 0.55) 100%)',
+                    borderRadius: 2,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <Stack
+                    direction="row"
+                    spacing={1.5}
+                    alignItems="center"
+                    justifyContent="space-between"
+                    sx={{
+                      width: '100%',
+                      px: 2,
+                      py: 1.5,
+                      color: 'common.white',
+                      pointerEvents: 'auto',
+                    }}
+                  >
+                    <Stack spacing={0.5}>
+                      <Typography variant="subtitle2" color="inherit">
+                        {resource?.title ?? 'Unlinked resource'}
+                      </Typography>
+                      <Typography variant="caption" color="rgba(255,255,255,0.75)">
+                        {resource?.type ? resource.type.toUpperCase() : 'Select a resource'}
+                      </Typography>
+                    </Stack>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="primary"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setResourceDialogMode({ type: 'update', blockId: block.id });
+                        setResourceDialogOpen(true);
+                      }}
+                    >
+                      {resource ? 'Change' : 'Choose'}
+                    </Button>
+                  </Stack>
+                </Box>
+              )}
+            </Box>
           ) : (
-            <BlockRenderer block={block} resource={resourceForBlock(block)} />
+            <BlockRenderer block={block} resource={resource} />
           )}
         </Stack>
       </Box>
@@ -1612,46 +1790,80 @@ export default function CourseBuilderAdmin() {
         <Stack spacing={2} sx={{ minHeight: 'calc(100vh - 200px)' }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             {selectedSubtree ? (
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between">
-                <Stack spacing={0.5}>
-                  <Typography variant="h6">{selectedSubtree.node.title ?? 'Untitled node'}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {selectedSubtree.node.node_type}
-                  </Typography>
+              <Stack spacing={2}>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'flex-start', md: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Stack spacing={0.5}>
+                    <Typography variant="h6">{selectedSubtree.node.title ?? 'Untitled node'}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedSubtree.node.node_type}
+                    </Typography>
+                  </Stack>
+                  <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', md: 'center' }}>
+                    <ToggleButtonGroup
+                      size="small"
+                      exclusive
+                      value={nodeDraft?.state ?? selectedSubtree.node.state}
+                      onChange={(_, value) => value && handleNodeFieldChange('state', value)}
+                    >
+                      <ToggleButton value="draft">Draft</ToggleButton>
+                      <ToggleButton value="published">Published</ToggleButton>
+                      <ToggleButton value="archived">Archived</ToggleButton>
+                    </ToggleButtonGroup>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          size="small"
+                          checked={previewMode}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setPreviewMode(checked);
+                            if (checked) {
+                              setEditingState(null);
+                              setSelectedBlockId(null);
+                              setPanelMode('node');
+                            }
+                          }}
+                        />
+                      }
+                      label="Preview mode"
+                      labelPlacement="start"
+                      sx={{ m: 0 }}
+                    />
+                    <Button variant="outlined" onClick={() => { setPanelMode('node'); setPropertiesOpen(true); }}>
+                      Node details
+                    </Button>
+                  </Stack>
                 </Stack>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'stretch', md: 'center' }}>
-                  <ToggleButtonGroup
-                    size="small"
-                    exclusive
-                    value={nodeDraft?.state ?? selectedSubtree.node.state}
-                    onChange={(_, value) => value && handleNodeFieldChange('state', value)}
-                  >
-                    <ToggleButton value="draft">Draft</ToggleButton>
-                    <ToggleButton value="published">Published</ToggleButton>
-                    <ToggleButton value="archived">Archived</ToggleButton>
-                  </ToggleButtonGroup>
-                  <Button variant="outlined" onClick={() => { setPanelMode('node'); setPropertiesOpen(true); }}>
-                    Node details
-                  </Button>
-                  <Button
-                    variant="contained"
-                    startIcon={<TextFieldsIcon />}
-                    disabled={!canEditBlocks}
-                    onClick={() => {
-                      if (!selectedSubtree) return;
-                      handleAddBlockAt(sortedBlocks.length, 'text');
-                    }}
-                    sx={{ display: { xs: 'none', md: 'inline-flex' } }}
-                  >
-                    Quick text block
-                  </Button>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'flex-start', md: 'center' }}
+                  justifyContent="space-between"
+                >
                   <Stack direction="row" spacing={1} alignItems="center">
                     {savingState === 'saving' && <CircularProgress size={16} />}
                     {savingState === 'saved' && <CheckCircleOutlineIcon color="success" fontSize="small" />}
                     {savingState === 'error' && <ErrorOutlineIcon color="error" fontSize="small" />}
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary">
                       {savingMessage}
                     </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={1}>
+                    <Button
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      disabled={!canEditBlocks || previewMode}
+                      onClick={(event) => {
+                        setInsertMenu({ anchor: event.currentTarget, index: sortedBlocks.length });
+                      }}
+                    >
+                      Add block
+                    </Button>
                   </Stack>
                 </Stack>
               </Stack>
@@ -1662,20 +1874,39 @@ export default function CourseBuilderAdmin() {
 
           <Paper variant="outlined" sx={{ p: 3, flex: 1, overflowY: 'auto' }}>
             {selectedSubtree ? (
-              <Box sx={{ maxWidth: 820, mx: 'auto' }}>
+              <Box
+                sx={{
+                  maxWidth: 900,
+                  mx: 'auto',
+                  width: '100%',
+                  px: { xs: 1, sm: 2 },
+                  py: { xs: 1, sm: 2 },
+                }}
+              >
                 {canEditBlocks ? (
-                  <Stack spacing={2}>
+                  <Stack spacing={2.5}>
                     {renderDropZone(0)}
                     {sortedBlocks.map((block, index) => (
-                      <Stack key={block.id} spacing={2}>
-                        {renderBlockCard(block, index)}
+                      <Stack key={block.id} spacing={2.5}>
+                        {renderBlockCard(block)}
                         {renderDropZone(index + 1)}
                       </Stack>
                     ))}
                     {sortedBlocks.length === 0 && (
                       <Alert severity="info" sx={{ mt: 2 }}>
-                        This node has no content blocks yet. Use the add buttons to get started.
+                        This node has no content blocks yet. Use the add controls to get started.
                       </Alert>
+                    )}
+                    {!previewMode && (
+                      <Box textAlign="center" pt={sortedBlocks.length ? 1 : 2}>
+                        <Button
+                          variant="outlined"
+                          startIcon={<AddIcon />}
+                          onClick={(event) => setInsertMenu({ anchor: event.currentTarget, index: sortedBlocks.length })}
+                        >
+                          Add block
+                        </Button>
+                      </Box>
                     )}
                   </Stack>
                 ) : (
@@ -1704,46 +1935,27 @@ export default function CourseBuilderAdmin() {
             </Stack>
 
             {panelMode === 'block' && selectedBlock ? (
-              <Stack spacing={2}>
-                <Typography variant="subtitle2">Block #{selectedBlock.position + 1}</Typography>
+              <Stack spacing={3}>
+                <Stack spacing={0.25}>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Block {selectedBlock.position + 1}
+                  </Typography>
+                  <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
+                    {selectedBlock.block_type} block
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Edit the primary content directly on the canvas. Use this panel for supporting details.
+                  </Typography>
+                </Stack>
+
                 {selectedBlock.block_type === 'text' && (
-                  <Stack spacing={1}>
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Button
-                        variant={showMarkdownPreview ? 'outlined' : 'contained'}
-                        size="small"
-                        onClick={() => setShowMarkdownPreview((prev) => !prev)}
-                      >
-                        {showMarkdownPreview ? 'Edit raw markdown' : 'Show preview'}
-                      </Button>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        onClick={() => {
-                          setEditingBlockId(selectedBlock.id);
-                          setPanelMode('block');
-                        }}
-                      >
-                        Edit inline
-                      </Button>
-                    </Stack>
-                    {!showMarkdownPreview ? (
-                      <TextField
-                        multiline
-                        minRows={8}
-                        value={selectedBlock.text_md ?? ''}
-                        onChange={(event) => queueBlockUpdate(selectedBlock.id, { text_md: event.target.value })}
-                      />
-                    ) : (
-                      <BlockRenderer block={selectedBlock} resource={null} />
-                    )}
-                  </Stack>
+                  <Alert severity="info">Click the block in the canvas to edit its markdown inline.</Alert>
                 )}
 
                 {selectedBlock.block_type === 'asset' && (
                   <Stack spacing={2}>
                     <Button
-                      variant="outlined"
+                      variant="contained"
                       startIcon={<SearchIcon />}
                       onClick={() => {
                         setResourceDialogMode({ type: 'update', blockId: selectedBlock.id });
@@ -1752,25 +1964,29 @@ export default function CourseBuilderAdmin() {
                     >
                       {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
                     </Button>
-                    {selectedBlock.resource_id && (
-                      <Card variant="outlined" sx={{ p: 2 }}>
+                    <Card variant="outlined" sx={{ p: 2 }}>
+                      <Stack spacing={1}>
                         <Typography variant="subtitle1">
-                          {resourceForBlock(selectedBlock)?.title ?? `Resource #${selectedBlock.resource_id}`}
+                          {resourceForBlock(selectedBlock)?.title ?? 'No resource selected'}
                         </Typography>
-                        {resourceForBlock(selectedBlock)?.url && (
+                        {resourceForBlock(selectedBlock)?.url ? (
                           <Button
                             size="small"
                             endIcon={<OpenInNewIcon fontSize="small" />}
                             href={resourceForBlock(selectedBlock)?.url ?? undefined}
                             target="_blank"
                             rel="noreferrer"
-                            sx={{ mt: 1 }}
+                            sx={{ alignSelf: 'flex-start' }}
                           >
                             Open resource
                           </Button>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            Pick a published resource to display to learners.
+                          </Typography>
                         )}
-                      </Card>
-                    )}
+                      </Stack>
+                    </Card>
                     <TextField
                       label="Caption"
                       value={selectedBlock.label ?? ''}
@@ -1806,7 +2022,7 @@ export default function CourseBuilderAdmin() {
                 )}
 
                 {selectedBlock.block_type === 'divider' && (
-                  <Alert severity="info">Divider blocks have no configurable properties.</Alert>
+                  <Alert severity="info">Divider blocks create spacing between sections and have no extra settings.</Alert>
                 )}
 
                 <Button
@@ -1818,144 +2034,172 @@ export default function CourseBuilderAdmin() {
                 </Button>
               </Stack>
             ) : selectedSubtree && nodeDraft ? (
-              <Stack spacing={3}>
-                <Stack spacing={2}>
-                  <TextField
-                    label="Title"
-                    value={nodeDraft.title}
-                    onChange={(event) => handleNodeFieldChange('title', event.target.value)}
-                  />
-                  <TextField
-                    label="Slug"
-                    value={nodeDraft.slug}
-                    onChange={(event) => handleNodeFieldChange('slug', event.target.value)}
-                  />
-                  <TextField
-                    label="Description"
-                    multiline
-                    minRows={3}
-                    value={nodeDraft.description}
-                    onChange={(event) => handleNodeFieldChange('description', event.target.value)}
-                  />
-                  <TextField
-                    label="Hero image URL"
-                    value={nodeDraft.hero_image}
-                    onChange={(event) => handleNodeFieldChange('hero_image', event.target.value)}
-                  />
-                  <TextField
-                    label="Icon"
-                    value={nodeDraft.icon}
-                    onChange={(event) => handleNodeFieldChange('icon', event.target.value)}
-                  />
-                  <TextField
-                    label="Objectives"
-                    multiline
-                    minRows={3}
-                    value={nodeDraft.objectives}
-                    onChange={(event) => handleNodeFieldChange('objectives', event.target.value)}
-                  />
-                  <TextField
-                    label="Metadata (JSON)"
-                    multiline
-                    minRows={4}
-                    value={nodeDraft.metadata}
-                    onChange={(event) => handleNodeFieldChange('metadata', event.target.value)}
-                    error={!!metadataError}
-                    helperText={metadataError ?? 'Provide structured metadata for this node'}
-                  />
-                </Stack>
+              <Stack spacing={2}>
+                <Accordion defaultExpanded>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>Basic information</AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      <TextField
+                        label="Title"
+                        value={nodeDraft.title}
+                        onChange={(event) => handleNodeFieldChange('title', event.target.value)}
+                      />
+                      <TextField
+                        label="Slug"
+                        value={nodeDraft.slug}
+                        onChange={(event) => handleNodeFieldChange('slug', event.target.value)}
+                      />
+                      <TextField
+                        label="Description"
+                        multiline
+                        minRows={3}
+                        value={nodeDraft.description}
+                        onChange={(event) => handleNodeFieldChange('description', event.target.value)}
+                      />
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <Divider />
+                <Accordion>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>Visuals & objectives</AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={2}>
+                      <TextField
+                        label="Hero image URL"
+                        value={nodeDraft.hero_image}
+                        onChange={(event) => handleNodeFieldChange('hero_image', event.target.value)}
+                      />
+                      <TextField
+                        label="Icon"
+                        value={nodeDraft.icon}
+                        onChange={(event) => handleNodeFieldChange('icon', event.target.value)}
+                      />
+                      <TextField
+                        label="Objectives"
+                        multiline
+                        minRows={3}
+                        value={nodeDraft.objectives}
+                        onChange={(event) => handleNodeFieldChange('objectives', event.target.value)}
+                      />
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
 
-                <Stack spacing={1} direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="subtitle2">Children</Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Button
-                      size="small"
-                      startIcon={<AddIcon />}
-                      onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'create' })}
-                    >
-                      Add child
-                    </Button>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'attach' })}
-                    >
-                      Attach existing
-                    </Button>
-                  </Stack>
-                </Stack>
+                <Accordion>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>Metadata</AccordionSummary>
+                  <AccordionDetails>
+                    <TextField
+                      label="Metadata (JSON)"
+                      multiline
+                      minRows={4}
+                      value={nodeDraft.metadata}
+                      onChange={(event) => handleNodeFieldChange('metadata', event.target.value)}
+                      error={!!metadataError}
+                      helperText={metadataError ?? 'Provide structured metadata for this node'}
+                    />
+                  </AccordionDetails>
+                </Accordion>
 
-                <Stack spacing={1.5}>
-                  {selectedSubtree.children
-                    .slice()
-                    .sort((a, b) => a.edge.position - b.edge.position)
-                    .map((child, index, arr) => (
-                      <Paper key={child.edge.child_id} variant="outlined" sx={{ p: 2 }}>
-                        <Stack spacing={1.5}>
-                          <Stack direction="row" justifyContent="space-between" alignItems="center">
-                            <Stack spacing={0.5}>
-                              <Typography variant="subtitle2">{child.subtree.node.title ?? `Node #${child.subtree.node.id}`}</Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {child.subtree.node.node_type}
-                              </Typography>
+                <Accordion defaultExpanded>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>Children</AccordionSummary>
+                  <AccordionDetails>
+                    <Stack spacing={1} direction="row" justifyContent="flex-end" sx={{ mb: 2 }}>
+                      <Button
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'create' })}
+                      >
+                        Add child
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => setAddChildDialog({ open: true, parentId: selectedSubtree.node.id, mode: 'attach' })}
+                      >
+                        Attach existing
+                      </Button>
+                    </Stack>
+                    <Stack spacing={1.5}>
+                      {selectedSubtree.children
+                        .slice()
+                        .sort((a, b) => a.edge.position - b.edge.position)
+                        .map((child, index, arr) => (
+                          <Paper key={child.edge.child_id} variant="outlined" sx={{ p: 2 }}>
+                            <Stack spacing={1.5}>
+                              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                <Stack spacing={0.5}>
+                                  <Typography variant="subtitle2">
+                                    {child.subtree.node.title ?? `Node #${child.subtree.node.id}`}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {child.subtree.node.node_type}
+                                  </Typography>
+                                </Stack>
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                  <Tooltip title="Move up">
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        disabled={index === 0}
+                                        onClick={() =>
+                                          void handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'up')
+                                        }
+                                      >
+                                        <ArrowUpwardIcon fontSize="small" />
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                  <Tooltip title="Move down">
+                                    <span>
+                                      <IconButton
+                                        size="small"
+                                        disabled={index === arr.length - 1}
+                                        onClick={() =>
+                                          void handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'down')
+                                        }
+                                      >
+                                        <ArrowDownwardIcon fontSize="small" />
+                                      </IconButton>
+                                    </span>
+                                  </Tooltip>
+                                  <FormControlLabel
+                                    control={
+                                      <Checkbox
+                                        size="small"
+                                        checked={!!child.edge.is_required}
+                                        onChange={(event) =>
+                                          void handleUpdateChild(selectedSubtree.node.id, child.edge.child_id, {
+                                            is_required: event.target.checked,
+                                          })
+                                        }
+                                      />
+                                    }
+                                    label="Required"
+                                  />
+                                  <Tooltip title="Detach child">
+                                    <IconButton
+                                      size="small"
+                                      color="error"
+                                      onClick={() =>
+                                        void handleRemoveChild(selectedSubtree.node.id, child.edge.child_id)
+                                      }
+                                    >
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  </Tooltip>
+                                </Stack>
+                              </Stack>
+                              {child.edge.label && (
+                                <Typography variant="body2" color="text.secondary">
+                                  {child.edge.label}
+                                </Typography>
+                              )}
                             </Stack>
-                            <Stack direction="row" spacing={1} alignItems="center">
-                              <Tooltip title="Move up">
-                                <span>
-                                  <IconButton
-                                    size="small"
-                                    disabled={index === 0}
-                                    onClick={() => handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'up')}
-                                  >
-                                    <ArrowUpwardIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                              <Tooltip title="Move down">
-                                <span>
-                                  <IconButton
-                                    size="small"
-                                    disabled={index === arr.length - 1}
-                                    onClick={() => handleReorderChild(selectedSubtree.node.id, child.edge.child_id, 'down')}
-                                  >
-                                    <ArrowDownwardIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                              <Tooltip title="Remove child">
-                                <IconButton
-                                  size="small"
-                                  color="error"
-                                  onClick={() => void handleRemoveChild(selectedSubtree.node.id, child.edge.child_id)}
-                                >
-                                  <DeleteIcon fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                            </Stack>
-                          </Stack>
-                          <Stack direction="row" spacing={1} alignItems="center">
-                            <Checkbox
-                              checked={child.edge.is_required ?? true}
-                              onChange={(event) =>
-                                void handleUpdateChild(selectedSubtree.node.id, child, {
-                                  is_required: event.target.checked,
-                                })
-                              }
-                              size="small"
-                            />
-                            <Typography variant="body2">Required for progression</Typography>
-                          </Stack>
-                        </Stack>
-                      </Paper>
-                    ))}
-                  {selectedSubtree.children.length === 0 && (
-                    <Typography variant="body2" color="text.secondary">
-                      This node has no children.
-                    </Typography>
-                  )}
-                </Stack>
+                          </Paper>
+                        ))}
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
               </Stack>
             ) : (
               <Typography color="text.secondary">Select a node to edit details.</Typography>
