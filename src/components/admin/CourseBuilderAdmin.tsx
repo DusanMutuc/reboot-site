@@ -1019,12 +1019,19 @@ export default function CourseBuilderAdmin() {
     [flushNodeUpdate],
   );
 
-  const handleSelectBlock = useCallback((blockId: number) => {
-    setSelectedBlockId(blockId);
-    setPanelMode('block');
-    setPropertiesOpen(true);
-    setEditingBlockId(null);
-  }, []);
+  const handleSelectBlock = useCallback(
+    (block: ContentBlock, options: { focusEditor?: boolean } = {}) => {
+      setSelectedBlockId(block.id);
+      setPanelMode('block');
+      setPropertiesOpen(true);
+      if (block.block_type === 'text' && options.focusEditor !== false) {
+        setEditingBlockId(block.id);
+      } else {
+        setEditingBlockId(null);
+      }
+    },
+    [],
+  );
 
   const handleReorderBlocksToIndex = useCallback(
     async (blockId: number, targetIndex: number) => {
@@ -1425,30 +1432,54 @@ export default function CourseBuilderAdmin() {
       }}
       sx={{
         position: 'relative',
-        my: 1,
-        display: 'flex',
-        justifyContent: 'center',
+        py: 1.5,
+        '&:hover .add-button': {
+          opacity: 1,
+          transform: 'translateY(0)',
+        },
       }}
     >
-      <Button
-        variant="outlined"
-        size="small"
-        startIcon={<AddIcon />}
-        onClick={(event) => {
-          setInsertMenu({ anchor: event.currentTarget, index });
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'center',
+          position: 'relative',
         }}
       >
-        Add block
-      </Button>
+        <IconButton
+          className="add-button"
+          size="small"
+          onClick={(event) => {
+            event.stopPropagation();
+            setInsertMenu({ anchor: event.currentTarget, index });
+          }}
+          sx={{
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: 3,
+            opacity: sortedBlocks.length === 0 ? 1 : 0,
+            transform: 'translateY(-4px)',
+            transition: 'all 0.2s ease',
+            '&:hover': {
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
+            },
+          }}
+        >
+          <AddIcon fontSize="small" />
+        </IconButton>
+      </Box>
       {dragState.overIndex === index && (
         <Box
           sx={{
             position: 'absolute',
+            left: 24,
+            right: 24,
             top: '50%',
-            left: 12,
-            right: 12,
             height: 2,
             bgcolor: 'primary.main',
+            borderRadius: 1,
           }}
         />
       )}
@@ -1467,12 +1498,14 @@ export default function CourseBuilderAdmin() {
           borderRadius: 2,
           border: '1px solid',
           borderColor: isSelected ? 'primary.main' : 'transparent',
-          bgcolor: isSelected ? 'action.hover' : 'background.paper',
+          bgcolor: 'background.paper',
           px: 4,
           py: 3,
-          transition: 'border-color 0.2s ease, background-color 0.2s ease',
+          boxShadow: isSelected ? '0 0 0 3px rgba(25,118,210,0.12)' : '0 4px 16px rgba(15,23,42,0.06)',
+          transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
           '&:hover .block-controls': { opacity: 1 },
-          cursor: 'pointer',
+          '&:hover': { borderColor: 'primary.light' },
+          cursor: 'text',
         }}
         draggable
         onDragStart={(event) => {
@@ -1480,14 +1513,15 @@ export default function CourseBuilderAdmin() {
           setDragState({ blockId: block.id, overIndex: null });
         }}
         onDragEnd={() => setDragState({ blockId: null, overIndex: null })}
-        onClick={() => handleSelectBlock(block.id)}
+        onClick={() => handleSelectBlock(block)}
       >
         <Box
           className="block-handle"
           sx={{
             position: 'absolute',
             left: 12,
-            top: 16,
+            top: '50%',
+            transform: 'translateY(-50%)',
             opacity: 0.4,
             display: 'flex',
             alignItems: 'center',
@@ -1496,14 +1530,43 @@ export default function CourseBuilderAdmin() {
         >
           <DragIndicatorIcon fontSize="small" />
         </Box>
-        <Stack direction="row" spacing={1} className="block-controls" sx={{ position: 'absolute', right: 12, top: 12, opacity: 0 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          className="block-controls"
+          sx={{
+            position: 'absolute',
+            right: 12,
+            top: 12,
+            opacity: 0,
+            transition: 'opacity 0.2s ease',
+          }}
+        >
           {isText && (
-            <Tooltip title={isEditing ? 'Stop editing' : 'Edit inline'}>
+            <Tooltip title={isEditing ? 'Hide editor' : 'Edit text'}>
               <IconButton
                 size="small"
                 onClick={(event) => {
                   event.stopPropagation();
                   setEditingBlockId(isEditing ? null : block.id);
+                  if (!isEditing) {
+                    handleSelectBlock(block);
+                  }
+                }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {block.block_type === 'asset' && (
+            <Tooltip title="Change resource">
+              <IconButton
+                size="small"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleSelectBlock(block, { focusEditor: false });
+                  setResourceDialogMode({ type: 'update', blockId: block.id });
+                  setResourceDialogOpen(true);
                 }}
               >
                 <EditIcon fontSize="small" />
@@ -1544,6 +1607,13 @@ export default function CourseBuilderAdmin() {
               onChange={(event) => queueBlockUpdate(block.id, { text_md: event.target.value })}
               onBlur={() => setEditingBlockId(null)}
               autoFocus
+              sx={{
+                '& textarea': {
+                  fontFamily: 'var(--font-mono, monospace)',
+                  lineHeight: 1.6,
+                },
+              }}
+              onClick={(event) => event.stopPropagation()}
             />
           ) : (
             <BlockRenderer block={block} resource={resourceForBlock(block)} />
@@ -1552,6 +1622,8 @@ export default function CourseBuilderAdmin() {
       </Box>
     );
   };
+
+  const selectedBlockResource = selectedBlock ? resourceForBlock(selectedBlock) : null;
 
   return (
     <>
@@ -1563,10 +1635,10 @@ export default function CourseBuilderAdmin() {
             xs: '1fr',
             lg: propertiesOpen ? '260px minmax(0,1fr) 320px' : '260px minmax(0,1fr)',
           },
-          alignItems: 'start',
+          alignItems: 'stretch',
         }}
       >
-        <Paper variant="outlined" sx={{ p: 2, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+        <Paper variant="outlined" sx={{ p: 2, overflowY: 'auto', height: '100%' }}>
           <Stack spacing={2}>
             <TextField
               value={search}
@@ -1600,6 +1672,7 @@ export default function CourseBuilderAdmin() {
                   setSelectedId(id);
                   setPanelMode('node');
                   setSelectedBlockId(null);
+                  setPropertiesOpen(true);
                 }}
                 selectedId={selectedId}
                 search={search}
@@ -1609,17 +1682,69 @@ export default function CourseBuilderAdmin() {
           </Stack>
         </Paper>
 
-        <Stack spacing={2} sx={{ minHeight: 'calc(100vh - 200px)' }}>
-          <Paper variant="outlined" sx={{ p: 2 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 160px)' }}>
+          <Paper variant="outlined" sx={{ px: 3, py: 2, mb: 2 }}>
             {selectedSubtree ? (
-              <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between">
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                alignItems={{ xs: 'flex-start', md: 'center' }}
+                justifyContent="space-between"
+              >
                 <Stack spacing={0.5}>
                   <Typography variant="h6">{selectedSubtree.node.title ?? 'Untitled node'}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {selectedSubtree.node.node_type}
                   </Typography>
                 </Stack>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'stretch', md: 'center' }}>
+                <Stack
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={2}
+                  alignItems={{ xs: 'stretch', md: 'center' }}
+                  sx={{ width: '100%', maxWidth: { xs: '100%', md: 'auto' } }}
+                >
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1 }}>
+                    <Tooltip title="Add text block">
+                      <span>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<TextFieldsIcon />}
+                          disabled={!canEditBlocks}
+                          onClick={() => handleAddBlockAt(sortedBlocks.length, 'text')}
+                        >
+                          Text
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Add resource block">
+                      <span>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<VideoLibraryIcon />}
+                          disabled={!canEditBlocks}
+                          onClick={() => handleAddBlockAt(sortedBlocks.length, 'asset')}
+                        >
+                          Resource
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Add divider">
+                      <span>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<HorizontalRuleIcon />}
+                          disabled={!canEditBlocks}
+                          onClick={() => handleAddBlockAt(sortedBlocks.length, 'divider')}
+                        >
+                          Divider
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </Stack>
+                  <Divider flexItem orientation="vertical" sx={{ display: { xs: 'none', md: 'block' } }} />
                   <ToggleButtonGroup
                     size="small"
                     exclusive
@@ -1630,20 +1755,15 @@ export default function CourseBuilderAdmin() {
                     <ToggleButton value="published">Published</ToggleButton>
                     <ToggleButton value="archived">Archived</ToggleButton>
                   </ToggleButtonGroup>
-                  <Button variant="outlined" onClick={() => { setPanelMode('node'); setPropertiesOpen(true); }}>
-                    Node details
-                  </Button>
                   <Button
-                    variant="contained"
-                    startIcon={<TextFieldsIcon />}
-                    disabled={!canEditBlocks}
+                    variant="outlined"
+                    size="small"
                     onClick={() => {
-                      if (!selectedSubtree) return;
-                      handleAddBlockAt(sortedBlocks.length, 'text');
+                      setPanelMode('node');
+                      setPropertiesOpen(true);
                     }}
-                    sx={{ display: { xs: 'none', md: 'inline-flex' } }}
                   >
-                    Quick text block
+                    Node metadata
                   </Button>
                   <Stack direction="row" spacing={1} alignItems="center">
                     {savingState === 'saving' && <CircularProgress size={16} />}
@@ -1660,38 +1780,42 @@ export default function CourseBuilderAdmin() {
             )}
           </Paper>
 
-          <Paper variant="outlined" sx={{ p: 3, flex: 1, overflowY: 'auto' }}>
+          <Box sx={{ flex: 1, overflowY: 'auto', pb: 4 }}>
             {selectedSubtree ? (
-              <Box sx={{ maxWidth: 820, mx: 'auto' }}>
+              <Box sx={{ maxWidth: 820, mx: 'auto', width: '100%', px: { xs: 2, md: 4 } }}>
                 {canEditBlocks ? (
                   <Stack spacing={2}>
                     {renderDropZone(0)}
                     {sortedBlocks.map((block, index) => (
-                      <Stack key={block.id} spacing={2}>
+                      <Box key={block.id}>
                         {renderBlockCard(block, index)}
                         {renderDropZone(index + 1)}
-                      </Stack>
+                      </Box>
                     ))}
                     {sortedBlocks.length === 0 && (
-                      <Alert severity="info" sx={{ mt: 2 }}>
-                        This node has no content blocks yet. Use the add buttons to get started.
+                      <Alert severity="info">
+                        This node has no content yet. Use the + buttons to add blocks.
                       </Alert>
                     )}
                   </Stack>
                 ) : (
                   <Alert severity="info">
-                    Content blocks are available only for nodes without child nodes. Select a lesson or chapter leaf node to edit blocks.
+                    Content blocks are available only for nodes without child nodes. Select a lesson or chapter leaf node to edit content.
                   </Alert>
                 )}
               </Box>
             ) : (
-              <Typography color="text.secondary">Select a node from the tree to preview its content.</Typography>
+              <Stack alignItems="center" justifyContent="center" sx={{ height: '100%' }}>
+                <Typography color="text.secondary">
+                  Select a node from the tree to preview its content.
+                </Typography>
+              </Stack>
             )}
-          </Paper>
-        </Stack>
+          </Box>
+        </Box>
 
         {propertiesOpen && (
-          <Paper variant="outlined" sx={{ p: 3, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+          <Paper variant="outlined" sx={{ p: 3, height: '100%', overflowY: 'auto' }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
               <Typography variant="subtitle1">
                 {panelMode === 'block' && selectedBlock ? 'Block properties' : 'Node details'}
@@ -1704,10 +1828,10 @@ export default function CourseBuilderAdmin() {
             </Stack>
 
             {panelMode === 'block' && selectedBlock ? (
-              <Stack spacing={2}>
+              <Stack spacing={3}>
                 <Typography variant="subtitle2">Block #{selectedBlock.position + 1}</Typography>
                 {selectedBlock.block_type === 'text' && (
-                  <Stack spacing={1}>
+                  <Stack spacing={1.5}>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Button
                         variant={showMarkdownPreview ? 'outlined' : 'contained'}
@@ -1735,7 +1859,7 @@ export default function CourseBuilderAdmin() {
                         onChange={(event) => queueBlockUpdate(selectedBlock.id, { text_md: event.target.value })}
                       />
                     ) : (
-                      <BlockRenderer block={selectedBlock} resource={null} />
+                      <BlockRenderer block={selectedBlock} resource={selectedBlockResource} />
                     )}
                   </Stack>
                 )}
@@ -1750,63 +1874,59 @@ export default function CourseBuilderAdmin() {
                         setResourceDialogOpen(true);
                       }}
                     >
-                      {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
+                      Change resource
                     </Button>
-                    {selectedBlock.resource_id && (
-                      <Card variant="outlined" sx={{ p: 2 }}>
-                        <Typography variant="subtitle1">
-                          {resourceForBlock(selectedBlock)?.title ?? `Resource #${selectedBlock.resource_id}`}
+                    {selectedBlockResource && (
+                      <Stack spacing={0.5}>
+                        <Typography variant="subtitle2">{selectedBlockResource.title}</Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          {selectedBlockResource.type}
                         </Typography>
-                        {resourceForBlock(selectedBlock)?.url && (
-                          <Button
-                            size="small"
-                            endIcon={<OpenInNewIcon fontSize="small" />}
-                            href={resourceForBlock(selectedBlock)?.url ?? undefined}
-                            target="_blank"
-                            rel="noreferrer"
-                            sx={{ mt: 1 }}
-                          >
-                            Open resource
-                          </Button>
-                        )}
-                      </Card>
+                      </Stack>
+                    )}
+                    {(selectedBlockResource?.type === 'video' || selectedBlockResource?.type === 'audio') && (
+                      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                        <TextField
+                          type="number"
+                          label="Start (ms)"
+                          value={selectedBlock.start_ms ?? ''}
+                          onChange={(event) =>
+                            queueBlockUpdate(selectedBlock.id, {
+                              start_ms: event.target.value ? Number(event.target.value) : null,
+                            })
+                          }
+                        />
+                        <TextField
+                          type="number"
+                          label="End (ms)"
+                          value={selectedBlock.end_ms ?? ''}
+                          onChange={(event) =>
+                            queueBlockUpdate(selectedBlock.id, {
+                              end_ms: event.target.value ? Number(event.target.value) : null,
+                            })
+                          }
+                        />
+                      </Stack>
                     )}
                     <TextField
                       label="Caption"
                       value={selectedBlock.label ?? ''}
                       onChange={(event) => queueBlockUpdate(selectedBlock.id, { label: event.target.value || null })}
                     />
-                    <Stack direction="row" spacing={1}>
-                      <TextField
-                        label="Start (ms)"
-                        value={selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : ''}
-                        onChange={(event) => {
-                          const parsed = Number(event.target.value);
-                          if (Number.isNaN(parsed) || parsed < 0) {
-                            queueBlockUpdate(selectedBlock.id, { start_ms: null });
-                          } else {
-                            queueBlockUpdate(selectedBlock.id, { start_ms: parsed });
-                          }
-                        }}
-                      />
-                      <TextField
-                        label="End (ms)"
-                        value={selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : ''}
-                        onChange={(event) => {
-                          const parsed = Number(event.target.value);
-                          if (Number.isNaN(parsed) || parsed < 0) {
-                            queueBlockUpdate(selectedBlock.id, { end_ms: null });
-                          } else {
-                            queueBlockUpdate(selectedBlock.id, { end_ms: parsed });
-                          }
-                        }}
-                      />
-                    </Stack>
+                    <TextField
+                      label="Notes"
+                      multiline
+                      minRows={2}
+                      value={selectedBlock.notes ?? ''}
+                      onChange={(event) => queueBlockUpdate(selectedBlock.id, { notes: event.target.value || null })}
+                    />
                   </Stack>
                 )}
 
                 {selectedBlock.block_type === 'divider' && (
-                  <Alert severity="info">Divider blocks have no configurable properties.</Alert>
+                  <Typography variant="body2" color="text.secondary">
+                    Divider blocks currently have minimal styling options.
+                  </Typography>
                 )}
 
                 <Button
@@ -1819,7 +1939,7 @@ export default function CourseBuilderAdmin() {
               </Stack>
             ) : selectedSubtree && nodeDraft ? (
               <Stack spacing={3}>
-                <Stack spacing={2}>
+                <Stack spacing={1.5}>
                   <TextField
                     label="Title"
                     value={nodeDraft.title}
@@ -1837,6 +1957,16 @@ export default function CourseBuilderAdmin() {
                     value={nodeDraft.description}
                     onChange={(event) => handleNodeFieldChange('description', event.target.value)}
                   />
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={nodeDraft.state}
+                    onChange={(_, value) => value && handleNodeFieldChange('state', value)}
+                  >
+                    <ToggleButton value="draft">Draft</ToggleButton>
+                    <ToggleButton value="published">Published</ToggleButton>
+                    <ToggleButton value="archived">Archived</ToggleButton>
+                  </ToggleButtonGroup>
                   <TextField
                     label="Hero image URL"
                     value={nodeDraft.hero_image}
