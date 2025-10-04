@@ -78,6 +78,7 @@ export default function Canvas({
   }, [blocks, editingBlockId, onInsertBlock, previewMode, selectedBlockId]);
 
   const handleOpenInsertMenu = (element: HTMLElement, position: number) => {
+    if (!canEditBlocks) return;
     setInsertAnchor({ element, position });
   };
 
@@ -154,80 +155,92 @@ export default function Canvas({
     <Box sx={{ p: 3, height: '100%', overflowY: 'auto' }}>
       <Stack spacing={3} sx={{ maxWidth: 900, mx: 'auto' }}>
         <Typography variant="h6">{subtree.node.title ?? 'Untitled node'}</Typography>
-        {blocks.length === 0 ? (
-          <Alert severity="info">Use the “+” buttons to add content blocks to this node.</Alert>
+        {!previewMode && blocks.length === 0 ? (
+          <Alert severity="info" sx={{ textAlign: 'center' }}>
+            This lesson has no content yet. Click the + buttons to add your first block.
+          </Alert>
         ) : null}
-        <BlockDndContext onDragOver={canEditBlocks ? handleDragOver : undefined} onDragEnd={canEditBlocks ? handleDragEnd : undefined}>
-          <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
-            <Stack
-              spacing={2}
-              sx={{
-                position: 'relative',
-                pl: { xs: 0, md: 4 },
-                '&:hover .canvas-insert': {
-                  opacity: canEditBlocks ? 1 : 0,
-                },
-              }}
-            >
-              {renderInsertAffordance(0)}
-              {blocks.map((block, index) => {
-                const isSelected = selectedBlockId === block.id;
-                const isEditing = editingBlockId === block.id;
-                const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
-                return (
-                  <Fragment key={block.id}>
-                    {indicatorIndex === index ? <DropIndicator /> : null}
-                    <CanvasRow>
-                      <SortableBlock
-                        block={block}
-                        disabled={!canEditBlocks}
-                        isSelected={isSelected}
-                        isEditing={isEditing}
-                        resource={resource}
-                        previewMode={previewMode}
-                        onSelect={() => {
-                          onSelectBlock(block);
-                          if (block.block_type === 'text' && canEditBlocks) {
-                            onStartEdit(block.id);
-                          }
-                        }}
-                      >
-                        {block.block_type === 'text' && isEditing && canEditBlocks ? (
-                          <TipTapHtmlEditor
-                            value={block.text_md ?? ''}
-                            onChange={(html) => onChangeText(block.id, html)}
-                            onBlur={() => onExitEdit()}
-                            onEscape={() => onExitEdit()}
-                            autoFocus
-                          />
-                        ) : (
-                          <BlockRenderer block={block} resource={resource} />
-                        )}
-                      </SortableBlock>
-                    </CanvasRow>
-                    {renderInsertAffordance(index + 1)}
-                  </Fragment>
-                );
-              })}
-              {indicatorIndex === blocks.length ? <DropIndicator /> : null}
-            </Stack>
-          </SortableContext>
-        </BlockDndContext>
-        {!canEditBlocks && (
+        {previewMode ? (
+          <Stack spacing={3}>
+            {blocks.map((block) => {
+              const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
+              return <BlockRenderer key={block.id} block={block} resource={resource} />;
+            })}
+          </Stack>
+        ) : (
+          <BlockDndContext onDragOver={canEditBlocks ? handleDragOver : undefined} onDragEnd={canEditBlocks ? handleDragEnd : undefined}>
+            <SortableContext items={blockIds} strategy={verticalListSortingStrategy}>
+              <Stack
+                spacing={2}
+                sx={{
+                  position: 'relative',
+                  pl: { xs: 0, md: 4 },
+                  '&:hover .canvas-insert': {
+                    opacity: canEditBlocks ? 1 : 0,
+                  },
+                }}
+              >
+                {renderInsertAffordance(0)}
+                {blocks.map((block, index) => {
+                  const isSelected = selectedBlockId === block.id;
+                  const isEditing = editingBlockId === block.id;
+                  const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
+                  return (
+                    <Fragment key={block.id}>
+                      {indicatorIndex === index ? <DropIndicator /> : null}
+                      <CanvasRow>
+                        <SortableBlock
+                          block={block}
+                          disabled={!canEditBlocks}
+                          isSelected={isSelected}
+                          isEditing={isEditing}
+                          previewMode={previewMode}
+                          onSelect={() => {
+                            onSelectBlock(block);
+                            if (block.block_type === 'text' && canEditBlocks) {
+                              onStartEdit(block.id);
+                            }
+                          }}
+                        >
+                          {block.block_type === 'text' && isEditing && canEditBlocks ? (
+                            <TipTapHtmlEditor
+                              value={block.text_md ?? ''}
+                              onChange={(html) => onChangeText(block.id, html)}
+                              onBlur={() => onExitEdit()}
+                              onEscape={() => onExitEdit()}
+                              autoFocus
+                            />
+                          ) : (
+                            <BlockRenderer block={block} resource={resource} />
+                          )}
+                        </SortableBlock>
+                      </CanvasRow>
+                      {renderInsertAffordance(index + 1)}
+                    </Fragment>
+                  );
+                })}
+                {indicatorIndex === blocks.length ? <DropIndicator /> : null}
+              </Stack>
+            </SortableContext>
+          </BlockDndContext>
+        )}
+        {!canEditBlocks && !previewMode && (
           <Alert severity="info">Blocks are only available on leaf nodes.</Alert>
         )}
       </Stack>
-      <Menu anchorEl={insertAnchor?.element ?? null} open={!!insertAnchor} onClose={handleCloseInsertMenu}>
-        <MenuItem onClick={() => handleChooseInsert('text')}>
-          <TextFieldsIcon fontSize="small" sx={{ mr: 1 }} /> Text
-        </MenuItem>
-        <MenuItem onClick={() => handleChooseInsert('asset')}>
-          <VideoLibraryIcon fontSize="small" sx={{ mr: 1 }} /> Resource
-        </MenuItem>
-        <MenuItem onClick={() => handleChooseInsert('divider')}>
-          <HorizontalRuleIcon fontSize="small" sx={{ mr: 1 }} /> Divider
-        </MenuItem>
-      </Menu>
+      {!previewMode && (
+        <Menu anchorEl={insertAnchor?.element ?? null} open={!!insertAnchor} onClose={handleCloseInsertMenu}>
+          <MenuItem onClick={() => handleChooseInsert('text')}>
+            <TextFieldsIcon fontSize="small" sx={{ mr: 1 }} /> Text
+          </MenuItem>
+          <MenuItem onClick={() => handleChooseInsert('asset')}>
+            <VideoLibraryIcon fontSize="small" sx={{ mr: 1 }} /> Resource
+          </MenuItem>
+          <MenuItem onClick={() => handleChooseInsert('divider')}>
+            <HorizontalRuleIcon fontSize="small" sx={{ mr: 1 }} /> Divider
+          </MenuItem>
+        </Menu>
+      )}
     </Box>
   );
 }
@@ -237,19 +250,17 @@ type SortableBlockProps = {
   disabled: boolean;
   isSelected: boolean;
   isEditing: boolean;
-  resource: RenderableResource | null;
   previewMode: boolean;
   onSelect: () => void;
   children: React.ReactNode;
 };
 
-function SortableBlock({ block, disabled, isSelected, isEditing, resource, previewMode, onSelect, children }: SortableBlockProps) {
+function SortableBlock({ block, disabled, isSelected, isEditing, previewMode, onSelect, children }: SortableBlockProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: block.id, disabled });
 
   return (
     <BlockShell
       block={block}
-      resource={resource}
       isSelected={isSelected}
       isEditing={isEditing}
       previewMode={previewMode}

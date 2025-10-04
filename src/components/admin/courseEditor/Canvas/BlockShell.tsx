@@ -2,15 +2,14 @@
 
 import { CSS } from '@dnd-kit/utilities';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
-import { Box, Card, CardContent, Chip, Stack, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { Box, IconButton } from '@mui/material';
 import type { DraggableAttributes } from '@dnd-kit/core';
 import type { ContentBlock } from '@/types/course';
-import type { RenderableResource } from '@/components/course/BlockRenderer';
 import type { ReactNode } from 'react';
 
 export type BlockShellProps = {
   block: ContentBlock;
-  resource: RenderableResource | null;
   isSelected: boolean;
   isEditing: boolean;
   previewMode?: boolean;
@@ -26,7 +25,6 @@ export type BlockShellProps = {
 
 export default function BlockShell({
   block,
-  resource,
   isSelected,
   isEditing,
   previewMode = false,
@@ -44,63 +42,61 @@ export default function BlockShell({
     transition: transition ?? undefined,
   } as const;
 
+  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (previewMode) return;
+    event.stopPropagation();
+    onSelect(block);
+  };
+
+  const dragHandle = previewMode ? null : (
+    <IconButton
+      className="block-shell__handle"
+      size="small"
+      {...listeners}
+      aria-label="Drag to reorder block"
+      sx={{
+        position: 'absolute',
+        left: -40,
+        top: '50%',
+        transform: 'translateY(-50%)',
+        opacity: isEditing || isDragging ? 0 : 0.4,
+        transition: 'opacity 0.2s ease',
+        cursor: 'grab',
+        color: isSelected ? 'primary.main' : 'text.secondary',
+        '&:hover': { opacity: 1 },
+      }}
+    >
+      <DragIndicatorIcon fontSize="small" />
+    </IconButton>
+  );
+
   return (
-    <Card
+    <Box
       className="block-shell"
       ref={setNodeRef}
       {...attributes}
       sx={{
         position: 'relative',
-        borderColor: isSelected ? 'primary.main' : 'divider',
-        backgroundColor: isEditing ? 'action.hover' : undefined,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: isSelected ? 'primary.main' : 'transparent',
+        backgroundColor: isEditing
+          ? (theme) => alpha(theme.palette.primary.main, 0.06)
+          : (theme) => alpha(theme.palette.background.paper, previewMode ? 0 : 1),
         cursor: previewMode ? 'default' : 'pointer',
         opacity: isDragging ? 0.6 : 1,
-        transition: 'border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease',
+        transition: 'border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease',
+        boxShadow: isSelected ? 2 : 0,
+        p: { xs: 1.5, md: 2 },
         '&:hover .block-shell__handle': {
-          opacity: previewMode || isEditing ? 0 : 1,
+          opacity: previewMode || isEditing ? 0 : 0.8,
         },
       }}
       style={style}
-      variant={isSelected ? 'outlined' : undefined}
-      onClick={() => onSelect(block)}
+      onClick={handleClick}
     >
-      {!previewMode && (
-        <Box
-          className="block-shell__handle"
-          {...listeners}
-          sx={{
-            position: 'absolute',
-            left: -32,
-            top: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: isSelected ? 'primary.main' : 'text.disabled',
-            cursor: 'grab',
-            opacity: isEditing ? 0 : 0,
-            pointerEvents: isEditing ? 'none' : 'auto',
-            transition: 'opacity 0.2s ease',
-            pr: 1,
-          }}
-        >
-          <DragIndicatorIcon fontSize="small" />
-        </Box>
-      )}
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="subtitle2">Block {block.position + 1}</Typography>
-              {resource?.title ? <Chip label={resource.title} size="small" /> : null}
-            </Stack>
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
-              {block.block_type}
-            </Typography>
-          </Stack>
-          <Box>{children}</Box>
-        </Stack>
-      </CardContent>
-    </Card>
+      {dragHandle}
+      <Box>{children}</Box>
+    </Box>
   );
 }

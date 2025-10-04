@@ -202,10 +202,12 @@ function CourseEditorInner() {
     editingBlockId,
     savingState,
     savingMessage,
+    editorMode,
     setSelectedNodeId,
     setSelectedBlockId,
     setEditingBlockId,
     setSavingState,
+    setEditorMode,
   } = useEditorStore();
 
   const [trees, setTrees] = useState<NodeSubtree[]>([]);
@@ -216,7 +218,6 @@ function CourseEditorInner() {
   const [search, setSearch] = useState('');
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState(false);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
   const [snack, setSnack] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -266,7 +267,7 @@ function CourseEditorInner() {
     } finally {
       setLoading(false);
     }
-  }, [setSelectedNodeId, setSelectedBlockId]);
+  }, [setEditingBlockId, setSelectedBlockId, setSelectedNodeId, setExpanded]);
 
   useEffect(() => {
     void loadData();
@@ -469,6 +470,13 @@ function CourseEditorInner() {
       pendingTextDrafts.current.delete(pending.tempId);
     }
   }, [queueBlockUpdate, setEditingBlockId, setSelectedBlockId, sortedBlocks]);
+
+  useEffect(() => {
+    if (editorMode === 'preview') {
+      setSelectedBlockId(null);
+      setEditingBlockId(null);
+    }
+  }, [editorMode, setEditingBlockId, setSelectedBlockId]);
 
   const flushNodeUpdate = useCallback(
     async (nodeId: number) => {
@@ -929,18 +937,13 @@ function CourseEditorInner() {
         <Toolbar
           subtree={selectedSubtree}
           nodeDraft={nodeDraft}
-          previewMode={previewMode}
-          onPreviewModeChange={(value) => {
-            setPreviewMode(value);
-            if (value) {
-              setSelectedBlockId(null);
-              setEditingBlockId(null);
-            }
-          }}
           onStateChange={(state) => handleStateChange(state)}
           onShowDetails={() => {
             setSelectedBlockId(null);
             setEditingBlockId(null);
+            if (editorMode === 'preview') {
+              setEditorMode('edit');
+            }
           }}
         />
         <Box
@@ -948,7 +951,10 @@ function CourseEditorInner() {
             flex: 1,
             minHeight: 0,
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: '3fr 5fr 4fr' },
+            gridTemplateColumns:
+              editorMode === 'preview'
+                ? { xs: '1fr', md: '320px 1fr' }
+                : { xs: '1fr', md: '320px minmax(0, 1fr) 360px' },
           }}
         >
           <Box sx={{ borderRight: { md: '1px solid' }, borderColor: 'divider', minHeight: 0 }}>
@@ -964,13 +970,23 @@ function CourseEditorInner() {
                 setSelectedBlockId(null);
                 setEditingBlockId(null);
               }}
-              onContextMenu={(event, nodeId) => {
-                setMenuAnchor(event.currentTarget as HTMLElement);
-                setMenuNodeId(nodeId);
-              }}
+              onContextMenu={
+                editorMode === 'edit'
+                  ? (event, nodeId) => {
+                      setMenuAnchor(event.currentTarget as HTMLElement);
+                      setMenuNodeId(nodeId);
+                    }
+                  : undefined
+              }
             />
           </Box>
-          <Box sx={{ borderRight: { md: '1px solid' }, borderColor: 'divider', minHeight: 0 }}>
+          <Box
+            sx={{
+              borderRight: editorMode === 'preview' ? undefined : { md: '1px solid' },
+              borderColor: 'divider',
+              minHeight: 0,
+            }}
+          >
             <Canvas
               subtree={selectedSubtree}
               resources={resourceCache}
@@ -982,80 +998,90 @@ function CourseEditorInner() {
               onInsertBlock={handleInsertBlock}
               onReorderBlocks={handleReorderBlocks}
               onChangeText={handleTextChange}
-              previewMode={previewMode}
+              previewMode={editorMode === 'preview'}
             />
           </Box>
-          <Box sx={{ minHeight: 0 }}>
-            <Properties
-              subtree={selectedSubtree}
-              nodeDraft={nodeDraft}
-              metadataError={metadataError}
-              onNodeFieldChange={handleNodeFieldChange}
-              onRequestAddChild={(mode, options) =>
-                setAddChildDialog({ open: true, parentId: selectedSubtree?.node.id ?? null, mode, type: options?.type })
-              }
-              onReorderChild={(childId, direction) => selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)}
-              onUpdateChild={(childId, updates) => selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)}
-              onRemoveChild={(childId) => selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)}
-              selectedBlock={selectedBlock}
-              onClearBlockSelection={() => {
-                setSelectedBlockId(null);
-                setEditingBlockId(null);
-              }}
-              onUpdateBlock={(blockId, updates, options) => queueBlockUpdate(blockId, updates, options)}
-              onDeleteBlock={handleDeleteBlock}
-              onOpenResourcePicker={(mode, blockId) => {
-                if (!selectedSubtree) return;
-                setResourceDialogMode({ type: mode, blockId });
-                setResourceDialogOpen(true);
-              }}
-              resources={resourceCache}
-              savingState={savingState}
-              savingMessage={savingMessage}
-              availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
-            />
-          </Box>
+          {editorMode === 'edit' ? (
+            <Box sx={{ minHeight: 0 }}>
+              <Properties
+                subtree={selectedSubtree}
+                nodeDraft={nodeDraft}
+                metadataError={metadataError}
+                onNodeFieldChange={handleNodeFieldChange}
+                onRequestAddChild={(mode, options) =>
+                  setAddChildDialog({ open: true, parentId: selectedSubtree?.node.id ?? null, mode, type: options?.type })
+                }
+                onReorderChild={(childId, direction) =>
+                  selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)
+                }
+                onUpdateChild={(childId, updates) =>
+                  selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)
+                }
+                onRemoveChild={(childId) =>
+                  selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)
+                }
+                selectedBlock={selectedBlock}
+                onClearBlockSelection={() => {
+                  setSelectedBlockId(null);
+                  setEditingBlockId(null);
+                }}
+                onUpdateBlock={(blockId, updates, options) => queueBlockUpdate(blockId, updates, options)}
+                onDeleteBlock={handleDeleteBlock}
+                onOpenResourcePicker={(mode, blockId) => {
+                  if (!selectedSubtree) return;
+                  setResourceDialogMode({ type: mode, blockId });
+                  setResourceDialogOpen(true);
+                }}
+                resources={resourceCache}
+                savingState={savingState}
+                savingMessage={savingMessage}
+                availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
+              />
+            </Box>
+          ) : null}
         </Box>
       </Stack>
 
-      <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
-        <MenuItem
-          onClick={() => {
-            if (!menuNodeId) return;
-            setMenuAnchor(null);
-            setAddChildDialog({ open: true, parentId: menuNodeId, mode: 'create' });
-          }}
-        >
-          <AddIcon fontSize="small" sx={{ mr: 1 }} /> Add child
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (!menuNodeId) return;
-            setMenuAnchor(null);
-            setAddChildDialog({ open: true, parentId: menuNodeId, mode: 'attach' });
-          }}
-        >
-          <SearchIcon fontSize="small" sx={{ mr: 1 }} /> Attach existing
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (!menuNodeId) return;
-            setMenuAnchor(null);
-            setDuplicateDialog({ open: true, nodeId: menuNodeId });
-          }}
-        >
-          <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Duplicate
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (!menuNodeId) return;
-            setMenuAnchor(null);
-            setDeleteDialog({ open: true, nodeId: menuNodeId });
-          }}
-        >
-          <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
-        </MenuItem>
-      </Menu>
+      {editorMode === 'edit' ? (
+        <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
+          <MenuItem
+            onClick={() => {
+              if (!menuNodeId) return;
+              setMenuAnchor(null);
+              setAddChildDialog({ open: true, parentId: menuNodeId, mode: 'create' });
+            }}
+          >
+            <AddIcon fontSize="small" sx={{ mr: 1 }} /> Add child
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (!menuNodeId) return;
+              setMenuAnchor(null);
+              setAddChildDialog({ open: true, parentId: menuNodeId, mode: 'attach' });
+            }}
+          >
+            <SearchIcon fontSize="small" sx={{ mr: 1 }} /> Attach existing
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (!menuNodeId) return;
+              setMenuAnchor(null);
+              setDuplicateDialog({ open: true, nodeId: menuNodeId });
+            }}
+          >
+            <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Duplicate
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              if (!menuNodeId) return;
+              setMenuAnchor(null);
+              setDeleteDialog({ open: true, nodeId: menuNodeId });
+            }}
+          >
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+          </MenuItem>
+        </Menu>
+      ) : null}
 
       <ResourcePickerDialog
         open={resourceDialogOpen}

@@ -39,7 +39,7 @@ export type TreeProps = {
   onSearchChange: (value: string) => void;
   onToggle: (id: number) => void;
   onSelect: (id: number) => void;
-  onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
 };
 
 function matchesQuery(value: string | null | undefined, query: string) {
@@ -64,7 +64,7 @@ function TreeNode({
   onSelect: (id: number) => void;
   selectedId: number | null;
   search: string;
-  onContextMenu: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
 }) {
   const hasChildren = subtree.children.length > 0;
   const isExpanded = expanded.has(subtree.node.id) || (!!search && hasChildren);
@@ -89,16 +89,20 @@ function TreeNode({
           <Box sx={{ width: 32 }} />
         )}
         <Tooltip title={subtree.node.title ?? 'Untitled node'} placement="right">
-          <Chip
-            size="small"
-            icon={NODE_ICONS[subtree.node.node_type] ?? <StorageIcon fontSize="small" />}
-            label={subtree.node.title ?? 'Untitled'}
-            color={selectedId === subtree.node.id ? 'primary' : 'default'}
-            onClick={() => onSelect(subtree.node.id)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              onContextMenu(event, subtree.node.id);
-            }}
+            <Chip
+              size="small"
+              icon={NODE_ICONS[subtree.node.node_type] ?? <StorageIcon fontSize="small" />}
+              label={subtree.node.title ?? 'Untitled'}
+              color={selectedId === subtree.node.id ? 'primary' : 'default'}
+              onClick={() => onSelect(subtree.node.id)}
+              onContextMenu={
+                onContextMenu
+                  ? (event) => {
+                      event.preventDefault();
+                      onContextMenu(event, subtree.node.id);
+                    }
+                  : undefined
+              }
             sx={{
               maxWidth: '100%',
               '& .MuiChip-label': {

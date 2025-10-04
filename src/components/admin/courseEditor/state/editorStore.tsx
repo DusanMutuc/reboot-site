@@ -4,16 +4,20 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 
+export type EditorMode = 'edit' | 'preview';
+
 export type EditorStoreValue = {
   selectedNodeId: number | null;
   selectedBlockId: number | null;
   editingBlockId: number | null;
   savingState: SavingState;
   savingMessage: string;
+  editorMode: EditorMode;
   setSelectedNodeId: (nodeId: number | null) => void;
   setSelectedBlockId: (blockId: number | null) => void;
   setEditingBlockId: (blockId: number | null) => void;
   setSavingState: (state: SavingState, message?: string) => void;
+  setEditorMode: (mode: EditorMode) => void;
 };
 
 const EditorStoreContext = createContext<EditorStoreValue | undefined>(undefined);
@@ -24,6 +28,7 @@ export function EditorStoreProvider({ children }: { children: ReactNode }) {
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [savingState, setSavingStateValue] = useState<SavingState>('idle');
   const [savingMessage, setSavingMessage] = useState('All changes saved');
+  const [editorMode, setEditorMode] = useState<EditorMode>('edit');
 
   const setSavingState = (state: SavingState, message?: string) => {
     setSavingStateValue(state);
@@ -41,12 +46,21 @@ export function EditorStoreProvider({ children }: { children: ReactNode }) {
       editingBlockId,
       savingState,
       savingMessage,
+      editorMode,
       setSelectedNodeId,
       setSelectedBlockId,
       setEditingBlockId,
       setSavingState,
+      setEditorMode,
     }),
-    [selectedNodeId, selectedBlockId, editingBlockId, savingState, savingMessage],
+    [
+      selectedNodeId,
+      selectedBlockId,
+      editingBlockId,
+      savingState,
+      savingMessage,
+      editorMode,
+    ],
   );
 
   return <EditorStoreContext.Provider value={value}>{children}</EditorStoreContext.Provider>;
