@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   IconButton,
   InputAdornment,
   List,
@@ -29,8 +30,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
-import LibraryAddIcon from '@mui/icons-material/LibraryAdd';
-import ViewAgendaIcon from '@mui/icons-material/ViewAgenda';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import type { NodeSubtree } from '@/types/course';
@@ -155,58 +154,166 @@ function OutlineNode({
   const isExpanded = expanded.has(subtree.node.id) || (!!search && hasChildren && childMatches);
   const isChapter = subtree.node.node_type === 'chapter';
   const isLesson = subtree.node.node_type === 'lesson';
+  const isSelected = selectedId === subtree.node.id;
 
   if (search && !matches && !childMatches) {
     return null;
   }
 
-  const labelVariant = subtree.node.node_type === 'lesson' ? 'subtitle2' : 'body2';
+  const indentation = level <= 0 ? 2 : 6 + (level - 1) * 2;
 
-  return (
-    <Box>
-      <ListItem disablePadding sx={{ display: 'block' }}>
-        <ListItemButton
-          selected={selectedId === subtree.node.id}
-          onClick={() => onSelect(subtree.node.id)}
-          onContextMenu={
-            onContextMenu
-              ? (event) => {
-                  event.preventDefault();
-                  onContextMenu(event, subtree.node.id);
-                }
-              : undefined
-          }
+  const handleContextMenu =
+    onContextMenu
+      ? (event: React.MouseEvent<HTMLElement>) => {
+          event.preventDefault();
+          onContextMenu(event, subtree.node.id);
+        }
+      : undefined;
+
+  if (isChapter) {
+    return (
+      <Box sx={{ ml: level ? level * 2 : 0, mb: 1.5 }}>
+        <Box
           sx={{
-            alignItems: 'center',
-            gap: 1,
-            py: 1.2,
-            pl: `calc(${level} * 24px + 16px)`,
-            pr: 1.5,
             borderRadius: 2,
             border: '1px solid',
-            borderColor: isChapter
-              ? (theme) => alpha(theme.palette.primary.main, 0.18)
-              : 'transparent',
-            backgroundColor: isChapter
-              ? (theme) => alpha(theme.palette.primary.main, 0.08)
-              : 'transparent',
-            boxShadow: isLesson
-              ? 'inset 0 0 0 1px rgba(145, 158, 171, 0.12)'
-              : 'none',
+            borderColor: isSelected ? 'primary.main' : 'divider',
+            backgroundColor: 'grey.50',
+            overflow: 'hidden',
+            boxShadow: isSelected ? (theme) => `0 12px 24px ${alpha(theme.palette.primary.main, 0.16)}` : '0 2px 8px rgba(15, 23, 42, 0.06)',
+            transition: 'border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease',
+            '&:hover': {
+              borderColor: 'primary.light',
+              boxShadow: '0 6px 18px rgba(15, 23, 42, 0.12)',
+            },
+          }}
+        >
+          <ListItem disablePadding sx={{ display: 'block' }}>
+            <ListItemButton
+              selected={isSelected}
+              onClick={() => onSelect(subtree.node.id)}
+              onContextMenu={handleContextMenu}
+              sx={{
+                alignItems: 'center',
+                gap: 1.5,
+                py: 1.5,
+                px: 2.5,
+                borderRadius: 0,
+                backgroundColor: 'grey.50',
+                '&.Mui-selected': {
+                  backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                  '&:hover': {
+                    backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.16),
+                  },
+                },
+                '&:hover': {
+                  backgroundColor: 'grey.100',
+                },
+                transition: 'background-color 160ms ease',
+              }}
+            >
+              <IconButton
+                size="small"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggle(subtree.node.id);
+                }}
+                sx={{
+                  mr: 1,
+                  color: 'text.secondary',
+                  transition: 'transform 200ms ease',
+                  transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+                  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                }}
+                aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
+              >
+                <ExpandMoreIcon fontSize="small" />
+              </IconButton>
+              <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{
+                getNodeIcon(subtree.node.node_type)
+              }</Box>
+              <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600 }}>
+                {subtree.node.title ?? 'Untitled chapter'}
+              </Typography>
+            </ListItemButton>
+          </ListItem>
+          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+            {hasChildren ? (
+              <Box sx={{ backgroundColor: 'background.paper' }}>
+                {subtree.children.map((child) => (
+                  <Box
+                    key={child.subtree.node.id}
+                    sx={{
+                      borderTop: '1px solid',
+                      borderColor: 'divider',
+                      '&:last-of-type': {
+                        borderBottomLeftRadius: 2,
+                        borderBottomRightRadius: 2,
+                      },
+                    }}
+                  >
+                    <OutlineNode
+                      subtree={child.subtree}
+                      level={level + 1}
+                      expanded={expanded}
+                      toggle={toggle}
+                      onSelect={onSelect}
+                      selectedId={selectedId}
+                      search={search}
+                      onContextMenu={onContextMenu}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Box
+                sx={{
+                  px: 3,
+                  py: 4,
+                  textAlign: 'center',
+                  color: 'text.secondary',
+                  backgroundColor: 'grey.50',
+                }}
+              >
+                <ArticleOutlinedIcon sx={{ fontSize: 28, opacity: 0.4, mb: 1 }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  This chapter has no content yet.
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Use the + Block action to add content.
+                </Typography>
+              </Box>
+            )}
+          </Collapse>
+        </Box>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ ml: level ? level * 2 : 0 }}>
+      <ListItem disablePadding sx={{ display: 'block' }}>
+        <ListItemButton
+          selected={isSelected}
+          onClick={() => onSelect(subtree.node.id)}
+          onContextMenu={handleContextMenu}
+          sx={{
+            alignItems: 'center',
+            gap: 1.5,
+            py: 1.25,
+            pl: indentation,
+            pr: 2.5,
+            borderRadius: 0,
             '&.Mui-selected': {
-              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
               '&:hover': {
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.15),
+                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
               },
             },
             '&:hover': {
-              backgroundColor: (theme) =>
-                alpha(theme.palette.primary.main, isChapter ? 0.12 : 0.06),
-              borderColor: (theme) =>
-                alpha(theme.palette.primary.main, isChapter ? 0.24 : 0.18),
-              boxShadow: isLesson ? 'inset 0 0 0 1px rgba(145, 158, 171, 0.24)' : 'none',
+              backgroundColor: 'grey.50',
             },
-            transition: 'background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
+            transition: 'background-color 160ms ease',
           }}
         >
           {hasChildren ? (
@@ -217,9 +324,9 @@ function OutlineNode({
                 toggle(subtree.node.id);
               }}
               sx={{
-                mr: 0.5,
+                mr: 1,
                 color: 'text.secondary',
-                transition: 'transform 180ms ease',
+                transition: 'transform 200ms ease',
                 transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
               }}
@@ -228,34 +335,38 @@ function OutlineNode({
               <ExpandMoreIcon fontSize="small" />
             </IconButton>
           ) : (
-            <Box sx={{ width: 32 }} />
+            <Box sx={{ width: 28 }} />
           )}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{
-              getNodeIcon(subtree.node.node_type)
-            }</Box>
-            <Typography variant={labelVariant} noWrap sx={{ fontWeight: subtree.node.node_type === 'lesson' ? 600 : 500 }}>
-              {subtree.node.title ?? 'Untitled node'}
-            </Typography>
-          </Box>
+          <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{
+            getNodeIcon(subtree.node.node_type)
+          }</Box>
+          <Typography
+            variant={isLesson ? 'subtitle2' : 'body2'}
+            noWrap
+            sx={{ fontWeight: isLesson ? 600 : 500 }}
+          >
+            {subtree.node.title ?? 'Untitled node'}
+          </Typography>
         </ListItemButton>
       </ListItem>
-      {hasChildren && isExpanded ? (
-        <Box>
-          {subtree.children.map((child) => (
-            <OutlineNode
-              key={child.subtree.node.id}
-              subtree={child.subtree}
-              level={level + 1}
-              expanded={expanded}
-              toggle={toggle}
-              onSelect={onSelect}
-              selectedId={selectedId}
-              search={search}
-              onContextMenu={onContextMenu}
-            />
-          ))}
-        </Box>
+      {hasChildren ? (
+        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+          <Box>
+            {subtree.children.map((child) => (
+              <OutlineNode
+                key={child.subtree.node.id}
+                subtree={child.subtree}
+                level={level + 1}
+                expanded={expanded}
+                toggle={toggle}
+                onSelect={onSelect}
+                selectedId={selectedId}
+                search={search}
+                onContextMenu={onContextMenu}
+              />
+            ))}
+          </Box>
+        </Collapse>
       ) : null}
     </Box>
   );
@@ -431,24 +542,12 @@ function OutlineHeader({
   onBack,
   onExpandAll,
   onCollapseAll,
-  onQuickAddLesson,
-  onQuickAddChapter,
-  onQuickAddBlock,
-  canAddLesson,
-  canAddChapter,
-  canAddBlock,
 }: {
   course: NodeSubtree;
   stats: { lessons: number; chapters: number };
   onBack: () => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
-  onQuickAddLesson: () => void;
-  onQuickAddChapter: () => void;
-  onQuickAddBlock: () => void;
-  canAddLesson: boolean;
-  canAddChapter: boolean;
-  canAddBlock: boolean;
 }) {
   const courseState = (course.node.state ?? 'draft').toLowerCase();
   const stateLabel = courseState.replace(/\b\w/g, (char) => char.toUpperCase());
@@ -463,93 +562,183 @@ function OutlineHeader({
           color: 'warning.dark',
         };
 
+  const badgeBaseStyles = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 0.75,
+    px: 1.5,
+    py: 0.75,
+    borderRadius: 1.5,
+    fontSize: 13,
+    fontWeight: 600,
+    lineHeight: 1.2,
+  };
+
   return (
-    <Stack spacing={3}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
+    <Stack spacing={2.5}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ gap: 2 }}>
         <Button
           size="small"
           startIcon={<ArrowBackIcon />}
           onClick={onBack}
           variant="text"
-          sx={{ fontWeight: 600, color: 'text.secondary' }}
+          sx={{
+            fontWeight: 600,
+            color: 'primary.main',
+            textTransform: 'uppercase',
+            letterSpacing: 0.8,
+            px: 1.5,
+          }}
         >
           Courses
         </Button>
         <Stack direction="row" spacing={1}>
-          <Button size="small" variant="outlined" onClick={onExpandAll}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={onExpandAll}
+            sx={{
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              px: 1.5,
+              borderRadius: 1.5,
+            }}
+          >
             Expand all
           </Button>
-          <Button size="small" variant="outlined" onClick={onCollapseAll}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={onCollapseAll}
+            sx={{
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: 0.8,
+              px: 1.5,
+              borderRadius: 1.5,
+            }}
+          >
             Collapse all
           </Button>
         </Stack>
       </Stack>
       <Stack spacing={1.5}>
-        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, fontSize: 24 }}>
           {course.node.title ?? 'Untitled course'}
         </Typography>
-        <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-          <Chip
-            size="small"
-            label={`${courseState === 'published' ? '✅' : '📝'} ${stateLabel}`}
+        <Stack direction="row" spacing={1.5} flexWrap="wrap" alignItems="center">
+          <Box component="span" sx={{ ...badgeBaseStyles, ...stateChipStyles }}>
+            {courseState === 'published' ? '✅ Published' : `📝 ${stateLabel}`}
+          </Box>
+          <Box
+            component="span"
             sx={{
-              fontWeight: 600,
-              ...stateChipStyles,
+              ...badgeBaseStyles,
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.16),
+              color: 'primary.dark',
             }}
-          />
-          <Chip
-            size="small"
-            label={`📄 ${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'}`}
+          >
+            📄 {stats.lessons} lesson{stats.lessons === 1 ? '' : 's'}
+          </Box>
+          <Box
+            component="span"
             sx={{
-              fontWeight: 600,
-              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
-              color: 'primary.main',
+              ...badgeBaseStyles,
+              backgroundColor: (theme) => alpha(theme.palette.info.main, 0.18),
+              color: 'info.dark',
             }}
-          />
-          <Chip
-            size="small"
-            label={`📚 ${stats.chapters} chapter${stats.chapters === 1 ? '' : 's'}`}
-            sx={{
-              fontWeight: 600,
-              backgroundColor: (theme) => alpha(theme.palette.info.main, 0.12),
-              color: 'info.main',
-            }}
-          />
+          >
+            📚 {stats.chapters} chapter{stats.chapters === 1 ? '' : 's'}
+          </Box>
         </Stack>
       </Stack>
-      <Stack direction="row" spacing={1.5} flexWrap="wrap">
-        <Button
-          size="small"
-          variant="contained"
-          color="primary"
-          startIcon={<ArticleOutlinedIcon fontSize="small" />}
-          onClick={onQuickAddLesson}
-          disabled={!canAddLesson}
-          sx={{ px: 2.5, fontWeight: 600 }}
-        >
-          + Lesson
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<LibraryAddIcon fontSize="small" />}
-          onClick={onQuickAddChapter}
-          disabled={!canAddChapter}
-          sx={{ px: 2.5, fontWeight: 600 }}
-        >
-          + Chapter
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<ViewAgendaIcon fontSize="small" />}
-          onClick={onQuickAddBlock}
-          disabled={!canAddBlock}
-          sx={{ px: 2.5, fontWeight: 600 }}
-        >
-          + Block
-        </Button>
-      </Stack>
+    </Stack>
+  );
+}
+
+function OutlineQuickActions({
+  onQuickAddLesson,
+  onQuickAddChapter,
+  onQuickAddBlock,
+  canAddLesson,
+  canAddChapter,
+  canAddBlock,
+}: {
+  onQuickAddLesson: () => void;
+  onQuickAddChapter: () => void;
+  onQuickAddBlock: () => void;
+  canAddLesson: boolean;
+  canAddChapter: boolean;
+  canAddBlock: boolean;
+}) {
+  const buttonBaseStyles = {
+    fontWeight: 700,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.8,
+    borderRadius: 2,
+    px: 2.5,
+    py: 1,
+  };
+
+  return (
+    <Stack direction="row" spacing={1} flexWrap="wrap">
+      <Button
+        size="small"
+        variant="contained"
+        startIcon={<AddIcon fontSize="small" />}
+        onClick={onQuickAddLesson}
+        disabled={!canAddLesson}
+        sx={{
+          ...buttonBaseStyles,
+          backgroundColor: 'primary.main',
+          '&:hover': { backgroundColor: 'primary.dark' },
+          '&:disabled': {
+            backgroundColor: 'action.disabledBackground',
+            color: 'action.disabled',
+          },
+        }}
+      >
+        Lesson
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AddIcon fontSize="small" />}
+        onClick={onQuickAddChapter}
+        disabled={!canAddChapter}
+        sx={{
+          ...buttonBaseStyles,
+          color: 'text.secondary',
+          borderColor: 'divider',
+          backgroundColor: 'common.white',
+          '&:hover': {
+            backgroundColor: 'grey.100',
+            borderColor: 'grey.300',
+          },
+        }}
+      >
+        Chapter
+      </Button>
+      <Button
+        size="small"
+        variant="outlined"
+        startIcon={<AddIcon fontSize="small" />}
+        onClick={onQuickAddBlock}
+        disabled={!canAddBlock}
+        sx={{
+          ...buttonBaseStyles,
+          color: 'text.secondary',
+          borderColor: 'divider',
+          backgroundColor: 'common.white',
+          '&:hover': {
+            backgroundColor: 'grey.100',
+            borderColor: 'grey.300',
+          },
+        }}
+      >
+        Block
+      </Button>
     </Stack>
   );
 }
@@ -618,75 +807,98 @@ function OutlinePanel({
   }
 
   return (
-    <Stack spacing={3} sx={{ height: '100%' }}>
-      <OutlineHeader
-        course={course}
-        stats={stats}
-        onBack={onBack}
-        onExpandAll={onExpandAll}
-        onCollapseAll={onCollapseAll}
-        onQuickAddLesson={onQuickAddLesson}
-        onQuickAddChapter={onQuickAddChapter}
-        onQuickAddBlock={onQuickAddBlock}
-        canAddLesson={canAddLesson}
-        canAddChapter={canAddChapter}
-        canAddBlock={canAddBlock}
-      />
-      <TextField
-        size="small"
-        fullWidth
-        placeholder="Search in course"
-        value={search}
-        onChange={(event) => onSearchChange(event.target.value)}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon fontSize="small" />
-            </InputAdornment>
-          ),
-        }}
+    <Stack spacing={0} sx={{ height: '100%', minHeight: 0, backgroundColor: 'background.paper' }}>
+      <Box sx={{ px: 3, py: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <OutlineHeader course={course} stats={stats} onBack={onBack} onExpandAll={onExpandAll} onCollapseAll={onCollapseAll} />
+      </Box>
+      <Box
         sx={{
-          '& .MuiOutlinedInput-root': {
-            borderRadius: 2,
-            backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.9),
-            transition: 'box-shadow 160ms ease, border-color 160ms ease',
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'primary.light',
-            },
-            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'primary.main',
-              boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.18)}`,
-            },
-          },
-          '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: 'divider',
-          },
-          '& .MuiInputAdornment-root': {
-            color: 'text.secondary',
-          },
+          px: 3,
+          py: 2,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: 'grey.50',
         }}
-      />
-      {contextualMessage ? (
-        <Stack
-          direction="row"
-          spacing={1.5}
-          alignItems="center"
+      >
+        <OutlineQuickActions
+          onQuickAddLesson={onQuickAddLesson}
+          onQuickAddChapter={onQuickAddChapter}
+          onQuickAddBlock={onQuickAddBlock}
+          canAddLesson={canAddLesson}
+          canAddChapter={canAddChapter}
+          canAddBlock={canAddBlock}
+        />
+      </Box>
+      <Box
+        sx={{
+          px: 3,
+          py: 2.5,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          backgroundColor: 'background.paper',
+        }}
+      >
+        <TextField
+          size="small"
+          fullWidth
+          placeholder="Search in course"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
           sx={{
-            p: 1.5,
-            borderRadius: 2,
-            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 2,
+              backgroundColor: 'grey.50',
+              transition: 'box-shadow 160ms ease, border-color 160ms ease, background-color 160ms ease',
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'grey.300',
+              },
+              '&.Mui-focused': {
+                backgroundColor: 'common.white',
+                boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.16)}`,
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: 'primary.main',
+              },
+            },
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'divider',
+            },
+            '& .MuiInputAdornment-root': {
+              color: 'text.secondary',
+            },
+          }}
+        />
+      </Box>
+      {contextualMessage ? (
+        <Box
+          sx={{
+            px: 3,
+            py: 2.5,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.06),
+            borderBottom: '1px solid',
+            borderColor: 'divider',
           }}
         >
           <InfoOutlinedIcon color="primary" fontSize="small" />
           <Typography variant="body2" color="text.secondary">
             {contextualMessage}
           </Typography>
-        </Stack>
+        </Box>
       ) : null}
-      <Box sx={{ flex: 1, overflowY: 'auto' }}>
+      <Box sx={{ flex: 1, minHeight: 0, px: 3, py: 3, overflowY: 'auto', backgroundColor: 'background.paper' }}>
         {hasLessons ? (
           filteredChildren.length > 0 ? (
-            <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
               {filteredChildren.map((child) => (
                 <OutlineNode
                   key={child.node.id}
@@ -707,12 +919,13 @@ function OutlinePanel({
               alignItems="center"
               justifyContent="center"
               sx={{
-                borderRadius: 3,
+                borderRadius: 2,
                 border: '1px dashed',
                 borderColor: 'divider',
                 py: 4,
                 px: 3,
                 color: 'text.secondary',
+                backgroundColor: 'grey.50',
               }}
             >
               <SearchIcon color="primary" />
@@ -728,13 +941,13 @@ function OutlinePanel({
             alignItems="center"
             justifyContent="center"
             sx={{
-              borderRadius: 3,
+              borderRadius: 2,
               border: '1px dashed',
-              borderColor: 'divider',
+              borderColor: (theme) => alpha(theme.palette.primary.main, 0.3),
               py: 5,
               px: 3,
               textAlign: 'center',
-              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04),
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.06),
             }}
           >
             <InfoOutlinedIcon color="primary" sx={{ fontSize: 32 }} />
