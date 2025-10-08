@@ -17,7 +17,7 @@ import type {
   NodeType,
 } from '@/types/course';
 import Canvas from './Canvas/Canvas';
-import Tree from './Sidebar/Tree';
+import Tree, { type SidebarMode } from './Sidebar/Tree';
 import Properties, { type NodeDraft } from './Sidebar/Properties';
 import Toolbar from './Toolbar/Toolbar';
 import {
@@ -194,6 +194,49 @@ function findParentEdge(list: NodeSubtree[], nodeId: number): NodeChild | null {
   return null;
 }
 
+function findPathFromSubtree(subtree: NodeSubtree, nodeId: number): NodeSubtree[] | null {
+  if (subtree.node.id === nodeId) {
+    return [subtree];
+  }
+  for (const child of subtree.children) {
+    const path = findPathFromSubtree(child.subtree, nodeId);
+    if (path) {
+      return [subtree, ...path];
+    }
+  }
+  return null;
+}
+
+function findNodePathInForest(forest: NodeSubtree[], nodeId: number): NodeSubtree[] | null {
+  for (const tree of forest) {
+    const path = findPathFromSubtree(tree, nodeId);
+    if (path) return path;
+  }
+  return null;
+}
+
+function gatherNodeIds(subtree: NodeSubtree): number[] {
+  const ids: number[] = [subtree.node.id];
+  subtree.children.forEach((child) => {
+    ids.push(...gatherNodeIds(child.subtree));
+  });
+  return ids;
+}
+
+function summarizeCourse(subtree: NodeSubtree): { lessons: number; chapters: number } {
+  let lessons = 0;
+  let chapters = 0;
+  subtree.children.forEach((child) => {
+    const type = child.subtree.node.node_type;
+    if (type === 'lesson') lessons += 1;
+    if (type === 'chapter') chapters += 1;
+    const nested = summarizeCourse(child.subtree);
+    lessons += nested.lessons;
+    chapters += nested.chapters;
+  });
+  return { lessons, chapters };
+}
+
 function sortBlocks(blocks: ContentBlock[]) {
   return [...blocks].sort((a, b) => a.position - b.position);
 }
@@ -229,7 +272,10 @@ function CourseEditorInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
-  const [search, setSearch] = useState('');
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>('courses');
+  const [courseSearch, setCourseSearch] = useState('');
+  const [outlineSearch, setOutlineSearch] = useState('');
+  const [lastActiveCourseId, setLastActiveCourseId] = useState<number | null>(null);
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
@@ -275,13 +321,24 @@ function CourseEditorInner() {
       setSelectedBlockId(null);
       setEditingBlockId(null);
       setExpanded(new Set(subtrees.map((tree) => tree.node.id)));
+      setSidebarMode(first ? 'outline' : 'courses');
+      setCourseSearch('');
+      setOutlineSearch('');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load data';
       setError(message);
     } finally {
       setLoading(false);
     }
-  }, [setEditingBlockId, setSelectedBlockId, setSelectedNodeId, setExpanded]);
+  }, [
+    setEditingBlockId,
+    setSelectedBlockId,
+    setSelectedNodeId,
+    setExpanded,
+    setSidebarMode,
+    setCourseSearch,
+    setOutlineSearch,
+  ]);
 
   useEffect(() => {
     void loadData();
@@ -291,6 +348,62 @@ function CourseEditorInner() {
     if (selectedNodeId == null) return null;
     return findSubtree(trees, selectedNodeId);
   }, [trees, selectedNodeId]);
+
+  const selectedPath = useMemo(() => {
+    if (selectedNodeId == null) return null;
+    return findNodePathInForest(trees, selectedNodeId);
+  }, [trees, selectedNodeId]);
+
+  const activeCourse = useMemo(() => {
+    if (!selectedPath || selectedPath.length === 0) return null;
+    const root = selectedPath[0];
+    return root.node.node_type === 'course' ? root : null;
+  }, [selectedPath]);
+
+  useEffect(() => {
+    if (activeCourse) {
+      setLastActiveCourseId(activeCourse.node.id);
+    }
+  }, [activeCourse, setLastActiveCourseId]);
+
+  useEffect(() => {
+    if (selectedNodeId == null) {
+      if (sidebarMode !== 'courses') {
+        setSidebarMode('courses');
+      }
+      return;
+    }
+    if (activeCourse && sidebarMode !== 'outline') {
+      setSidebarMode('outline');
+    }
+  }, [selectedNodeId, activeCourse, sidebarMode, setSidebarMode]);
+
+  const selectedLessonSubtree = useMemo(() => {
+    if (!selectedPath) return null;
+    for (let index = selectedPath.length - 1; index >= 0; index -= 1) {
+      const node = selectedPath[index];
+      if (node.node.node_type === 'lesson') {
+        return node;
+      }
+    }
+    return null;
+  }, [selectedPath]);
+
+  const courseStats = useMemo(() => {
+    const map = new Map<number, { lessons: number; chapters: number }>();
+    trees.forEach((tree) => {
+      map.set(tree.node.id, summarizeCourse(tree));
+    });
+    return map;
+  }, [trees]);
+
+  const canAddBlock =
+    !!selectedSubtree &&
+    selectedSubtree.children.length === 0 &&
+    selectedSubtree.node.node_type !== 'course';
+  const canAddLesson = !!activeCourse;
+  const canAddChapter = !!selectedLessonSubtree;
+  const activeCourseIdForHighlight = activeCourse?.node.id ?? lastActiveCourseId;
 
   const sortedBlocks = useMemo(() => {
     if (!selectedSubtree) return [] as ContentBlock[];
@@ -591,6 +704,64 @@ function CourseEditorInner() {
     });
   }, []);
 
+  const expandActiveCourse = useCallback(() => {
+    if (!activeCourse) return;
+    const ids = gatherNodeIds(activeCourse);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [activeCourse, setExpanded]);
+
+  const collapseActiveCourse = useCallback(() => {
+    if (!activeCourse) return;
+    const ids = gatherNodeIds(activeCourse);
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+  }, [activeCourse, setExpanded]);
+
+  const handleSelectCourse = useCallback(
+    (courseId: number) => {
+      setSelectedNodeId(courseId);
+      setSelectedBlockId(null);
+      setEditingBlockId(null);
+      setOutlineSearch('');
+      setSidebarMode('outline');
+    },
+    [setEditingBlockId, setOutlineSearch, setSelectedBlockId, setSelectedNodeId, setSidebarMode],
+  );
+
+  const handleSelectNode = useCallback(
+    (nodeId: number) => {
+      setSelectedNodeId(nodeId);
+      setSelectedBlockId(null);
+      setEditingBlockId(null);
+    },
+    [setEditingBlockId, setSelectedBlockId, setSelectedNodeId],
+  );
+
+  const handleBackToCourses = useCallback(() => {
+    setSidebarMode('courses');
+    setSelectedNodeId(null);
+    setSelectedBlockId(null);
+    setEditingBlockId(null);
+    setOutlineSearch('');
+  }, [setEditingBlockId, setOutlineSearch, setSelectedBlockId, setSelectedNodeId, setSidebarMode]);
+
+  const handleQuickAddLesson = useCallback(() => {
+    if (!activeCourse) return;
+    setAddChildDialog({ open: true, parentId: activeCourse.node.id, mode: 'create', type: 'lesson' });
+  }, [activeCourse, setAddChildDialog]);
+
+  const handleQuickAddChapter = useCallback(() => {
+    if (!selectedLessonSubtree) return;
+    setAddChildDialog({ open: true, parentId: selectedLessonSubtree.node.id, mode: 'create', type: 'chapter' });
+  }, [selectedLessonSubtree, setAddChildDialog]);
+
   const handleNodeFieldChange = useCallback(
     (field: keyof NodeDraft, value: string) => {
       if (!selectedSubtree) return;
@@ -677,6 +848,12 @@ function CourseEditorInner() {
     },
     [handleCreateBlock, pendingTextDrafts, selectedSubtree, setEditingBlockId, setSelectedBlockId],
   );
+
+  const handleQuickAddBlock = useCallback(() => {
+    if (!selectedSubtree || selectedSubtree.children.length > 0 || selectedSubtree.node.node_type === 'course') return;
+    const position = selectedSubtree.blocks.length;
+    handleInsertBlock(position, 'text');
+  }, [handleInsertBlock, selectedSubtree]);
 
   const handleDeleteBlock = useCallback(
     async (blockId: number) => {
@@ -837,7 +1014,7 @@ function CourseEditorInner() {
 
   const getAvailableChildTypes = useCallback(
     (parentId: number | null) => {
-      if (parentId == null) return [] as NodeType[];
+      if (parentId == null) return ['course'] as NodeType[];
       const parent = findSubtree(trees, parentId);
       if (!parent) return [] as NodeType[];
       return rules
@@ -979,17 +1156,23 @@ function CourseEditorInner() {
         >
           <Box sx={{ borderRight: { md: '1px solid' }, borderColor: 'divider', minHeight: 0 }}>
             <Tree
-              trees={trees}
+              mode={sidebarMode}
+              courses={trees}
               expanded={expanded}
-              search={search}
+              activeCourse={activeCourse}
+              selectedSubtree={selectedSubtree}
               selectedNodeId={selectedNodeId}
-              onSearchChange={setSearch}
+              activeCourseId={activeCourseIdForHighlight}
+              courseSearch={courseSearch}
+              outlineSearch={outlineSearch}
+              onCourseSearchChange={setCourseSearch}
+              onOutlineSearchChange={setOutlineSearch}
+              onSelectCourse={handleSelectCourse}
+              onSelectNode={handleSelectNode}
+              onBackToCourses={handleBackToCourses}
               onToggle={toggleExpand}
-              onSelect={(id) => {
-                setSelectedNodeId(id);
-                setSelectedBlockId(null);
-                setEditingBlockId(null);
-              }}
+              onExpandAll={expandActiveCourse}
+              onCollapseAll={collapseActiveCourse}
               onContextMenu={
                 editorMode === 'edit'
                   ? (event, nodeId) => {
@@ -998,6 +1181,16 @@ function CourseEditorInner() {
                     }
                   : undefined
               }
+              onCreateCourse={() =>
+                setAddChildDialog({ open: true, parentId: null, mode: 'create', type: 'course' })
+              }
+              onQuickAddLesson={handleQuickAddLesson}
+              onQuickAddChapter={handleQuickAddChapter}
+              onQuickAddBlock={handleQuickAddBlock}
+              canAddLesson={canAddLesson}
+              canAddChapter={canAddChapter}
+              canAddBlock={canAddBlock}
+              courseStats={courseStats}
             />
           </Box>
           <Box
