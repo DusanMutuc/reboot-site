@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactElement, type ReactNode, useMemo } from 'react';
-import { alpha } from '@mui/material/styles';
+import { alpha, type Theme } from '@mui/material/styles';
 import {
   Avatar,
   Box,
@@ -19,7 +19,6 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ArticleIcon from '@mui/icons-material/Article';
 import LayersIcon from '@mui/icons-material/Layers';
@@ -29,6 +28,10 @@ import StorageIcon from '@mui/icons-material/Storage';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import LibraryAddIcon from '@mui/icons-material/LibraryAdd';
+import ViewAgendaIcon from '@mui/icons-material/ViewAgenda';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import type { NodeSubtree } from '@/types/course';
 
@@ -150,6 +153,8 @@ function OutlineNode({
   const matches = matchesQuery(subtree.node.title, search);
   const childMatches = subtree.children.some((child) => subtreeContainsQuery(child.subtree, search));
   const isExpanded = expanded.has(subtree.node.id) || (!!search && hasChildren && childMatches);
+  const isChapter = subtree.node.node_type === 'chapter';
+  const isLesson = subtree.node.node_type === 'lesson';
 
   if (search && !matches && !childMatches) {
     return null;
@@ -174,15 +179,34 @@ function OutlineNode({
           sx={{
             alignItems: 'center',
             gap: 1,
-            py: 1,
-            pl: `calc(${level} * 20px + 12px)`,
-            borderRadius: 1.5,
+            py: 1.2,
+            pl: `calc(${level} * 24px + 16px)`,
+            pr: 1.5,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: isChapter
+              ? (theme) => alpha(theme.palette.primary.main, 0.18)
+              : 'transparent',
+            backgroundColor: isChapter
+              ? (theme) => alpha(theme.palette.primary.main, 0.08)
+              : 'transparent',
+            boxShadow: isLesson
+              ? 'inset 0 0 0 1px rgba(145, 158, 171, 0.12)'
+              : 'none',
             '&.Mui-selected': {
               backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
               '&:hover': {
                 backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.15),
               },
             },
+            '&:hover': {
+              backgroundColor: (theme) =>
+                alpha(theme.palette.primary.main, isChapter ? 0.12 : 0.06),
+              borderColor: (theme) =>
+                alpha(theme.palette.primary.main, isChapter ? 0.24 : 0.18),
+              boxShadow: isLesson ? 'inset 0 0 0 1px rgba(145, 158, 171, 0.24)' : 'none',
+            },
+            transition: 'background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease',
           }}
         >
           {hasChildren ? (
@@ -194,11 +218,14 @@ function OutlineNode({
               }}
               sx={{
                 mr: 0.5,
+                color: 'text.secondary',
+                transition: 'transform 180ms ease',
+                transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
               }}
               aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
             >
-              {isExpanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+              <ExpandMoreIcon fontSize="small" />
             </IconButton>
           ) : (
             <Box sx={{ width: 32 }} />
@@ -423,10 +450,29 @@ function OutlineHeader({
   canAddChapter: boolean;
   canAddBlock: boolean;
 }) {
+  const courseState = (course.node.state ?? 'draft').toLowerCase();
+  const stateLabel = courseState.replace(/\b\w/g, (char) => char.toUpperCase());
+  const stateChipStyles =
+    courseState === 'published'
+      ? {
+          backgroundColor: (theme: Theme) => alpha(theme.palette.success.main, 0.16),
+          color: 'success.dark',
+        }
+      : {
+          backgroundColor: (theme: Theme) => alpha(theme.palette.warning.main, 0.18),
+          color: 'warning.dark',
+        };
+
   return (
-    <Stack spacing={2}>
+    <Stack spacing={3}>
       <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Button size="small" startIcon={<ArrowBackIcon />} onClick={onBack} variant="text">
+        <Button
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          onClick={onBack}
+          variant="text"
+          sx={{ fontWeight: 600, color: 'text.secondary' }}
+        >
           Courses
         </Button>
         <Stack direction="row" spacing={1}>
@@ -438,28 +484,69 @@ function OutlineHeader({
           </Button>
         </Stack>
       </Stack>
-      <Stack spacing={1}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+      <Stack spacing={1.5}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
           {course.node.title ?? 'Untitled course'}
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
           <Chip
             size="small"
-            label={(course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase())}
-            color={course.node.state === 'published' ? 'success' : 'default'}
+            label={`${courseState === 'published' ? '✅' : '📝'} ${stateLabel}`}
+            sx={{
+              fontWeight: 600,
+              ...stateChipStyles,
+            }}
           />
-          <Chip size="small" label={`${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'}`} />
-          <Chip size="small" label={`${stats.chapters} chapter${stats.chapters === 1 ? '' : 's'}`} />
+          <Chip
+            size="small"
+            label={`📄 ${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'}`}
+            sx={{
+              fontWeight: 600,
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+              color: 'primary.main',
+            }}
+          />
+          <Chip
+            size="small"
+            label={`📚 ${stats.chapters} chapter${stats.chapters === 1 ? '' : 's'}`}
+            sx={{
+              fontWeight: 600,
+              backgroundColor: (theme) => alpha(theme.palette.info.main, 0.12),
+              color: 'info.main',
+            }}
+          />
         </Stack>
       </Stack>
-      <Stack direction="row" spacing={1} flexWrap="wrap">
-        <Button size="small" variant="contained" onClick={onQuickAddLesson} disabled={!canAddLesson}>
+      <Stack direction="row" spacing={1.5} flexWrap="wrap">
+        <Button
+          size="small"
+          variant="contained"
+          color="primary"
+          startIcon={<ArticleOutlinedIcon fontSize="small" />}
+          onClick={onQuickAddLesson}
+          disabled={!canAddLesson}
+          sx={{ px: 2.5, fontWeight: 600 }}
+        >
           + Lesson
         </Button>
-        <Button size="small" variant="outlined" onClick={onQuickAddChapter} disabled={!canAddChapter}>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<LibraryAddIcon fontSize="small" />}
+          onClick={onQuickAddChapter}
+          disabled={!canAddChapter}
+          sx={{ px: 2.5, fontWeight: 600 }}
+        >
           + Chapter
         </Button>
-        <Button size="small" variant="outlined" onClick={onQuickAddBlock} disabled={!canAddBlock}>
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<ViewAgendaIcon fontSize="small" />}
+          onClick={onQuickAddBlock}
+          disabled={!canAddBlock}
+          sx={{ px: 2.5, fontWeight: 600 }}
+        >
           + Block
         </Button>
       </Stack>
@@ -531,7 +618,7 @@ function OutlinePanel({
   }
 
   return (
-    <Stack spacing={2} sx={{ height: '100%' }}>
+    <Stack spacing={3} sx={{ height: '100%' }}>
       <OutlineHeader
         course={course}
         stats={stats}
@@ -558,18 +645,48 @@ function OutlinePanel({
             </InputAdornment>
           ),
         }}
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            borderRadius: 2,
+            backgroundColor: (theme) => alpha(theme.palette.background.paper, 0.9),
+            transition: 'box-shadow 160ms ease, border-color 160ms ease',
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'primary.light',
+            },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'primary.main',
+              boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.18)}`,
+            },
+          },
+          '& .MuiOutlinedInput-notchedOutline': {
+            borderColor: 'divider',
+          },
+          '& .MuiInputAdornment-root': {
+            color: 'text.secondary',
+          },
+        }}
       />
       {contextualMessage ? (
-        <Box sx={{ p: 1.5, borderRadius: 2, backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08) }}>
+        <Stack
+          direction="row"
+          spacing={1.5}
+          alignItems="center"
+          sx={{
+            p: 1.5,
+            borderRadius: 2,
+            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
+          }}
+        >
+          <InfoOutlinedIcon color="primary" fontSize="small" />
           <Typography variant="body2" color="text.secondary">
             {contextualMessage}
           </Typography>
-        </Box>
+        </Stack>
       ) : null}
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         {hasLessons ? (
           filteredChildren.length > 0 ? (
-            <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {filteredChildren.map((child) => (
                 <OutlineNode
                   key={child.node.id}
@@ -585,14 +702,49 @@ function OutlinePanel({
               ))}
             </List>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              No matches in this course.
-            </Typography>
+            <Stack
+              spacing={1}
+              alignItems="center"
+              justifyContent="center"
+              sx={{
+                borderRadius: 3,
+                border: '1px dashed',
+                borderColor: 'divider',
+                py: 4,
+                px: 3,
+                color: 'text.secondary',
+              }}
+            >
+              <SearchIcon color="primary" />
+              <Typography variant="subtitle2">No matches in this course.</Typography>
+              <Typography variant="body2" color="text.secondary" align="center">
+                Try a different keyword or clear your search to see all lessons and chapters.
+              </Typography>
+            </Stack>
           )
         ) : (
-          <Typography variant="body2" color="text.secondary">
-            This course has no lessons yet. Add a lesson to begin.
-          </Typography>
+          <Stack
+            spacing={1.5}
+            alignItems="center"
+            justifyContent="center"
+            sx={{
+              borderRadius: 3,
+              border: '1px dashed',
+              borderColor: 'divider',
+              py: 5,
+              px: 3,
+              textAlign: 'center',
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04),
+            }}
+          >
+            <InfoOutlinedIcon color="primary" sx={{ fontSize: 32 }} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+              Start building your course
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Add your first lesson to outline the journey learners will take.
+            </Typography>
+          </Stack>
         )}
       </Box>
     </Stack>
