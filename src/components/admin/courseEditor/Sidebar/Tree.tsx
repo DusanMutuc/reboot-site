@@ -12,6 +12,7 @@ import {
   List,
   ListItem,
   ListItemButton,
+  Collapse,
   Stack,
   TextField,
   Tooltip,
@@ -166,7 +167,37 @@ function OutlineNode({
 
   return (
     <Box>
-      <ListItem disablePadding sx={{ display: 'block' }}>
+      <ListItem
+        disablePadding
+        sx={{
+          display: 'block',
+          position: 'relative',
+          ...(level > 0
+            ? {
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  left: connectorLeft,
+                  top: 8,
+                  bottom: 8,
+                  width: 1,
+                  backgroundColor: 'divider',
+                  opacity: 0.35,
+                },
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  left: connectorLeft,
+                  top: 'calc(50% - 0.5px)',
+                  width: 12,
+                  height: 1,
+                  backgroundColor: 'divider',
+                  opacity: 0.35,
+                },
+              }
+            : {}),
+        }}
+      >
         <ListItemButton
           selected={selectedId === subtree.node.id}
           onClick={() => onSelect(subtree.node.id)}
@@ -181,41 +212,38 @@ function OutlineNode({
           sx={{
             alignItems: 'center',
             gap: 1,
-            py: 1,
-            pl: `calc(${level} * 20px + 12px)`,
+            py: 0.85,
+            pl: `calc(${level} * 20px + 20px)`,
             borderRadius: 1.5,
             position: 'relative',
+            minHeight: 44,
+            transition: 'background-color 150ms ease, color 150ms ease',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              inset: '6px auto 6px 0',
+              width: 3,
+              borderRadius: 2,
+              backgroundColor: 'transparent',
+              transition: 'background-color 150ms ease',
+            },
+            '&:hover': {
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.05),
+            },
             '&.Mui-selected': {
-              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
+              backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12),
+              '&::before': {
+                backgroundColor: 'primary.main',
+              },
               '&:hover': {
-                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.15),
+                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.16),
               },
             },
-            ...(level > 0
-              ? {
-                  '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    left: connectorLeft,
-                    top: 6,
-                    bottom: 6,
-                    width: 1,
-                    backgroundColor: 'divider',
-                    opacity: 0.4,
-                  },
-                  '&::after': {
-                    content: '""',
-                    position: 'absolute',
-                    left: connectorLeft,
-                    top: '50%',
-                    width: 12,
-                    height: 1,
-                    backgroundColor: 'divider',
-                    opacity: 0.4,
-                    transform: 'translateY(-50%)',
-                  },
-                }
-              : {}),
+            '&.Mui-focusVisible': {
+              outline: '2px solid',
+              outlineColor: 'primary.main',
+              outlineOffset: 2,
+            },
           }}
         >
           {hasChildren ? (
@@ -227,6 +255,11 @@ function OutlineNode({
               }}
               sx={{
                 mr: 0.5,
+                color: 'text.disabled',
+                '&:hover': {
+                  backgroundColor: 'transparent',
+                  color: 'text.secondary',
+                },
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
               }}
               aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
@@ -237,7 +270,16 @@ function OutlineNode({
             <Box sx={{ width: 32 }} />
           )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Box sx={{ color: level === 0 ? 'text.secondary' : 'text.disabled', display: 'flex', alignItems: 'center' }}>
+            <Box
+              sx={{
+                color: level === 0 ? 'text.secondary' : 'text.disabled',
+                display: 'flex',
+                alignItems: 'center',
+                '& .MuiSvgIcon-root': {
+                  fontSize: level === 0 ? '1.125rem' : '1rem',
+                },
+              }}
+            >
               {getNodeIcon(subtree.node.node_type)}
             </Box>
             <Typography
@@ -247,6 +289,7 @@ function OutlineNode({
                 fontWeight: subtree.node.node_type === 'lesson' ? 600 : 500,
                 color: tone.color,
                 opacity: tone.opacity,
+                fontSize: subtree.node.node_type === 'lesson' ? '0.95rem' : '0.84rem',
               }}
             >
               {subtree.node.title ?? 'Untitled node'}
@@ -254,22 +297,24 @@ function OutlineNode({
           </Box>
         </ListItemButton>
       </ListItem>
-      {hasChildren && isExpanded ? (
-        <Box>
-          {subtree.children.map((child) => (
-            <OutlineNode
-              key={child.subtree.node.id}
-              subtree={child.subtree}
-              level={level + 1}
-              expanded={expanded}
-              toggle={toggle}
-              onSelect={onSelect}
-              selectedId={selectedId}
-              search={search}
-              onContextMenu={onContextMenu}
-            />
-          ))}
-        </Box>
+      {hasChildren ? (
+        <Collapse in={isExpanded} timeout={150} unmountOnExit>
+          <Box>
+            {subtree.children.map((child) => (
+              <OutlineNode
+                key={child.subtree.node.id}
+                subtree={child.subtree}
+                level={level + 1}
+                expanded={expanded}
+                toggle={toggle}
+                onSelect={onSelect}
+                selectedId={selectedId}
+                search={search}
+                onContextMenu={onContextMenu}
+              />
+            ))}
+          </Box>
+        </Collapse>
       ) : null}
     </Box>
   );
@@ -455,34 +500,28 @@ function CoursesList({
 }
 
 function OutlineHeader({
-  course,
-  stats,
   onBack,
   onExpandAll,
   onCollapseAll,
-  onQuickAddLesson,
-  onQuickAddChapter,
-  onQuickAddBlock,
-  canAddLesson,
-  canAddChapter,
-  canAddBlock,
 }: {
-  course: NodeSubtree;
-  stats: { lessons: number; chapters: number };
   onBack: () => void;
   onExpandAll: () => void;
   onCollapseAll: () => void;
-  onQuickAddLesson: () => void;
-  onQuickAddChapter: () => void;
-  onQuickAddBlock: () => void;
-  canAddLesson: boolean;
-  canAddChapter: boolean;
-  canAddBlock: boolean;
 }) {
   return (
-    <Stack spacing={2}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center">
-        <Button size="small" startIcon={<ArrowBackIcon />} onClick={onBack} variant="text">
+    <Stack spacing={1}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+        <Button
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          onClick={onBack}
+          variant="text"
+          sx={{
+            alignSelf: 'flex-start',
+            color: 'text.secondary',
+            '&:hover': { backgroundColor: 'transparent', color: 'text.primary' },
+          }}
+        >
           Courses
         </Button>
         <Stack direction="row" spacing={1}>
@@ -494,32 +533,62 @@ function OutlineHeader({
           </Button>
         </Stack>
       </Stack>
-      <Stack spacing={1}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          {course.node.title ?? 'Untitled course'}
+    </Stack>
+  );
+}
+
+function CourseSummaryCard({
+  course,
+  stats,
+}: {
+  course: NodeSubtree;
+  stats: { lessons: number; chapters: number };
+}) {
+  const courseTitle = course.node.title ?? 'Untitled course';
+  const stateLabel = (course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase());
+  const relative =
+    formatRelativeDate(
+      (course.node as { updated_at?: string }).updated_at ??
+        (course.node as { updatedAt?: string }).updatedAt ??
+        null,
+    ) ?? 'recently';
+
+  return (
+    <Box
+      sx={{
+        p: 2,
+        borderRadius: 2,
+        bgcolor: 'background.paper',
+        boxShadow: (theme) => theme.shadows[1],
+        display: 'flex',
+        alignItems: { xs: 'flex-start', sm: 'center' },
+        justifyContent: 'space-between',
+        gap: 2,
+      }}
+    >
+      <Stack spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+        <Typography
+          variant="h6"
+          sx={{ fontWeight: 600, fontSize: '1.125rem' }}
+          noWrap
+          title={courseTitle}
+        >
+          {courseTitle}
         </Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
           <Chip
             size="small"
-            label={(course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase())}
+            label={stateLabel}
             color={course.node.state === 'published' ? 'success' : 'default'}
           />
           <Chip size="small" label={`${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'}`} />
           <Chip size="small" label={`${stats.chapters} chapter${stats.chapters === 1 ? '' : 's'}`} />
+          <Typography variant="caption" color="text.secondary">
+            Updated {relative}
+          </Typography>
         </Stack>
       </Stack>
-      <Stack direction="row" spacing={1} flexWrap="wrap">
-        <Button size="small" variant="contained" onClick={onQuickAddLesson} disabled={!canAddLesson}>
-          + Lesson
-        </Button>
-        <Button size="small" variant="outlined" onClick={onQuickAddChapter} disabled={!canAddChapter}>
-          + Chapter
-        </Button>
-        <Button size="small" variant="outlined" onClick={onQuickAddBlock} disabled={!canAddBlock}>
-          + Block
-        </Button>
-      </Stack>
-    </Stack>
+    </Box>
   );
 }
 
@@ -527,7 +596,6 @@ function OutlinePanel({
   course,
   expanded,
   selectedNodeId,
-  selectedSubtree,
   search,
   onSearchChange,
   onSelect,
@@ -547,7 +615,6 @@ function OutlinePanel({
   course: NodeSubtree;
   expanded: Set<number>;
   selectedNodeId: number | null;
-  selectedSubtree: NodeSubtree | null;
   search: string;
   onSearchChange: (value: string) => void;
   onSelect: (nodeId: number) => void;
@@ -576,35 +643,31 @@ function OutlinePanel({
   );
 
   const hasLessons = course.children.length > 0;
-
-  let contextualMessage: string | null = null;
-  if (!search && selectedSubtree) {
-    if (selectedSubtree.node.node_type === 'lesson' && selectedSubtree.children.length === 0) {
-      contextualMessage = 'Add chapters to structure this lesson.';
-    } else if (selectedSubtree.node.node_type === 'chapter' && selectedSubtree.children.length === 0) {
-      contextualMessage = 'This chapter has no content yet. Use the + Block action to add content.';
-    }
-  }
+  const searchPlaceholderTitle = course.node.title?.trim();
 
   return (
-    <Stack spacing={2} sx={{ height: '100%' }}>
+    <Stack spacing={2.5} sx={{ height: '100%' }}>
       <OutlineHeader
-        course={course}
-        stats={stats}
         onBack={onBack}
         onExpandAll={onExpandAll}
         onCollapseAll={onCollapseAll}
-        onQuickAddLesson={onQuickAddLesson}
-        onQuickAddChapter={onQuickAddChapter}
-        onQuickAddBlock={onQuickAddBlock}
-        canAddLesson={canAddLesson}
-        canAddChapter={canAddChapter}
-        canAddBlock={canAddBlock}
       />
+      <CourseSummaryCard course={course} stats={stats} />
+      <Stack direction="row" spacing={1} flexWrap="wrap">
+        <Button size="small" variant="contained" onClick={onQuickAddLesson} disabled={!canAddLesson}>
+          + Lesson
+        </Button>
+        <Button size="small" variant="outlined" onClick={onQuickAddChapter} disabled={!canAddChapter}>
+          + Chapter
+        </Button>
+        <Button size="small" variant="outlined" onClick={onQuickAddBlock} disabled={!canAddBlock}>
+          + Block
+        </Button>
+      </Stack>
       <TextField
         size="small"
         fullWidth
-        placeholder="Search in course"
+        placeholder={searchPlaceholderTitle ? `Search in "${searchPlaceholderTitle}"` : 'Search in course'}
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
         InputProps={{
@@ -615,13 +678,6 @@ function OutlinePanel({
           ),
         }}
       />
-      {contextualMessage ? (
-        <Box sx={{ p: 1.5, borderRadius: 2, backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08) }}>
-          <Typography variant="body2" color="text.secondary">
-            {contextualMessage}
-          </Typography>
-        </Box>
-      ) : null}
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         {hasLessons ? (
           filteredChildren.length > 0 ? (
@@ -660,7 +716,6 @@ export default function Tree({
   courses,
   expanded,
   activeCourse,
-  selectedSubtree,
   selectedNodeId,
   activeCourseId,
   courseSearch,
@@ -684,7 +739,17 @@ export default function Tree({
   courseStats,
 }: TreeProps) {
   return (
-    <Stack spacing={3} sx={{ p: 3, height: '100%' }}>
+    <Stack
+      spacing={3}
+      sx={{
+        px: 3.5,
+        py: 3,
+        height: '100%',
+        backgroundColor: 'action.hover',
+        borderRight: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
       {mode === 'courses' ? (
         <CoursesList
           courses={courses}
@@ -701,7 +766,6 @@ export default function Tree({
           course={activeCourse}
           expanded={expanded}
           selectedNodeId={selectedNodeId}
-          selectedSubtree={selectedSubtree}
           search={outlineSearch}
           onSearchChange={onOutlineSearchChange}
           onSelect={onSelectNode}
