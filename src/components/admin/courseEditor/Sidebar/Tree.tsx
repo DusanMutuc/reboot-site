@@ -156,6 +156,13 @@ function OutlineNode({
   }
 
   const labelVariant = subtree.node.node_type === 'lesson' ? 'subtitle2' : 'body2';
+  const tone =
+    level === 0
+      ? { color: 'text.primary', opacity: 0.95 }
+      : level === 1
+        ? { color: 'text.secondary', opacity: 0.85 }
+        : { color: 'text.secondary', opacity: 0.75 };
+  const connectorLeft = `calc(${level} * 20px + 8px)`;
 
   return (
     <Box>
@@ -177,12 +184,38 @@ function OutlineNode({
             py: 1,
             pl: `calc(${level} * 20px + 12px)`,
             borderRadius: 1.5,
+            position: 'relative',
             '&.Mui-selected': {
               backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
               '&:hover': {
                 backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.15),
               },
             },
+            ...(level > 0
+              ? {
+                  '&::before': {
+                    content: '""',
+                    position: 'absolute',
+                    left: connectorLeft,
+                    top: 6,
+                    bottom: 6,
+                    width: 1,
+                    backgroundColor: 'divider',
+                    opacity: 0.4,
+                  },
+                  '&::after': {
+                    content: '""',
+                    position: 'absolute',
+                    left: connectorLeft,
+                    top: '50%',
+                    width: 12,
+                    height: 1,
+                    backgroundColor: 'divider',
+                    opacity: 0.4,
+                    transform: 'translateY(-50%)',
+                  },
+                }
+              : {}),
           }}
         >
           {hasChildren ? (
@@ -204,10 +237,18 @@ function OutlineNode({
             <Box sx={{ width: 32 }} />
           )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-            <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>{
-              getNodeIcon(subtree.node.node_type)
-            }</Box>
-            <Typography variant={labelVariant} noWrap sx={{ fontWeight: subtree.node.node_type === 'lesson' ? 600 : 500 }}>
+            <Box sx={{ color: level === 0 ? 'text.secondary' : 'text.disabled', display: 'flex', alignItems: 'center' }}>
+              {getNodeIcon(subtree.node.node_type)}
+            </Box>
+            <Typography
+              variant={labelVariant}
+              noWrap
+              sx={{
+                fontWeight: subtree.node.node_type === 'lesson' ? 600 : 500,
+                color: tone.color,
+                opacity: tone.opacity,
+              }}
+            >
               {subtree.node.title ?? 'Untitled node'}
             </Typography>
           </Box>
@@ -267,9 +308,24 @@ function CoursesList({
   return (
     <Stack spacing={2} sx={{ height: '100%' }}>
       <Box>
-        <Typography variant="subtitle1" gutterBottom>
-          Courses
-        </Typography>
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ mb: 1.5 }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            Courses
+          </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<AddIcon fontSize="small" />}
+            onClick={onCreateCourse}
+          >
+            New course
+          </Button>
+        </Stack>
         <TextField
           size="small"
           fullWidth
