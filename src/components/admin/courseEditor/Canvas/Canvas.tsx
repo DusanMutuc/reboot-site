@@ -53,7 +53,9 @@ export default function Canvas({
 
   const [insertAnchor, setInsertAnchor] = useState<{ element: HTMLElement; position: number } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ id: number; position: 'before' | 'after' } | null>(null);
-  const [editingSnapshot, setEditingSnapshot] = useState<{ blockId: number; html: string } | null>(null);
+  const [editingSnapshot, setEditingSnapshot] = useState<
+    { blockId: number; initialHtml: string; draftHtml: string } | null
+  >(null);
   const pendingCancelRef = useRef(false);
 
   useEffect(() => {
@@ -72,7 +74,8 @@ export default function Canvas({
       if (previous?.blockId === block.id) {
         return previous;
       }
-      return { blockId: block.id, html: block.text_md ?? '' };
+      const initialHtml = block.text_md ?? '';
+      return { blockId: block.id, initialHtml, draftHtml: initialHtml };
     });
   }, [blocks, editingBlockId]);
 
@@ -229,8 +232,20 @@ export default function Canvas({
                         >
                           {block.block_type === 'text' && isEditing && canEditBlocks ? (
                             <TipTapHtmlEditor
-                              value={block.text_md ?? ''}
-                              onChange={(html) => onChangeText(block.id, html)}
+                              value={
+                                editingSnapshot && editingSnapshot.blockId === block.id
+                                  ? editingSnapshot.draftHtml
+                                  : block.text_md ?? ''
+                              }
+                              onChange={(html) => {
+                                setEditingSnapshot((previous) => {
+                                  if (!previous || previous.blockId !== block.id) {
+                                    return previous;
+                                  }
+                                  return { ...previous, draftHtml: html };
+                                });
+                                onChangeText(block.id, html);
+                              }}
                               onSubmit={(html) => {
                                 onChangeText(block.id, html, { debounce: false });
                                 onExitEdit();
@@ -240,14 +255,14 @@ export default function Canvas({
                                 pendingCancelRef.current = true;
                                 const snapshot =
                                   editingSnapshot && editingSnapshot.blockId === block.id
-                                    ? editingSnapshot.html
+                                    ? editingSnapshot.initialHtml
                                     : block.text_md ?? '';
                                 onChangeText(block.id, snapshot, { debounce: false });
                                 onExitEdit();
                               }}
                               initialValue={
                                 editingSnapshot && editingSnapshot.blockId === block.id
-                                  ? editingSnapshot.html
+                                  ? editingSnapshot.initialHtml
                                   : block.text_md ?? ''
                               }
                               autoFocus

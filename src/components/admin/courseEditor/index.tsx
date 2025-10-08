@@ -156,6 +156,20 @@ function removeSubtree(list: NodeSubtree[], nodeId: number) {
   return next;
 }
 
+function applyPendingBlockDrafts(
+  forest: NodeSubtree[],
+  drafts: Map<number, Partial<ContentBlock>>,
+): NodeSubtree[] {
+  if (drafts.size === 0) {
+    return forest;
+  }
+  let nextForest = forest;
+  drafts.forEach((updates, blockId) => {
+    nextForest = nextForest.map((tree) => updateBlockDraft(tree, blockId, updates));
+  });
+  return nextForest;
+}
+
 function findSubtree(list: NodeSubtree[], nodeId: number): NodeSubtree | null {
   for (const tree of list) {
     if (tree.node.id === nodeId) return tree;
@@ -356,7 +370,8 @@ function CourseEditorInner() {
       if (options.optimistic) {
         setTrees((prev) => {
           optimisticSnapshot.current = prev.map((tree) => cloneSubtree(tree));
-          return options.optimistic ? options.optimistic(prev) : prev;
+          const optimisticResult = options.optimistic ? options.optimistic(prev) : prev;
+          return applyPendingBlockDrafts(optimisticResult, blockUpdateQueue.current);
         });
       } else {
         optimisticSnapshot.current = null;
@@ -370,7 +385,10 @@ function CourseEditorInner() {
         const payload = await request();
         const subtree = 'subtree' in payload ? payload.subtree : (payload as NodeSubtree);
         if (subtree) {
-          setTrees((prev) => mergeSubtree(prev, subtree));
+          setTrees((prev) => {
+            const merged = mergeSubtree(prev, subtree);
+            return applyPendingBlockDrafts(merged, blockUpdateQueue.current);
+          });
         }
         completeSaving(options.message);
         if (options.message) {
@@ -379,7 +397,7 @@ function CourseEditorInner() {
         return payload;
       } catch (err) {
         if (optimisticSnapshot.current) {
-          setTrees(optimisticSnapshot.current);
+          setTrees(applyPendingBlockDrafts(optimisticSnapshot.current, blockUpdateQueue.current));
         }
         const message = err instanceof Error ? err.message : 'Failed to save changes';
         failSaving(message);
