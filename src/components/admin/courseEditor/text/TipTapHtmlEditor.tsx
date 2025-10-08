@@ -175,7 +175,7 @@ export default function TipTapHtmlEditor({
             if (event.key === 'Enter') {
               if (event.shiftKey) {
                 event.preventDefault();
-                editor.commands.focus().setHardBreak().run();
+                editor.chain().focus().setHardBreak().run();
                 return;
               }
               event.preventDefault();
