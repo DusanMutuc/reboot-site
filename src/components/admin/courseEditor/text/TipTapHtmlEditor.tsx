@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { alpha } from '@mui/material/styles';
 import { Box, IconButton, Stack, Tooltip } from '@mui/material';
 import LooksTwoIcon from '@mui/icons-material/LooksTwo';
 import Looks3Icon from '@mui/icons-material/Looks3';
@@ -18,11 +19,21 @@ type TipTapHtmlEditorProps = {
   value: string;
   onChange: (html: string) => void;
   onBlur?: () => void;
-  onEscape?: () => void;
+  onSubmit?: (html: string) => void;
+  onCancel?: () => void;
+  initialValue?: string;
   autoFocus?: boolean;
 };
 
-export default function TipTapHtmlEditor({ value, onChange, onBlur, onEscape, autoFocus }: TipTapHtmlEditorProps) {
+export default function TipTapHtmlEditor({
+  value,
+  onChange,
+  onBlur,
+  onSubmit,
+  onCancel,
+  initialValue,
+  autoFocus,
+}: TipTapHtmlEditorProps) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -48,6 +59,12 @@ export default function TipTapHtmlEditor({ value, onChange, onBlur, onEscape, au
     },
   });
 
+  const initialContentRef = useRef(initialValue ?? '');
+
+  useEffect(() => {
+    initialContentRef.current = initialValue ?? '';
+  }, [initialValue]);
+
   useEffect(() => {
     if (!editor) return;
     const current = editor.getHTML();
@@ -64,23 +81,6 @@ export default function TipTapHtmlEditor({ value, onChange, onBlur, onEscape, au
     if (!editor || !autoFocus) return;
     editor.chain().focus('end').run();
   }, [editor, autoFocus]);
-
-  useEffect(() => {
-    if (!editor || !onEscape) return;
-
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && editor.isFocused) {
-        event.preventDefault();
-        onEscape();
-        editor.commands.blur();
-      }
-    };
-
-    document.addEventListener('keydown', handler);
-    return () => {
-      document.removeEventListener('keydown', handler);
-    };
-  }, [editor, onEscape]);
 
   if (!editor) {
     return null;
@@ -168,6 +168,30 @@ export default function TipTapHtmlEditor({ value, onChange, onBlur, onEscape, au
           onBlur={() => {
             onBlur?.();
           }}
+          onKeyDown={(event) => {
+            if (event.isComposing) {
+              return;
+            }
+            if (event.key === 'Enter') {
+              if (event.shiftKey) {
+                event.preventDefault();
+                editor.commands.focus().setHardBreak().run();
+                return;
+              }
+              event.preventDefault();
+              const html = editor.getHTML();
+              onSubmit?.(html === '<p></p>' ? '' : html);
+              return;
+            }
+            if (event.key === 'Escape') {
+              if (!editor.isFocused) return;
+              event.preventDefault();
+              const initial = initialContentRef.current;
+              const content = initial && initial.trim().length > 0 ? initial : '<p></p>';
+              editor.commands.setContent(content, false);
+              onCancel?.();
+            }
+          }}
         />
       </Box>
     </Stack>
@@ -186,9 +210,30 @@ function ToolbarButton({ tooltip, onClick, active, children }: ToolbarButtonProp
     <Tooltip title={tooltip}>
       <IconButton
         size="small"
+        aria-label={tooltip}
         onClick={onClick}
-        color={active ? 'primary' : 'default'}
-        sx={{ border: '1px solid', borderColor: active ? 'primary.main' : 'divider' }}
+        aria-pressed={active || false}
+        onMouseDown={(event) => {
+          event.preventDefault();
+        }}
+        sx={(theme) => ({
+          border: '1px solid',
+          borderColor: active ? theme.palette.primary.main : theme.palette.divider,
+          backgroundColor: active ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+          color: active ? theme.palette.primary.main : theme.palette.text.primary,
+          transition: theme.transitions.create(['background-color', 'border-color', 'color'], {
+            duration: theme.transitions.duration.shortest,
+          }),
+          '&:hover': {
+            backgroundColor: active
+              ? alpha(theme.palette.primary.main, 0.2)
+              : theme.palette.action.hover,
+          },
+          '&.Mui-focusVisible': {
+            outline: `2px solid ${theme.palette.primary.main}`,
+            outlineOffset: 2,
+          },
+        })}
       >
         {children}
       </IconButton>

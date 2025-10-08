@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, IconButton, Menu, MenuItem, Stack, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
@@ -9,7 +9,7 @@ import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule';
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import type { UniqueIdentifier } from '@dnd-kit/core';
 
-import type { BlockType, ContentBlock, NodeSubtree } from '@/types/course';
+import type { BlockType, ContentBlock, NodeSubtree, NodeType } from '@/types/course';
 import BlockShell from './BlockShell';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { BlockRenderer } from '@/components/course/BlockRenderer';
@@ -27,7 +27,7 @@ export type CanvasProps = {
   onExitEdit: () => void;
   onInsertBlock: (position: number, type: BlockType) => void;
   onReorderBlocks: (blocks: ContentBlock[]) => void;
-  onChangeText: (blockId: number, html: string) => void;
+  onChangeText: (blockId: number, html: string, options?: { debounce?: boolean }) => void;
 };
 
 export default function Canvas({
@@ -53,6 +53,28 @@ export default function Canvas({
 
   const [insertAnchor, setInsertAnchor] = useState<{ element: HTMLElement; position: number } | null>(null);
   const [dropIndicator, setDropIndicator] = useState<{ id: number; position: 'before' | 'after' } | null>(null);
+  const [editingSnapshot, setEditingSnapshot] = useState<{ blockId: number; html: string } | null>(null);
+  const pendingCancelRef = useRef(false);
+
+  useEffect(() => {
+    if (!editingBlockId) {
+      setEditingSnapshot(null);
+      pendingCancelRef.current = false;
+      return;
+    }
+
+    const block = blocks.find((item) => item.id === editingBlockId);
+    if (!block) return;
+
+    pendingCancelRef.current = false;
+
+    setEditingSnapshot((previous) => {
+      if (previous?.blockId === block.id) {
+        return previous;
+      }
+      return { blockId: block.id, html: block.text_md ?? '' };
+    });
+  }, [blocks, editingBlockId]);
 
   useEffect(() => {
     if (!selectedBlockId || editingBlockId != null || previewMode) return;
@@ -157,7 +179,7 @@ export default function Canvas({
         <Typography variant="h6">{subtree.node.title ?? 'Untitled node'}</Typography>
         {!previewMode && blocks.length === 0 ? (
           <Alert severity="info" sx={{ textAlign: 'center' }}>
-            This lesson has no content yet. Click the + buttons to add your first block.
+            {getEmptyStateMessage(subtree.node.node_type)}
           </Alert>
         ) : null}
         {previewMode ? (
@@ -176,6 +198,9 @@ export default function Canvas({
                   position: 'relative',
                   pl: { xs: 0, md: 4 },
                   '&:hover .canvas-insert': {
+                    opacity: canEditBlocks ? 1 : 0,
+                  },
+                  '& .canvas-insert:focus-within': {
                     opacity: canEditBlocks ? 1 : 0,
                   },
                 }}
@@ -206,9 +231,30 @@ export default function Canvas({
                             <TipTapHtmlEditor
                               value={block.text_md ?? ''}
                               onChange={(html) => onChangeText(block.id, html)}
-                              onBlur={() => onExitEdit()}
-                              onEscape={() => onExitEdit()}
+                              onSubmit={(html) => {
+                                onChangeText(block.id, html, { debounce: false });
+                                onExitEdit();
+                              }}
+                              onCancel={() => {
+                                if (pendingCancelRef.current) return;
+                                pendingCancelRef.current = true;
+                                const snapshot =
+                                  editingSnapshot && editingSnapshot.blockId === block.id
+                                    ? editingSnapshot.html
+                                    : block.text_md ?? '';
+                                onChangeText(block.id, snapshot, { debounce: false });
+                                onExitEdit();
+                              }}
+                              initialValue={
+                                editingSnapshot && editingSnapshot.blockId === block.id
+                                  ? editingSnapshot.html
+                                  : block.text_md ?? ''
+                              }
                               autoFocus
+                              onBlur={() => {
+                                if (pendingCancelRef.current) return;
+                                onExitEdit();
+                              }}
                             />
                           ) : (
                             <BlockRenderer block={block} resource={resource} />
@@ -225,7 +271,7 @@ export default function Canvas({
           </BlockDndContext>
         )}
         {!canEditBlocks && !previewMode && (
-          <Alert severity="info">Blocks are only available on leaf nodes.</Alert>
+          <Alert severity="info">{getLeafNodeMessage(subtree.node.node_type)}</Alert>
         )}
       </Stack>
       {!previewMode && (
@@ -243,6 +289,38 @@ export default function Canvas({
       )}
     </Box>
   );
+}
+
+function getEmptyStateMessage(nodeType: NodeType) {
+  switch (nodeType) {
+    case 'course':
+      return 'This course has no content yet. Select a lesson to add your first block.';
+    case 'chapter':
+      return 'This chapter has no content yet. Choose a lesson within this chapter to add blocks.';
+    case 'lesson':
+      return 'This lesson has no content yet. Click the + buttons to add your first block.';
+    case 'collection':
+      return 'This collection has no content yet. Select a lesson to add blocks.';
+    case 'playlist':
+      return 'This playlist has no content yet. Select a lesson to add blocks.';
+    default:
+      return 'This node has no content yet. Select a lesson to add blocks.';
+  }
+}
+
+function getLeafNodeMessage(nodeType: NodeType) {
+  switch (nodeType) {
+    case 'course':
+      return 'Blocks can only be added to lessons. Expand the tree and choose a lesson to edit its content.';
+    case 'chapter':
+      return 'Blocks live inside lessons. Select a lesson in this chapter to edit its blocks.';
+    case 'collection':
+      return 'Blocks are only available on lessons. Pick a lesson from this collection to add content.';
+    case 'playlist':
+      return 'Blocks are only available on lessons. Choose a lesson in this playlist to edit its content.';
+    default:
+      return 'Blocks can only be added to lessons.';
+  }
 }
 
 type SortableBlockProps = {
@@ -301,20 +379,28 @@ function InsertionAffordance({ disabled, onClick }: InsertionAffordanceProps) {
       <IconButton
         size="small"
         color="primary"
+        aria-label="Add block"
         onClick={(event) => {
           event.stopPropagation();
           onClick(event.currentTarget);
         }}
-        sx={{
+        sx={(theme) => ({
           backgroundColor: 'background.paper',
           border: '1px solid',
           borderColor: 'divider',
           boxShadow: 1,
+          transition: theme.transitions.create(['background-color', 'color', 'box-shadow'], {
+            duration: theme.transitions.duration.shorter,
+          }),
           '&:hover': {
-            backgroundColor: 'primary.main',
-            color: 'primary.contrastText',
+            backgroundColor: theme.palette.primary.main,
+            color: theme.palette.primary.contrastText,
           },
-        }}
+          '&:focus-visible': {
+            outline: `2px solid ${theme.palette.primary.main}`,
+            outlineOffset: 2,
+          },
+        })}
       >
         <AddIcon fontSize="small" />
       </IconButton>

@@ -408,7 +408,7 @@ function CourseEditorInner() {
           const subtree = await updateBlock(blockId, pending);
           return { subtree };
         },
-        { silent: true },
+        { savingMessage: 'Saving…' },
       );
     },
     [runMutation],
@@ -425,6 +425,8 @@ function CourseEditorInner() {
       const current = blockUpdateQueue.current.get(blockId) ?? {};
       blockUpdateQueue.current.set(blockId, { ...current, ...updates });
 
+      startSaving('Saving…');
+
       if (options.debounce) {
         const existing = blockDebounceTimers.current.get(blockId);
         if (existing) clearTimeout(existing);
@@ -436,7 +438,7 @@ function CourseEditorInner() {
         void flushBlockUpdate(blockId);
       }
     },
-    [flushBlockUpdate],
+    [flushBlockUpdate, startSaving],
   );
 
   useEffect(() => {
@@ -694,14 +696,14 @@ function CourseEditorInner() {
   );
 
   const handleTextChange = useCallback(
-    (blockId: number, html: string) => {
+    (blockId: number, html: string, options: { debounce?: boolean } = {}) => {
       const normalized = normalizeHtmlContent(html);
       if (blockId < 0) {
         pendingTextDrafts.current.set(blockId, html);
         return;
       }
       pendingTextDrafts.current.delete(blockId);
-      queueBlockUpdate(blockId, { text_md: normalized });
+      queueBlockUpdate(blockId, { text_md: normalized }, { debounce: options.debounce ?? true });
     },
     [queueBlockUpdate],
   );

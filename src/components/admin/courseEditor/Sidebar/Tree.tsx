@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import {
   Box,
   Chip,
@@ -47,6 +47,12 @@ function matchesQuery(value: string | null | undefined, query: string) {
   return (value ?? '').toLowerCase().includes(query.toLowerCase());
 }
 
+function subtreeContainsQuery(subtree: NodeSubtree, query: string): boolean {
+  if (!query) return true;
+  if (matchesQuery(subtree.node.title, query)) return true;
+  return subtree.children.some((child) => subtreeContainsQuery(child.subtree, query));
+}
+
 function TreeNode({
   subtree,
   level,
@@ -67,14 +73,14 @@ function TreeNode({
   onContextMenu?: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
 }) {
   const hasChildren = subtree.children.length > 0;
-  const isExpanded = expanded.has(subtree.node.id) || (!!search && hasChildren);
   const matches = matchesQuery(subtree.node.title, search);
-  const childMatches = useMemo(
-    () => subtree.children.some((child) => matchesQuery(child.subtree.node.title, search)),
-    [subtree.children, search],
-  );
+  const childMatches = search
+    ? subtree.children.some((child) => subtreeContainsQuery(child.subtree, search))
+    : false;
+  const subtreeMatches = search ? matches || childMatches : true;
+  const isExpanded = expanded.has(subtree.node.id) || (!!search && hasChildren && childMatches);
 
-  if (search && !matches && !childMatches) {
+  if (search && !subtreeMatches) {
     return null;
   }
 
