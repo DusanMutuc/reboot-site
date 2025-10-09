@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 
 import type { ContentNode, NodeType } from '@/types/course';
+import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 
 export type AddChildDialogProps = {
   open: boolean;
@@ -45,6 +46,18 @@ export default function AddChildDialog({
 }: AddChildDialogProps) {
   const [title, setTitle] = useState('');
   const [selectedType, setSelectedType] = useState<NodeType>('lesson');
+
+  const titleInput = useUndoRedoInput({
+    value: title,
+    onChange: setTitle,
+    scopeKey: `title-${mode}-${open ? 'open' : 'closed'}`,
+  });
+
+  const attachSearchInput = useUndoRedoInput({
+    value: attachQuery,
+    onChange: onAttachQueryChange,
+    scopeKey: `attach-${mode}-${open ? 'open' : 'closed'}`,
+  });
 
   useEffect(() => {
     if (type && availableTypes.includes(type as NodeType)) {
@@ -78,14 +91,20 @@ export default function AddChildDialog({
                 </MenuItem>
               ))}
             </TextField>
-            <TextField label="Title" value={title} onChange={(event) => setTitle(event.target.value)} />
+            <TextField
+              label="Title"
+              value={title}
+              onChange={(event) => titleInput.handleChange(event.target.value)}
+              onKeyDown={titleInput.handleKeyDown}
+            />
           </Stack>
         ) : (
           <Stack spacing={2}>
             <TextField
               label="Search nodes"
               value={attachQuery}
-              onChange={(event) => onAttachQueryChange(event.target.value)}
+              onChange={(event) => attachSearchInput.handleChange(event.target.value)}
+              onKeyDown={attachSearchInput.handleKeyDown}
             />
             {searchResults.loading && <CircularProgress size={24} />}
             {searchResults.error && <Alert severity="error">{searchResults.error}</Alert>}

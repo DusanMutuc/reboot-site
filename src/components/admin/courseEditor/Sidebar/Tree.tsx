@@ -32,6 +32,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
 
 import type { NodeSubtree } from '@/types/course';
+import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 
 const NODE_ICONS: Record<string, ReactElement> = {
   course: <MenuBookIcon fontSize="small" />,
@@ -156,7 +157,7 @@ function TruncateTooltip({
 
   // Safely attach a ref to the child for measurement (cast avoids TS “ref” prop error)
   const childWithRef = isValidElement(children)
-    ? cloneElement(children as unknown as React.ReactElement<any>, { ref } as any)
+    ? cloneElement(children as React.ReactElement, { ref } as React.RefAttributes<HTMLElement>)
     : children;
 
   return (
@@ -310,6 +311,11 @@ function CoursesList({
   courseStats: Map<number, { lessons: number; chapters: number }>;
   onCreateCourse: () => void;
 }) {
+  const searchInput = useUndoRedoInput({
+    value: search,
+    onChange: onSearchChange,
+    scopeKey: 'courses-search',
+  });
   const filtered = useMemo(
     () =>
       courses.filter((course) => {
@@ -332,7 +338,8 @@ function CoursesList({
           fullWidth
           placeholder="Search courses"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          onChange={(event) => searchInput.handleChange(event.target.value)}
+          onKeyDown={searchInput.handleKeyDown}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -728,6 +735,11 @@ function OutlinePanel({
   canAddBlock: boolean;
   stats: { lessons: number; chapters: number };
 }) {
+  const searchInput = useUndoRedoInput({
+    value: search,
+    onChange: onSearchChange,
+    scopeKey: `outline-${course.node.id}`,
+  });
   const filteredChildren = useMemo(
     () =>
       course.children
@@ -797,7 +809,8 @@ function OutlinePanel({
           fullWidth
           placeholder="Search in course"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          onChange={(event) => searchInput.handleChange(event.target.value)}
+          onKeyDown={searchInput.handleKeyDown}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">

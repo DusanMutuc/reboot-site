@@ -183,6 +183,20 @@ function applyPendingBlockDrafts(
   return nextForest;
 }
 
+function applyPendingNodeDrafts(
+  forest: NodeSubtree[],
+  drafts: Map<number, Partial<ContentNode>>,
+): NodeSubtree[] {
+  if (drafts.size === 0) {
+    return forest;
+  }
+  let nextForest = forest;
+  drafts.forEach((updates, nodeId) => {
+    nextForest = nextForest.map((tree) => updateNodeDraft(tree, nodeId, updates));
+  });
+  return nextForest;
+}
+
 function findSubtree(list: NodeSubtree[], nodeId: number): NodeSubtree | null {
   for (const tree of list) {
     if (tree.node.id === nodeId) return tree;
@@ -321,6 +335,12 @@ function CourseEditorInner() {
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingBlockRef = useRef<{ tempId: number; position: number; type: BlockType; resourceId?: number } | null>(null);
   const pendingTextDrafts = useRef<Map<number, string>>(new Map());
+
+  const applyAllPendingDrafts = useCallback(
+    (forest: NodeSubtree[]) =>
+      applyPendingNodeDrafts(applyPendingBlockDrafts(forest, blockUpdateQueue.current), nodeUpdateQueue.current),
+    [blockUpdateQueue, nodeUpdateQueue],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -497,7 +517,7 @@ function CourseEditorInner() {
         setTrees((prev) => {
           optimisticSnapshot.current = prev.map((tree) => cloneSubtree(tree));
           const optimisticResult = options.optimistic ? options.optimistic(prev) : prev;
-          return applyPendingBlockDrafts(optimisticResult, blockUpdateQueue.current);
+          return applyAllPendingDrafts(optimisticResult);
         });
       } else {
         optimisticSnapshot.current = null;
@@ -536,7 +556,7 @@ function CourseEditorInner() {
             if (subtree) {
               next = mergeSubtree(next, subtree);
             }
-            return applyPendingBlockDrafts(next, blockUpdateQueue.current);
+            return applyAllPendingDrafts(next);
           });
         }
         completeSaving(options.message);
@@ -546,7 +566,7 @@ function CourseEditorInner() {
         return payload;
       } catch (err) {
         if (optimisticSnapshot.current) {
-          setTrees(applyPendingBlockDrafts(optimisticSnapshot.current, blockUpdateQueue.current));
+          setTrees(applyAllPendingDrafts(optimisticSnapshot.current));
         }
         const message = err instanceof Error ? err.message : 'Failed to save changes';
         failSaving(message);
@@ -556,7 +576,7 @@ function CourseEditorInner() {
         optimisticSnapshot.current = null;
       }
     },
-    [startSaving, completeSaving, failSaving],
+    [applyAllPendingDrafts, startSaving, completeSaving, failSaving],
   );
 
   const flushBlockUpdate = useCallback(

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -25,6 +25,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import type { ContentBlock, NodeChild, NodeSubtree, NodeType } from '@/types/course';
 import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
+import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 
 export type NodeDraft = {
   title: string;
@@ -79,6 +80,143 @@ export default function Properties({
   const [settingsDraft, setSettingsDraft] = useState('');
   const [settingsError, setSettingsError] = useState<string | null>(null);
 
+  const nodeScopeKey = subtree?.node.id ?? null;
+  const blockScopeKey = selectedBlock?.id ?? null;
+  const isPendingBlock = (selectedBlock?.id ?? 0) < 0;
+
+  const titleInput = useUndoRedoInput({
+    value: nodeDraft?.title ?? '',
+    onChange: (next) => onNodeFieldChange('title', next),
+    scopeKey: nodeScopeKey,
+  });
+  const slugInput = useUndoRedoInput({
+    value: nodeDraft?.slug ?? '',
+    onChange: (next) => onNodeFieldChange('slug', next),
+    scopeKey: nodeScopeKey,
+  });
+  const descriptionInput = useUndoRedoInput({
+    value: nodeDraft?.description ?? '',
+    onChange: (next) => onNodeFieldChange('description', next),
+    scopeKey: nodeScopeKey,
+  });
+  const heroImageInput = useUndoRedoInput({
+    value: nodeDraft?.hero_image ?? '',
+    onChange: (next) => onNodeFieldChange('hero_image', next),
+    scopeKey: nodeScopeKey,
+  });
+  const iconInput = useUndoRedoInput({
+    value: nodeDraft?.icon ?? '',
+    onChange: (next) => onNodeFieldChange('icon', next),
+    scopeKey: nodeScopeKey,
+  });
+  const objectivesInput = useUndoRedoInput({
+    value: nodeDraft?.objectives ?? '',
+    onChange: (next) => onNodeFieldChange('objectives', next),
+    scopeKey: nodeScopeKey,
+  });
+  const metadataInput = useUndoRedoInput({
+    value: nodeDraft?.metadata ?? '',
+    onChange: (next) => onNodeFieldChange('metadata', next),
+    scopeKey: nodeScopeKey,
+  });
+
+  const handleNumericField = useCallback(
+    (field: 'start_ms' | 'end_ms', raw: string) => {
+      if (!selectedBlock || selectedBlock.id < 0) {
+        return;
+      }
+      const value = raw.trim();
+      if (!value) {
+        onUpdateBlock(selectedBlock.id, { [field]: null });
+        return;
+      }
+      const parsed = Number(value);
+      if (Number.isNaN(parsed) || parsed < 0) {
+        return;
+      }
+      onUpdateBlock(selectedBlock.id, { [field]: parsed });
+    },
+    [onUpdateBlock, selectedBlock],
+  );
+
+  const handleLabelChange = useCallback(
+    (value: string) => {
+      if (!selectedBlock || selectedBlock.id < 0) {
+        return;
+      }
+      onUpdateBlock(selectedBlock.id, { label: value ? value : null });
+    },
+    [onUpdateBlock, selectedBlock],
+  );
+
+  const handleNotesChange = useCallback(
+    (value: string) => {
+      if (!selectedBlock || selectedBlock.id < 0) {
+        return;
+      }
+      onUpdateBlock(selectedBlock.id, { notes: value ? value : null });
+    },
+    [onUpdateBlock, selectedBlock],
+  );
+
+  const handleSettingsChange = useCallback(
+    (value: string) => {
+      setSettingsDraft(value);
+      if (!selectedBlock || selectedBlock.id < 0) {
+        return;
+      }
+      if (!value.trim()) {
+        setSettingsError(null);
+        onUpdateBlock(selectedBlock.id, { settings: null });
+        return;
+      }
+      try {
+        const parsed = JSON.parse(value);
+        setSettingsError(null);
+        onUpdateBlock(selectedBlock.id, { settings: parsed });
+      } catch {
+        setSettingsError('Settings must be valid JSON');
+      }
+    },
+    [onUpdateBlock, selectedBlock, setSettingsDraft, setSettingsError],
+  );
+
+  const startInput = useUndoRedoInput({
+    value:
+      selectedBlock && selectedBlock.start_ms != null
+        ? String(selectedBlock.start_ms)
+        : '',
+    onChange: (next) => handleNumericField('start_ms', next),
+    scopeKey: blockScopeKey,
+  });
+
+  const endInput = useUndoRedoInput({
+    value:
+      selectedBlock && selectedBlock.end_ms != null
+        ? String(selectedBlock.end_ms)
+        : '',
+    onChange: (next) => handleNumericField('end_ms', next),
+    scopeKey: blockScopeKey,
+  });
+
+  const labelInput = useUndoRedoInput({
+    value: selectedBlock?.label ?? '',
+    onChange: handleLabelChange,
+    scopeKey: blockScopeKey,
+  });
+
+  const notesInput = useUndoRedoInput({
+    value: selectedBlock?.notes ?? '',
+    onChange: handleNotesChange,
+    scopeKey: blockScopeKey,
+  });
+
+  const settingsInput = useUndoRedoInput({
+    value: settingsDraft,
+    onChange: handleSettingsChange,
+    scopeKey: blockScopeKey,
+  });
+
   useEffect(() => {
     if (availableChildTypes.length > 0 && !availableChildTypes.includes(childType)) {
       setChildType(availableChildTypes[0]);
@@ -97,7 +235,7 @@ export default function Properties({
       setSettingsDraft('');
     }
     setSettingsError(null);
-  }, [selectedBlock?.id, selectedBlock?.settings]);
+  }, [selectedBlock]);
 
   const canEditBlocks = subtree ? subtree.children.length === 0 : false;
 
@@ -114,30 +252,53 @@ export default function Properties({
     return (
       <Stack spacing={2}>
         <Typography variant="subtitle2">Node details</Typography>
-        <TextField label="Title" value={nodeDraft.title} onChange={(event) => onNodeFieldChange('title', event.target.value)} />
-        <TextField label="Slug" value={nodeDraft.slug} onChange={(event) => onNodeFieldChange('slug', event.target.value)} />
+        <TextField
+          label="Title"
+          value={nodeDraft.title}
+          onChange={(event) => titleInput.handleChange(event.target.value)}
+          onKeyDown={titleInput.handleKeyDown}
+        />
+        <TextField
+          label="Slug"
+          value={nodeDraft.slug}
+          onChange={(event) => slugInput.handleChange(event.target.value)}
+          onKeyDown={slugInput.handleKeyDown}
+        />
         <TextField
           label="Description"
           multiline
           minRows={3}
           value={nodeDraft.description}
-          onChange={(event) => onNodeFieldChange('description', event.target.value)}
+          onChange={(event) => descriptionInput.handleChange(event.target.value)}
+          onKeyDown={descriptionInput.handleKeyDown}
         />
-        <TextField label="Hero image URL" value={nodeDraft.hero_image} onChange={(event) => onNodeFieldChange('hero_image', event.target.value)} />
-        <TextField label="Icon" value={nodeDraft.icon} onChange={(event) => onNodeFieldChange('icon', event.target.value)} />
+        <TextField
+          label="Hero image URL"
+          value={nodeDraft.hero_image}
+          onChange={(event) => heroImageInput.handleChange(event.target.value)}
+          onKeyDown={heroImageInput.handleKeyDown}
+        />
+        <TextField
+          label="Icon"
+          value={nodeDraft.icon}
+          onChange={(event) => iconInput.handleChange(event.target.value)}
+          onKeyDown={iconInput.handleKeyDown}
+        />
         <TextField
           label="Objectives"
           multiline
           minRows={3}
           value={nodeDraft.objectives}
-          onChange={(event) => onNodeFieldChange('objectives', event.target.value)}
+          onChange={(event) => objectivesInput.handleChange(event.target.value)}
+          onKeyDown={objectivesInput.handleKeyDown}
         />
         <TextField
           label="Metadata (JSON)"
           multiline
           minRows={4}
           value={nodeDraft.metadata}
-          onChange={(event) => onNodeFieldChange('metadata', event.target.value)}
+          onChange={(event) => metadataInput.handleChange(event.target.value)}
+          onKeyDown={metadataInput.handleKeyDown}
           error={!!metadataError}
           helperText={metadataError ?? 'Provide structured metadata for this node.'}
         />
@@ -227,41 +388,6 @@ export default function Properties({
   const renderBlockProperties = () => {
     if (!selectedBlock) return null;
 
-    const isPendingBlock = selectedBlock.id < 0;
-
-    const handleNumericField = (field: 'start_ms' | 'end_ms', raw: string) => {
-      if (!selectedBlock) return;
-      if (isPendingBlock) return;
-      const value = raw.trim();
-      if (!value) {
-        onUpdateBlock(selectedBlock.id, { [field]: null });
-        return;
-      }
-      const parsed = Number(value);
-      if (Number.isNaN(parsed) || parsed < 0) {
-        return;
-      }
-      onUpdateBlock(selectedBlock.id, { [field]: parsed });
-    };
-
-    const handleSettingsChange = (value: string) => {
-      setSettingsDraft(value);
-      if (!selectedBlock) return;
-      if (isPendingBlock) return;
-      if (!value.trim()) {
-        setSettingsError(null);
-        onUpdateBlock(selectedBlock.id, { settings: null });
-        return;
-      }
-      try {
-        const parsed = JSON.parse(value);
-        setSettingsError(null);
-        onUpdateBlock(selectedBlock.id, { settings: parsed });
-      } catch (error) {
-        setSettingsError('Settings must be valid JSON');
-      }
-    };
-
     return (
       <Stack spacing={2}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
@@ -301,13 +427,15 @@ export default function Properties({
               <TextField
                 label="Start (ms)"
                 value={selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : ''}
-                onChange={(event) => handleNumericField('start_ms', event.target.value)}
+                onChange={(event) => startInput.handleChange(event.target.value)}
+                onKeyDown={startInput.handleKeyDown}
                 disabled={isPendingBlock}
               />
               <TextField
                 label="End (ms)"
                 value={selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : ''}
-                onChange={(event) => handleNumericField('end_ms', event.target.value)}
+                onChange={(event) => endInput.handleChange(event.target.value)}
+                onKeyDown={endInput.handleKeyDown}
                 disabled={isPendingBlock}
               />
             </Stack>
@@ -319,7 +447,8 @@ export default function Properties({
             <TextField
               label="Label"
               value={selectedBlock.label ?? ''}
-              onChange={(event) => !isPendingBlock && onUpdateBlock(selectedBlock.id, { label: event.target.value || null })}
+              onChange={(event) => labelInput.handleChange(event.target.value)}
+              onKeyDown={labelInput.handleKeyDown}
               disabled={isPendingBlock}
             />
             <TextField
@@ -327,7 +456,8 @@ export default function Properties({
               multiline
               minRows={3}
               value={selectedBlock.notes ?? ''}
-              onChange={(event) => !isPendingBlock && onUpdateBlock(selectedBlock.id, { notes: event.target.value || null })}
+              onChange={(event) => notesInput.handleChange(event.target.value)}
+              onKeyDown={notesInput.handleKeyDown}
               disabled={isPendingBlock}
             />
           </Stack>
@@ -339,7 +469,8 @@ export default function Properties({
             multiline
             minRows={4}
             value={settingsDraft}
-            onChange={(event) => handleSettingsChange(event.target.value)}
+            onChange={(event) => settingsInput.handleChange(event.target.value)}
+            onKeyDown={settingsInput.handleKeyDown}
             error={!!settingsError}
             helperText={settingsError ?? 'Optional advanced configuration for this block.'}
             disabled={isPendingBlock}

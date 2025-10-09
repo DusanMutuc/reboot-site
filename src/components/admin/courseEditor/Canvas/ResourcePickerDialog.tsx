@@ -17,6 +17,7 @@ import SearchIcon from '@mui/icons-material/Search';
 
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { supabase } from '@/lib/supabaseClient';
+import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 
 export type ResourcePickerDialogProps = {
   open: boolean;
@@ -29,6 +30,12 @@ export default function ResourcePickerDialog({ open, onClose, onSelect }: Resour
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<RenderableResource[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const queryInput = useUndoRedoInput({
+    value: query,
+    onChange: setQuery,
+    scopeKey: open ? 'resource-open' : 'resource-closed',
+  });
 
   const load = useCallback(
     async (term: string) => {
@@ -72,7 +79,8 @@ export default function ResourcePickerDialog({ open, onClose, onSelect }: Resour
         <Stack spacing={2}>
           <TextField
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => queryInput.handleChange(event.target.value)}
+            onKeyDown={queryInput.handleKeyDown}
             placeholder="Search resources"
             InputProps={{
               startAdornment: (
