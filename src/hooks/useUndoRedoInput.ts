@@ -95,7 +95,7 @@ export function useUndoRedoInput({
   }, [commitChange]);
 
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    (event: KeyboardEvent<HTMLElement>) => {
       if (!(event.metaKey || event.ctrlKey) || event.altKey) {
         return;
       }
