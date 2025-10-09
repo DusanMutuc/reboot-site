@@ -156,6 +156,19 @@ function removeSubtree(list: NodeSubtree[], nodeId: number) {
   return next;
 }
 
+function isNodeSubtree(value: unknown): value is NodeSubtree {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<NodeSubtree>;
+  return (
+    typeof candidate.node === 'object' &&
+    candidate.node !== null &&
+    Array.isArray(candidate.blocks) &&
+    Array.isArray(candidate.children)
+  );
+}
+
 function applyPendingBlockDrafts(
   forest: NodeSubtree[],
   drafts: Map<number, Partial<ContentBlock>>,
@@ -496,11 +509,34 @@ function CourseEditorInner() {
 
       try {
         const payload = await request();
-        const subtree = 'subtree' in payload ? payload.subtree : (payload as NodeSubtree);
-        if (subtree) {
+        let subtree: NodeSubtree | null = null;
+        let parentSubtree: NodeSubtree | null = null;
+
+        if (isNodeSubtree(payload)) {
+          subtree = payload;
+        } else if (payload && typeof payload === 'object') {
+          const result = payload as {
+            subtree?: NodeSubtree | null;
+            parentSubtree?: NodeSubtree | null;
+          };
+          if (result.subtree && isNodeSubtree(result.subtree)) {
+            subtree = result.subtree;
+          }
+          if (result.parentSubtree && isNodeSubtree(result.parentSubtree)) {
+            parentSubtree = result.parentSubtree;
+          }
+        }
+
+        if (subtree || parentSubtree) {
           setTrees((prev) => {
-            const merged = mergeSubtree(prev, subtree);
-            return applyPendingBlockDrafts(merged, blockUpdateQueue.current);
+            let next = prev;
+            if (parentSubtree) {
+              next = mergeSubtree(next, parentSubtree);
+            }
+            if (subtree) {
+              next = mergeSubtree(next, subtree);
+            }
+            return applyPendingBlockDrafts(next, blockUpdateQueue.current);
           });
         }
         completeSaving(options.message);
