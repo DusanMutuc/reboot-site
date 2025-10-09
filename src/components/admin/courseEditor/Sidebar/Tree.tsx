@@ -32,6 +32,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
 
 import type { NodeSubtree } from '@/types/course';
+import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 
 const NODE_ICONS: Record<string, ReactElement> = {
   course: <MenuBookIcon fontSize="small" />,
@@ -156,7 +157,7 @@ function TruncateTooltip({
 
   // Safely attach a ref to the child for measurement (cast avoids TS “ref” prop error)
   const childWithRef = isValidElement(children)
-    ? cloneElement(children as unknown as React.ReactElement<any>, { ref } as any)
+    ? cloneElement(children as React.ReactElement, { ref } as React.RefAttributes<HTMLElement>)
     : children;
 
   return (
@@ -310,6 +311,11 @@ function CoursesList({
   courseStats: Map<number, { lessons: number; chapters: number }>;
   onCreateCourse: () => void;
 }) {
+  const searchInput = useUndoRedoInput({
+    value: search,
+    onChange: onSearchChange,
+    scopeKey: 'courses-search',
+  });
   const filtered = useMemo(
     () =>
       courses.filter((course) => {
@@ -332,7 +338,8 @@ function CoursesList({
           fullWidth
           placeholder="Search courses"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          onChange={(event) => searchInput.handleChange(event.target.value)}
+          onKeyDown={searchInput.handleKeyDown}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -549,6 +556,7 @@ function ChapterCard({
 }) {
   const hasChildren = subtree.children.length > 0;
   const isExpanded = expanded.has(subtree.node.id);
+  const isSelected = selectedId === subtree.node.id;
 
   return (
     <Box
@@ -564,7 +572,7 @@ function ChapterCard({
       {/* Chapter header */}
       <Box
         role="button"
-        onClick={() => hasChildren && onToggle(subtree.node.id)}
+        onClick={() => onSelect(subtree.node.id)}
         onContextMenu={
           onContextMenu
             ? (e) => {
@@ -579,18 +587,32 @@ function ChapterCard({
           gap: 1.5,
           px: 2,
           py: 1.5,
-          bgcolor: 'background.default',
-          cursor: hasChildren ? 'pointer' : 'default',
+          bgcolor: isSelected ? (t) => alpha(t.palette.primary.main, 0.08) : 'background.default',
+          cursor: 'pointer',
           userSelect: 'none',
-          '&:hover': { bgcolor: 'action.hover' },
+          '&:hover': { bgcolor: (t) => (isSelected ? alpha(t.palette.primary.main, 0.16) : t.palette.action.hover) },
         }}
       >
         <Box sx={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {hasChildren ? (
-            <ChevronRightIcon
-              fontSize="small"
-              sx={{ transition: 'transform .2s', transform: isExpanded ? 'rotate(90deg)' : 'none', color: 'text.secondary' }}
-            />
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggle(subtree.node.id);
+              }}
+              sx={{
+                width: 24,
+                height: 24,
+                color: 'text.secondary',
+                '&:hover': { bgcolor: 'transparent' },
+              }}
+            >
+              <ChevronRightIcon
+                fontSize="small"
+                sx={{ transition: 'transform .2s', transform: isExpanded ? 'rotate(90deg)' : 'none' }}
+              />
+            </IconButton>
           ) : null}
         </Box>
 
@@ -728,6 +750,11 @@ function OutlinePanel({
   canAddBlock: boolean;
   stats: { lessons: number; chapters: number };
 }) {
+  const searchInput = useUndoRedoInput({
+    value: search,
+    onChange: onSearchChange,
+    scopeKey: `outline-${course.node.id}`,
+  });
   const filteredChildren = useMemo(
     () =>
       course.children
@@ -797,7 +824,8 @@ function OutlinePanel({
           fullWidth
           placeholder="Search in course"
           value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
+          onChange={(event) => searchInput.handleChange(event.target.value)}
+          onKeyDown={searchInput.handleKeyDown}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
