@@ -349,12 +349,13 @@ function CourseEditorInner() {
       const [subtrees, edgeRules] = await Promise.all([fetchCourseTrees('course'), fetchEdgeRules()]);
       setTrees(subtrees);
       setRules(edgeRules);
-      const first = subtrees[0]?.node.id ?? null;
-      setSelectedNodeId(first);
+      setSelectedNodeId((prev) => {
+        if (prev == null) return null;
+        return findSubtree(subtrees, prev) ? prev : null;
+      });
       setSelectedBlockId(null);
       setEditingBlockId(null);
       setExpanded(new Set(subtrees.map((tree) => tree.node.id)));
-      setSidebarMode(first ? 'outline' : 'courses');
       setCourseSearch('');
       setOutlineSearch('');
     } catch (err) {
@@ -368,7 +369,6 @@ function CourseEditorInner() {
     setSelectedBlockId,
     setSelectedNodeId,
     setExpanded,
-    setSidebarMode,
     setCourseSearch,
     setOutlineSearch,
   ]);
