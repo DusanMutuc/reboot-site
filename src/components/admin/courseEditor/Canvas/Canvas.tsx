@@ -182,6 +182,7 @@ export default function Canvas({
         <Typography
           variant={previewMode ? 'h4' : 'h6'}
           component={previewMode ? 'h1' : undefined}
+          sx={previewMode ? { fontWeight: 'bold' } : undefined}
         >
           {subtree.node.title ?? 'Untitled node'}
         </Typography>
