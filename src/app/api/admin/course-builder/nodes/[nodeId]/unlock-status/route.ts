@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 import { requireAdmin } from '@/lib/requireAdmin';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } },
-);
+import { getSupabaseServiceClient } from '@/lib/supabaseServiceClient';
 
 type UnlockRow = {
   child_id: number;
@@ -39,6 +33,8 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId') ?? undefined;
 
+    const supabase = getSupabaseServiceClient();
+
     const rpcParams: { _parent_id: number; _user_id?: string } = { _parent_id: parentId };
     if (userId) {
       rpcParams._user_id = userId;
@@ -69,7 +65,10 @@ export async function GET(
     const invalidRequest = error instanceof Error && error.message.includes('Invalid nodeId');
     return NextResponse.json(
       { error: message },
-      { status: invalidRequest ? 400 : 500, headers: { 'Cache-Control': 'no-store' } },
+      {
+        status: invalidRequest ? 400 : 500,
+        headers: { 'Cache-Control': 'no-store' },
+      },
     );
   }
 }

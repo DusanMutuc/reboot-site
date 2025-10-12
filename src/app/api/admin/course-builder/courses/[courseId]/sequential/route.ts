@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
 import { requireAdmin } from '@/lib/requireAdmin';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { persistSession: false } },
-);
+import { getSupabaseServiceClient } from '@/lib/supabaseServiceClient';
 
 function parseCourseId(raw: string): number {
   const value = Number(raw);
@@ -42,6 +36,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ co
 
     const body = await request.json();
     const enabled = parseEnabledFlag(body);
+
+    const supabase = getSupabaseServiceClient();
 
     const { error } = await supabase.rpc('enforce_strict_sequence', {
       _root_id: courseId,
