@@ -31,6 +31,7 @@ import {
   fetchCourseTrees,
   fetchEdgeRules,
   enforceStrictSequence,
+  getUnlockStatus,
   reorderBlocks,
   reorderChildren,
   searchNodes,
@@ -132,27 +133,6 @@ function applyStrictSequenceState(subtree: NodeSubtree, enabled: boolean): NodeS
     blocks: subtree.blocks,
     children,
   };
-}
-
-function hasStrictSequenceMismatch(subtree: NodeSubtree, expected: boolean): boolean {
-  const shouldPropagate = subtree.node.node_type === 'course' || subtree.node.node_type === 'lesson';
-  if (shouldPropagate) {
-    if (Boolean(subtree.node.sequential_unlock) !== expected) {
-      return true;
-    }
-
-    const firstPosition =
-      subtree.children.length > 0 ? Math.min(...subtree.children.map((child) => child.edge.position)) : null;
-
-    for (const child of subtree.children) {
-      const shouldRequire = expected && firstPosition != null && child.edge.position !== firstPosition;
-      if (Boolean(child.edge.is_required) !== shouldRequire) {
-        return true;
-      }
-    }
-  }
-
-  return subtree.children.some((child) => hasStrictSequenceMismatch(child.subtree, expected));
 }
 
 function pruneTree(tree: NodeSubtree, nodeId: number): { next: NodeSubtree; removed: boolean } {
@@ -774,12 +754,6 @@ function CourseEditorInner() {
       void runMutation(
         async () => {
           const subtree = await enforceStrictSequence(courseId, enabled);
-          if (hasStrictSequenceMismatch(subtree, enabled)) {
-            setSnack({
-              message: 'Saved sequence differs from requested setting. Reverting to server value.',
-              severity: 'warning',
-            });
-          }
           return { subtree };
         },
         {
@@ -789,7 +763,7 @@ function CourseEditorInner() {
         },
       );
     },
-    [activeCourse, runMutation, setSnack],
+    [activeCourse, runMutation],
   );
 
   const ensureResource = useCallback(
@@ -1320,13 +1294,15 @@ function CourseEditorInner() {
               }
               onQuickAddLesson={handleQuickAddLesson}
               onQuickAddChapter={handleQuickAddChapter}
-              onQuickAddBlock={handleQuickAddBlock}
-              canAddLesson={canAddLesson}
-              canAddChapter={canAddChapter}
-              canAddBlock={canAddBlock}
-              courseStats={courseStats}
-              onToggleSequentialUnlock={handleToggleSequentialUnlock}
-            />
+          onQuickAddBlock={handleQuickAddBlock}
+          canAddLesson={canAddLesson}
+          canAddChapter={canAddChapter}
+          canAddBlock={canAddBlock}
+          courseStats={courseStats}
+          onToggleSequentialUnlock={handleToggleSequentialUnlock}
+          getUnlockStatus={getUnlockStatus}
+          onUnlockStatusError={(message) => setSnack({ message, severity: 'error' })}
+        />
           </Box>
           <Box
             sx={{

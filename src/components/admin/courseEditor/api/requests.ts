@@ -100,13 +100,40 @@ export async function updateNode(nodeId: number, updates: Partial<ContentNode>) 
 }
 
 export async function enforceStrictSequence(rootId: number, enabled: boolean) {
-  const res = await fetch(`/api/admin/course-builder/nodes/${rootId}/sequence`, {
-    method: 'PATCH',
+  const toggleRes = await fetch(`/api/admin/course-builder/courses/${rootId}/sequential`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled }),
+    body: JSON.stringify({ on: enabled }),
   });
-  const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to update sequential unlock', 'enforceStrictSequence');
-  return data.subtree;
+  await parseJson<{ ok: boolean }>(toggleRes, 'Failed to update sequential unlock', 'enforceStrictSequence.toggle');
+
+  const refreshRes = await fetch(`/api/admin/course-builder/nodes/${rootId}`, {
+    cache: 'no-store',
+  });
+  const refreshed = await parseJson<{ subtree: NodeSubtree }>(
+    refreshRes,
+    'Failed to refresh sequential unlock state',
+    'enforceStrictSequence.refresh',
+  );
+  return refreshed.subtree;
+}
+
+export async function getUnlockStatus(
+  parentId: number,
+  options: { userId?: string } = {},
+): Promise<Record<number, { locked: boolean; is_required: boolean; reason: string | null; child_position: number }>> {
+  const params = new URLSearchParams();
+  if (options.userId) {
+    params.set('userId', options.userId);
+  }
+
+  const res = await fetch(`/api/admin/course-builder/nodes/${parentId}/unlock-status${params.size ? `?${params.toString()}` : ''}`, {
+    cache: 'no-store',
+  });
+
+  return parseJson<
+    Record<number, { locked: boolean; is_required: boolean; reason: string | null; child_position: number }>
+  >(res, 'Failed to load unlock status', 'getUnlockStatus');
 }
 
 export async function deleteNode(nodeId: number) {

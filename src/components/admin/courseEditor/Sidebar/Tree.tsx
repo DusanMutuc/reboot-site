@@ -1,6 +1,15 @@
 'use client';
 
-import React, { type ReactElement, type ReactNode, useMemo, useEffect, useRef, useState, cloneElement, isValidElement } from 'react';
+import React, {
+  type ReactElement,
+  type ReactNode,
+  useMemo,
+  useEffect,
+  useRef,
+  useState,
+  cloneElement,
+  isValidElement,
+} from 'react';
 import { alpha } from '@mui/material/styles';
 import {
   Avatar,
@@ -47,6 +56,15 @@ const NODE_ICONS: Record<string, ReactElement> = {
 
 export type SidebarMode = 'courses' | 'outline';
 
+type UnlockStatus = {
+  locked: boolean;
+  is_required: boolean;
+  reason: string | null;
+  child_position: number;
+};
+
+type UnlockStatusMap = Record<number, UnlockStatus>;
+
 export type TreeProps = {
   mode: SidebarMode;
   courses: NodeSubtree[];
@@ -75,6 +93,8 @@ export type TreeProps = {
   canAddBlock: boolean;
   courseStats: Map<number, { lessons: number; chapters: number }>;
   onToggleSequentialUnlock: (value: boolean) => void;
+  getUnlockStatus: (parentId: number) => Promise<UnlockStatusMap>;
+  onUnlockStatusError?: (message: string) => void;
 };
 
 function matchesQuery(value: string | null | undefined, query: string) {
@@ -563,28 +583,27 @@ function OutlineHeader({
  *  ----------------------------- */
 function ChapterCard({
   subtree,
-  edge,
   expanded,
   onToggle,
   onSelect,
   selectedId,
   onContextMenu,
   sequentialUnlock,
+  lockStatus,
 }: {
   subtree: NodeSubtree;
-  edge: NodeSubtree['children'][number]['edge'];
   expanded: Set<number>;
   onToggle: (id: number) => void;
   onSelect: (id: number) => void;
   selectedId: number | null;
   onContextMenu?: (e: React.MouseEvent<HTMLElement>, id: number) => void;
   sequentialUnlock: boolean;
+  lockStatus?: UnlockStatus;
 }) {
   const hasChildren = subtree.children.length > 0;
   const isExpanded = expanded.has(subtree.node.id);
   const isSelected = selectedId === subtree.node.id;
-  const showLockIcon =
-    sequentialUnlock && subtree.node.node_type === 'lesson' && edge.position > 0;
+  const showLockIcon = sequentialUnlock && subtree.node.node_type === 'lesson' && Boolean(lockStatus?.locked);
 
   return (
     <Box
@@ -764,6 +783,8 @@ function OutlinePanel({
   canAddBlock,
   stats,
   onToggleSequentialUnlock,
+  getUnlockStatus,
+  onUnlockStatusError,
 }: {
   course: NodeSubtree;
   expanded: Set<number>;
@@ -785,6 +806,8 @@ function OutlinePanel({
   canAddBlock: boolean;
   stats: { lessons: number; chapters: number };
   onToggleSequentialUnlock: (value: boolean) => void;
+  getUnlockStatus: (parentId: number) => Promise<UnlockStatusMap>;
+  onUnlockStatusError?: (message: string) => void;
 }) {
   const searchInput = useUndoRedoInput({
     value: search,
@@ -792,6 +815,55 @@ function OutlinePanel({
     scopeKey: `outline-${course.node.id}`,
   });
   const sequentialUnlock = Boolean(course.node.sequential_unlock);
+  const [unlockPreview, setUnlockPreview] = useState<UnlockStatusMap>({});
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!sequentialUnlock) {
+      setUnlockPreview({});
+      return undefined;
+    }
+
+    const sortedLessons = [...course.children]
+      .filter((child) => child.subtree.node.node_type === 'lesson')
+      .sort((a, b) => (a.edge.position ?? 0) - (b.edge.position ?? 0));
+
+    const optimistic: UnlockStatusMap = {};
+    sortedLessons.forEach((child, index) => {
+      const position = child.edge.position ?? index;
+      const locked = index > 0;
+      optimistic[child.subtree.node.id] = {
+        locked,
+        is_required: locked,
+        reason: locked ? 'waiting_for_required_previous' : 'available',
+        child_position: position,
+      };
+    });
+
+    setUnlockPreview(optimistic);
+
+    const load = async () => {
+      try {
+        const remote = await getUnlockStatus(course.node.id);
+        if (!cancelled) {
+          setUnlockPreview(remote);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          onUnlockStatusError?.('Failed to refresh unlock preview');
+          console.error('[courseBuilder] Failed to fetch unlock status', error);
+          setUnlockPreview({});
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [course, getUnlockStatus, onUnlockStatusError, sequentialUnlock]);
   const filteredChildren = useMemo(
     () =>
       course.children.filter(({ subtree }) => {
@@ -892,17 +964,17 @@ function OutlinePanel({
         {hasLessons ? (
           filteredChildren.length > 0 ? (
             <Stack spacing={1.5}>
-              {filteredChildren.map(({ edge, subtree }) => (
+              {filteredChildren.map(({ subtree }) => (
                 <ChapterCard
                   key={subtree.node.id}
                   subtree={subtree}
-                  edge={edge}
                   expanded={expanded}
                   onToggle={onToggle}
                   onSelect={onSelect}
                   selectedId={selectedNodeId}
                   onContextMenu={onContextMenu}
                   sequentialUnlock={sequentialUnlock}
+                  lockStatus={unlockPreview[subtree.node.id]}
                 />
               ))}
             </Stack>
@@ -952,6 +1024,8 @@ export default function Tree({
   canAddBlock,
   courseStats,
   onToggleSequentialUnlock,
+  getUnlockStatus,
+  onUnlockStatusError,
 }: TreeProps) {
   return (
     <Paper
@@ -999,6 +1073,8 @@ export default function Tree({
           canAddBlock={canAddBlock}
           stats={courseStats.get(activeCourse.node.id) ?? { lessons: 0, chapters: 0 }}
           onToggleSequentialUnlock={onToggleSequentialUnlock}
+          getUnlockStatus={getUnlockStatus}
+          onUnlockStatusError={onUnlockStatusError}
         />
       ) : (
         <CoursesList
