@@ -36,6 +36,7 @@ import {
   updateBlock,
   updateChild,
   updateNode,
+  updateSequentialUnlock,
 } from './api/requests';
 import { EditorStoreProvider, useEditorStore } from './state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
@@ -303,6 +304,8 @@ function CourseEditorInner() {
   const [courseSearch, setCourseSearch] = useState('');
   const [outlineSearch, setOutlineSearch] = useState('');
   const [lastActiveCourseId, setLastActiveCourseId] = useState<number | null>(null);
+  const [unlockStatusRefreshToken, setUnlockStatusRefreshToken] = useState(0);
+  const [sequentialLoading, setSequentialLoading] = useState(false);
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
@@ -911,6 +914,30 @@ function CourseEditorInner() {
     handleInsertBlock(position, 'text');
   }, [handleInsertBlock, selectedSubtree]);
 
+  const handleSequentialToggle = useCallback(
+    async (courseId: number, on: boolean) => {
+      setSequentialLoading(true);
+      try {
+        await runMutation(
+          async () => {
+            const subtree = await updateSequentialUnlock(courseId, on);
+            return { subtree };
+          },
+          {
+            message: on ? 'Sequential unlock enabled' : 'Sequential unlock disabled',
+            savingMessage: 'Saving…',
+          },
+        );
+        setUnlockStatusRefreshToken((prev) => prev + 1);
+      } catch {
+        // runMutation surfaces the error message
+      } finally {
+        setSequentialLoading(false);
+      }
+    },
+    [runMutation],
+  );
+
   const handleDeleteBlock = useCallback(
     async (blockId: number) => {
       await runMutation(
@@ -1247,6 +1274,10 @@ function CourseEditorInner() {
               canAddChapter={canAddChapter}
               canAddBlock={canAddBlock}
               courseStats={courseStats}
+              previewMode={editorMode === 'preview'}
+              unlockStatusRefreshToken={unlockStatusRefreshToken}
+              onToggleSequential={handleSequentialToggle}
+              sequentialLoading={sequentialLoading}
             />
           </Box>
           <Box

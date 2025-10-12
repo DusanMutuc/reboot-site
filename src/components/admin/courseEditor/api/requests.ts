@@ -1,4 +1,11 @@
-import type { ContentBlock, ContentNode, NodeChild, NodeEdgeRule, NodeSubtree } from '@/types/course';
+import type {
+  ChildUnlockStatus,
+  ContentBlock,
+  ContentNode,
+  NodeChild,
+  NodeEdgeRule,
+  NodeSubtree,
+} from '@/types/course';
 
 async function parseJson<T>(res: Response, fallback: string): Promise<T> {
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };
@@ -140,5 +147,22 @@ export async function reorderBlocks(nodeId: number, updates: Array<{ block_id: n
     body: JSON.stringify({ updates }),
   });
   const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to reorder blocks');
+  return data.subtree;
+}
+
+export async function fetchUnlockStatus(parentId: number, signal?: AbortSignal) {
+  const params = new URLSearchParams({ parentId: String(parentId) });
+  const res = await fetch(`/api/admin/course-builder/unlock-status?${params.toString()}`, { signal });
+  const data = await parseJson<{ unlockStatus: ChildUnlockStatus[] }>(res, 'Failed to load unlock status');
+  return data.unlockStatus ?? [];
+}
+
+export async function updateSequentialUnlock(rootId: number, on: boolean) {
+  const res = await fetch(`/api/admin/course-builder/nodes/${rootId}/sequential`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ on }),
+  });
+  const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to update sequential unlock');
   return data.subtree;
 }

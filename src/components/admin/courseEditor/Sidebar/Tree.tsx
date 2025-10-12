@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   Chip,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   List,
@@ -14,6 +15,7 @@ import {
   ListItemButton,
   Paper,
   Stack,
+  Switch,
   TextField,
   Tooltip,
   Typography,
@@ -30,9 +32,11 @@ import StorageIcon from '@mui/icons-material/Storage';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
-import type { NodeSubtree } from '@/types/course';
+import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
+import { fetchUnlockStatus } from '../api/requests';
 
 const NODE_ICONS: Record<string, ReactElement> = {
   course: <MenuBookIcon fontSize="small" />,
@@ -71,6 +75,10 @@ export type TreeProps = {
   canAddChapter: boolean;
   canAddBlock: boolean;
   courseStats: Map<number, { lessons: number; chapters: number }>;
+  previewMode: boolean;
+  unlockStatusRefreshToken: number;
+  onToggleSequential: (courseId: number, on: boolean) => Promise<void> | void;
+  sequentialLoading: boolean;
 };
 
 function matchesQuery(value: string | null | undefined, query: string) {
@@ -477,6 +485,10 @@ type OutlineHeaderProps = {
   canAddLesson: boolean;
   canAddChapter: boolean;
   canAddBlock: boolean;
+  previewMode: boolean;
+  sequentialUnlock: boolean;
+  onSequentialToggle: (on: boolean) => void;
+  sequentialLoading: boolean;
 };
 
 function OutlineHeader({
@@ -485,6 +497,10 @@ function OutlineHeader({
   onBack,
   onExpandAll,
   onCollapseAll,
+  previewMode,
+  sequentialUnlock,
+  onSequentialToggle,
+  sequentialLoading,
 }: OutlineHeaderProps) {
   return (
     <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -532,6 +548,27 @@ function OutlineHeader({
         <Chip size="small" label={`${stats.lessons} lessons`} sx={{ bgcolor: '#e7f3ff', color: '#0c5ba0', fontWeight: 600 }} />
         <Chip size="small" label={`${stats.chapters} chapters`} sx={{ bgcolor: '#e7f3ff', color: '#0c5ba0', fontWeight: 600 }} />
       </Box>
+
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={sequentialUnlock}
+            onChange={(event) => {
+              void onSequentialToggle(event.target.checked);
+            }}
+            disabled={sequentialLoading}
+          />
+        }
+        label="All nodes require previous nodes"
+        sx={{ mt: 2, '& .MuiFormControlLabel-label': { fontSize: 13 } }}
+      />
+
+      {previewMode ? (
+        <Typography variant="caption" color="text.secondary">
+          Locked icons reflect current completion progress.
+        </Typography>
+      ) : null}
     </Box>
   );
 }
@@ -546,6 +583,9 @@ function ChapterCard({
   onSelect,
   selectedId,
   onContextMenu,
+  previewMode,
+  lockStatus,
+  childLocks,
 }: {
   subtree: NodeSubtree;
   expanded: Set<number>;
@@ -553,10 +593,17 @@ function ChapterCard({
   onSelect: (id: number) => void;
   selectedId: number | null;
   onContextMenu?: (e: React.MouseEvent<HTMLElement>, id: number) => void;
+  previewMode: boolean;
+  lockStatus?: ChildUnlockStatus;
+  childLocks?: Record<number, ChildUnlockStatus>;
 }) {
   const hasChildren = subtree.children.length > 0;
   const isExpanded = expanded.has(subtree.node.id);
   const isSelected = selectedId === subtree.node.id;
+  const isLocked = !!(previewMode && lockStatus?.locked);
+  const lockReason = lockStatus?.reason ?? null;
+
+  const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
 
   return (
     <Box
@@ -604,7 +651,7 @@ function ChapterCard({
               sx={{
                 width: 24,
                 height: 24,
-                color: 'text.secondary',
+                color: iconColor,
                 '&:hover': { bgcolor: 'transparent' },
               }}
             >
@@ -616,15 +663,26 @@ function ChapterCard({
           ) : null}
         </Box>
 
-        <Box sx={{ color: 'text.secondary', display: 'flex', alignItems: 'center' }}>
+        <Box sx={{ color: iconColor, display: 'flex', alignItems: 'center' }}>
           <LayersIcon fontSize="small" />
         </Box>
 
         <TruncateTooltip title={subtree.node.title || 'Untitled'}>
-          <Typography sx={{ fontWeight: 700, fontSize: 15, flex: 1 }} noWrap>
+          <Typography
+            sx={{ fontWeight: 700, fontSize: 15, flex: 1, color: isLocked ? 'text.disabled' : 'text.primary' }}
+            noWrap
+          >
             {subtree.node.title || 'Untitled'}
           </Typography>
         </TruncateTooltip>
+
+        {isLocked ? (
+          <Tooltip title={lockReason ?? 'Locked'}>
+            <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled' }}>
+              <LockOutlinedIcon fontSize="small" sx={{ pointerEvents: 'none' }} />
+            </Box>
+          </Tooltip>
+        ) : null}
 
       </Box>
 
@@ -640,6 +698,8 @@ function ChapterCard({
                 selected={selectedId === child.subtree.node.id}
                 onContextMenu={onContextMenu}
                 divider={idx > 0}
+                previewMode={previewMode}
+                lockStatus={childLocks?.[child.subtree.node.id]}
               />
             ))
           ) : (
@@ -662,13 +722,22 @@ function LessonRow({
   selected,
   onContextMenu,
   divider,
+  previewMode,
+  lockStatus,
 }: {
   subtree: NodeSubtree;
   onSelect: (id: number) => void;
   selected: boolean;
   onContextMenu?: (e: React.MouseEvent<HTMLElement>, id: number) => void;
   divider?: boolean;
+  previewMode: boolean;
+  lockStatus?: ChildUnlockStatus;
 }) {
+  const isLocked = !!(previewMode && lockStatus?.locked);
+  const lockReason = lockStatus?.reason ?? null;
+  const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
+  const textColor = isLocked ? 'text.disabled' : 'text.primary';
+
   return (
     <Box
       onClick={() => onSelect(subtree.node.id)}
@@ -695,12 +764,19 @@ function LessonRow({
         transition: 'background-color .2s',
       }}
     >
-      <ArticleIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+      <ArticleIcon fontSize="small" sx={{ color: iconColor }} />
       <TruncateTooltip title={subtree.node.title || 'Untitled'}>
-        <Typography variant="body2" noWrap sx={{ color: 'text.primary' }}>
+        <Typography variant="body2" noWrap sx={{ color: textColor, flex: 1 }}>
           {subtree.node.title || 'Untitled'}
         </Typography>
       </TruncateTooltip>
+      {isLocked ? (
+        <Tooltip title={lockReason ?? 'Locked'}>
+          <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled' }}>
+            <LockOutlinedIcon fontSize="small" sx={{ pointerEvents: 'none' }} />
+          </Box>
+        </Tooltip>
+      ) : null}
 
     </Box>
   );
@@ -729,6 +805,10 @@ function OutlinePanel({
   canAddChapter,
   canAddBlock,
   stats,
+  previewMode,
+  unlockStatuses,
+  onToggleSequential,
+  sequentialLoading,
 }: {
   course: NodeSubtree;
   expanded: Set<number>;
@@ -749,6 +829,10 @@ function OutlinePanel({
   canAddChapter: boolean;
   canAddBlock: boolean;
   stats: { lessons: number; chapters: number };
+  previewMode: boolean;
+  unlockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
+  onToggleSequential: (courseId: number, on: boolean) => void;
+  sequentialLoading: boolean;
 }) {
   const searchInput = useUndoRedoInput({
     value: search,
@@ -767,6 +851,12 @@ function OutlinePanel({
   );
 
   const hasLessons = course.children.length > 0;
+
+  const courseLockMap = previewMode
+    ? unlockStatuses[course.node.id] ?? {}
+    : ({} as Record<number, ChildUnlockStatus>);
+  const getChildLocks = (parentId: number) =>
+    previewMode ? unlockStatuses[parentId] ?? undefined : undefined;
 
   let contextualMessage: string | null = null;
   if (!search && selectedSubtree) {
@@ -791,6 +881,10 @@ function OutlinePanel({
         canAddLesson={canAddLesson}
         canAddChapter={canAddChapter}
         canAddBlock={canAddBlock}
+        previewMode={previewMode}
+        sequentialUnlock={!!course.node.sequential_unlock}
+        onSequentialToggle={(on) => onToggleSequential(course.node.id, on)}
+        sequentialLoading={sequentialLoading}
       />
 
       {/* Actions bar */}
@@ -864,6 +958,9 @@ function OutlinePanel({
                   onSelect={onSelect}
                   selectedId={selectedNodeId}
                   onContextMenu={onContextMenu}
+                  previewMode={previewMode}
+                  lockStatus={previewMode ? courseLockMap[child.node.id] : undefined}
+                  childLocks={getChildLocks(child.node.id)}
                 />
               ))}
             </Stack>
@@ -912,7 +1009,84 @@ export default function Tree({
   canAddChapter,
   canAddBlock,
   courseStats,
+  previewMode,
+  unlockStatusRefreshToken,
+  onToggleSequential,
+  sequentialLoading,
 }: TreeProps) {
+  const [unlockStatuses, setUnlockStatuses] = useState<Record<number, Record<number, ChildUnlockStatus>>>({});
+
+  useEffect(() => {
+    if (!previewMode || !activeCourse || mode !== 'outline') {
+      setUnlockStatuses({});
+      return;
+    }
+
+    const parentIds = new Set<number>();
+    if (activeCourse.children.length > 0) {
+      parentIds.add(activeCourse.node.id);
+    }
+
+    const collect = (subtree: NodeSubtree) => {
+      if (!expanded.has(subtree.node.id)) {
+        return;
+      }
+      subtree.children.forEach((child) => {
+        const childTree = child.subtree;
+        if (childTree.children.length > 0) {
+          parentIds.add(childTree.node.id);
+        }
+        collect(childTree);
+      });
+    };
+
+    collect(activeCourse);
+
+    if (parentIds.size === 0) {
+      setUnlockStatuses({});
+      return;
+    }
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          Array.from(parentIds).map(async (parentId) => {
+            const rows = await fetchUnlockStatus(parentId, signal);
+            const map: Record<number, ChildUnlockStatus> = {};
+            rows.forEach((row) => {
+              map[row.child_id] = row;
+            });
+            return [parentId, map] as const;
+          }),
+        );
+
+        if (cancelled) return;
+
+        const next: Record<number, Record<number, ChildUnlockStatus>> = {};
+        entries.forEach(([parentId, map]) => {
+          next[parentId] = map;
+        });
+        setUnlockStatuses(next);
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
+        console.error('Failed to fetch unlock statuses', error);
+        setUnlockStatuses({});
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [previewMode, activeCourse, expanded, unlockStatusRefreshToken, mode]);
+
   return (
     <Paper
       elevation={0}
@@ -958,6 +1132,10 @@ export default function Tree({
           canAddChapter={canAddChapter}
           canAddBlock={canAddBlock}
           stats={courseStats.get(activeCourse.node.id) ?? { lessons: 0, chapters: 0 }}
+          previewMode={previewMode}
+          unlockStatuses={unlockStatuses}
+          onToggleSequential={onToggleSequential}
+          sequentialLoading={sequentialLoading}
         />
       ) : (
         <CoursesList

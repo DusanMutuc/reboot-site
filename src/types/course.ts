@@ -12,6 +12,7 @@ export type ContentNode = {
   hero_image: string | null;
   icon: string | null;
   objectives: string | null;
+  sequential_unlock: boolean;
   metadata: Record<string, unknown> | null;
   [key: string]: unknown;
 };
@@ -54,4 +55,12 @@ export type NodeEdgeRule = {
   parent_type: string;
   child_kind: string;
   child_type: string;
+};
+
+export type ChildUnlockStatus = {
+  child_id: number;
+  child_position: number;
+  is_required: boolean;
+  locked: boolean;
+  reason: string | null;
 };
