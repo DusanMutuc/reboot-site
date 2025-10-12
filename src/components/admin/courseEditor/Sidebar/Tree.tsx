@@ -7,12 +7,14 @@ import {
   Box,
   Button,
   Chip,
+  FormControlLabel,
   IconButton,
   InputAdornment,
   List,
   ListItem,
   ListItemButton,
   Paper,
+  Switch,
   Stack,
   TextField,
   Tooltip,
@@ -71,6 +73,7 @@ export type TreeProps = {
   canAddChapter: boolean;
   canAddBlock: boolean;
   courseStats: Map<number, { lessons: number; chapters: number }>;
+  onToggleSequentialUnlock: (value: boolean) => void;
 };
 
 function matchesQuery(value: string | null | undefined, query: string) {
@@ -477,6 +480,8 @@ type OutlineHeaderProps = {
   canAddLesson: boolean;
   canAddChapter: boolean;
   canAddBlock: boolean;
+  sequentialUnlock: boolean;
+  onToggleSequentialUnlock: (value: boolean) => void;
 };
 
 function OutlineHeader({
@@ -485,6 +490,8 @@ function OutlineHeader({
   onBack,
   onExpandAll,
   onCollapseAll,
+  sequentialUnlock,
+  onToggleSequentialUnlock,
 }: OutlineHeaderProps) {
   return (
     <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -531,6 +538,20 @@ function OutlineHeader({
         />
         <Chip size="small" label={`${stats.lessons} lessons`} sx={{ bgcolor: '#e7f3ff', color: '#0c5ba0', fontWeight: 600 }} />
         <Chip size="small" label={`${stats.chapters} chapters`} sx={{ bgcolor: '#e7f3ff', color: '#0c5ba0', fontWeight: 600 }} />
+      </Box>
+
+      <Box sx={{ mt: 2 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={sequentialUnlock}
+              onChange={(event) => onToggleSequentialUnlock(event.target.checked)}
+              color="primary"
+              inputProps={{ 'aria-label': 'Toggle sequential unlock for course' }}
+            />
+          }
+          label="All nodes require previous nodes"
+        />
       </Box>
     </Box>
   );
@@ -729,6 +750,7 @@ function OutlinePanel({
   canAddChapter,
   canAddBlock,
   stats,
+  onToggleSequentialUnlock,
 }: {
   course: NodeSubtree;
   expanded: Set<number>;
@@ -749,12 +771,14 @@ function OutlinePanel({
   canAddChapter: boolean;
   canAddBlock: boolean;
   stats: { lessons: number; chapters: number };
+  onToggleSequentialUnlock: (value: boolean) => void;
 }) {
   const searchInput = useUndoRedoInput({
     value: search,
     onChange: onSearchChange,
     scopeKey: `outline-${course.node.id}`,
   });
+  const sequentialUnlock = Boolean(course.node.sequential_unlock);
   const filteredChildren = useMemo(
     () =>
       course.children
@@ -785,6 +809,8 @@ function OutlinePanel({
         onBack={onBack}
         onExpandAll={onExpandAll}
         onCollapseAll={onCollapseAll}
+        sequentialUnlock={sequentialUnlock}
+        onToggleSequentialUnlock={onToggleSequentialUnlock}
         onQuickAddLesson={onQuickAddLesson}
         onQuickAddChapter={onQuickAddChapter}
         onQuickAddBlock={onQuickAddBlock}
@@ -912,6 +938,7 @@ export default function Tree({
   canAddChapter,
   canAddBlock,
   courseStats,
+  onToggleSequentialUnlock,
 }: TreeProps) {
   return (
     <Paper
@@ -958,6 +985,7 @@ export default function Tree({
           canAddChapter={canAddChapter}
           canAddBlock={canAddBlock}
           stats={courseStats.get(activeCourse.node.id) ?? { lessons: 0, chapters: 0 }}
+          onToggleSequentialUnlock={onToggleSequentialUnlock}
         />
       ) : (
         <CoursesList

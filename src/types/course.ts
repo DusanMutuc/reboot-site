@@ -8,6 +8,7 @@ export type ContentNode = {
   title: string;
   slug: string | null;
   state: NodeState;
+  sequential_unlock: boolean;
   description: string | null;
   hero_image: string | null;
   icon: string | null;

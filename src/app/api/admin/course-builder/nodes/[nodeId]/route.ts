@@ -60,6 +60,7 @@ export async function PATCH(
       'title',
       'slug',
       'state',
+      'sequential_unlock',
       'description',
       'hero_image',
       'icon',
@@ -71,6 +72,9 @@ export async function PATCH(
     const updatePayload: Record<string, unknown> = {};
     for (const key of allowedFields) {
       if (key in updates) {
+        if (key === 'sequential_unlock' && typeof updates[key] !== 'boolean') {
+          throw new CourseBuilderError('sequential_unlock must be a boolean', 400);
+        }
         updatePayload[key] = updates[key];
       }
     }

@@ -714,6 +714,15 @@ function CourseEditorInner() {
     [flushNodeUpdate],
   );
 
+  const handleToggleSequentialUnlock = useCallback(
+    (enabled: boolean) => {
+      if (!activeCourse) return;
+      const courseId = activeCourse.node.id;
+      queueNodeUpdate(courseId, { sequential_unlock: enabled }, { debounce: false });
+    },
+    [activeCourse, queueNodeUpdate],
+  );
+
   const ensureResource = useCallback(
     async (resourceId: number) => {
       if (resourceCache[resourceId]) {
@@ -1247,6 +1256,7 @@ function CourseEditorInner() {
               canAddChapter={canAddChapter}
               canAddBlock={canAddBlock}
               courseStats={courseStats}
+              onToggleSequentialUnlock={handleToggleSequentialUnlock}
             />
           </Box>
           <Box
