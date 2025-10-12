@@ -1,12 +1,58 @@
 import type { ContentBlock, ContentNode, NodeChild, NodeEdgeRule, NodeSubtree } from '@/types/course';
 
-async function parseJson<T>(res: Response, fallback: string): Promise<T> {
-  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+async function parseJson<T>(res: Response, fallback: string, context?: string): Promise<T> {
+  const debugContext = context ?? 'courseBuilderRequest';
+  let rawBody = '';
+  try {
+    rawBody = await res.text();
+  } catch (readError) {
+    console.error('[courseBuilder] Failed to read response body', {
+      context: debugContext,
+      status: res.status,
+      statusText: res.statusText,
+      url: res.url,
+      error: readError,
+    });
+  }
+
+  let parsed: T & { error?: string } | undefined;
+  if (rawBody) {
+    try {
+      parsed = JSON.parse(rawBody) as T & { error?: string };
+    } catch (parseError) {
+      console.error('[courseBuilder] Failed to parse response JSON', {
+        context: debugContext,
+        status: res.status,
+        statusText: res.statusText,
+        url: res.url,
+        body: rawBody,
+        error: parseError,
+      });
+      if (res.ok) {
+        throw new Error(`Invalid JSON response for ${debugContext}`);
+      }
+    }
+  }
+
   if (!res.ok) {
-    const message = (json as { error?: string }).error ?? fallback;
+    console.error('[courseBuilder] Request failed', {
+      context: debugContext,
+      status: res.status,
+      statusText: res.statusText,
+      url: res.url,
+      body: rawBody,
+      parsed,
+    });
+    const statusInfo = `${res.status}${res.statusText ? ` ${res.statusText}` : ''}`;
+    const message = parsed?.error ?? `${fallback} (status ${statusInfo})`;
     throw new Error(message);
   }
-  return json;
+
+  if (!parsed) {
+    return {} as T;
+  }
+
+  return parsed;
 }
 
 export async function fetchCourseTrees(rootType: string = 'course') {
@@ -59,7 +105,7 @@ export async function enforceStrictSequence(rootId: number, enabled: boolean) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
   });
-  const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to update sequential unlock');
+  const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to update sequential unlock', 'enforceStrictSequence');
   return data.subtree;
 }
 
