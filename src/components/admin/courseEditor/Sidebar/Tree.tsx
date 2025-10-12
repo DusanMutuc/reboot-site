@@ -29,6 +29,7 @@ import LayersIcon from '@mui/icons-material/Layers';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import StorageIcon from '@mui/icons-material/Storage';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
@@ -562,22 +563,28 @@ function OutlineHeader({
  *  ----------------------------- */
 function ChapterCard({
   subtree,
+  edge,
   expanded,
   onToggle,
   onSelect,
   selectedId,
   onContextMenu,
+  sequentialUnlock,
 }: {
   subtree: NodeSubtree;
+  edge: NodeSubtree['children'][number]['edge'];
   expanded: Set<number>;
   onToggle: (id: number) => void;
   onSelect: (id: number) => void;
   selectedId: number | null;
   onContextMenu?: (e: React.MouseEvent<HTMLElement>, id: number) => void;
+  sequentialUnlock: boolean;
 }) {
   const hasChildren = subtree.children.length > 0;
   const isExpanded = expanded.has(subtree.node.id);
   const isSelected = selectedId === subtree.node.id;
+  const showLockIcon =
+    sequentialUnlock && subtree.node.node_type === 'lesson' && edge.position > 0;
 
   return (
     <Box
@@ -646,6 +653,12 @@ function ChapterCard({
             {subtree.node.title || 'Untitled'}
           </Typography>
         </TruncateTooltip>
+
+        {showLockIcon ? (
+          <Tooltip title="Students must complete previous lessons first" placement="top" arrow>
+            <LockOutlinedIcon fontSize="small" sx={{ color: 'text.disabled' }} />
+          </Tooltip>
+        ) : null}
 
       </Box>
 
@@ -781,12 +794,10 @@ function OutlinePanel({
   const sequentialUnlock = Boolean(course.node.sequential_unlock);
   const filteredChildren = useMemo(
     () =>
-      course.children
-        .map((child) => child.subtree)
-        .filter((child) => {
-          if (!search) return true;
-          return subtreeContainsQuery(child, search);
-        }),
+      course.children.filter(({ subtree }) => {
+        if (!search) return true;
+        return subtreeContainsQuery(subtree, search);
+      }),
     [course.children, search],
   );
 
@@ -881,15 +892,17 @@ function OutlinePanel({
         {hasLessons ? (
           filteredChildren.length > 0 ? (
             <Stack spacing={1.5}>
-              {filteredChildren.map((child) => (
+              {filteredChildren.map(({ edge, subtree }) => (
                 <ChapterCard
-                  key={child.node.id}
-                  subtree={child}
+                  key={subtree.node.id}
+                  subtree={subtree}
+                  edge={edge}
                   expanded={expanded}
                   onToggle={onToggle}
                   onSelect={onSelect}
                   selectedId={selectedNodeId}
                   onContextMenu={onContextMenu}
+                  sequentialUnlock={sequentialUnlock}
                 />
               ))}
             </Stack>

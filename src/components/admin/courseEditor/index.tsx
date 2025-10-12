@@ -30,6 +30,7 @@ import {
   duplicateNode,
   fetchCourseTrees,
   fetchEdgeRules,
+  enforceStrictSequence,
   reorderBlocks,
   reorderChildren,
   searchNodes,
@@ -104,6 +105,54 @@ function mergeSubtree(list: NodeSubtree[], updated: NodeSubtree) {
   }
 
   return next;
+}
+
+function applyStrictSequenceState(subtree: NodeSubtree, enabled: boolean): NodeSubtree {
+  const shouldPropagate = subtree.node.node_type === 'course' || subtree.node.node_type === 'lesson';
+  const node = shouldPropagate ? { ...subtree.node, sequential_unlock: enabled } : subtree.node;
+  const firstPosition =
+    shouldPropagate && subtree.children.length > 0
+      ? Math.min(...subtree.children.map((child) => child.edge.position))
+      : null;
+
+  const children = subtree.children.map((child) => {
+    const required = shouldPropagate
+      ? Boolean(enabled) && firstPosition != null && child.edge.position !== firstPosition
+      : child.edge.is_required;
+    const edge = shouldPropagate ? { ...child.edge, is_required: required } : child.edge;
+
+    return {
+      edge,
+      subtree: applyStrictSequenceState(child.subtree, enabled),
+    };
+  });
+
+  return {
+    node,
+    blocks: subtree.blocks,
+    children,
+  };
+}
+
+function hasStrictSequenceMismatch(subtree: NodeSubtree, expected: boolean): boolean {
+  const shouldPropagate = subtree.node.node_type === 'course' || subtree.node.node_type === 'lesson';
+  if (shouldPropagate) {
+    if (Boolean(subtree.node.sequential_unlock) !== expected) {
+      return true;
+    }
+
+    const firstPosition =
+      subtree.children.length > 0 ? Math.min(...subtree.children.map((child) => child.edge.position)) : null;
+
+    for (const child of subtree.children) {
+      const shouldRequire = expected && firstPosition != null && child.edge.position !== firstPosition;
+      if (Boolean(child.edge.is_required) !== shouldRequire) {
+        return true;
+      }
+    }
+  }
+
+  return subtree.children.some((child) => hasStrictSequenceMismatch(child.subtree, expected));
 }
 
 function pruneTree(tree: NodeSubtree, nodeId: number): { next: NodeSubtree; removed: boolean } {
@@ -306,7 +355,10 @@ function CourseEditorInner() {
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
-  const [snack, setSnack] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+  const [snack, setSnack] = useState<{
+    message: string;
+    severity: 'success' | 'error' | 'warning';
+  } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [menuNodeId, setMenuNodeId] = useState<number | null>(null);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
@@ -718,9 +770,26 @@ function CourseEditorInner() {
     (enabled: boolean) => {
       if (!activeCourse) return;
       const courseId = activeCourse.node.id;
-      queueNodeUpdate(courseId, { sequential_unlock: enabled }, { debounce: false });
+
+      void runMutation(
+        async () => {
+          const subtree = await enforceStrictSequence(courseId, enabled);
+          if (hasStrictSequenceMismatch(subtree, enabled)) {
+            setSnack({
+              message: 'Saved sequence differs from requested setting. Reverting to server value.',
+              severity: 'warning',
+            });
+          }
+          return { subtree };
+        },
+        {
+          optimistic: (forest) =>
+            forest.map((tree) => (tree.node.id === courseId ? applyStrictSequenceState(tree, enabled) : tree)),
+          savingMessage: 'Saving…',
+        },
+      );
     },
-    [activeCourse, queueNodeUpdate],
+    [activeCourse, runMutation, setSnack],
   );
 
   const ensureResource = useCallback(

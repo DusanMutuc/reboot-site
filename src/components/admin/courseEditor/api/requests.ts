@@ -53,6 +53,16 @@ export async function updateNode(nodeId: number, updates: Partial<ContentNode>) 
   return data.subtree;
 }
 
+export async function enforceStrictSequence(rootId: number, enabled: boolean) {
+  const res = await fetch(`/api/admin/course-builder/nodes/${rootId}/sequence`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled }),
+  });
+  const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to update sequential unlock');
+  return data.subtree;
+}
+
 export async function deleteNode(nodeId: number) {
   const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}`, { method: 'DELETE' });
   const data = await parseJson<{ subtree?: NodeSubtree }>(res, 'Failed to delete node');
