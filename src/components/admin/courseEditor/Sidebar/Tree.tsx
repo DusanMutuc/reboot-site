@@ -603,6 +603,31 @@ function ChapterCard({
   const isLocked = !!(previewMode && lockStatus?.locked);
   const lockReason = lockStatus?.reason ?? null;
 
+  const effectiveChildLocks = useMemo<Record<number, ChildUnlockStatus> | undefined>(
+    () => {
+      if (!previewMode || !isLocked) {
+        return childLocks;
+      }
+
+      const merged: Record<number, ChildUnlockStatus> = {};
+      subtree.children.forEach((child) => {
+        const childId = child.subtree.node.id;
+        const existing = childLocks?.[childId];
+
+        merged[childId] = {
+          child_id: childId,
+          child_position: existing?.child_position ?? child.edge.position,
+          is_required: existing?.is_required ?? Boolean(child.edge.is_required),
+          locked: true,
+          reason: existing?.reason ?? lockReason ?? null,
+        };
+      });
+
+      return merged;
+    },
+    [previewMode, isLocked, childLocks, lockReason, subtree],
+  );
+
   const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
 
   return (
@@ -699,7 +724,7 @@ function ChapterCard({
                 onContextMenu={onContextMenu}
                 divider={idx > 0}
                 previewMode={previewMode}
-                lockStatus={childLocks?.[child.subtree.node.id]}
+                lockStatus={effectiveChildLocks?.[child.subtree.node.id]}
               />
             ))
           ) : (
