@@ -17,23 +17,25 @@ type UnlockRow = {
   reason: string | null;
 };
 
-function parseParentId(raw: string): number {
+function parseNodeId(raw: string): number {
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) {
-    throw new Error('Invalid parentId');
+    throw new Error('Invalid nodeId');
   }
   return value;
 }
 
-export async function GET(request: NextRequest, context: { params: Promise<{ parentId: string }> }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { nodeId: string } },
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const { parentId: rawParentId } = await context.params;
-    const parentId = parseParentId(rawParentId);
+    const parentId = parseNodeId(params.nodeId);
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId') ?? undefined;
 
@@ -45,7 +47,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ par
     const { data, error } = await supabase.rpc<UnlockRow>('get_child_unlock_status', rpcParams);
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json(
+        { error: error.message },
+        { status: 500, headers: { 'Cache-Control': 'no-store' } },
+      );
     }
 
     const payload: Record<number, { locked: boolean; is_required: boolean; reason: string | null; child_position: number }> = {};
@@ -61,7 +66,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ par
     return NextResponse.json(payload, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load unlock status';
-    const invalidRequest = error instanceof Error && error.message.includes('Invalid');
-    return NextResponse.json({ error: message }, { status: invalidRequest ? 400 : 500, headers: { 'Cache-Control': 'no-store' } });
+    const invalidRequest = error instanceof Error && error.message.includes('Invalid nodeId');
+    return NextResponse.json(
+      { error: message },
+      { status: invalidRequest ? 400 : 500, headers: { 'Cache-Control': 'no-store' } },
+    );
   }
 }
