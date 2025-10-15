@@ -2,7 +2,20 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Box, Button, Card, CardContent, CardMedia, CircularProgress, Divider, Stack, TextField, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardMedia,
+  CircularProgress,
+  Divider,
+  FormControl,
+  FormLabel,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -58,6 +71,39 @@ type SmartDocState =
   | { status: 'error'; message: string }
   | { status: 'ready'; doc: SmartDocRecord };
 
+/** ---------- Shared field/label styles (unifies look across the page) ---------- */
+const FIELD_SX = {
+  bgcolor: 'grey.100',
+  borderRadius: 2,
+  px: 2,
+  py: 1,
+  border: '1px solid',
+  borderColor: 'transparent',
+  alignItems: 'flex-start',
+  '& .MuiInputBase-input': { py: 1.25 },
+  '& textarea': { py: 1.25 },
+  '&:hover': { bgcolor: 'grey.100' },
+  '&.Mui-focused': {
+    bgcolor: 'common.white',
+    borderColor: 'primary.light',
+    boxShadow: (t: any) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.18)}`,
+  },
+} as const;
+
+const LABEL_SX = {
+  fontWeight: 700,
+  fontSize: '1.6rem',   // slightly larger than body text
+  lineHeight: 1.3,
+  color: 'text.primary',
+  mb: 1,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 0.5,
+} as const;
+
+
+/** --------------------------------------------------------------------------- */
+
 export type BlockRendererProps = {
   block: RenderableBlock;
   resource: RenderableResource | null;
@@ -65,81 +111,37 @@ export type BlockRendererProps = {
 };
 
 function SmartDocPromptField({ prompt }: { prompt: SmartDocPrompt }) {
-  const label = useMemo(() => prompt.label.trim(), [prompt.label]);
-  const helperText = prompt.help_text?.trim().length ? prompt.help_text : undefined;
+  const isTextarea = prompt.prompt_type === 'textarea';
+  const label = useMemo(() => prompt.label?.trim() || 'Question', [prompt.label]);
+  const helper = prompt.help_text?.trim();
 
   return (
-    <Stack
-      spacing={2}
-      sx={{
-        px: { xs: 0, sm: 0.5 },
-      }}
-    >
-      <Stack
-        spacing={1}
-        sx={{
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 2.5,
-          bgcolor: 'grey.50',
-          px: { xs: 2, sm: 2.5 },
-          py: { xs: 2, sm: 2.5 },
-          boxShadow: 'none',
-          gap: 1.5,
-        }}
-      >
-        <Stack spacing={0.75}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
-            {label}
-            {prompt.required ? (
-              <Typography component="span" color="error.main" sx={{ ml: 0.5 }}>
-                *
-              </Typography>
-            ) : null}
-          </Typography>
-          {helperText ? (
-            <Typography variant="body2" color="text.secondary">
-              {helperText}
-            </Typography>
-          ) : null}
-        </Stack>
-        <TextField
-          fullWidth
-          variant="outlined"
-          multiline={prompt.prompt_type === 'textarea'}
-          minRows={prompt.prompt_type === 'textarea' ? 4 : undefined}
-          placeholder=""
-          InputProps={{
-            sx: {
-              alignItems: 'flex-start',
-              bgcolor: 'common.white',
-              borderRadius: 2,
-              px: 1.5,
-              py: 0,
-              '& fieldset': {
-                borderColor: 'divider',
-              },
-              '&:hover fieldset': {
-                borderColor: 'grey.400',
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: 'primary.main',
-                borderWidth: 2,
-              },
-              '&.Mui-focused': {
-                boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.2)}`,
-              },
-              '& .MuiInputBase-input': {
-                py: 1.5,
-              },
-              '& textarea': {
-                py: 1.5,
-              },
-            },
-          }}
-        />
-      </Stack>
-    </Stack>
+    <FormControl fullWidth sx={{ mb: 4 }}>
+      <FormLabel sx={LABEL_SX}>
+        {label}
+        {prompt.required && (
+          <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
+            *
+          </Box>
+        )}
+      </FormLabel>
+
+      {helper && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {helper}
+        </Typography>
+      )}
+
+      <TextField
+        fullWidth
+        variant="filled"
+        label={undefined}
+        placeholder=""
+        multiline={isTextarea}
+        minRows={isTextarea ? 6 : undefined}
+        InputProps={{ disableUnderline: true, sx: FIELD_SX }}
+      />
+    </FormControl>
   );
 }
 
@@ -148,10 +150,9 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
 
   useEffect(() => {
     let active = true;
-
     setState({ status: 'loading' });
 
-    const load = async () => {
+    (async () => {
       const { data, error } = await supabase
         .from('smart_docs')
         .select(
@@ -165,21 +166,20 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
       if (!active) return;
 
       if (error || !data) {
-        const message = error?.message ?? 'Smart doc not found';
-        setState({ status: 'error', message });
+        setState({ status: 'error', message: error?.message ?? 'Smart doc not found' });
         return;
       }
 
       const prompts = (data.smart_doc_prompts ?? [])
-        .map((prompt) => ({
-          id: prompt.id,
-          position: prompt.position,
-          label: prompt.label,
-          prompt_type: prompt.prompt_type,
-          help_text: prompt.help_text,
-          required: prompt.required,
+        .map((p: any) => ({
+          id: p.id,
+          position: p.position,
+          label: p.label,
+          prompt_type: p.prompt_type,
+          help_text: p.help_text,
+          required: p.required,
         }))
-        .sort((a, b) => a.position - b.position);
+        .sort((a: any, b: any) => a.position - b.position);
 
       setState({
         status: 'ready',
@@ -191,31 +191,21 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
           prompts,
         },
       });
-    };
-
-    void load();
+    })();
 
     return () => {
       active = false;
     };
   }, [docId]);
 
-  const containerStyles = {
-    bgcolor: 'background.paper',
-    px: { xs: 2.5, sm: 4 },
-    py: { xs: 3.5, sm: 5 },
-    borderRadius: 3,
-    boxShadow: 'none',
-    border: 'none',
-    gap: 4,
-  } as const;
+  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
   if (state.status === 'idle' || state.status === 'loading') {
     return (
-      <Stack spacing={2} alignItems="center" justifyContent="center" sx={containerStyles}>
-        <CircularProgress size={24} />
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+        <CircularProgress size={22} />
         <Typography variant="body2" color="text.secondary">
-          Loading smart doc…
+          Loading…
         </Typography>
       </Stack>
     );
@@ -223,54 +213,48 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
 
   if (state.status === 'error') {
     return (
-      <Stack spacing={1.5} sx={containerStyles}>
+      <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
         <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
         <Typography variant="body2" color="error.main">
-          Failed to load smart doc: {state.message}
+          Failed to load: {state.message}
         </Typography>
       </Stack>
     );
   }
 
   const { doc } = state;
-  const headerTitle = doc.title.trim().length > 0 ? doc.title : fallbackLabel ?? 'Smart doc';
+  const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
 
   return (
-    <Stack spacing={4} sx={containerStyles}>
-      <Stack spacing={2}>
-        <Typography variant="h5" sx={{ fontWeight: 600 }}>
-          {headerTitle}
-        </Typography>
-        {doc.description?.trim().length ? (
-          <Box
-            sx={{
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2.5,
-              bgcolor: 'grey.50',
-              px: { xs: 2, sm: 2.5 },
-              py: { xs: 1.75, sm: 2 },
-              maxWidth: '72ch',
-            }}
-          >
-            <Stack direction="row" spacing={1.5} alignItems="flex-start">
-              <InfoOutlinedIcon color="primary" sx={{ mt: 0.25 }} />
-              <Typography variant="body1" color="text.secondary">
-                {doc.description}
-              </Typography>
-            </Stack>
-          </Box>
-        ) : null}
-      </Stack>
-      <Stack spacing={doc.prompts.length ? 4 : 2.5}>
+    <Stack spacing={3} sx={wrapSx}>
+      {/* Section title */}
+      <Typography
+        component="h2"
+        variant="h2"
+        sx={{ fontWeight: 650, fontSize: { xs: '1.35rem', sm: '2rem' }, lineHeight: 1.25 }}
+      >
+        {title}
+      </Typography>
+
+      {/* Optional description box */}
+      {/* Optional description – plain text under title */}
+{doc.description?.trim() && (
+  <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
+    {doc.description}
+  </Typography>
+)}
+
+
+      {/* Prompts */}
+      <Box>
         {doc.prompts.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            This smart doc has no prompts yet.
+            No questions yet.
           </Typography>
         ) : (
-          doc.prompts.map((prompt) => <SmartDocPromptField key={prompt.id} prompt={prompt} />)
+          doc.prompts.map((p) => <SmartDocPromptField key={p.id} prompt={p} />)
         )}
-      </Stack>
+      </Box>
     </Stack>
   );
 }
@@ -305,11 +289,7 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
   const isYoutube = lower.includes('youtube.com') || lower.includes('youtu.be');
   const isVimeo = lower.includes('vimeo.com');
 
-  const frameWrapper = (
-    src: string,
-    allow: string,
-    title: string,
-  ) => (
+  const frameWrapper = (src: string, allow: string, title: string) => (
     <Box
       sx={{
         position: 'relative',
@@ -368,12 +348,7 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
   return (
     <Card variant="outlined">
       {resource.thumbnail && (
-        <CardMedia
-          component="img"
-          image={resource.thumbnail}
-          alt={resource.title}
-          sx={{ maxHeight: 320, objectFit: 'cover' }}
-        />
+        <CardMedia component="img" image={resource.thumbnail} alt={resource.title} sx={{ maxHeight: 320, objectFit: 'cover' }} />
       )}
       <CardContent>
         <Stack spacing={1}>
