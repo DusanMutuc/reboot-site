@@ -2,18 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
-import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CardMedia,
-  CircularProgress,
-  Divider,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material';
+import { Box, Button, Card, CardContent, CardMedia, CircularProgress, Divider, Stack, TextField, Typography } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -21,7 +10,6 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import InsertLinkIcon from '@mui/icons-material/InsertLink';
 import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
-import DescriptionIcon from '@mui/icons-material/Description';
 
 import { supabase } from '@/lib/supabaseClient';
 
@@ -79,16 +67,42 @@ function SmartDocPromptField({ prompt }: { prompt: SmartDocPrompt }) {
   const helperText = prompt.help_text?.trim().length ? prompt.help_text : undefined;
 
   return (
-    <TextField
-      fullWidth
-      label={label}
-      required={prompt.required}
-      helperText={helperText}
-      variant="outlined"
-      multiline={prompt.prompt_type === 'textarea'}
-      minRows={prompt.prompt_type === 'textarea' ? 4 : undefined}
-      defaultValue=""
-    />
+    <Stack spacing={1.5} sx={{ px: { xs: 0, sm: 0.5 } }}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+        {label}
+        {prompt.required ? (
+          <Typography component="span" color="error.main" sx={{ ml: 0.5 }}>
+            *
+          </Typography>
+        ) : null}
+      </Typography>
+      {helperText ? (
+        <Typography variant="body2" color="text.secondary">
+          {helperText}
+        </Typography>
+      ) : null}
+      <TextField
+        fullWidth
+        variant="standard"
+        multiline={prompt.prompt_type === 'textarea'}
+        minRows={prompt.prompt_type === 'textarea' ? 4 : undefined}
+        InputProps={{
+          sx: {
+            fontSize: '1rem',
+            '& .MuiInputBase-input': {
+              py: 1.5,
+            },
+            '&:before': {
+              borderBottomColor: 'divider',
+            },
+            '&:after': {
+              borderBottomColor: 'primary.main',
+            },
+          },
+        }}
+        placeholder=""
+      />
+    </Stack>
   );
 }
 
@@ -149,36 +163,34 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
     };
   }, [docId]);
 
+  const containerStyles = {
+    bgcolor: 'background.paper',
+    px: { xs: 2, sm: 3 },
+    py: { xs: 3, sm: 4 },
+    borderRadius: 2,
+    boxShadow: 'none',
+    border: 'none',
+  };
+
   if (state.status === 'idle' || state.status === 'loading') {
     return (
-      <Card variant="outlined">
-        <CardContent>
-          <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ py: 4 }}>
-            <CircularProgress size={24} />
-            <Typography variant="body2" color="text.secondary">
-              Loading smart doc…
-            </Typography>
-          </Stack>
-        </CardContent>
-      </Card>
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={containerStyles}>
+        <CircularProgress size={24} />
+        <Typography variant="body2" color="text.secondary">
+          Loading smart doc…
+        </Typography>
+      </Stack>
     );
   }
 
   if (state.status === 'error') {
     return (
-      <Card variant="outlined">
-        <CardContent>
-          <Stack spacing={1}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <DescriptionIcon fontSize="small" />
-              <Typography variant="subtitle1">{fallbackLabel ?? 'Smart doc'}</Typography>
-            </Stack>
-            <Typography variant="body2" color="error.main">
-              Failed to load smart doc: {state.message}
-            </Typography>
-          </Stack>
-        </CardContent>
-      </Card>
+      <Stack spacing={1.5} sx={containerStyles}>
+        <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
+        <Typography variant="body2" color="error.main">
+          Failed to load smart doc: {state.message}
+        </Typography>
+      </Stack>
     );
   }
 
@@ -186,32 +198,27 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
   const headerTitle = doc.title.trim().length > 0 ? doc.title : fallbackLabel ?? 'Smart doc';
 
   return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={3}>
-          <Stack spacing={1}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <DescriptionIcon fontSize="small" />
-              <Typography variant="h6">{headerTitle}</Typography>
-            </Stack>
-            {doc.description?.trim().length ? (
-              <Typography variant="body2" color="text.secondary">
-                {doc.description}
-              </Typography>
-            ) : null}
-          </Stack>
-          <Stack spacing={2}>
-            {doc.prompts.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                This smart doc has no prompts yet.
-              </Typography>
-            ) : (
-              doc.prompts.map((prompt) => <SmartDocPromptField key={prompt.id} prompt={prompt} />)
-            )}
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
+    <Stack spacing={4} sx={containerStyles}>
+      <Stack spacing={1.5}>
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>
+          {headerTitle}
+        </Typography>
+        {doc.description?.trim().length ? (
+          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: '68ch' }}>
+            {doc.description}
+          </Typography>
+        ) : null}
+      </Stack>
+      <Stack spacing={doc.prompts.length ? 3.5 : 2}>
+        {doc.prompts.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            This smart doc has no prompts yet.
+          </Typography>
+        ) : (
+          doc.prompts.map((prompt) => <SmartDocPromptField key={prompt.id} prompt={prompt} />)
+        )}
+      </Stack>
+    </Stack>
   );
 }
 
@@ -523,12 +530,9 @@ export function BlockRenderer({ block, resource, previewMode = false }: BlockRen
       <Card variant="outlined">
         <CardContent>
           <Stack spacing={1}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <DescriptionIcon fontSize="small" />
-              <Typography variant="subtitle1">
-                {block.label ?? (block.smart_doc_id ? `Smart doc #${block.smart_doc_id}` : 'Smart doc')}
-              </Typography>
-            </Stack>
+            <Typography variant="subtitle1">
+              {block.label ?? (block.smart_doc_id ? `Smart doc #${block.smart_doc_id}` : 'Smart doc')}
+            </Typography>
             <Typography variant="body2" color="text.secondary">
               {block.smart_doc_id
                 ? `Smart doc ID ${block.smart_doc_id}.`
