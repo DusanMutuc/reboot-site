@@ -63,6 +63,7 @@ async function cloneSubtree(nodeId: number, options: CloneOptions) {
         position: block.position,
         text_md: block.text_md ?? null,
         resource_id: block.resource_id ?? null,
+        smart_doc_id: block.smart_doc_id ?? null,
         start_ms: block.start_ms ?? null,
         end_ms: block.end_ms ?? null,
         label: block.label ?? null,

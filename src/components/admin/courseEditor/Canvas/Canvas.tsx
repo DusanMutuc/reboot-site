@@ -6,6 +6,7 @@ import AddIcon from '@mui/icons-material/Add';
 import TextFieldsIcon from '@mui/icons-material/TextFields';
 import VideoLibraryIcon from '@mui/icons-material/VideoLibrary';
 import HorizontalRuleIcon from '@mui/icons-material/HorizontalRule';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import type { UniqueIdentifier } from '@dnd-kit/core';
 
@@ -302,6 +303,9 @@ export default function Canvas({
           </MenuItem>
           <MenuItem onClick={() => handleChooseInsert('asset')}>
             <VideoLibraryIcon fontSize="small" sx={{ mr: 1 }} /> Resource
+          </MenuItem>
+          <MenuItem onClick={() => handleChooseInsert('smart_doc')}>
+            <DescriptionIcon fontSize="small" sx={{ mr: 1 }} /> Smart Doc
           </MenuItem>
           <MenuItem onClick={() => handleChooseInsert('divider')}>
             <HorizontalRuleIcon fontSize="small" sx={{ mr: 1 }} /> Divider

@@ -10,13 +10,15 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import InsertLinkIcon from '@mui/icons-material/InsertLink';
 import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 export type RenderableBlock = {
   id: number;
-  block_type: 'text' | 'asset' | 'divider';
+  block_type: 'text' | 'asset' | 'divider' | 'smart_doc';
   position: number;
   text_md: string | null;
   resource_id: number | null;
+  smart_doc_id: number | null;
   start_ms: number | null;
   end_ms: number | null;
   label: string | null;
@@ -332,6 +334,28 @@ export function BlockRenderer({ block, resource }: BlockRendererProps) {
         }}
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
       />
+    );
+  }
+
+  if (block.block_type === 'smart_doc') {
+    return (
+      <Card variant="outlined">
+        <CardContent>
+          <Stack spacing={1}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <DescriptionIcon fontSize="small" />
+              <Typography variant="subtitle1">
+                {block.label ?? (block.smart_doc_id ? `Smart doc #${block.smart_doc_id}` : 'Smart doc')}
+              </Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {block.smart_doc_id
+                ? `Smart doc ID ${block.smart_doc_id}.`
+                : 'Smart doc details will appear after it is saved.'}
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     );
   }
 
