@@ -75,6 +75,14 @@ function clonePrompts(prompts: SmartDocPromptDraft[]): SmartDocPromptDraft[] {
   return prompts.map((prompt) => ({ ...prompt }));
 }
 
+function logSmartDocDebug(message: string, context?: Record<string, unknown>) {
+  if (context) {
+    console.log(`[SmartDoc] ${message}`, context);
+  } else {
+    console.log(`[SmartDoc] ${message}`);
+  }
+}
+
 function createEmptySmartDocDraft(docId: number | null = null): SmartDocDraft {
   return {
     docId,
@@ -317,6 +325,7 @@ export default function Properties({
 
     const load = async () => {
       try {
+        logSmartDocDebug('Fetching smart doc', { docId });
         const { data, error } = await supabase
           .from('smart_docs')
           .select(
@@ -328,6 +337,12 @@ export default function Properties({
           .single();
 
         if (cancelled) return;
+
+        logSmartDocDebug('Fetch complete', {
+          docId,
+          hasData: !!data,
+          error: error ? error.message : null,
+        });
 
         if (error) {
           setSmartDocError(error.message ?? 'Failed to load smart doc');
@@ -365,6 +380,7 @@ export default function Properties({
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Failed to load smart doc';
+        logSmartDocDebug('Fetch threw error', { docId, message });
         setSmartDocError(message);
         setSmartDocDraft(createEmptySmartDocDraft(docId));
       } finally {
@@ -480,19 +496,33 @@ export default function Properties({
     setSmartDocError(null);
     setSmartDocMessage(null);
 
+    logSmartDocDebug('Saving smart doc start', {
+      blockId: selectedBlock.id,
+      docId: smartDocDraft.docId,
+      promptCount: smartDocDraft.prompts.length,
+    });
+
     try {
-      let docId = smartDocDraft.docId;
       const title = smartDocDraft.title.trim();
       const description = smartDocDraft.description.trim();
+      let docId = smartDocDraft.docId;
 
       if (!docId) {
+        logSmartDocDebug('Creating smart doc', { title, description });
         const { data: doc, error } = await supabase
           .from('smart_docs')
           .insert({ title, description: description ? description : null, is_published: false })
           .select('id, title, description, is_published')
           .single();
+        logSmartDocDebug('Create result', {
+          receivedId: doc?.id ?? null,
+          error: error ? error.message : null,
+        });
         if (error) {
           throw new Error(error.message);
+        }
+        if (!doc) {
+          throw new Error('Failed to create smart doc');
         }
         docId = doc.id as number;
 
@@ -508,18 +538,33 @@ export default function Properties({
         }));
 
         if (promptsPayload.length > 0) {
+          logSmartDocDebug('Creating prompts', { docId, promptPayload: promptsPayload });
           const { error: promptError } = await supabase.from('smart_doc_prompts').insert(promptsPayload);
+          logSmartDocDebug('Create prompts result', {
+            docId,
+            error: promptError ? promptError.message : null,
+          });
           if (promptError) {
             throw new Error(promptError.message);
           }
         }
       } else {
+        logSmartDocDebug('Updating smart doc', {
+          docId,
+          title,
+          description,
+          is_published: smartDocDraft.is_published,
+        });
         const { error: updateError } = await supabase
           .from('smart_docs')
           .update({ title, description: description ? description : null, is_published: smartDocDraft.is_published })
           .eq('id', docId)
           .select('id')
           .single();
+        logSmartDocDebug('Update smart doc result', {
+          docId,
+          error: updateError ? updateError.message : null,
+        });
         if (updateError) {
           throw new Error(updateError.message);
         }
@@ -535,7 +580,12 @@ export default function Properties({
           .map((prompt) => prompt.id)
           .filter((id): id is number => id != null && !nextIds.has(id));
         if (toDeleteIds.length > 0) {
+          logSmartDocDebug('Deleting prompts', { docId, toDeleteIds });
           const { error: deleteError } = await supabase.from('smart_doc_prompts').delete().in('id', toDeleteIds);
+          logSmartDocDebug('Delete prompts result', {
+            docId,
+            error: deleteError ? deleteError.message : null,
+          });
           if (deleteError) {
             throw new Error(deleteError.message);
           }
@@ -552,6 +602,17 @@ export default function Properties({
             !!previous.required !== !!prompt.required ||
             previous.position !== prompt.position
           ) {
+            logSmartDocDebug('Updating prompt', {
+              docId,
+              promptId: prompt.id,
+              payload: {
+                label: prompt.label.trim(),
+                prompt_type: prompt.prompt_type,
+                help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+                required: !!prompt.required,
+                position: prompt.position,
+              },
+            });
             const { error: promptUpdateError } = await supabase
               .from('smart_doc_prompts')
               .update({
@@ -565,6 +626,11 @@ export default function Properties({
               })
               .eq('id', prompt.id)
               .eq('doc_id', docId);
+            logSmartDocDebug('Update prompt result', {
+              docId,
+              promptId: prompt.id,
+              error: promptUpdateError ? promptUpdateError.message : null,
+            });
             if (promptUpdateError) {
               throw new Error(promptUpdateError.message);
             }
@@ -573,6 +639,16 @@ export default function Properties({
 
         const toInsert = nextPrompts.filter((prompt) => !prompt.id);
         if (toInsert.length > 0) {
+          logSmartDocDebug('Inserting prompts', {
+            docId,
+            toInsert: toInsert.map((prompt) => ({
+              label: prompt.label.trim(),
+              prompt_type: prompt.prompt_type,
+              help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+              required: !!prompt.required,
+              position: prompt.position,
+            })),
+          });
           const { error: insertError } = await supabase.from('smart_doc_prompts').insert(
             toInsert.map((prompt) => ({
               doc_id: docId,
@@ -585,12 +661,17 @@ export default function Properties({
               position: prompt.position,
             })),
           );
+          logSmartDocDebug('Insert prompts result', {
+            docId,
+            error: insertError ? insertError.message : null,
+          });
           if (insertError) {
             throw new Error(insertError.message);
           }
         }
       }
 
+      logSmartDocDebug('Refreshing smart doc after save', { docId });
       const { data: refreshed, error: fetchError } = await supabase
         .from('smart_docs')
         .select(
@@ -600,6 +681,12 @@ export default function Properties({
         )
         .eq('id', docId!)
         .single();
+
+      logSmartDocDebug('Refresh result', {
+        docId,
+        hasData: !!refreshed,
+        error: fetchError ? fetchError.message : null,
+      });
 
       if (fetchError) {
         throw new Error(fetchError.message);
@@ -638,8 +725,14 @@ export default function Properties({
       }
 
       setSmartDocMessage('Smart doc saved');
+      logSmartDocDebug('Smart doc save complete', { docId, blockId: selectedBlock.id });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save smart doc';
+      logSmartDocDebug('Smart doc save failed', {
+        docId: smartDocDraft.docId,
+        blockId: selectedBlock.id,
+        message,
+      });
       setSmartDocError(message);
     } finally {
       setSmartDocSaving(false);
