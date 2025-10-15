@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { Box, Button, Card, CardContent, CardMedia, CircularProgress, Divider, Stack, TextField, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -10,6 +11,7 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import InsertLinkIcon from '@mui/icons-material/InsertLink';
 import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { supabase } from '@/lib/supabaseClient';
 
@@ -67,41 +69,76 @@ function SmartDocPromptField({ prompt }: { prompt: SmartDocPrompt }) {
   const helperText = prompt.help_text?.trim().length ? prompt.help_text : undefined;
 
   return (
-    <Stack spacing={1.5} sx={{ px: { xs: 0, sm: 0.5 } }}>
-      <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
-        {label}
-        {prompt.required ? (
-          <Typography component="span" color="error.main" sx={{ ml: 0.5 }}>
-            *
-          </Typography>
-        ) : null}
-      </Typography>
-      {helperText ? (
-        <Typography variant="body2" color="text.secondary">
-          {helperText}
-        </Typography>
-      ) : null}
-      <TextField
-        fullWidth
-        variant="standard"
-        multiline={prompt.prompt_type === 'textarea'}
-        minRows={prompt.prompt_type === 'textarea' ? 4 : undefined}
-        InputProps={{
-          sx: {
-            fontSize: '1rem',
-            '& .MuiInputBase-input': {
-              py: 1.5,
-            },
-            '&:before': {
-              borderBottomColor: 'divider',
-            },
-            '&:after': {
-              borderBottomColor: 'primary.main',
-            },
-          },
+    <Stack
+      spacing={2}
+      sx={{
+        px: { xs: 0, sm: 0.5 },
+      }}
+    >
+      <Stack
+        spacing={1}
+        sx={{
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 2.5,
+          bgcolor: 'grey.50',
+          px: { xs: 2, sm: 2.5 },
+          py: { xs: 2, sm: 2.5 },
+          boxShadow: 'none',
+          gap: 1.5,
         }}
-        placeholder=""
-      />
+      >
+        <Stack spacing={0.75}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
+            {label}
+            {prompt.required ? (
+              <Typography component="span" color="error.main" sx={{ ml: 0.5 }}>
+                *
+              </Typography>
+            ) : null}
+          </Typography>
+          {helperText ? (
+            <Typography variant="body2" color="text.secondary">
+              {helperText}
+            </Typography>
+          ) : null}
+        </Stack>
+        <TextField
+          fullWidth
+          variant="outlined"
+          multiline={prompt.prompt_type === 'textarea'}
+          minRows={prompt.prompt_type === 'textarea' ? 4 : undefined}
+          placeholder=""
+          InputProps={{
+            sx: {
+              alignItems: 'flex-start',
+              bgcolor: 'common.white',
+              borderRadius: 2,
+              px: 1.5,
+              py: 0,
+              '& fieldset': {
+                borderColor: 'divider',
+              },
+              '&:hover fieldset': {
+                borderColor: 'grey.400',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: 'primary.main',
+                borderWidth: 2,
+              },
+              '&.Mui-focused': {
+                boxShadow: (theme) => `0 0 0 3px ${alpha(theme.palette.primary.main, 0.2)}`,
+              },
+              '& .MuiInputBase-input': {
+                py: 1.5,
+              },
+              '& textarea': {
+                py: 1.5,
+              },
+            },
+          }}
+        />
+      </Stack>
     </Stack>
   );
 }
@@ -165,12 +202,13 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
 
   const containerStyles = {
     bgcolor: 'background.paper',
-    px: { xs: 2, sm: 3 },
-    py: { xs: 3, sm: 4 },
-    borderRadius: 2,
+    px: { xs: 2.5, sm: 4 },
+    py: { xs: 3.5, sm: 5 },
+    borderRadius: 3,
     boxShadow: 'none',
     border: 'none',
-  };
+    gap: 4,
+  } as const;
 
   if (state.status === 'idle' || state.status === 'loading') {
     return (
@@ -199,17 +237,32 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
 
   return (
     <Stack spacing={4} sx={containerStyles}>
-      <Stack spacing={1.5}>
+      <Stack spacing={2}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           {headerTitle}
         </Typography>
         {doc.description?.trim().length ? (
-          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: '68ch' }}>
-            {doc.description}
-          </Typography>
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2.5,
+              bgcolor: 'grey.50',
+              px: { xs: 2, sm: 2.5 },
+              py: { xs: 1.75, sm: 2 },
+              maxWidth: '72ch',
+            }}
+          >
+            <Stack direction="row" spacing={1.5} alignItems="flex-start">
+              <InfoOutlinedIcon color="primary" sx={{ mt: 0.25 }} />
+              <Typography variant="body1" color="text.secondary">
+                {doc.description}
+              </Typography>
+            </Stack>
+          </Box>
         ) : null}
       </Stack>
-      <Stack spacing={doc.prompts.length ? 3.5 : 2}>
+      <Stack spacing={doc.prompts.length ? 4 : 2.5}>
         {doc.prompts.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
             This smart doc has no prompts yet.
