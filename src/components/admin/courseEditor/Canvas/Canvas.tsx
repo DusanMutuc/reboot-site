@@ -196,7 +196,9 @@ export default function Canvas({
           <Stack spacing={3}>
             {blocks.map((block) => {
               const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
-              return <BlockRenderer key={block.id} block={block} resource={resource} />;
+              return (
+                <BlockRenderer key={block.id} block={block} resource={resource} previewMode />
+              );
             })}
           </Stack>
         ) : (
@@ -279,7 +281,11 @@ export default function Canvas({
                               }}
                             />
                           ) : (
-                            <BlockRenderer block={block} resource={resource} />
+                            <BlockRenderer
+                              block={block}
+                              resource={resource}
+                              previewMode={previewMode}
+                            />
                           )}
                         </SortableBlock>
                       </CanvasRow>
