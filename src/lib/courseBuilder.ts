@@ -33,10 +33,11 @@ export type NodeChildRow = {
 export type ContentBlockRow = {
   id: number;
   node_id: number;
-  block_type: 'text' | 'asset' | 'divider';
+  block_type: 'text' | 'asset' | 'divider' | 'smart_doc';
   position: number;
   text_md: string | null;
   resource_id: number | null;
+  smart_doc_id: number | null;
   start_ms: number | null;
   end_ms: number | null;
   label: string | null;
@@ -181,7 +182,7 @@ export function validateBlockPayload(block: Partial<ContentBlockRow>) {
     throw new CourseBuilderError('Block type is required', 400);
   }
 
-  if (!['text', 'asset', 'divider'].includes(blockType)) {
+  if (!['text', 'asset', 'divider', 'smart_doc'].includes(blockType)) {
     throw new CourseBuilderError('Invalid block type', 400, { blockType });
   }
 
@@ -218,6 +219,22 @@ export function validateBlockPayload(block: Partial<ContentBlockRow>) {
 
     if (hasContent) {
       throw new CourseBuilderError('divider blocks cannot include content fields', 400);
+    }
+  }
+
+  if (blockType === 'smart_doc') {
+    if (!block.smart_doc_id) {
+      throw new CourseBuilderError('smart_doc blocks require smart_doc_id', 400);
+    }
+
+    const hasContent =
+      (block.text_md != null && block.text_md.trim().length > 0) ||
+      block.resource_id != null ||
+      block.start_ms != null ||
+      block.end_ms != null;
+
+    if (hasContent) {
+      throw new CourseBuilderError('smart_doc blocks cannot include text or media fields', 400);
     }
   }
 }

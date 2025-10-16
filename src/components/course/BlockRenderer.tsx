@@ -1,8 +1,22 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Box, Button, Card, CardContent, CardMedia, Divider, Stack, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  CardMedia,
+  CircularProgress,
+  Divider,
+  FormControl,
+  FormLabel,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -10,13 +24,17 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import InsertLinkIcon from '@mui/icons-material/InsertLink';
 import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+
+import { supabase } from '@/lib/supabaseClient';
 
 export type RenderableBlock = {
   id: number;
-  block_type: 'text' | 'asset' | 'divider';
+  block_type: 'text' | 'asset' | 'divider' | 'smart_doc';
   position: number;
   text_md: string | null;
   resource_id: number | null;
+  smart_doc_id: number | null;
   start_ms: number | null;
   end_ms: number | null;
   label: string | null;
@@ -31,10 +49,215 @@ export type RenderableResource = {
   duration: number | null;
 };
 
+type SmartDocPrompt = {
+  id: number;
+  position: number;
+  label: string;
+  prompt_type: 'text' | 'textarea';
+  help_text: string | null;
+  required: boolean;
+};
+
+type SmartDocRecord = {
+  id: number;
+  title: string;
+  description: string | null;
+  is_published: boolean;
+  prompts: SmartDocPrompt[];
+};
+
+type SmartDocState =
+  | { status: 'idle' | 'loading' }
+  | { status: 'error'; message: string }
+  | { status: 'ready'; doc: SmartDocRecord };
+
+/** ---------- Shared field/label styles (unifies look across the page) ---------- */
+const FIELD_SX = {
+  bgcolor: 'grey.100',
+  borderRadius: 2,
+  px: 2,
+  py: 1,
+  border: '1px solid',
+  borderColor: 'transparent',
+  alignItems: 'flex-start',
+  '& .MuiInputBase-input': { py: 1.25 },
+  '& textarea': { py: 1.25 },
+  '&:hover': { bgcolor: 'grey.100' },
+  '&.Mui-focused': {
+    bgcolor: 'common.white',
+    borderColor: 'primary.light',
+    boxShadow: (t: any) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.18)}`,
+  },
+} as const;
+
+const LABEL_SX = {
+  fontWeight: 700,
+  fontSize: '1.6rem',   // slightly larger than body text
+  lineHeight: 1.3,
+  color: 'text.primary',
+  mb: 1,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 0.5,
+} as const;
+
+
+/** --------------------------------------------------------------------------- */
+
 export type BlockRendererProps = {
   block: RenderableBlock;
   resource: RenderableResource | null;
+  previewMode?: boolean;
 };
+
+function SmartDocPromptField({ prompt }: { prompt: SmartDocPrompt }) {
+  const isTextarea = prompt.prompt_type === 'textarea';
+  const label = useMemo(() => prompt.label?.trim() || 'Question', [prompt.label]);
+  const helper = prompt.help_text?.trim();
+
+  return (
+    <FormControl fullWidth sx={{ mb: 4 }}>
+      <FormLabel sx={LABEL_SX}>
+        {label}
+        {prompt.required && (
+          <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
+            *
+          </Box>
+        )}
+      </FormLabel>
+
+      {helper && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          {helper}
+        </Typography>
+      )}
+
+      <TextField
+        fullWidth
+        variant="filled"
+        label={undefined}
+        placeholder=""
+        multiline={isTextarea}
+        minRows={isTextarea ? 6 : undefined}
+        InputProps={{ disableUnderline: true, sx: FIELD_SX }}
+      />
+    </FormControl>
+  );
+}
+
+function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabel: string | null }) {
+  const [state, setState] = useState<SmartDocState>({ status: 'idle' });
+
+  useEffect(() => {
+    let active = true;
+    setState({ status: 'loading' });
+
+    (async () => {
+      const { data, error } = await supabase
+        .from('smart_docs')
+        .select(
+          `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
+            id, position, label, prompt_type, help_text, required
+          )`,
+        )
+        .eq('id', docId)
+        .single();
+
+      if (!active) return;
+
+      if (error || !data) {
+        setState({ status: 'error', message: error?.message ?? 'Smart doc not found' });
+        return;
+      }
+
+      const prompts = (data.smart_doc_prompts ?? [])
+        .map((p: any) => ({
+          id: p.id,
+          position: p.position,
+          label: p.label,
+          prompt_type: p.prompt_type,
+          help_text: p.help_text,
+          required: p.required,
+        }))
+        .sort((a: any, b: any) => a.position - b.position);
+
+      setState({
+        status: 'ready',
+        doc: {
+          id: data.id,
+          title: data.title,
+          description: data.description,
+          is_published: data.is_published,
+          prompts,
+        },
+      });
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [docId]);
+
+  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+
+  if (state.status === 'idle' || state.status === 'loading') {
+    return (
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+        <CircularProgress size={22} />
+        <Typography variant="body2" color="text.secondary">
+          Loading…
+        </Typography>
+      </Stack>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
+        <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
+        <Typography variant="body2" color="error.main">
+          Failed to load: {state.message}
+        </Typography>
+      </Stack>
+    );
+  }
+
+  const { doc } = state;
+  const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
+
+  return (
+    <Stack spacing={3} sx={wrapSx}>
+      {/* Section title */}
+      <Typography
+        component="h2"
+        variant="h2"
+        sx={{ fontWeight: 650, fontSize: { xs: '1.35rem', sm: '2rem' }, lineHeight: 1.25 }}
+      >
+        {title}
+      </Typography>
+
+      {/* Optional description box */}
+      {/* Optional description – plain text under title */}
+{doc.description?.trim() && (
+  <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
+    {doc.description}
+  </Typography>
+)}
+
+
+      {/* Prompts */}
+      <Box>
+        {doc.prompts.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No questions yet.
+          </Typography>
+        ) : (
+          doc.prompts.map((p) => <SmartDocPromptField key={p.id} prompt={p} />)
+        )}
+      </Box>
+    </Stack>
+  );
+}
 
 function formatDuration(seconds: number | null) {
   if (!seconds || Number.isNaN(seconds)) return null;
@@ -66,11 +289,7 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
   const isYoutube = lower.includes('youtube.com') || lower.includes('youtu.be');
   const isVimeo = lower.includes('vimeo.com');
 
-  const frameWrapper = (
-    src: string,
-    allow: string,
-    title: string,
-  ) => (
+  const frameWrapper = (src: string, allow: string, title: string) => (
     <Box
       sx={{
         position: 'relative',
@@ -129,12 +348,7 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
   return (
     <Card variant="outlined">
       {resource.thumbnail && (
-        <CardMedia
-          component="img"
-          image={resource.thumbnail}
-          alt={resource.title}
-          sx={{ maxHeight: 320, objectFit: 'cover' }}
-        />
+        <CardMedia component="img" image={resource.thumbnail} alt={resource.title} sx={{ maxHeight: 320, objectFit: 'cover' }} />
       )}
       <CardContent>
         <Stack spacing={1}>
@@ -280,7 +494,7 @@ function LinkPreview({ resource }: { resource: RenderableResource }) {
   );
 }
 
-export function BlockRenderer({ block, resource }: BlockRendererProps) {
+export function BlockRenderer({ block, resource, previewMode = false }: BlockRendererProps) {
   if (block.block_type === 'divider') {
     return <Divider sx={{ my: 3 }} />;
   }
@@ -332,6 +546,29 @@ export function BlockRenderer({ block, resource }: BlockRendererProps) {
         }}
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
       />
+    );
+  }
+
+  if (block.block_type === 'smart_doc') {
+    if (block.smart_doc_id && previewMode) {
+      return <SmartDocPreview docId={block.smart_doc_id} fallbackLabel={block.label} />;
+    }
+
+    return (
+      <Card variant="outlined">
+        <CardContent>
+          <Stack spacing={1}>
+            <Typography variant="subtitle1">
+              {block.label ?? (block.smart_doc_id ? `Smart doc #${block.smart_doc_id}` : 'Smart doc')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {block.smart_doc_id
+                ? `Smart doc ID ${block.smart_doc_id}.`
+                : 'Smart doc details will appear after it is saved.'}
+            </Typography>
+          </Stack>
+        </CardContent>
+      </Card>
     );
   }
 

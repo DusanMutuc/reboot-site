@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Box,
@@ -26,6 +26,7 @@ import type { ContentBlock, NodeChild, NodeSubtree, NodeType } from '@/types/cou
 import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
+import { supabase } from '@/lib/supabaseClient';
 
 export type NodeDraft = {
   title: string;
@@ -36,6 +37,104 @@ export type NodeDraft = {
   objectives: string;
   metadata: string;
 };
+
+type SmartDocPromptDraft = {
+  id: number | null;
+  label: string;
+  prompt_type: 'text' | 'textarea';
+  help_text: string;
+  required: boolean;
+};
+
+type SmartDocDraft = {
+  docId: number | null;
+  title: string;
+  description: string;
+  is_published: boolean;
+  prompts: SmartDocPromptDraft[];
+  original: {
+    docId: number | null;
+    title: string;
+    description: string;
+    is_published: boolean;
+    prompts: SmartDocPromptDraft[];
+  } | null;
+};
+
+function createEmptyPromptDraft(): SmartDocPromptDraft {
+  return {
+    id: null,
+    label: '',
+    prompt_type: 'text',
+    help_text: '',
+    required: false,
+  };
+}
+
+function clonePrompts(prompts: SmartDocPromptDraft[]): SmartDocPromptDraft[] {
+  return prompts.map((prompt) => ({ ...prompt }));
+}
+
+function logSmartDocDebug(message: string, context?: Record<string, unknown>) {
+  if (context) {
+    console.log(`[SmartDoc] ${message}`, context);
+  } else {
+    console.log(`[SmartDoc] ${message}`);
+  }
+}
+
+function createEmptySmartDocDraft(docId: number | null = null): SmartDocDraft {
+  return {
+    docId,
+    title: '',
+    description: '',
+    is_published: false,
+    prompts: [createEmptyPromptDraft()],
+    original: null,
+  };
+}
+
+function promptsEqual(a: SmartDocPromptDraft[], b: SmartDocPromptDraft[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let index = 0; index < a.length; index += 1) {
+    const left = a[index];
+    const right = b[index];
+    if (
+      left.id !== right.id ||
+      left.label !== right.label ||
+      left.prompt_type !== right.prompt_type ||
+      (left.help_text ?? '') !== (right.help_text ?? '') ||
+      !!left.required !== !!right.required
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function validateSmartDocDraft(draft: SmartDocDraft | null): string | null {
+  if (!draft) {
+    return 'Smart doc is not ready yet';
+  }
+  const title = draft.title.trim();
+  if (title.length < 3) {
+    return 'Title must be at least 3 characters';
+  }
+  if (draft.prompts.length === 0) {
+    return 'Add at least one prompt';
+  }
+  for (const prompt of draft.prompts) {
+    if (!prompt.label.trim()) {
+      return 'Each prompt requires a label';
+    }
+    if (prompt.prompt_type !== 'text' && prompt.prompt_type !== 'textarea') {
+      return 'Prompt type must be text or textarea';
+    }
+  }
+  return null;
+}
 
 export type PropertiesProps = {
   subtree: NodeSubtree | null;
@@ -51,6 +150,11 @@ export type PropertiesProps = {
   onUpdateBlock: (blockId: number, updates: Partial<ContentBlock>, options?: { debounce?: boolean }) => void;
   onDeleteBlock: (blockId: number) => void;
   onOpenResourcePicker: (mode: 'insert' | 'update', blockId?: number) => void;
+  onFinalizeSmartDocBlock: (
+    block: ContentBlock,
+    docId: number,
+    options?: { suppressToast?: boolean },
+  ) => Promise<void>;
   resources: Record<number, RenderableResource>;
   savingState: SavingState;
   savingMessage: string;
@@ -71,6 +175,7 @@ export default function Properties({
   onUpdateBlock,
   onDeleteBlock,
   onOpenResourcePicker,
+  onFinalizeSmartDocBlock,
   resources,
   savingState,
   savingMessage,
@@ -79,6 +184,12 @@ export default function Properties({
   const [childType, setChildType] = useState<NodeType>('lesson');
   const [settingsDraft, setSettingsDraft] = useState('');
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [smartDocDraft, setSmartDocDraft] = useState<SmartDocDraft | null>(null);
+  const [smartDocLoading, setSmartDocLoading] = useState(false);
+  const [smartDocSaving, setSmartDocSaving] = useState(false);
+  const [smartDocError, setSmartDocError] = useState<string | null>(null);
+  const [smartDocMessage, setSmartDocMessage] = useState<string | null>(null);
+  const smartDocLoadedRef = useRef<number | null>(null);
 
   const nodeScopeKey = subtree?.node.id ?? null;
   const blockScopeKey = selectedBlock?.id ?? null;
@@ -180,6 +291,591 @@ export default function Properties({
     },
     [onUpdateBlock, selectedBlock, setSettingsDraft, setSettingsError],
   );
+
+  useEffect(() => {
+    if (!selectedBlock || selectedBlock.block_type !== 'smart_doc') {
+      setSmartDocDraft(null);
+      setSmartDocLoading(false);
+      setSmartDocSaving(false);
+      setSmartDocError(null);
+      setSmartDocMessage(null);
+      smartDocLoadedRef.current = null;
+      return;
+    }
+
+    if (!selectedBlock.smart_doc_id) {
+      smartDocLoadedRef.current = null;
+      setSmartDocDraft((prev) => (prev && prev.docId === null ? prev : createEmptySmartDocDraft(null)));
+      setSmartDocLoading(false);
+      setSmartDocError(null);
+      return;
+    }
+
+    const docId = selectedBlock.smart_doc_id;
+    if (smartDocLoadedRef.current === docId) {
+      return;
+    }
+
+    smartDocLoadedRef.current = docId;
+    setSmartDocLoading(true);
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        logSmartDocDebug('Fetching smart doc', { docId });
+        const { data, error } = await supabase
+          .from('smart_docs')
+          .select(
+            `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
+              id, position, label, prompt_type, help_text, required
+            )`,
+          )
+          .eq('id', docId)
+          .single();
+
+        if (cancelled) return;
+
+        logSmartDocDebug('Fetch complete', {
+          docId,
+          hasData: !!data,
+          error: error ? error.message : null,
+        });
+
+        if (error) {
+          setSmartDocError(error.message ?? 'Failed to load smart doc');
+          setSmartDocDraft(createEmptySmartDocDraft(docId));
+        } else if (data) {
+          const prompts = (data.smart_doc_prompts ?? [])
+            .slice()
+            .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+            .map((prompt) => ({
+              id: prompt.id ?? null,
+              label: prompt.label ?? '',
+              prompt_type: (prompt.prompt_type as 'text' | 'textarea') ?? 'text',
+              help_text: prompt.help_text ?? '',
+              required: !!prompt.required,
+            }));
+          const normalizedPrompts = prompts.length > 0 ? prompts : [createEmptyPromptDraft()];
+          const next: SmartDocDraft = {
+            docId: data.id ?? docId,
+            title: data.title ?? '',
+            description: data.description ?? '',
+            is_published: !!data.is_published,
+            prompts: clonePrompts(normalizedPrompts),
+            original: {
+              docId: data.id ?? docId,
+              title: data.title ?? '',
+              description: data.description ?? '',
+              is_published: !!data.is_published,
+              prompts: clonePrompts(normalizedPrompts),
+            },
+          };
+          setSmartDocDraft(next);
+        } else {
+          setSmartDocDraft(createEmptySmartDocDraft(docId));
+        }
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Failed to load smart doc';
+        logSmartDocDebug('Fetch threw error', { docId, message });
+        setSmartDocError(message);
+        setSmartDocDraft(createEmptySmartDocDraft(docId));
+      } finally {
+        if (!cancelled) {
+          setSmartDocLoading(false);
+        }
+      }
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBlock]);
+
+  const smartDocDirty = useMemo(() => {
+    if (!smartDocDraft) return false;
+    if (!smartDocDraft.original) return true;
+    if (smartDocDraft.title !== smartDocDraft.original.title) return true;
+    if (smartDocDraft.description !== smartDocDraft.original.description) return true;
+    if (smartDocDraft.is_published !== smartDocDraft.original.is_published) return true;
+    if (!promptsEqual(smartDocDraft.prompts, smartDocDraft.original.prompts)) return true;
+    return false;
+  }, [smartDocDraft]);
+
+  const smartDocValidationError = useMemo(() => validateSmartDocDraft(smartDocDraft), [smartDocDraft]);
+
+  const handleSmartDocFieldChange = useCallback((field: 'title' | 'description', value: string) => {
+    setSmartDocDraft((prev) => {
+      if (!prev) return prev;
+      return { ...prev, [field]: value };
+    });
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+  }, []);
+
+  const handlePromptChange = useCallback(
+    (index: number, field: 'label' | 'prompt_type' | 'help_text', value: string) => {
+      setSmartDocDraft((prev) => {
+        if (!prev) return prev;
+        const prompts = prev.prompts.map((prompt, idx) =>
+          idx === index ? { ...prompt, [field]: value } : prompt,
+        );
+        return { ...prev, prompts };
+      });
+      setSmartDocError(null);
+      setSmartDocMessage(null);
+    },
+    [],
+  );
+
+  const handlePromptRequiredChange = useCallback((index: number, checked: boolean) => {
+    setSmartDocDraft((prev) => {
+      if (!prev) return prev;
+      const prompts = prev.prompts.map((prompt, idx) =>
+        idx === index ? { ...prompt, required: checked } : prompt,
+      );
+      return { ...prev, prompts };
+    });
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+  }, []);
+
+  const handleAddPrompt = useCallback(() => {
+    setSmartDocDraft((prev) => {
+      if (!prev) return prev;
+      return { ...prev, prompts: [...prev.prompts, createEmptyPromptDraft()] };
+    });
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+  }, []);
+
+  const handleRemovePrompt = useCallback((index: number) => {
+    setSmartDocDraft((prev) => {
+      if (!prev) return prev;
+      if (prev.prompts.length <= 1) {
+        return prev;
+      }
+      const prompts = prev.prompts.filter((_, idx) => idx !== index);
+      return { ...prev, prompts: prompts.length > 0 ? prompts : [createEmptyPromptDraft()] };
+    });
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+  }, []);
+
+  const handleMovePrompt = useCallback((index: number, direction: 'up' | 'down') => {
+    setSmartDocDraft((prev) => {
+      if (!prev) return prev;
+      const nextIndex = direction === 'up' ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= prev.prompts.length) {
+        return prev;
+      }
+      const prompts = [...prev.prompts];
+      const [prompt] = prompts.splice(index, 1);
+      prompts.splice(nextIndex, 0, prompt);
+      return { ...prev, prompts };
+    });
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+  }, []);
+
+  const handleSaveSmartDoc = useCallback(async () => {
+    if (!selectedBlock || selectedBlock.block_type !== 'smart_doc') return;
+    const validationError = validateSmartDocDraft(smartDocDraft);
+    if (validationError) {
+      setSmartDocError(validationError);
+      return;
+    }
+    if (!smartDocDraft) return;
+
+    setSmartDocSaving(true);
+    setSmartDocError(null);
+    setSmartDocMessage(null);
+
+    logSmartDocDebug('Saving smart doc start', {
+      blockId: selectedBlock.id,
+      docId: smartDocDraft.docId,
+      promptCount: smartDocDraft.prompts.length,
+    });
+
+    try {
+      const title = smartDocDraft.title.trim();
+      const description = smartDocDraft.description.trim();
+      let docId = smartDocDraft.docId;
+
+      if (!docId) {
+        logSmartDocDebug('Creating smart doc', { title, description });
+        const { data: doc, error } = await supabase
+          .from('smart_docs')
+          .insert({ title, description: description ? description : null, is_published: false })
+          .select('id, title, description, is_published')
+          .single();
+        logSmartDocDebug('Create result', {
+          receivedId: doc?.id ?? null,
+          error: error ? error.message : null,
+        });
+        if (error) {
+          throw new Error(error.message);
+        }
+        if (!doc) {
+          throw new Error('Failed to create smart doc');
+        }
+        docId = doc.id as number;
+
+        const promptsPayload = smartDocDraft.prompts.map((prompt, index) => ({
+          doc_id: docId,
+          label: prompt.label.trim(),
+          prompt_type: prompt.prompt_type,
+          help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+          required: !!prompt.required,
+          options_json: null,
+          validation_json: null,
+          position: index,
+        }));
+
+        if (promptsPayload.length > 0) {
+          logSmartDocDebug('Creating prompts', { docId, promptPayload: promptsPayload });
+          const { error: promptError } = await supabase.from('smart_doc_prompts').insert(promptsPayload);
+          logSmartDocDebug('Create prompts result', {
+            docId,
+            error: promptError ? promptError.message : null,
+          });
+          if (promptError) {
+            throw new Error(promptError.message);
+          }
+        }
+      } else {
+        logSmartDocDebug('Updating smart doc', {
+          docId,
+          title,
+          description,
+          is_published: smartDocDraft.is_published,
+        });
+        const { error: updateError } = await supabase
+          .from('smart_docs')
+          .update({ title, description: description ? description : null, is_published: smartDocDraft.is_published })
+          .eq('id', docId)
+          .select('id')
+          .single();
+        logSmartDocDebug('Update smart doc result', {
+          docId,
+          error: updateError ? updateError.message : null,
+        });
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
+        const nextPrompts = smartDocDraft.prompts.map((prompt, index) => ({
+          ...prompt,
+          position: index,
+        }));
+
+        const existingPrompts = smartDocDraft.original?.prompts ?? [];
+        const nextIds = new Set(nextPrompts.map((prompt) => prompt.id).filter((id): id is number => id != null));
+        const toDeleteIds = existingPrompts
+          .map((prompt) => prompt.id)
+          .filter((id): id is number => id != null && !nextIds.has(id));
+        if (toDeleteIds.length > 0) {
+          logSmartDocDebug('Deleting prompts', { docId, toDeleteIds });
+          const { error: deleteError } = await supabase.from('smart_doc_prompts').delete().in('id', toDeleteIds);
+          logSmartDocDebug('Delete prompts result', {
+            docId,
+            error: deleteError ? deleteError.message : null,
+          });
+          if (deleteError) {
+            throw new Error(deleteError.message);
+          }
+        }
+
+        for (const prompt of nextPrompts) {
+          if (!prompt.id) continue;
+          const previous = existingPrompts.find((item) => item.id === prompt.id);
+          if (!previous) continue;
+          if (
+            previous.label !== prompt.label ||
+            previous.prompt_type !== prompt.prompt_type ||
+            (previous.help_text ?? '') !== (prompt.help_text ?? '') ||
+            !!previous.required !== !!prompt.required ||
+            previous.position !== prompt.position
+          ) {
+            logSmartDocDebug('Updating prompt', {
+              docId,
+              promptId: prompt.id,
+              payload: {
+                label: prompt.label.trim(),
+                prompt_type: prompt.prompt_type,
+                help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+                required: !!prompt.required,
+                position: prompt.position,
+              },
+            });
+            const { error: promptUpdateError } = await supabase
+              .from('smart_doc_prompts')
+              .update({
+                label: prompt.label.trim(),
+                prompt_type: prompt.prompt_type,
+                help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+                required: !!prompt.required,
+                options_json: null,
+                validation_json: null,
+                position: prompt.position,
+              })
+              .eq('id', prompt.id)
+              .eq('doc_id', docId);
+            logSmartDocDebug('Update prompt result', {
+              docId,
+              promptId: prompt.id,
+              error: promptUpdateError ? promptUpdateError.message : null,
+            });
+            if (promptUpdateError) {
+              throw new Error(promptUpdateError.message);
+            }
+          }
+        }
+
+        const toInsert = nextPrompts.filter((prompt) => !prompt.id);
+        if (toInsert.length > 0) {
+          logSmartDocDebug('Inserting prompts', {
+            docId,
+            toInsert: toInsert.map((prompt) => ({
+              label: prompt.label.trim(),
+              prompt_type: prompt.prompt_type,
+              help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+              required: !!prompt.required,
+              position: prompt.position,
+            })),
+          });
+          const { error: insertError } = await supabase.from('smart_doc_prompts').insert(
+            toInsert.map((prompt) => ({
+              doc_id: docId,
+              label: prompt.label.trim(),
+              prompt_type: prompt.prompt_type,
+              help_text: prompt.help_text.trim() ? prompt.help_text.trim() : null,
+              required: !!prompt.required,
+              options_json: null,
+              validation_json: null,
+              position: prompt.position,
+            })),
+          );
+          logSmartDocDebug('Insert prompts result', {
+            docId,
+            error: insertError ? insertError.message : null,
+          });
+          if (insertError) {
+            throw new Error(insertError.message);
+          }
+        }
+      }
+
+      logSmartDocDebug('Refreshing smart doc after save', { docId });
+      const { data: refreshed, error: fetchError } = await supabase
+        .from('smart_docs')
+        .select(
+          `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
+            id, position, label, prompt_type, help_text, required
+          )`,
+        )
+        .eq('id', docId!)
+        .single();
+
+      logSmartDocDebug('Refresh result', {
+        docId,
+        hasData: !!refreshed,
+        error: fetchError ? fetchError.message : null,
+      });
+
+      if (fetchError) {
+        throw new Error(fetchError.message);
+      }
+
+      const prompts = (refreshed?.smart_doc_prompts ?? [])
+        .slice()
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map((prompt) => ({
+          id: prompt.id ?? null,
+          label: prompt.label ?? '',
+          prompt_type: (prompt.prompt_type as 'text' | 'textarea') ?? 'text',
+          help_text: prompt.help_text ?? '',
+          required: !!prompt.required,
+        }));
+      const normalizedPrompts = prompts.length > 0 ? prompts : [createEmptyPromptDraft()];
+
+      setSmartDocDraft({
+        docId: refreshed?.id ?? docId!,
+        title: refreshed?.title ?? '',
+        description: refreshed?.description ?? '',
+        is_published: !!refreshed?.is_published,
+        prompts: clonePrompts(normalizedPrompts),
+        original: {
+          docId: refreshed?.id ?? docId!,
+          title: refreshed?.title ?? '',
+          description: refreshed?.description ?? '',
+          is_published: !!refreshed?.is_published,
+          prompts: clonePrompts(normalizedPrompts),
+        },
+      });
+      smartDocLoadedRef.current = docId!;
+
+      if (!selectedBlock.smart_doc_id || selectedBlock.smart_doc_id !== docId) {
+        await onFinalizeSmartDocBlock(selectedBlock, docId!, { suppressToast: true });
+      }
+
+      setSmartDocMessage('Smart doc saved');
+      logSmartDocDebug('Smart doc save complete', { docId, blockId: selectedBlock.id });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save smart doc';
+      logSmartDocDebug('Smart doc save failed', {
+        docId: smartDocDraft.docId,
+        blockId: selectedBlock.id,
+        message,
+      });
+      setSmartDocError(message);
+    } finally {
+      setSmartDocSaving(false);
+    }
+  }, [onFinalizeSmartDocBlock, selectedBlock, smartDocDraft]);
+
+  const renderSmartDocForm = () => {
+    if (!selectedBlock || selectedBlock.block_type !== 'smart_doc') {
+      return null;
+    }
+
+    if (smartDocLoading || !smartDocDraft) {
+      return <Typography color="text.secondary">Loading smart doc…</Typography>;
+    }
+
+    return (
+      <Stack spacing={2}>
+        {selectedBlock.id < 0 ? (
+          <Alert severity="info">Fill out the smart doc details, then save to create this block.</Alert>
+        ) : null}
+        {smartDocError ? <Alert severity="error">{smartDocError}</Alert> : null}
+        {smartDocMessage ? <Alert severity="success">{smartDocMessage}</Alert> : null}
+        <TextField
+          label="Smart doc title"
+          required
+          value={smartDocDraft.title}
+          onChange={(event) => handleSmartDocFieldChange('title', event.target.value)}
+        />
+        <TextField
+          label="Description"
+          value={smartDocDraft.description}
+          onChange={(event) => handleSmartDocFieldChange('description', event.target.value)}
+          multiline
+          minRows={3}
+        />
+        <Stack spacing={1}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="subtitle2">Prompts</Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={handleAddPrompt}
+              disabled={smartDocSaving}
+            >
+              Add prompt
+            </Button>
+          </Stack>
+          <Stack spacing={1.5}>
+            {smartDocDraft.prompts.map((prompt, index) => (
+              <Stack
+                key={prompt.id ?? `prompt-${index}`}
+                spacing={1}
+                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}
+              >
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle2">Prompt {index + 1}</Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Tooltip title="Move up">
+                      <span>
+                        <IconButton size="small" disabled={index === 0} onClick={() => handleMovePrompt(index, 'up')}>
+                          <ArrowUpwardIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Move down">
+                      <span>
+                        <IconButton
+                          size="small"
+                          disabled={index === smartDocDraft.prompts.length - 1}
+                          onClick={() => handleMovePrompt(index, 'down')}
+                        >
+                          <ArrowDownwardIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Remove prompt">
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="error"
+                          disabled={smartDocDraft.prompts.length <= 1}
+                          onClick={() => handleRemovePrompt(index)}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Stack>
+                </Stack>
+                <TextField
+                  label="Label"
+                  value={prompt.label}
+                  onChange={(event) => handlePromptChange(index, 'label', event.target.value)}
+                  required
+                />
+                <TextField
+                  label="Prompt type"
+                  select
+                  value={prompt.prompt_type}
+                  onChange={(event) => handlePromptChange(index, 'prompt_type', event.target.value as 'text' | 'textarea')}
+                >
+                  <MenuItem value="text">Short text</MenuItem>
+                  <MenuItem value="textarea">Paragraph</MenuItem>
+                </TextField>
+                <TextField
+                  label="Help text"
+                  value={prompt.help_text}
+                  onChange={(event) => handlePromptChange(index, 'help_text', event.target.value)}
+                  multiline
+                  minRows={2}
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={prompt.required}
+                      onChange={(event) => handlePromptRequiredChange(index, event.target.checked)}
+                    />
+                  }
+                  label="Required"
+                />
+              </Stack>
+            ))}
+          </Stack>
+        </Stack>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Button
+            variant="contained"
+            onClick={handleSaveSmartDoc}
+            disabled={
+              smartDocSaving ||
+              !smartDocDraft ||
+              !!smartDocValidationError ||
+              (!smartDocDirty && smartDocDraft.docId != null)
+            }
+          >
+            {smartDocSaving ? 'Saving…' : smartDocDraft.docId ? 'Save smart doc' : 'Create smart doc'}
+          </Button>
+          {smartDocSaving ? <Typography color="text.secondary">Saving…</Typography> : null}
+        </Stack>
+      </Stack>
+    );
+  };
 
   const startInput = useUndoRedoInput({
     value:
@@ -410,74 +1106,80 @@ export default function Properties({
           <Alert severity="info">Text blocks are edited inline on the canvas.</Alert>
         ) : null}
 
-        {selectedBlock.block_type === 'asset' && (
-          <Stack spacing={2}>
-            <Button
-              variant="outlined"
-              startIcon={<SearchIcon />}
-              onClick={() => onOpenResourcePicker('update', selectedBlock.id)}
-              disabled={isPendingBlock}
-            >
-              {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
-            </Button>
-            <Typography variant="body2" color="text.secondary">
-              {blockResource ? blockResource.title : 'No resource selected'}
-            </Typography>
-            <Stack direction="row" spacing={2}>
-              <TextField
-                label="Start (ms)"
-                value={selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : ''}
-                onChange={(event) => startInput.handleChange(event.target.value)}
-                onKeyDown={startInput.handleKeyDown}
-                disabled={isPendingBlock}
-              />
-              <TextField
-                label="End (ms)"
-                value={selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : ''}
-                onChange={(event) => endInput.handleChange(event.target.value)}
-                onKeyDown={endInput.handleKeyDown}
-                disabled={isPendingBlock}
-              />
-            </Stack>
-          </Stack>
-        )}
+        {selectedBlock.block_type === 'smart_doc'
+          ? renderSmartDocForm()
+          : (
+              <>
+                {selectedBlock.block_type === 'asset' && (
+                  <Stack spacing={2}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SearchIcon />}
+                      onClick={() => onOpenResourcePicker('update', selectedBlock.id)}
+                      disabled={isPendingBlock}
+                    >
+                      {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
+                    </Button>
+                    <Typography variant="body2" color="text.secondary">
+                      {blockResource ? blockResource.title : 'No resource selected'}
+                    </Typography>
+                    <Stack direction="row" spacing={2}>
+                      <TextField
+                        label="Start (ms)"
+                        value={selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : ''}
+                        onChange={(event) => startInput.handleChange(event.target.value)}
+                        onKeyDown={startInput.handleKeyDown}
+                        disabled={isPendingBlock}
+                      />
+                      <TextField
+                        label="End (ms)"
+                        value={selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : ''}
+                        onChange={(event) => endInput.handleChange(event.target.value)}
+                        onKeyDown={endInput.handleKeyDown}
+                        disabled={isPendingBlock}
+                      />
+                    </Stack>
+                  </Stack>
+                )}
 
-        {(selectedBlock.block_type === 'asset' || selectedBlock.block_type === 'divider') && (
-          <Stack spacing={2}>
-            <TextField
-              label="Label"
-              value={selectedBlock.label ?? ''}
-              onChange={(event) => labelInput.handleChange(event.target.value)}
-              onKeyDown={labelInput.handleKeyDown}
-              disabled={isPendingBlock}
-            />
-            <TextField
-              label="Notes"
-              multiline
-              minRows={3}
-              value={selectedBlock.notes ?? ''}
-              onChange={(event) => notesInput.handleChange(event.target.value)}
-              onKeyDown={notesInput.handleKeyDown}
-              disabled={isPendingBlock}
-            />
-          </Stack>
-        )}
+                {(selectedBlock.block_type === 'asset' || selectedBlock.block_type === 'divider') && (
+                  <Stack spacing={2}>
+                    <TextField
+                      label="Label"
+                      value={selectedBlock.label ?? ''}
+                      onChange={(event) => labelInput.handleChange(event.target.value)}
+                      onKeyDown={labelInput.handleKeyDown}
+                      disabled={isPendingBlock}
+                    />
+                    <TextField
+                      label="Notes"
+                      multiline
+                      minRows={3}
+                      value={selectedBlock.notes ?? ''}
+                      onChange={(event) => notesInput.handleChange(event.target.value)}
+                      onKeyDown={notesInput.handleKeyDown}
+                      disabled={isPendingBlock}
+                    />
+                  </Stack>
+                )}
 
-        {selectedBlock.block_type === 'asset' && (selectedBlock.settings != null || settingsDraft) && (
-          <TextField
-            label="Settings (JSON)"
-            multiline
-            minRows={4}
-            value={settingsDraft}
-            onChange={(event) => settingsInput.handleChange(event.target.value)}
-            onKeyDown={settingsInput.handleKeyDown}
-            error={!!settingsError}
-            helperText={settingsError ?? 'Optional advanced configuration for this block.'}
-            disabled={isPendingBlock}
-          />
-        )}
+                {selectedBlock.block_type === 'asset' && (selectedBlock.settings != null || settingsDraft) && (
+                  <TextField
+                    label="Settings (JSON)"
+                    multiline
+                    minRows={4}
+                    value={settingsDraft}
+                    onChange={(event) => settingsInput.handleChange(event.target.value)}
+                    onKeyDown={settingsInput.handleKeyDown}
+                    error={!!settingsError}
+                    helperText={settingsError ?? 'Optional advanced configuration for this block.'}
+                    disabled={isPendingBlock}
+                  />
+                )}
+              </>
+            )}
 
-        {isPendingBlock && (
+        {isPendingBlock && selectedBlock.block_type !== 'smart_doc' && (
           <Alert severity="info">This block is being saved. Additional options will be available shortly.</Alert>
         )}
 

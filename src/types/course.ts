@@ -1,6 +1,6 @@
 export type NodeType = 'course' | 'lesson' | 'chapter' | 'collection' | 'playlist';
 export type NodeState = 'draft' | 'published' | 'archived';
-export type BlockType = 'text' | 'asset' | 'divider';
+export type BlockType = 'text' | 'asset' | 'divider' | 'smart_doc';
 
 export type ContentNode = {
   id: number;
@@ -34,6 +34,7 @@ export type ContentBlock = {
   /** Stores sanitized HTML (legacy name kept for API compatibility). */
   text_md: string | null;
   resource_id: number | null;
+  smart_doc_id: number | null;
   start_ms: number | null;
   end_ms: number | null;
   label: string | null;

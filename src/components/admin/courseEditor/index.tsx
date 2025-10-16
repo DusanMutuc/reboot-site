@@ -336,7 +336,9 @@ function CourseEditorInner() {
   const nodeDebounceTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
   const optimisticSnapshot = useRef<NodeSubtree[] | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingBlockRef = useRef<{ tempId: number; position: number; type: BlockType; resourceId?: number } | null>(null);
+  const pendingBlockRef = useRef<
+    { tempId: number; position: number; type: BlockType; resourceId?: number; smartDocId?: number } | null
+  >(null);
   const pendingTextDrafts = useRef<Map<number, string>>(new Map());
 
   const applyAllPendingDrafts = useCallback(
@@ -640,6 +642,12 @@ function CourseEditorInner() {
       if (pending.type === 'asset' && pending.resourceId != null) {
         return block.resource_id === pending.resourceId && block.id > 0;
       }
+      if (pending.type === 'smart_doc') {
+        if (pending.smartDocId != null) {
+          return block.smart_doc_id === pending.smartDocId && block.id > 0;
+        }
+        return block.id > 0;
+      }
       return block.id > 0;
     });
     if (!candidate) return;
@@ -885,6 +893,19 @@ function CourseEditorInner() {
         return;
       }
 
+      if (type === 'smart_doc') {
+        const tempId = -Date.now();
+        const optimisticBlock = buildOptimisticBlock(nodeId, 'smart_doc', tempId, position, {
+          block_type: 'smart_doc',
+          smart_doc_id: null,
+        });
+        setTrees((prev) => insertBlockIntoForest(prev, nodeId, optimisticBlock));
+        pendingBlockRef.current = { tempId, position, type: 'smart_doc' };
+        setSelectedBlockId(tempId);
+        setEditingBlockId(null);
+        return;
+      }
+
       const payload: Partial<ContentBlock> & { block_type: BlockType } =
         type === 'text'
           ? { block_type: 'text', text_md: normalizeHtmlContent('') }
@@ -914,6 +935,27 @@ function CourseEditorInner() {
     handleInsertBlock(position, 'text');
   }, [handleInsertBlock, selectedSubtree]);
 
+  const handleFinalizeSmartDocBlock = useCallback(
+    async (block: ContentBlock, docId: number, options: { suppressToast?: boolean } = {}) => {
+      const insertPosition = sortedBlocks.findIndex((item) => item.id === block.id);
+      const position = insertPosition >= 0 ? insertPosition : block.position;
+
+      if (block.id < 0) {
+        setTrees((prev) => prev.map((tree) => updateBlockDraft(tree, block.id, { smart_doc_id: docId })));
+        pendingBlockRef.current = { tempId: block.id, position, type: 'smart_doc', smartDocId: docId };
+        await handleCreateBlock(
+          block.node_id,
+          { block_type: 'smart_doc', smart_doc_id: docId },
+          position,
+          { suppressToast: options.suppressToast ?? false },
+        );
+      } else if (block.smart_doc_id !== docId) {
+        queueBlockUpdate(block.id, { smart_doc_id: docId }, { debounce: false });
+      }
+    },
+    [handleCreateBlock, queueBlockUpdate, setTrees, sortedBlocks],
+  );
+
   const handleSequentialToggle = useCallback(
     async (courseId: number, on: boolean) => {
       setSequentialLoading(true);
@@ -940,6 +982,15 @@ function CourseEditorInner() {
 
   const handleDeleteBlock = useCallback(
     async (blockId: number) => {
+      if (blockId < 0) {
+        setTrees((prev) => removeBlockFromForest(prev, blockId));
+        if (pendingBlockRef.current?.tempId === blockId) {
+          pendingBlockRef.current = null;
+        }
+        setSelectedBlockId((prev) => (prev === blockId ? null : prev));
+        setEditingBlockId((prev) => (prev === blockId ? null : prev));
+        return;
+      }
       await runMutation(
         async () => {
           const subtree = await deleteBlock(blockId);
@@ -950,7 +1001,7 @@ function CourseEditorInner() {
       setSelectedBlockId((prev) => (prev === blockId ? null : prev));
       setEditingBlockId((prev) => (prev === blockId ? null : prev));
     },
-    [runMutation, setEditingBlockId, setSelectedBlockId],
+    [runMutation, setEditingBlockId, setSelectedBlockId, setTrees],
   );
 
   const handleReorderBlocks = useCallback(
@@ -1332,6 +1383,7 @@ function CourseEditorInner() {
                   setResourceDialogMode({ type: mode, blockId });
                   setResourceDialogOpen(true);
                 }}
+                onFinalizeSmartDocBlock={handleFinalizeSmartDocBlock}
                 resources={resourceCache}
                 savingState={savingState}
                 savingMessage={savingMessage}
@@ -1471,6 +1523,7 @@ function buildOptimisticBlock(
     position,
     text_md: type === 'text' ? normalizeHtmlContent(base.text_md) : null,
     resource_id: type === 'asset' ? base.resource_id ?? null : null,
+    smart_doc_id: type === 'smart_doc' ? base.smart_doc_id ?? null : null,
     start_ms: base.start_ms ?? null,
     end_ms: base.end_ms ?? null,
     label: base.label ?? null,
@@ -1505,6 +1558,33 @@ function insertBlockIntoTree(subtree: NodeSubtree, nodeId: number, block: Conten
     children: subtree.children.map((child) => ({
       edge: { ...child.edge },
       subtree: insertBlockIntoTree(child.subtree, nodeId, block),
+    })),
+  };
+}
+
+function removeBlockFromForest(forest: NodeSubtree[], blockId: number) {
+  return forest.map((tree) => removeBlockFromTree(tree, blockId));
+}
+
+function removeBlockFromTree(subtree: NodeSubtree, blockId: number): NodeSubtree {
+  let removed = false;
+  const blocks = subtree.blocks
+    .filter((block) => {
+      if (block.id === blockId) {
+        removed = true;
+        return false;
+      }
+      return true;
+    })
+    .map((block) => ({ ...block }));
+  const normalized = removed ? blocks.map((block, index) => ({ ...block, position: index })) : blocks;
+
+  return {
+    node: { ...subtree.node },
+    blocks: normalized,
+    children: subtree.children.map((child) => ({
+      edge: { ...child.edge },
+      subtree: removeBlockFromTree(child.subtree, blockId),
     })),
   };
 }

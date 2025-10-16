@@ -79,6 +79,16 @@ export async function PATCH(
       merged.end_ms = endMs;
     }
 
+    if (merged.smart_doc_id != null) {
+      const smartDocId = Number(merged.smart_doc_id);
+      if (!Number.isFinite(smartDocId) || smartDocId <= 0) {
+        throw new CourseBuilderError('smart_doc_id must be a valid number', 400, {
+          smart_doc_id: merged.smart_doc_id,
+        });
+      }
+      merged.smart_doc_id = smartDocId;
+    }
+
     validateBlockPayload(merged);
 
     const allowedFields = [
@@ -86,6 +96,7 @@ export async function PATCH(
       'position',
       'text_md',
       'resource_id',
+      'smart_doc_id',
       'start_ms',
       'end_ms',
       'label',
@@ -106,9 +117,15 @@ export async function PATCH(
           value = positionValue;
         }
 
-        if ((field === 'resource_id' || field === 'start_ms' || field === 'end_ms') && value != null) {
+        if (
+          (field === 'resource_id' || field === 'start_ms' || field === 'end_ms' || field === 'smart_doc_id') &&
+          value != null
+        ) {
           const numericValue = Number(value);
-          if (!Number.isFinite(numericValue) || (field !== 'resource_id' && numericValue < 0)) {
+          if (!Number.isFinite(numericValue) || (field !== 'resource_id' && field !== 'smart_doc_id' && numericValue < 0)) {
+            throw new CourseBuilderError(`${field} must be a valid number`, 400, { [field]: value });
+          }
+          if (field === 'smart_doc_id' && numericValue <= 0) {
             throw new CourseBuilderError(`${field} must be a valid number`, 400, { [field]: value });
           }
           value = numericValue;

@@ -59,10 +59,18 @@ export async function POST(
       });
     }
 
+    const smartDocId = block.smart_doc_id != null ? Number(block.smart_doc_id) : null;
+    if (smartDocId != null && (!Number.isFinite(smartDocId) || smartDocId <= 0)) {
+      throw new CourseBuilderError('smart_doc_id must be a number', 400, {
+        smart_doc_id: block.smart_doc_id,
+      });
+    }
+
     const sanitizedBlock = {
       ...block,
       position: positionValue ?? undefined,
       resource_id: resourceId ?? undefined,
+      smart_doc_id: smartDocId ?? undefined,
       start_ms: startMs ?? undefined,
       end_ms: endMs ?? undefined,
     };
@@ -91,6 +99,7 @@ export async function POST(
       position,
       text_md: block.text_md ?? null,
       resource_id: resourceId,
+      smart_doc_id: smartDocId,
       start_ms: startMs,
       end_ms: endMs,
       label: block.label ?? null,
