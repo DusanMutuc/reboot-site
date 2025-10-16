@@ -71,7 +71,7 @@ export async function PATCH(
     const { data: existing, error: existingError } = await adminClient
       .from('content_blocks')
       .select(
-        'id, node_id, block_type, text_md, resource_id, start_ms, end_ms, label, notes, settings, data',
+        'id, node_id, block_type, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, notes, settings, data',
       )
       .eq('node_id', nodeIdNumber);
 
@@ -103,6 +103,7 @@ export async function PATCH(
         block_type: base.block_type,
         text_md: base.text_md,
         resource_id: base.resource_id,
+        smart_doc_id: base.smart_doc_id,
         start_ms: base.start_ms,
         end_ms: base.end_ms,
         label: base.label,
@@ -116,6 +117,7 @@ export async function PATCH(
       if ('notes' in row) merged.notes = row.notes;
       if ('settings' in row) merged.settings = row.settings;
       if ('data' in row) merged.data = row.data;
+      if ('smart_doc_id' in row) merged.smart_doc_id = row.smart_doc_id;
 
       return merged;
     });
