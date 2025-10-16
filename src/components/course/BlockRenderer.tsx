@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import type { Theme } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -24,7 +25,6 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import InsertLinkIcon from '@mui/icons-material/InsertLink';
 import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { supabase } from '@/lib/supabaseClient';
 
@@ -71,6 +71,15 @@ type SmartDocState =
   | { status: 'error'; message: string }
   | { status: 'ready'; doc: SmartDocRecord };
 
+type SmartDocPromptRow = {
+  id: number;
+  position: number;
+  label: string | null;
+  prompt_type: SmartDocPrompt['prompt_type'];
+  help_text: string | null;
+  required: boolean;
+};
+
 /** ---------- Shared field/label styles (unifies look across the page) ---------- */
 const FIELD_SX = {
   bgcolor: 'grey.100',
@@ -86,7 +95,7 @@ const FIELD_SX = {
   '&.Mui-focused': {
     bgcolor: 'common.white',
     borderColor: 'primary.light',
-    boxShadow: (t: any) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.18)}`,
+    boxShadow: (t: Theme) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.18)}`,
   },
 } as const;
 
@@ -170,16 +179,19 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
         return;
       }
 
-      const prompts = (data.smart_doc_prompts ?? [])
-        .map((p: any) => ({
-          id: p.id,
-          position: p.position,
-          label: p.label,
-          prompt_type: p.prompt_type,
-          help_text: p.help_text,
-          required: p.required,
-        }))
-        .sort((a: any, b: any) => a.position - b.position);
+      const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
+const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
+  .map((p): SmartDocPrompt => ({
+    id: p.id,
+    position: p.position,
+    // coerce null → empty string to satisfy SmartDocPrompt.label: string
+    label: p.label ?? '',
+    prompt_type: p.prompt_type,
+    help_text: p.help_text,
+    required: p.required,
+  }))
+  .sort((a, b) => a.position - b.position);
+
 
       setState({
         status: 'ready',
@@ -200,7 +212,9 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
 
   const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
-  if (state.status === 'idle' || state.status === 'loading') {
+switch (state.status) {
+  case 'idle':
+  case 'loading':
     return (
       <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
         <CircularProgress size={22} />
@@ -209,9 +223,8 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
         </Typography>
       </Stack>
     );
-  }
 
-  if (state.status === 'error') {
+  case 'error':
     return (
       <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
         <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
@@ -220,10 +233,14 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
         </Typography>
       </Stack>
     );
-  }
 
-  const { doc } = state;
-  const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
+  case 'ready':
+    break;
+}
+
+const { doc } = state; // safely narrowed to 'ready'
+const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
+
 
   return (
     <Stack spacing={3} sx={wrapSx}>
@@ -252,7 +269,10 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
             No questions yet.
           </Typography>
         ) : (
-          doc.prompts.map((p) => <SmartDocPromptField key={p.id} prompt={p} />)
+          doc.prompts.map((p: SmartDocPrompt) => (
+            <SmartDocPromptField key={p.id} prompt={p} />
+          ))
+          
         )}
       </Box>
     </Stack>
