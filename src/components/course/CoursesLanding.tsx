@@ -11,10 +11,10 @@ import {
   CardMedia,
   CircularProgress,
   Container,
+  Grid,
   Stack,
   Typography,
 } from '@mui/material';
-import Grid from '@mui/material/Unstable_Grid2';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 
 import TopNav from '@/components/topNav';
@@ -103,7 +103,7 @@ export default function CoursesLanding() {
           if (!slug) return null;
 
           return (
-            <Grid key={course.id} xs={12} sm={6} lg={4}>
+            <Grid item key={course.id} xs={12} sm={6} lg={4}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardActionArea component={Link} href={`/courses/${slug}`} sx={{ flexGrow: 1 }}>
                   {course.hero_image ? (
