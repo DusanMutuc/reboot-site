@@ -39,7 +39,7 @@ type StudentCourseTreeProps = {
   selectedNodeId: number | null;
   lockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
   onToggle: (nodeId: number) => void;
-  onSelectLesson: (lesson: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
+  onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
   onBackToCourses: () => void;
   fullHeight?: boolean;
 };
@@ -52,7 +52,7 @@ type TreeNodeProps = {
   selectedNodeId: number | null;
   parentId: number | null;
   onToggle: (nodeId: number) => void;
-  onSelectLesson: (lesson: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
+  onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
 };
 
 function TreeNode({
@@ -63,7 +63,7 @@ function TreeNode({
   selectedNodeId,
   parentId,
   onToggle,
-  onSelectLesson,
+  onSelectContent,
 }: TreeNodeProps) {
   const { node } = subtree;
   const hasChildren = subtree.children.length > 0;
@@ -73,14 +73,20 @@ function TreeNode({
   const icon = NODE_ICONS[node.node_type] ?? NODE_ICONS.lesson;
   const isSelected = selectedNodeId === node.id;
   const paddingLeft = 2 + depth * 2;
+  const isContentNode = node.node_type === 'lesson' || node.node_type === 'chapter';
 
   const handleClick = () => {
-    if (hasChildren) {
-      onToggle(node.id);
-      return;
+    if (isContentNode) {
+      onSelectContent(subtree, lockStatus);
+      if (!hasChildren) {
+        return;
+      }
     }
-    if (node.node_type === 'lesson') {
-      onSelectLesson(subtree, lockStatus);
+
+    if (hasChildren) {
+      if (!isExpanded) {
+        onToggle(node.id);
+      }
     }
   };
 
@@ -120,8 +126,8 @@ function TreeNode({
       <ListItemText
         primary={node.title ?? 'Untitled'}
         primaryTypographyProps={{
-          variant: node.node_type === 'lesson' ? 'body1' : 'subtitle2',
-          fontWeight: node.node_type === 'lesson' ? 600 : 500,
+          variant: isContentNode ? 'body1' : 'subtitle2',
+          fontWeight: isContentNode ? 600 : 500,
         }}
       />
 
@@ -149,7 +155,7 @@ function TreeNode({
                 selectedNodeId={selectedNodeId}
                 parentId={subtree.node.id}
                 onToggle={onToggle}
-                onSelectLesson={onSelectLesson}
+                onSelectContent={onSelectContent}
               />
             ))}
           </List>
@@ -165,7 +171,7 @@ export default function StudentCourseTree({
   selectedNodeId,
   lockStatuses,
   onToggle,
-  onSelectLesson,
+  onSelectContent,
   onBackToCourses,
   fullHeight = true,
 }: StudentCourseTreeProps) {
@@ -222,7 +228,7 @@ export default function StudentCourseTree({
               selectedNodeId={selectedNodeId}
               parentId={course.node.id}
               onToggle={onToggle}
-              onSelectLesson={onSelectLesson}
+              onSelectContent={onSelectContent}
             />
           ))}
         </List>

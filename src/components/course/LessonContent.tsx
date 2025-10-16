@@ -15,6 +15,17 @@ type LessonContentProps = {
 
 type ResourceState = 'idle' | 'loading' | 'ready' | 'error';
 
+function getContentLabels(node: NodeSubtree | null) {
+  const type = node?.node.node_type;
+  if (type === 'chapter') {
+    return { title: 'Chapter', lower: 'chapter' };
+  }
+  if (type === 'lesson') {
+    return { title: 'Lesson', lower: 'lesson' };
+  }
+  return { title: 'Item', lower: 'item' };
+}
+
 function toRenderableBlock(block: ContentBlock): RenderableBlock {
   return {
     id: block.id,
@@ -33,6 +44,8 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
   const [resources, setResources] = useState<Record<number, RenderableResource>>({});
   const [resourceState, setResourceState] = useState<ResourceState>('idle');
   const [resourceError, setResourceError] = useState<string | null>(null);
+
+  const labels = getContentLabels(lesson);
 
   const assetBlockIds = useMemo(() => {
     if (!lesson) return [] as number[];
@@ -93,7 +106,7 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
     return (
       <Stack alignItems="center" spacing={2} sx={{ py: 10 }}>
         <CircularProgress />
-        <Typography color="text.secondary">Loading lesson…</Typography>
+        <Typography color="text.secondary">Loading {labels.lower}…</Typography>
       </Stack>
     );
   }
@@ -109,9 +122,9 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
   if (!lesson) {
     return (
       <Stack alignItems="center" spacing={2} sx={{ py: 10 }}>
-        <Typography variant="h6">Select a lesson to get started</Typography>
+        <Typography variant="h6">Select a chapter or lesson to get started</Typography>
         <Typography color="text.secondary" align="center">
-          Choose an unlocked lesson from the outline to explore its content.
+          Choose an unlocked chapter or lesson from the outline to explore its content.
         </Typography>
       </Stack>
     );
@@ -125,10 +138,10 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
       <Stack spacing={3} sx={{ maxWidth: 860, mx: 'auto', px: { xs: 2, md: 4 } }}>
         <Box>
           <Typography variant="overline" sx={{ color: 'primary.main', fontWeight: 600 }}>
-            Lesson
+            {labels.title}
           </Typography>
           <Typography variant="h3" sx={{ fontWeight: 700 }}>
-            {lesson.node.title ?? 'Untitled lesson'}
+            {lesson.node.title ?? `Untitled ${labels.lower}`}
           </Typography>
           {lesson.node.description ? (
             <Typography color="text.secondary" sx={{ mt: 1 }}>
@@ -138,7 +151,7 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
         </Box>
 
         {blocks.length === 0 ? (
-          <Alert severity="info">This lesson doesn’t have any blocks yet.</Alert>
+          <Alert severity="info">This {labels.lower} doesn’t have any blocks yet.</Alert>
         ) : (
           <Stack spacing={3}>
             {blocks.map((block) => {

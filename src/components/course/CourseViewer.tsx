@@ -33,6 +33,16 @@ type Maps = {
   parentById: Map<number, number | null>;
 };
 
+function isContentNodeType(nodeType: string) {
+  return nodeType === 'lesson' || nodeType === 'chapter';
+}
+
+function formatContentLabel(nodeType: string) {
+  if (nodeType === 'chapter') return 'Chapter';
+  if (nodeType === 'lesson') return 'Lesson';
+  return 'Item';
+}
+
 function buildMaps(course: NodeSubtree): Maps {
   const nodeById = new Map<number, NodeSubtree>();
   const slugToId = new Map<string, number>();
@@ -79,7 +89,7 @@ function collectParentPath(nodeId: number, parentById: Map<number, number | null
   return path;
 }
 
-function findFirstUnlockedLesson(
+function findFirstUnlockedContent(
   course: NodeSubtree,
   lockMap: Record<number, Record<number, ChildUnlockStatus>>,
 ): NodeSubtree | null {
@@ -91,7 +101,7 @@ function findFirstUnlockedLesson(
       }
     }
 
-    if (subtree.node.node_type === 'lesson') {
+    if (isContentNodeType(subtree.node.node_type)) {
       return subtree;
     }
 
@@ -169,10 +179,10 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     if (state.status !== 'ready' || !maps) return;
 
     if (!lessonSlug && !redirected) {
-      const firstLesson = findFirstUnlockedLesson(state.course, lockMap);
-      if (firstLesson && firstLesson.node.slug) {
+      const firstContent = findFirstUnlockedContent(state.course, lockMap);
+      if (firstContent && firstContent.node.slug) {
         setRedirected(true);
-        router.replace(`/courses/${courseSlug}/${firstLesson.node.slug}`);
+        router.replace(`/courses/${courseSlug}/${firstContent.node.slug}`);
       }
     }
   }, [courseSlug, lessonSlug, lockMap, maps, redirected, router, state]);
@@ -181,22 +191,24 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   const slugToId = maps?.slugToId ?? null;
   const parentById = maps?.parentById ?? null;
 
-  const requestedLessonId = lessonSlug && slugToId ? slugToId.get(lessonSlug) ?? null : null;
-  let selectedLesson: NodeSubtree | null = null;
-  let lessonError: string | null = null;
+  const requestedContentId = lessonSlug && slugToId ? slugToId.get(lessonSlug) ?? null : null;
+  let selectedContent: NodeSubtree | null = null;
+  let contentError: string | null = null;
 
-  if (requestedLessonId != null && nodeById && parentById) {
-    if (isNodeLocked(requestedLessonId, lockMap, parentById)) {
-      lessonError = 'This lesson is locked until you complete the previous required items.';
+  if (requestedContentId != null && nodeById && parentById) {
+    const candidate = nodeById.get(requestedContentId) ?? null;
+    if (!candidate || !isContentNodeType(candidate.node.node_type)) {
+      contentError = 'We couldn’t open this item.';
+    } else if (isNodeLocked(requestedContentId, lockMap, parentById)) {
+      const label = formatContentLabel(candidate.node.node_type).toLowerCase();
+      contentError = `This ${label} is locked until you complete the previous required items.`;
     } else {
-      selectedLesson = nodeById.get(requestedLessonId) ?? null;
+      selectedContent = candidate;
     }
   }
 
-  if (!selectedLesson && lessonSlug) {
-    if (!lessonError) {
-      lessonError = 'We couldn’t find this lesson.';
-    }
+  if (!selectedContent && lessonSlug && !contentError) {
+    contentError = 'We couldn’t find this item.';
   }
 
   const handleToggle = (nodeId: number) => {
@@ -211,14 +223,20 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     });
   };
 
-  const handleSelectLesson = (lesson: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => {
-    if (lockStatus?.locked) {
-      setSnackbar(lockStatus.reason ?? 'Complete the previous lesson to unlock this one.');
+  const handleSelectContent = (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => {
+    if (!isContentNodeType(node.node.node_type)) {
       return;
     }
 
-    if (!lesson.node.slug) {
-      setSnackbar('This lesson is missing a slug and cannot be opened.');
+    const label = formatContentLabel(node.node.node_type);
+
+    if (lockStatus?.locked) {
+      setSnackbar(lockStatus.reason ?? `Complete the previous ${label.toLowerCase()} to unlock this one.`);
+      return;
+    }
+
+    if (!node.node.slug) {
+      setSnackbar(`This ${label.toLowerCase()} is missing a slug and cannot be opened.`);
       return;
     }
 
@@ -227,26 +245,26 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
       return;
     }
 
-    const pathParents = collectParentPath(lesson.node.id, parentById);
+    const pathParents = collectParentPath(node.node.id, parentById);
     setExpanded((prev) => new Set([...prev, ...pathParents]));
-    router.push(`/courses/${courseSlug}/${lesson.node.slug}`);
+    router.push(`/courses/${courseSlug}/${node.node.slug}`);
   };
 
   useEffect(() => {
-    if (!selectedLesson || !parentById) return;
-    const pathParents = collectParentPath(selectedLesson.node.id, parentById);
+    if (!selectedContent || !parentById) return;
+    const pathParents = collectParentPath(selectedContent.node.id, parentById);
     setExpanded((prev) => new Set([...prev, ...pathParents]));
-  }, [parentById, selectedLesson]);
+  }, [parentById, selectedContent]);
 
   const nestedLockMap = lockMap;
-  const treeSelectedId = selectedLesson?.node.id ?? (lessonError && requestedLessonId ? requestedLessonId : null);
+  const treeSelectedId = selectedContent?.node.id ?? (contentError && requestedContentId ? requestedContentId : null);
 
   useEffect(() => {
-    if (!lessonError || !requestedLessonId || !parentById) return;
-    const pathParents = collectParentPath(requestedLessonId, parentById);
+    if (!contentError || !requestedContentId || !parentById) return;
+    const pathParents = collectParentPath(requestedContentId, parentById);
     if (pathParents.length === 0) return;
     setExpanded((prev) => new Set([...prev, ...pathParents]));
-  }, [lessonError, parentById, requestedLessonId]);
+  }, [contentError, parentById, requestedContentId]);
 
   if (state.status === 'loading') {
     return (
@@ -286,7 +304,7 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
           selectedNodeId={treeSelectedId}
           lockStatuses={nestedLockMap}
           onToggle={handleToggle}
-          onSelectLesson={handleSelectLesson}
+          onSelectContent={handleSelectContent}
           onBackToCourses={() => router.push('/courses')}
           fullHeight={false}
         />
@@ -305,7 +323,7 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
             selectedNodeId={treeSelectedId}
             lockStatuses={nestedLockMap}
             onToggle={handleToggle}
-            onSelectLesson={handleSelectLesson}
+            onSelectContent={handleSelectContent}
             onBackToCourses={() => router.push('/courses')}
           />
         </Box>
@@ -317,13 +335,13 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
                 {state.course.node.title ?? 'Course'}
               </Typography>
               <Typography color="text.secondary" sx={{ mt: 1 }}>
-                Select a lesson from the outline to start learning.
+                Select a chapter or lesson from the outline to start learning.
               </Typography>
               <Divider sx={{ my: 4 }} />
             </Box>
           )}
 
-          <LessonContent lesson={selectedLesson} loading={false} error={lessonError} />
+          <LessonContent lesson={selectedContent} loading={false} error={contentError} />
         </Box>
       </Box>
 
