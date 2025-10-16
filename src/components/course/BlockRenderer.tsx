@@ -180,16 +180,18 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
       }
 
       const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
-      const prompts = rawPrompts
-        .map((p) => ({
-          id: p.id,
-          position: p.position,
-          label: p.label,
-          prompt_type: p.prompt_type,
-          help_text: p.help_text,
-          required: p.required,
-        }))
-        .sort((a, b) => a.position - b.position);
+const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
+  .map((p): SmartDocPrompt => ({
+    id: p.id,
+    position: p.position,
+    // coerce null → empty string to satisfy SmartDocPrompt.label: string
+    label: p.label ?? '',
+    prompt_type: p.prompt_type,
+    help_text: p.help_text,
+    required: p.required,
+  }))
+  .sort((a, b) => a.position - b.position);
+
 
       setState({
         status: 'ready',
@@ -210,7 +212,9 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
 
   const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
-  if (state.status === 'idle' || state.status === 'loading') {
+switch (state.status) {
+  case 'idle':
+  case 'loading':
     return (
       <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
         <CircularProgress size={22} />
@@ -219,9 +223,8 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
         </Typography>
       </Stack>
     );
-  }
 
-  if (state.status === 'error') {
+  case 'error':
     return (
       <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
         <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
@@ -230,10 +233,14 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
         </Typography>
       </Stack>
     );
-  }
 
-  const { doc } = state;
-  const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
+  case 'ready':
+    break;
+}
+
+const { doc } = state; // safely narrowed to 'ready'
+const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
+
 
   return (
     <Stack spacing={3} sx={wrapSx}>
@@ -262,7 +269,10 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
             No questions yet.
           </Typography>
         ) : (
-          doc.prompts.map((p) => <SmartDocPromptField key={p.id} prompt={p} />)
+          doc.prompts.map((p: SmartDocPrompt) => (
+            <SmartDocPromptField key={p.id} prompt={p} />
+          ))
+          
         )}
       </Box>
     </Stack>
