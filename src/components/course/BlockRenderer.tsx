@@ -17,6 +17,7 @@ import {
   Typography,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import type { Theme } from '@mui/material/styles';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
@@ -24,7 +25,6 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import InsertLinkIcon from '@mui/icons-material/InsertLink';
 import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { supabase } from '@/lib/supabaseClient';
 
@@ -71,6 +71,15 @@ type SmartDocState =
   | { status: 'error'; message: string }
   | { status: 'ready'; doc: SmartDocRecord };
 
+type SmartDocPromptRow = {
+  id: number;
+  position: number;
+  label: string | null;
+  prompt_type: SmartDocPrompt['prompt_type'];
+  help_text: string | null;
+  required: boolean;
+};
+
 /** ---------- Shared field/label styles (unifies look across the page) ---------- */
 const FIELD_SX = {
   bgcolor: 'grey.100',
@@ -86,7 +95,7 @@ const FIELD_SX = {
   '&.Mui-focused': {
     bgcolor: 'common.white',
     borderColor: 'primary.light',
-    boxShadow: (t: any) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.18)}`,
+    boxShadow: (t: Theme) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.18)}`,
   },
 } as const;
 
@@ -170,8 +179,9 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
         return;
       }
 
-      const prompts = (data.smart_doc_prompts ?? [])
-        .map((p: any) => ({
+      const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
+      const prompts = rawPrompts
+        .map((p) => ({
           id: p.id,
           position: p.position,
           label: p.label,
@@ -179,7 +189,7 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
           help_text: p.help_text,
           required: p.required,
         }))
-        .sort((a: any, b: any) => a.position - b.position);
+        .sort((a, b) => a.position - b.position);
 
       setState({
         status: 'ready',
