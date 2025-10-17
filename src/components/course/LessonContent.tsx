@@ -162,9 +162,9 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       .filter((b) => {
         const resourceId = b.resource_id!;
         const resource = resources[resourceId];
-        if (!resource || resource.type !== 'video') return false;
-        const url = resource.url?.toLowerCase();
-        return Boolean(url && url.includes('vimeo.com'));
+        if (!resource) return false;
+        const url = resource.url?.toLowerCase() ?? '';
+        return url.includes('vimeo.com');
       })
       .map((b) => b.id);
   }, [blocks, resources]);

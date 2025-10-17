@@ -941,19 +941,36 @@ export function BlockRenderer({
     );
   }
 
-  switch (resource.type) {
-    case 'video':
-      return <VideoPreview resource={resource} onProgress={videoProgressHandler} />;
-    case 'podcast':
-    case 'audio':
-      return <AudioPreview resource={resource} />;
-    case 'pdf':
-    case 'document':
-      return <PdfPreview resource={resource} />;
-    case 'image':
-      return <ImagePreview resource={resource} />;
-    case 'link':
-    default:
-      return <LinkPreview resource={resource} />;
+  const normalizedType = (resource.type ?? '').toLowerCase();
+  const urlLower = (resource.url ?? '').toLowerCase();
+
+  const treatAsVideo =
+    normalizedType === 'video' ||
+    normalizedType === 'video_link' ||
+    normalizedType === 'vimeo' ||
+    normalizedType === 'youtube' ||
+    normalizedType.includes('video') ||
+    urlLower.includes('vimeo.com') ||
+    urlLower.includes('youtu.be') ||
+    urlLower.includes('youtube.com');
+
+  if (treatAsVideo) {
+    return <VideoPreview resource={resource} onProgress={videoProgressHandler} />;
   }
+
+  const treatAsAudio =
+    normalizedType === 'audio' || normalizedType === 'podcast' || normalizedType.includes('audio');
+  if (treatAsAudio) {
+    return <AudioPreview resource={resource} />;
+  }
+
+  if (normalizedType === 'pdf' || normalizedType === 'document') {
+    return <PdfPreview resource={resource} />;
+  }
+
+  if (normalizedType === 'image') {
+    return <ImagePreview resource={resource} />;
+  }
+
+  return <LinkPreview resource={resource} />;
 }
