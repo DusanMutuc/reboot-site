@@ -1,6 +1,14 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from 'react';
 
 export type SavingState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -13,9 +21,9 @@ export type EditorStoreValue = {
   savingState: SavingState;
   savingMessage: string;
   editorMode: EditorMode;
-  setSelectedNodeId: (nodeId: number | null) => void;
-  setSelectedBlockId: (blockId: number | null) => void;
-  setEditingBlockId: (blockId: number | null) => void;
+  setSelectedNodeId: Dispatch<SetStateAction<number | null>>;
+  setSelectedBlockId: Dispatch<SetStateAction<number | null>>;
+  setEditingBlockId: Dispatch<SetStateAction<number | null>>;
   setSavingState: (state: SavingState, message?: string) => void;
   setEditorMode: (mode: EditorMode) => void;
 };
