@@ -104,46 +104,6 @@ const courseCache = new Map<
   { course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]> }
 >();
 
-/** ------- merge helper: prefer UNLOCKED when merging snapshots ------- */
-function mergeLockStatusesPreferUnlocked(
-  current: Record<number, ChildUnlockStatus[]>,
-  incoming: Record<number, ChildUnlockStatus[]>
-): Record<number, ChildUnlockStatus[]> {
-  const out: Record<number, ChildUnlockStatus[]> = { ...current };
-
-  // Build quick lookup for current
-  const currByParent: Record<number, Record<number, ChildUnlockStatus>> = {};
-  for (const [pidStr, rows] of Object.entries(current)) {
-    const pid = Number(pidStr);
-    currByParent[pid] = {};
-    for (const r of rows) currByParent[pid][r.child_id] = r;
-  }
-
-  for (const [pidStr, rows] of Object.entries(incoming)) {
-    const pid = Number(pidStr);
-    const merged: Record<number, ChildUnlockStatus> = { ...(currByParent[pid] ?? {}) };
-
-    for (const r of rows) {
-      const existing = merged[r.child_id];
-      if (!existing) {
-        merged[r.child_id] = r;
-      } else {
-        // Prefer UNLOCKED if either says unlocked; keep latest metadata from incoming
-        merged[r.child_id] = {
-          ...r,
-          locked: Boolean(existing.locked && r.locked),
-        };
-      }
-    }
-
-    // Keep deterministic order
-    const arr = Object.values(merged).sort((a, b) => a.child_position - b.child_position);
-    out[pid] = arr;
-  }
-
-  return out;
-}
-
 export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
   const router = useRouter();
   const [state, setState] = useState<CourseState>({ status: 'loading' });
@@ -175,16 +135,8 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
         const data = (await res.json()) as { course: NodeSubtree; unlockStatuses: Record<number, ChildUnlockStatus[]> };
         if (!active) return;
 
-        // Merge incoming with current (prefer unlocked), and keep cache in sync
-        setState((prev) => {
-          if (prev.status === 'ready') {
-            const merged = mergeLockStatusesPreferUnlocked(prev.lockStatuses, data.unlockStatuses);
-            courseCache.set(courseSlug, { course: data.course, lockStatuses: merged });
-            return { ...prev, course: data.course, lockStatuses: merged };
-          }
-          courseCache.set(courseSlug, { course: data.course, lockStatuses: data.unlockStatuses });
-          return { status: 'ready', course: data.course, lockStatuses: data.unlockStatuses };
-        });
+        courseCache.set(courseSlug, { course: data.course, lockStatuses: data.unlockStatuses });
+        setState({ status: 'ready', course: data.course, lockStatuses: data.unlockStatuses });
       } catch (error) {
         if (!active) return;
         const message = error instanceof Error ? error.message : 'Failed to load course';
@@ -315,10 +267,13 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
       setState((prev) => {
         if (prev.status !== 'ready') return prev;
-        const merged = mergeLockStatusesPreferUnlocked(prev.lockStatuses, unlockStatuses);
-        // keep cache synced with merged state
-        courseCache.set(courseSlug, { course: prev.course, lockStatuses: merged });
-        return { ...prev, lockStatuses: merged };
+        const nextLockStatuses: Record<number, ChildUnlockStatus[]> = { ...prev.lockStatuses };
+        for (const [pidStr, rows] of Object.entries(unlockStatuses)) {
+          const pid = Number(pidStr);
+          nextLockStatuses[pid] = rows;
+        }
+        courseCache.set(courseSlug, { course: prev.course, lockStatuses: nextLockStatuses });
+        return { ...prev, lockStatuses: nextLockStatuses };
       });
     } catch {
       // ignore; next navigation will naturally refresh

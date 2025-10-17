@@ -4,24 +4,34 @@ export function useNodeProgress(nodeId: number | null) {
   const startedRef = useRef(false);
   const completedRef = useRef(false);
 
-  const markStarted = useCallback(() => {
+  const markStarted = useCallback(async () => {
     if (!nodeId || startedRef.current) return;
     startedRef.current = true;
-    void fetch('/api/progress', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'start', nodeId }),
-    }).catch(() => {});
+    try {
+      await fetch('/api/progress', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'start', nodeId }),
+      });
+    } catch (error) {
+      startedRef.current = false;
+      throw error;
+    }
   }, [nodeId]);
 
-  const markCompleted = useCallback(() => {
+  const markCompleted = useCallback(async () => {
     if (!nodeId || completedRef.current) return;
     completedRef.current = true;
-    void fetch('/api/progress', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'complete', nodeId }),
-    }).catch(() => {});
+    try {
+      await fetch('/api/progress', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'complete', nodeId }),
+      });
+    } catch (error) {
+      completedRef.current = false;
+      throw error;
+    }
   }, [nodeId]);
 
   return { markStarted, markCompleted };
