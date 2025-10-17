@@ -123,6 +123,7 @@ export type BlockRendererProps = {
   resource: RenderableResource | null;
   previewMode?: boolean;
   onSmartDocProgress?: (contentBlockId: number, progress: SmartDocClientProgress) => void;
+  onVideoProgress?: (contentBlockId: number, percent: number) => void;
 };
 
 /** --------------------------------------------------------------------------- */
@@ -445,7 +446,160 @@ function formatDuration(seconds: number | null) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function VideoPreview({ resource }: { resource: RenderableResource }) {
+type VimeoPlayerInstance = {
+  on: (event: 'timeupdate', callback: (data: { percent?: number }) => void) => void;
+  off: (event: 'timeupdate', callback: (data: { percent?: number }) => void) => void;
+  destroy: () => Promise<void> | void;
+};
+
+type VimeoPlayerConstructor = new (element: HTMLIFrameElement) => VimeoPlayerInstance;
+
+type VimeoWindow = Window & {
+  Vimeo?: {
+    Player: VimeoPlayerConstructor;
+  };
+};
+
+let vimeoScriptPromise: Promise<void> | null = null;
+
+function loadVimeoPlayerApi(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  const global = window as VimeoWindow;
+  if (global.Vimeo?.Player) return Promise.resolve();
+  if (vimeoScriptPromise) return vimeoScriptPromise;
+
+  vimeoScriptPromise = new Promise<void>((resolve, reject) => {
+    const existingByAttr = document.querySelector<HTMLScriptElement>('script[data-vimeo-player-api="true"]');
+    const existingBySrc =
+      existingByAttr ??
+      document.querySelector<HTMLScriptElement>('script[src="https://player.vimeo.com/api/player.js"]');
+    const existing = existingByAttr ?? existingBySrc;
+    if (existing) {
+      if (existing.dataset.vimeoPlayerLoaded === 'true') {
+        resolve();
+        return;
+      }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener(
+        'error',
+        () => reject(new Error('Failed to load Vimeo player script')),
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://player.vimeo.com/api/player.js';
+    script.async = true;
+    script.dataset.vimeoPlayerApi = 'true';
+    script.onload = () => {
+      script.dataset.vimeoPlayerLoaded = 'true';
+      resolve();
+    };
+    script.onerror = () => reject(new Error('Failed to load Vimeo player script'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    vimeoScriptPromise = null;
+    throw error;
+  });
+
+  return vimeoScriptPromise;
+}
+
+function VimeoPlayerFrame({
+  videoId,
+  title,
+  onProgress,
+}: {
+  videoId: string;
+  title: string;
+  onProgress?: (percent: number) => void;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const lastSentRef = useRef(0);
+
+  useEffect(() => {
+    lastSentRef.current = 0;
+    if (typeof window === 'undefined') return undefined;
+
+    let active = true;
+    let player: VimeoPlayerInstance | null = null;
+    const handleTimeUpdate = (data: { percent?: number }) => {
+      if (!active) return;
+      const raw = typeof data?.percent === 'number' ? data.percent : null;
+      if (raw === null || Number.isNaN(raw)) return;
+      const clamped = Math.max(0, Math.min(1, raw));
+      if (clamped <= lastSentRef.current + 0.001) return;
+      lastSentRef.current = clamped;
+      onProgress?.(clamped);
+    };
+
+    const setup = async () => {
+      try {
+        await loadVimeoPlayerApi();
+        if (!active || !iframeRef.current) return;
+        const global = window as VimeoWindow;
+        const PlayerCtor = global.Vimeo?.Player;
+        if (!PlayerCtor) return;
+        player = new PlayerCtor(iframeRef.current);
+        player.on('timeupdate', handleTimeUpdate);
+      } catch (error) {
+        console.error('Failed to initialise Vimeo player', error);
+      }
+    };
+
+    void setup();
+
+    return () => {
+      active = false;
+      if (player) {
+        try {
+          player.off('timeupdate', handleTimeUpdate);
+          const result = player.destroy?.();
+          if (result && typeof (result as Promise<void>).then === 'function') {
+            (result as Promise<void>).catch(() => {});
+          }
+        } catch (error) {
+          console.error('Failed to clean up Vimeo player', error);
+        }
+      }
+    };
+  }, [onProgress, videoId]);
+
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: 860,
+        mx: 'auto',
+        borderRadius: 2,
+        overflow: 'hidden',
+        bgcolor: 'common.black',
+        pb: '56.25%',
+        height: 0,
+      }}
+    >
+      <Box
+        component="iframe"
+        ref={iframeRef}
+        title={title}
+        src={`https://player.vimeo.com/video/${videoId}`}
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowFullScreen
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+      />
+    </Box>
+  );
+}
+
+function VideoPreview({
+  resource,
+  onProgress,
+}: {
+  resource: RenderableResource;
+  onProgress?: (percent: number) => void;
+}) {
   if (!resource.url) {
     return (
       <Card variant="outlined">
@@ -514,13 +668,10 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
 
   if (isVimeo) {
     const segments = resource.url.split('/');
-    const id = segments[segments.length - 1];
+    const idWithQuery = segments[segments.length - 1];
+    const id = idWithQuery?.split('?')[0]?.split('#')[0];
     if (id) {
-      return frameWrapper(
-        `https://player.vimeo.com/video/${id}`,
-        'autoplay; fullscreen; picture-in-picture',
-        resource.title,
-      );
+      return <VimeoPlayerFrame videoId={id} title={resource.title} onProgress={onProgress} />;
     }
   }
 
@@ -678,11 +829,17 @@ export function BlockRenderer({
   resource,
   previewMode = false,
   onSmartDocProgress,
+  onVideoProgress,
 }: BlockRendererProps) {
   const smartDocProgressHandler = useMemo(() => {
     if (!onSmartDocProgress || block.block_type !== 'smart_doc') return undefined;
     return (progress: SmartDocClientProgress) => onSmartDocProgress(block.id, progress);
   }, [onSmartDocProgress, block.id, block.block_type]);
+
+  const videoProgressHandler = useMemo(() => {
+    if (!onVideoProgress || block.block_type !== 'asset') return undefined;
+    return (percent: number) => onVideoProgress(block.id, percent);
+  }, [onVideoProgress, block.block_type, block.id]);
 
   if (block.block_type === 'divider') {
     return <Divider sx={{ my: 3 }} />;
@@ -786,7 +943,7 @@ export function BlockRenderer({
 
   switch (resource.type) {
     case 'video':
-      return <VideoPreview resource={resource} />;
+      return <VideoPreview resource={resource} onProgress={videoProgressHandler} />;
     case 'podcast':
     case 'audio':
       return <AudioPreview resource={resource} />;
