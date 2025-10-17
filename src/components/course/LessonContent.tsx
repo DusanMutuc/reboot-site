@@ -74,6 +74,16 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   const { markStarted, markCompleted } = useNodeProgress(nodeId);
   const completedOnceRef = useRef(false);
 
+  const completeLesson = useCallback(async () => {
+    if (!nodeId) return;
+    try {
+      await markCompleted();
+      onCompleted?.(nodeId);
+    } catch (e) {
+      console.error('completeLesson failed', e);
+    }
+  }, [markCompleted, nodeId, onCompleted]);
+
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
   useEffect(() => {
     if (!nodeId) {
@@ -390,8 +400,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
       if (smartDocsSatisfied && videosSatisfied) {
         completedOnceRef.current = true;
-        markCompleted();
-        if (nodeId) onCompleted?.(nodeId);
+        void completeLesson();
       }
       return;
     }
@@ -403,8 +412,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       if (h > 0 && y / h >= 0.8) {
         if (!completedOnceRef.current) {
           completedOnceRef.current = true;
-          markCompleted();
-          if (nodeId) onCompleted?.(nodeId);
+          void completeLesson();
         }
       }
     };
@@ -420,8 +428,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     allSmartDocsComplete,
     vimeoVideoBlockIds.length,
     allVideosComplete,
-    markCompleted,
-    onCompleted,
+    completeLesson,
   ]);
 
   // ===== 5) Submit handler for a specific Smart Doc placement =====
@@ -474,14 +481,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   
         if (effectiveAllComplete && nodeId) {
           // fire-and-forget: write completion and trigger unlock refresh
-          (async () => {
-            try {
-              await markCompleted();
-              onCompleted?.(nodeId);
-            } catch (e) {
-              console.error('markCompleted failed', e);
-            }
-          })();
+          void completeLesson();
         }
   
         return next;

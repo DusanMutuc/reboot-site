@@ -21,10 +21,17 @@ type CourseViewerProps = {
   lessonSlug?: string;
 };
 
+type EverUnlockedMap = Record<number, Set<number>>;
+
 type CourseState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]> };
+  | {
+      status: 'ready';
+      course: NodeSubtree;
+      lockStatuses: Record<number, ChildUnlockStatus[]>;
+      everUnlocked: EverUnlockedMap;
+    };
 
 type Maps = {
   nodeById: Map<number, NodeSubtree>;
@@ -101,47 +108,111 @@ function isNodeLocked(
 /** ------- simple per-session cache to avoid white flashes on remounts ------- */
 const courseCache = new Map<
   string,
-  { course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]> }
+  { course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]>; everUnlocked: EverUnlockedMap }
 >();
 
-/** ------- merge helper: prefer UNLOCKED when merging snapshots ------- */
-function mergeLockStatusesPreferUnlocked(
-  current: Record<number, ChildUnlockStatus[]>,
-  incoming: Record<number, ChildUnlockStatus[]>
-): Record<number, ChildUnlockStatus[]> {
-  const out: Record<number, ChildUnlockStatus[]> = { ...current };
-
-  // Build quick lookup for current
-  const currByParent: Record<number, Record<number, ChildUnlockStatus>> = {};
-  for (const [pidStr, rows] of Object.entries(current)) {
-    const pid = Number(pidStr);
-    currByParent[pid] = {};
-    for (const r of rows) currByParent[pid][r.child_id] = r;
+function cloneEverUnlocked(source: EverUnlockedMap): EverUnlockedMap {
+  const copy: EverUnlockedMap = {};
+  for (const [parentIdStr, set] of Object.entries(source)) {
+    const parentId = Number(parentIdStr);
+    copy[parentId] = new Set(set);
   }
+  return copy;
+}
 
-  for (const [pidStr, rows] of Object.entries(incoming)) {
-    const pid = Number(pidStr);
-    const merged: Record<number, ChildUnlockStatus> = { ...(currByParent[pid] ?? {}) };
+function seedEverUnlocked(unlocks: Record<number, ChildUnlockStatus[]>): EverUnlockedMap {
+  const seeded: EverUnlockedMap = {};
+  for (const [parentIdStr, rows] of Object.entries(unlocks)) {
+    const parentId = Number(parentIdStr);
+    for (const row of rows) {
+      if (!row.locked) {
+        if (!seeded[parentId]) seeded[parentId] = new Set();
+        seeded[parentId].add(row.child_id);
+      }
+    }
+  }
+  return seeded;
+}
 
-    for (const r of rows) {
-      const existing = merged[r.child_id];
-      if (!existing) {
-        merged[r.child_id] = r;
-      } else {
-        // Prefer UNLOCKED if either says unlocked; keep latest metadata from incoming
-        merged[r.child_id] = {
-          ...r,
-          locked: Boolean(existing.locked && r.locked),
-        };
+function applyMonotonicUnlocks(
+  unlocks: Record<number, ChildUnlockStatus[]>,
+  everUnlocked: EverUnlockedMap,
+): Record<number, ChildUnlockStatus[]> {
+  const result: Record<number, ChildUnlockStatus[]> = {};
+  for (const [parentIdStr, rows] of Object.entries(unlocks)) {
+    const parentId = Number(parentIdStr);
+    const seen = everUnlocked[parentId] ?? new Set<number>();
+    const adjusted = rows.map((row) => {
+      if (!row.locked) {
+        seen.add(row.child_id);
+        return row;
+      }
+      if (seen.has(row.child_id)) {
+        return { ...row, locked: false, reason: null };
+      }
+      return row;
+    });
+    if (!everUnlocked[parentId] && seen.size > 0) {
+      everUnlocked[parentId] = seen;
+    }
+    result[parentId] = adjusted;
+  }
+  return result;
+}
+
+function debugLogUnlockStatuses(
+  label: string,
+  unlocks: Record<number, ChildUnlockStatus[]>,
+  course: NodeSubtree,
+) {
+  if (process.env.NODE_ENV === 'production') return;
+
+  try {
+    const { nodeById } = buildMaps(course);
+    const rows: Array<{
+      parentId: number;
+      parentTitle: string;
+      parentSlug: string | null;
+      childId: number;
+      childTitle: string;
+      childSlug: string | null;
+      locked: boolean;
+      required: boolean;
+      reason: string | null;
+    }> = [];
+
+    for (const [parentIdStr, children] of Object.entries(unlocks)) {
+      const parentId = Number(parentIdStr);
+      const parentNode = nodeById.get(parentId)?.node;
+      for (const child of children) {
+        const childNode = nodeById.get(child.child_id)?.node;
+        rows.push({
+          parentId,
+          parentTitle: parentNode?.title ?? '(unknown parent)',
+          parentSlug: parentNode?.slug ?? null,
+          childId: child.child_id,
+          childTitle: childNode?.title ?? '(unknown child)',
+          childSlug: childNode?.slug ?? null,
+          locked: child.locked,
+          required: child.is_required,
+          reason: child.reason,
+        });
       }
     }
 
-    // Keep deterministic order
-    const arr = Object.values(merged).sort((a, b) => a.child_position - b.child_position);
-    out[pid] = arr;
-  }
+    if (rows.length === 0) {
+      console.groupCollapsed(`[unlock-debug] ${label}`);
+      console.log('No unlock rows available');
+      console.groupEnd();
+      return;
+    }
 
-  return out;
+    console.groupCollapsed(`[unlock-debug] ${label}`);
+    console.table(rows);
+    console.groupEnd();
+  } catch (error) {
+    console.warn('[unlock-debug] failed to log unlock statuses', error);
+  }
 }
 
 export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
@@ -160,7 +231,15 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
     const cached = courseCache.get(courseSlug);
     if (cached) {
-      setState({ status: 'ready', course: cached.course, lockStatuses: cached.lockStatuses });
+      setState({
+        status: 'ready',
+        course: cached.course,
+        lockStatuses: cached.lockStatuses,
+        everUnlocked: cloneEverUnlocked(cached.everUnlocked),
+      });
+      if (process.env.NODE_ENV !== 'production') {
+        debugLogUnlockStatuses('hydrate-from-cache', cached.lockStatuses, cached.course);
+      }
     } else {
       setState({ status: 'loading' });
     }
@@ -175,16 +254,26 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
         const data = (await res.json()) as { course: NodeSubtree; unlockStatuses: Record<number, ChildUnlockStatus[]> };
         if (!active) return;
 
-        // Merge incoming with current (prefer unlocked), and keep cache in sync
-        setState((prev) => {
-          if (prev.status === 'ready') {
-            const merged = mergeLockStatusesPreferUnlocked(prev.lockStatuses, data.unlockStatuses);
-            courseCache.set(courseSlug, { course: data.course, lockStatuses: merged });
-            return { ...prev, course: data.course, lockStatuses: merged };
-          }
-          courseCache.set(courseSlug, { course: data.course, lockStatuses: data.unlockStatuses });
-          return { status: 'ready', course: data.course, lockStatuses: data.unlockStatuses };
-        });
+        // AFTER
+// prefer existing everUnlocked (from cache or current state) so unlocks are truly monotonic across reloads
+const priorEver =
+(courseCache.get(courseSlug)?.everUnlocked && cloneEverUnlocked(courseCache.get(courseSlug)!.everUnlocked)) ||
+(state.status === 'ready' && cloneEverUnlocked(state.everUnlocked)) ||
+null;
+
+const everUnlocked = priorEver ?? seedEverUnlocked(data.unlockStatuses);
+const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
+
+courseCache.set(courseSlug, {
+course: data.course,
+lockStatuses,
+everUnlocked: cloneEverUnlocked(everUnlocked),
+});
+setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
+
+        if (process.env.NODE_ENV !== 'production') {
+          debugLogUnlockStatuses('initial-load', lockStatuses, data.course);
+        }
       } catch (error) {
         if (!active) return;
         const message = error instanceof Error ? error.message : 'Failed to load course';
@@ -305,6 +394,11 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   const refreshUnlocks = async (parentIds: number[]) => {
     if (parentIds.length === 0) return;
     try {
+      if (process.env.NODE_ENV !== 'production') {
+        console.groupCollapsed('[unlock-debug] refresh-unlocks request');
+        console.log('parentIds', parentIds);
+        console.groupEnd();
+      }
       const res = await fetch(`/api/courses/${courseSlug}/unlocks`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -315,10 +409,35 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
       setState((prev) => {
         if (prev.status !== 'ready') return prev;
-        const merged = mergeLockStatusesPreferUnlocked(prev.lockStatuses, unlockStatuses);
-        // keep cache synced with merged state
-        courseCache.set(courseSlug, { course: prev.course, lockStatuses: merged });
-        return { ...prev, lockStatuses: merged };
+        const nextLockStatuses: Record<number, ChildUnlockStatus[]> = { ...prev.lockStatuses };
+        const nextEverUnlocked = cloneEverUnlocked(prev.everUnlocked);
+
+        for (const [pidStr, rows] of Object.entries(unlockStatuses)) {
+          const pid = Number(pidStr);
+          const seen = nextEverUnlocked[pid] ?? new Set<number>();
+          const adjusted = rows.map((row) => {
+            if (!row.locked) {
+              seen.add(row.child_id);
+              return row;
+            }
+            if (seen.has(row.child_id)) {
+              return { ...row, locked: false, reason: null };
+            }
+            return row;
+          });
+          nextEverUnlocked[pid] = seen;
+          nextLockStatuses[pid] = adjusted;
+        }
+
+        courseCache.set(courseSlug, {
+          course: prev.course,
+          lockStatuses: nextLockStatuses,
+          everUnlocked: cloneEverUnlocked(nextEverUnlocked),
+        });
+        if (process.env.NODE_ENV !== 'production') {
+          debugLogUnlockStatuses('refresh-unlocks', nextLockStatuses, prev.course);
+        }
+        return { ...prev, lockStatuses: nextLockStatuses, everUnlocked: nextEverUnlocked };
       });
     } catch {
       // ignore; next navigation will naturally refresh
@@ -329,7 +448,12 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     if (!parentById) return;
     // refresh the immediate parent (this unlocks siblings)
     const parent = parentById.get(nodeId);
-    if (parent != null) refreshUnlocks([parent]);
+    if (parent != null) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[unlock-debug] handleLessonCompleted', { nodeId, parentId: parent });
+      }
+      refreshUnlocks([parent]);
+    }
   };
 
   // ----- inline skeleton instead of white full-page -----
