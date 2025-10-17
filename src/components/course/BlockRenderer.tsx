@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import {
   Box,
@@ -80,7 +80,7 @@ type SmartDocPromptRow = {
   required: boolean;
 };
 
-/** ---------- Shared field/label styles (unifies look across the page) ---------- */
+/** ---------- Shared field/label styles ---------- */
 const FIELD_SX = {
   bgcolor: 'grey.100',
   borderRadius: 2,
@@ -101,7 +101,7 @@ const FIELD_SX = {
 
 const LABEL_SX = {
   fontWeight: 700,
-  fontSize: '1.6rem',   // slightly larger than body text
+  fontSize: '1.6rem',
   lineHeight: 1.3,
   color: 'text.primary',
   mb: 1,
@@ -109,7 +109,6 @@ const LABEL_SX = {
   alignItems: 'center',
   gap: 0.5,
 } as const;
-
 
 /** --------------------------------------------------------------------------- */
 
@@ -119,13 +118,23 @@ export type BlockRendererProps = {
   previewMode?: boolean;
 };
 
-function SmartDocPromptField({ prompt }: { prompt: SmartDocPrompt }) {
+function SmartDocPromptField({
+  prompt,
+  value,
+  onChange,
+  disabled,
+}: {
+  prompt: SmartDocPrompt;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
   const isTextarea = prompt.prompt_type === 'textarea';
   const label = useMemo(() => prompt.label?.trim() || 'Question', [prompt.label]);
   const helper = prompt.help_text?.trim();
 
   return (
-    <FormControl fullWidth sx={{ mb: 4 }}>
+    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled}>
       <FormLabel sx={LABEL_SX}>
         {label}
         {prompt.required && (
@@ -149,19 +158,37 @@ function SmartDocPromptField({ prompt }: { prompt: SmartDocPrompt }) {
         multiline={isTextarea}
         minRows={isTextarea ? 6 : undefined}
         InputProps={{ disableUnderline: true, sx: FIELD_SX }}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
       />
     </FormControl>
   );
 }
 
-function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabel: string | null }) {
+function SmartDocPreview({
+  docId,
+  contentBlockId, // <--- NEW: placement id (content_blocks.id)
+  fallbackLabel,
+}: {
+  docId: number;
+  contentBlockId: number;
+  fallbackLabel: string | null;
+}) {
   const [state, setState] = useState<SmartDocState>({ status: 'idle' });
+
+  // Values keyed by prompt_id (string to handle TextField value)
+  const [values, setValues] = useState<Record<number, string>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  // Debounce timers per prompt
+  const timers = useRef<Record<number, number | undefined>>({});
 
   useEffect(() => {
     let active = true;
     setState({ status: 'loading' });
 
     (async () => {
+      // 1) load doc + prompts
       const { data, error } = await supabase
         .from('smart_docs')
         .select(
@@ -180,18 +207,16 @@ function SmartDocPreview({ docId, fallbackLabel }: { docId: number; fallbackLabe
       }
 
       const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
-const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
-  .map((p): SmartDocPrompt => ({
-    id: p.id,
-    position: p.position,
-    // coerce null → empty string to satisfy SmartDocPrompt.label: string
-    label: p.label ?? '',
-    prompt_type: p.prompt_type,
-    help_text: p.help_text,
-    required: p.required,
-  }))
-  .sort((a, b) => a.position - b.position);
-
+      const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
+        .map((p): SmartDocPrompt => ({
+          id: p.id,
+          position: p.position,
+          label: p.label ?? '',
+          prompt_type: p.prompt_type,
+          help_text: p.help_text,
+          required: p.required,
+        }))
+        .sort((a, b) => a.position - b.position);
 
       setState({
         status: 'ready',
@@ -203,44 +228,117 @@ const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
           prompts,
         },
       });
+
+      // 2) load existing submission status
+      try {
+        const statusRes = await fetch('/api/smartdoc/status', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ content_block_id: contentBlockId }),
+        });
+        if (statusRes.ok) {
+          const s = (await statusRes.json()) as { status: 'draft' | 'submitted' };
+          if (active) setSubmitted(s.status === 'submitted');
+        }
+      } catch {
+        /* ignore */
+      }
+
+      // 3) load existing values for this content_block_id (current user via RLS)
+      //   first get (or not) the envelope row id
+      const { data: resp, error: respErr } = await supabase
+        .from('smart_doc_responses')
+        .select('id')
+        .eq('content_block_id', contentBlockId)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (!respErr && resp?.id) {
+        const { data: vals } = await supabase
+          .from('smart_doc_response_values')
+          .select('prompt_id, value_json')
+          .eq('response_id', resp.id);
+
+        const next: Record<number, string> = {};
+        for (const row of vals ?? []) {
+          next[row.prompt_id] =
+            typeof row.value_json === 'string'
+              ? row.value_json
+              : row.value_json?.value ?? row.value_json?.text ?? '';
+        }
+        if (active) setValues(next);
+      }
     })();
 
     return () => {
       active = false;
+      // clear any pending timers
+      for (const k of Object.keys(timers.current)) {
+        window.clearTimeout(timers.current[+k]);
+      }
+      timers.current = {};
     };
-  }, [docId]);
+  }, [docId, contentBlockId]);
 
   const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
-switch (state.status) {
-  case 'idle':
-  case 'loading':
-    return (
-      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
-        <CircularProgress size={22} />
-        <Typography variant="body2" color="text.secondary">
-          Loading…
-        </Typography>
-      </Stack>
-    );
+  switch (state.status) {
+    case 'idle':
+    case 'loading':
+      return (
+        <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+          <CircularProgress size={22} />
+          <Typography variant="body2" color="text.secondary">
+            Loading…
+          </Typography>
+        </Stack>
+      );
+    case 'error':
+      return (
+        <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
+          <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
+          <Typography variant="body2" color="error.main">
+            Failed to load: {state.message}
+          </Typography>
+        </Stack>
+      );
+    case 'ready':
+      break;
+  }
 
-  case 'error':
-    return (
-      <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
-        <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
-        <Typography variant="body2" color="error.main">
-          Failed to load: {state.message}
-        </Typography>
-      </Stack>
-    );
+  const { doc } = state;
+  const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
 
-  case 'ready':
-    break;
-}
+  // local progress (required-only), purely for immediate feedback
+  const requiredTotal = doc.prompts.filter((p) => p.required).length;
+  const requiredCompleted = doc.prompts.filter(
+    (p) => p.required && (values[p.id]?.trim()?.length ?? 0) > 0,
+  ).length;
 
-const { doc } = state; // safely narrowed to 'ready'
-const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
+  const upsertValue = (promptId: number, value: string) => {
+    // optimistic UI
+    setValues((v) => ({ ...v, [promptId]: value }));
 
+    // debounce one request per prompt
+    window.clearTimeout(timers.current[promptId]);
+    timers.current[promptId] = window.setTimeout(async () => {
+      try {
+        await fetch('/api/smartdoc/upsert', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            content_block_id: contentBlockId,
+            prompt_id: promptId,
+            value, // RPC accepts jsonb; we pass plain string
+          }),
+        });
+      } catch (e) {
+        // optional: toast/log
+        console.error('smartdoc upsert failed', e);
+      }
+    }, 400);
+  };
 
   return (
     <Stack spacing={3} sx={wrapSx}>
@@ -253,14 +351,12 @@ const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
         {title}
       </Typography>
 
-      {/* Optional description box */}
-      {/* Optional description – plain text under title */}
-{doc.description?.trim() && (
-  <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
-    {doc.description}
-  </Typography>
-)}
-
+      {/* Description */}
+      {doc.description?.trim() && (
+        <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
+          {doc.description}
+        </Typography>
+      )}
 
       {/* Prompts */}
       <Box>
@@ -269,12 +365,22 @@ const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
             No questions yet.
           </Typography>
         ) : (
-          doc.prompts.map((p: SmartDocPrompt) => (
-            <SmartDocPromptField key={p.id} prompt={p} />
+          doc.prompts.map((p) => (
+            <SmartDocPromptField
+              key={p.id}
+              prompt={p}
+              value={values[p.id] ?? ''}
+              onChange={(v) => upsertValue(p.id, v)}
+              disabled={submitted}
+            />
           ))
-          
         )}
       </Box>
+
+      <Typography variant="caption" color="text.secondary">
+        Progress: {requiredCompleted}/{requiredTotal}
+        {submitted ? ' • Submitted' : ''}
+      </Typography>
     </Stack>
   );
 }
@@ -349,7 +455,7 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
         );
       }
     } catch {
-      // fall back to card preview below
+      // fall back
     }
   }
 
@@ -571,7 +677,14 @@ export function BlockRenderer({ block, resource, previewMode = false }: BlockRen
 
   if (block.block_type === 'smart_doc') {
     if (block.smart_doc_id && previewMode) {
-      return <SmartDocPreview docId={block.smart_doc_id} fallbackLabel={block.label} />;
+      // pass placement id so inputs can upsert
+      return (
+        <SmartDocPreview
+          docId={block.smart_doc_id}
+          contentBlockId={block.id}
+          fallbackLabel={block.label}
+        />
+      );
     }
 
     return (

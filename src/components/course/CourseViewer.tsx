@@ -79,11 +79,8 @@ function collectParentPath(nodeId: number, parentById: Map<number, number | null
   const path: number[] = [];
   let current: number | null | undefined = nodeId;
   while (current != null) {
-    // TS fix: annotate parent type explicitly
     const parent: number | null = (parentById.get(current) ?? null) as number | null;
-    if (parent != null) {
-      path.push(parent);
-    }
+    if (parent != null) path.push(parent);
     current = parent;
   }
   return path;
@@ -189,11 +186,8 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   const handleToggle = (nodeId: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
+      if (next.has(nodeId)) next.delete(nodeId);
+      else next.add(nodeId);
       return next;
     });
   };
@@ -238,6 +232,37 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     if (pathParents.length === 0) return;
     setExpanded((prev) => new Set([...prev, ...pathParents]));
   }, [contentError, parentById, requestedContentId]);
+
+  /** ------- Unlock refresh after completion -------- */
+  const refreshUnlocks = async (parentIds: number[]) => {
+    if (parentIds.length === 0) return;
+    try {
+      const res = await fetch(`/api/courses/${courseSlug}/unlocks`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ parentIds }),
+      });
+      if (!res.ok) return;
+      const { unlockStatuses } = (await res.json()) as { unlockStatuses: Record<number, ChildUnlockStatus[]> };
+      setState((prev) => {
+        if (prev.status !== 'ready') return prev;
+        // merge in refreshed parents
+        return {
+          ...prev,
+          lockStatuses: { ...prev.lockStatuses, ...unlockStatuses },
+        };
+      });
+    } catch {
+      // ignore; next navigation will naturally refresh
+    }
+  };
+
+  const handleLessonCompleted = (nodeId: number) => {
+    if (!parentById) return;
+    // refresh the immediate parent (this unlocks siblings)
+    const parent = parentById.get(nodeId);
+    if (parent != null) refreshUnlocks([parent]);
+  };
 
   // ----- inline skeleton instead of white full-page -----
   if (state.status === 'loading') {
@@ -324,7 +349,13 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
             </Box>
           )}
 
-          <LessonContent lesson={selectedContent} loading={false} error={contentError} />
+          <LessonContent
+            lesson={selectedContent}
+            loading={false}
+            error={contentError}
+            // NEW: when a node completes, refresh its parent’s unlocks
+            onCompleted={handleLessonCompleted}
+          />
         </Box>
       </Box>
 

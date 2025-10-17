@@ -1,16 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, CircularProgress, Stack, Typography } from '@mui/material';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 
 import type { ContentBlock, NodeSubtree } from '@/types/course';
 import { BlockRenderer, type RenderableBlock, type RenderableResource } from '@/components/course/BlockRenderer';
 import { supabase } from '@/lib/supabaseClient';
+import { useNodeProgress } from '@/hooks/useNodeProgress';
 
 type LessonContentProps = {
   lesson: NodeSubtree | null;
   loading: boolean;
   error?: string | null;
+  onCompleted?: (nodeId: number) => void;
 };
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -37,7 +39,7 @@ function toRenderableBlock(block: ContentBlock): RenderableBlock {
   };
 }
 
-export default function LessonContent({ lesson, loading, error }: LessonContentProps) {
+export default function LessonContent({ lesson, loading, error, onCompleted }: LessonContentProps) {
   // Lazily loaded blocks for the currently selected lesson/chapter
   const [blocks, setBlocks] = useState<RenderableBlock[]>([]);
   const [blocksState, setBlocksState] = useState<LoadState>('idle');
@@ -48,7 +50,20 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
   const [resourceState, setResourceState] = useState<ResourceState>('idle');
   const [resourceError, setResourceError] = useState<string | null>(null);
 
+  // Smart Doc progress (per content_block_id)
+  const [smartDocProgress, setSmartDocProgress] = useState<
+    Record<number, { fields_total: number; fields_completed: number }>
+  >({});
+  // Smart Doc submission status
+  const [smartDocStatus, setSmartDocStatus] = useState<
+    Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }>
+  >({});
+  const [submitLoading, setSubmitLoading] = useState<Record<number, boolean>>({});
+
   const labels = getContentLabels(lesson);
+  const nodeId = lesson?.node.id ?? null;
+  const { markStarted, markCompleted } = useNodeProgress(nodeId);
+  const completedOnceRef = useRef(false);
 
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
   useEffect(() => {
@@ -56,12 +71,20 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
       setBlocks([]);
       setBlocksState('idle');
       setBlocksError(null);
+      setSmartDocProgress({});
+      setSmartDocStatus({});
+      setSubmitLoading({});
+      completedOnceRef.current = false;
       return;
     }
 
     let active = true;
     setBlocksState('loading');
     setBlocksError(null);
+    setSmartDocProgress({});
+    setSmartDocStatus({});
+    setSubmitLoading({});
+    completedOnceRef.current = false;
 
     (async () => {
       try {
@@ -92,12 +115,24 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
     };
   }, [lesson]);
 
-  // Compute unique resource IDs from the *loaded blocks* (not from lesson.blocks)
+  // Mark STARTED as soon as the content is ready/visible
+  useEffect(() => {
+    if (blocksState === 'ready' && nodeId) {
+      markStarted();
+    }
+  }, [blocksState, nodeId, markStarted]);
+
+  // Compute unique resource IDs from the *loaded blocks*
   const assetBlockIds = useMemo(() => {
     return blocks
       .filter((b) => b.block_type === 'asset' && b.resource_id)
       .map((b) => b.resource_id!)
       .filter((id, idx, arr) => arr.indexOf(id) === idx);
+  }, [blocks]);
+
+  // Smart Doc content_block_ids
+  const smartDocBlockIds = useMemo(() => {
+    return blocks.filter((b) => b.block_type === 'smart_doc').map((b) => b.id);
   }, [blocks]);
 
   // ===== 2) Load media resources for those asset blocks =====
@@ -147,6 +182,165 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
       active = false;
     };
   }, [assetBlockIds, lesson]);
+
+  // ===== 3) Smart Doc progress polling (every 5s while lesson open) =====
+  useEffect(() => {
+    if (blocksState !== 'ready' || smartDocBlockIds.length === 0) {
+      setSmartDocProgress({});
+      return;
+    }
+
+    let active = true;
+
+    const fetchProgress = async () => {
+      try {
+        const entries = await Promise.all(
+          smartDocBlockIds.map(async (content_block_id) => {
+            const res = await fetch('/api/smartdoc/progress', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ content_block_id }),
+            });
+            if (!res.ok) throw new Error('progress fetch failed');
+            const { progress } = (await res.json()) as {
+              progress: { fields_total: number; fields_completed: number };
+            };
+            return [content_block_id, progress] as const;
+          })
+        );
+        if (!active) return;
+
+        const map: Record<number, { fields_total: number; fields_completed: number }> = {};
+        for (const [id, p] of entries) {
+          map[id] = { fields_total: p?.fields_total ?? 0, fields_completed: p?.fields_completed ?? 0 };
+        }
+        setSmartDocProgress(map);
+      } catch {
+        // swallow; next tick will retry
+      }
+    };
+
+    // initial + interval
+    void fetchProgress();
+    const t = setInterval(fetchProgress, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(t);
+    };
+  }, [blocksState, smartDocBlockIds]);
+
+  // ===== 3b) Smart Doc submission status (on mount/lesson change only) =====
+  useEffect(() => {
+    if (blocksState !== 'ready' || smartDocBlockIds.length === 0) {
+      setSmartDocStatus({});
+      return;
+    }
+    let active = true;
+
+    (async () => {
+      try {
+        const entries = await Promise.all(
+          smartDocBlockIds.map(async (content_block_id) => {
+            const res = await fetch('/api/smartdoc/status', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ content_block_id }),
+            });
+            if (!res.ok) throw new Error('status fetch failed');
+            const data = (await res.json()) as { status: 'draft' | 'submitted'; submitted_at: string | null };
+            return [content_block_id, data] as const;
+          })
+        );
+        if (!active) return;
+
+        const map: Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }> = {};
+        for (const [id, s] of entries) map[id] = s;
+        setSmartDocStatus(map);
+      } catch {
+        // silent
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [blocksState, smartDocBlockIds]);
+
+  // ===== 4) Completion rules =====
+  const allSmartDocsComplete = useMemo(() => {
+    if (smartDocBlockIds.length === 0) return false;
+    return smartDocBlockIds.every((id) => {
+      const p = smartDocProgress[id];
+      return p && p.fields_total > 0 && p.fields_completed >= p.fields_total;
+    });
+  }, [smartDocBlockIds, smartDocProgress]);
+
+  useEffect(() => {
+    if (completedOnceRef.current) return;
+    if (blocksState !== 'ready' || !nodeId) return;
+
+    // If SmartDocs exist: finish when all are fully completed (submission not required for unlocks)
+    if (smartDocBlockIds.length > 0) {
+      if (allSmartDocsComplete) {
+        completedOnceRef.current = true;
+        markCompleted();
+        if (nodeId) onCompleted?.(nodeId);
+      }
+      return;
+    }
+
+    // Fallback: no SmartDocs => complete on 80% scroll
+    const onScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop;
+      const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+      if (h > 0 && y / h >= 0.8) {
+        if (!completedOnceRef.current) {
+          completedOnceRef.current = true;
+          markCompleted();
+          if (nodeId) onCompleted?.(nodeId);
+        }
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, [blocksState, nodeId, smartDocBlockIds.length, allSmartDocsComplete, markCompleted, onCompleted]);
+
+  // ===== 5) Submit handler for a specific Smart Doc placement =====
+  const submitSmartDoc = async (content_block_id: number) => {
+    setSubmitLoading((m) => ({ ...m, [content_block_id]: true }));
+    try {
+      const res = await fetch('/api/smartdoc/submit', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content_block_id }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.details ?? j?.error ?? 'Submit failed');
+      }
+      const { result } = (await res.json()) as {
+        result: { fields_total: number; fields_completed: number; status: 'submitted' | 'draft'; submitted_at: string | null };
+      };
+      // Update local status + progress
+      setSmartDocStatus((m) => ({ ...m, [content_block_id]: { status: result.status, submitted_at: result.submitted_at } }));
+      setSmartDocProgress((m) => ({
+        ...m,
+        [content_block_id]: {
+          fields_total: result.fields_total ?? (m[content_block_id]?.fields_total ?? 0),
+          fields_completed: result.fields_completed ?? (m[content_block_id]?.fields_completed ?? 0),
+        },
+      }));
+    } catch (e) {
+      // You may want a toast; keeping silent here per your current pattern
+      console.error(e);
+    } finally {
+      setSubmitLoading((m) => ({ ...m, [content_block_id]: false }));
+    }
+  };
 
   // ===== Top-level loading/error/empty states =====
   if (loading) {
@@ -216,7 +410,35 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
               <Stack spacing={3}>
                 {blocks.map((block) => {
                   const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
-                  return <BlockRenderer key={block.id} block={block} resource={resource} previewMode />;
+                  const isSmart = block.block_type === 'smart_doc';
+                  const s = isSmart ? smartDocStatus[block.id] : undefined;
+                  const p = isSmart ? smartDocProgress[block.id] : undefined;
+                  const canSubmit = isSmart && p && p.fields_total > 0 && p.fields_completed >= p.fields_total && s?.status !== 'submitted';
+
+                  return (
+                    <Box key={block.id}>
+                      <BlockRenderer block={block} resource={resource} previewMode />
+                      {isSmart && (
+                        <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            {p
+                              ? `Progress: ${p.fields_completed}/${p.fields_total}`
+                              : 'Progress: —'}
+                            {s?.status === 'submitted' ? ' • Submitted' : ''}
+                          </Typography>
+                          <Box sx={{ flex: 1 }} />
+                          <Button
+                            size="small"
+                            variant="contained"
+                            disabled={!canSubmit || !!submitLoading[block.id]}
+                            onClick={() => submitSmartDoc(block.id)}
+                          >
+                            {s?.status === 'submitted' ? 'Submitted' : submitLoading[block.id] ? 'Submitting…' : 'Submit'}
+                          </Button>
+                        </Stack>
+                      )}
+                    </Box>
+                  );
                 })}
               </Stack>
             )}
