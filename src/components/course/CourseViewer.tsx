@@ -12,7 +12,6 @@ import {
   Typography,
 } from '@mui/material';
 
-import TopNav from '@/components/topNav';
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 import StudentCourseTree from './StudentCourseTree';
 import LessonContent from './LessonContent';
@@ -80,40 +79,14 @@ function collectParentPath(nodeId: number, parentById: Map<number, number | null
   const path: number[] = [];
   let current: number | null | undefined = nodeId;
   while (current != null) {
-    const parent = parentById.get(current) ?? null;
+    // TS fix: annotate parent type explicitly
+    const parent: number | null = (parentById.get(current) ?? null) as number | null;
     if (parent != null) {
       path.push(parent);
     }
     current = parent;
   }
   return path;
-}
-
-function findFirstUnlockedContent(
-  course: NodeSubtree,
-  lockMap: Record<number, Record<number, ChildUnlockStatus>>,
-): NodeSubtree | null {
-  const walk = (subtree: NodeSubtree, parentId: number | null): NodeSubtree | null => {
-    if (parentId != null) {
-      const status = lockMap[parentId]?.[subtree.node.id];
-      if (status?.locked) {
-        return null;
-      }
-    }
-
-    if (isContentNodeType(subtree.node.node_type)) {
-      return subtree;
-    }
-
-    for (const child of subtree.children) {
-      const result = walk(child.subtree, subtree.node.id);
-      if (result) return result;
-    }
-
-    return null;
-  };
-
-  return walk(course, null);
 }
 
 function isNodeLocked(
@@ -128,30 +101,44 @@ function isNodeLocked(
   return !!parentLocks[nodeId]?.locked;
 }
 
+/** ------- simple per-session cache to avoid white flashes on remounts ------- */
+const courseCache = new Map<
+  string,
+  { course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]> }
+>();
+
 export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
   const router = useRouter();
   const [state, setState] = useState<CourseState>({ status: 'loading' });
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [snackbar, setSnackbar] = useState<string | null>(null);
-  const [redirected, setRedirected] = useState(false);
 
   useEffect(() => {
-    setRedirected(false);
     setExpanded(new Set());
   }, [courseSlug]);
 
+  // Use cache to prevent full-screen loading flash, and revalidate in background
   useEffect(() => {
     let active = true;
 
+    const cached = courseCache.get(courseSlug);
+    if (cached) {
+      setState({ status: 'ready', course: cached.course, lockStatuses: cached.lockStatuses });
+    } else {
+      setState({ status: 'loading' });
+    }
+
     (async () => {
       try {
-        const res = await fetch(`/api/courses/${courseSlug}`);
+        const res = await fetch(`/api/courses/${courseSlug}`, { cache: 'no-store' });
         if (!res.ok) {
           const data = (await res.json().catch(() => ({}))) as { error?: string };
           throw new Error(data.error ?? 'Failed to load course');
         }
         const data = (await res.json()) as { course: NodeSubtree; unlockStatuses: Record<number, ChildUnlockStatus[]> };
         if (!active) return;
+
+        courseCache.set(courseSlug, { course: data.course, lockStatuses: data.unlockStatuses });
         setState({ status: 'ready', course: data.course, lockStatuses: data.unlockStatuses });
       } catch (error) {
         if (!active) return;
@@ -174,18 +161,6 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     if (state.status !== 'ready') return {} as Record<number, Record<number, ChildUnlockStatus>>;
     return toNestedLockMap(state.lockStatuses);
   }, [state]);
-
-  useEffect(() => {
-    if (state.status !== 'ready' || !maps) return;
-
-    if (!lessonSlug && !redirected) {
-      const firstContent = findFirstUnlockedContent(state.course, lockMap);
-      if (firstContent && firstContent.node.slug) {
-        setRedirected(true);
-        router.replace(`/courses/${courseSlug}/${firstContent.node.slug}`);
-      }
-    }
-  }, [courseSlug, lessonSlug, lockMap, maps, redirected, router, state]);
 
   const nodeById = maps?.nodeById ?? null;
   const slugToId = maps?.slugToId ?? null;
@@ -224,9 +199,7 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   };
 
   const handleSelectContent = (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => {
-    if (!isContentNodeType(node.node.node_type)) {
-      return;
-    }
+    if (!isContentNodeType(node.node.node_type)) return;
 
     const label = formatContentLabel(node.node.node_type);
 
@@ -266,14 +239,31 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     setExpanded((prev) => new Set([...prev, ...pathParents]));
   }, [contentError, parentById, requestedContentId]);
 
+  // ----- inline skeleton instead of white full-page -----
   if (state.status === 'loading') {
     return (
-      <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
-        <TopNav />
-        <Stack alignItems="center" spacing={2} sx={{ py: 12 }}>
-          <CircularProgress />
-          <Typography color="text.secondary">Loading course…</Typography>
-        </Stack>
+      <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+          <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="body2" color="text.secondary">Loading outline…</Typography>
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          <Box
+            sx={{
+              width: { xs: 0, md: 340 },
+              display: { xs: 'none', md: 'block' },
+              borderRight: '1px solid',
+              borderColor: 'divider',
+            }}
+          />
+          <Box sx={{ flex: 1, minWidth: 0, bgcolor: 'background.default' }}>
+            <Stack alignItems="center" spacing={2} sx={{ py: 12 }}>
+              <CircularProgress />
+              <Typography color="text.secondary">Loading course…</Typography>
+            </Stack>
+          </Box>
+        </Box>
       </Box>
     );
   }
@@ -281,7 +271,6 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   if (state.status === 'error') {
     return (
       <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
-        <TopNav />
         <Stack alignItems="center" spacing={2} sx={{ py: 12 }}>
           <Typography variant="h6">We couldn’t load this course.</Typography>
           <Typography color="text.secondary">{state.message}</Typography>
@@ -296,7 +285,6 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50', display: 'flex', flexDirection: 'column' }}>
-      <TopNav />
       <Box sx={{ display: { xs: 'block', md: 'none' } }}>
         <StudentCourseTree
           course={state.course}
@@ -309,13 +297,8 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
           fullHeight={false}
         />
       </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          flex: 1,
-          minHeight: 0,
-        }}
-      >
+
+      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Box sx={{ width: { xs: 0, md: 340 }, display: { xs: 'none', md: 'flex' } }}>
           <StudentCourseTree
             course={state.course}

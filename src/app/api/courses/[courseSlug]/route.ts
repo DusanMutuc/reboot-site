@@ -51,6 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: { courseSl
   const courseSlug = params.courseSlug;
 
   try {
+    // Ensure we're looking at a published course
     const { data: courseRow, error: courseError } = await adminClient
       .from('content_nodes')
       .select('id, node_type, state')
@@ -65,39 +66,66 @@ export async function GET(request: NextRequest, { params }: { params: { courseSl
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    const rawTree = await fetchNodeSubtree(courseRow.id);
+    // Build the sanitized tree (published-only)
+    const rawTree = await fetchNodeSubtree(courseRow.id, {
+      includeBlocks: false,       // we lazy-load per selected node
+      allowUnpublished: false,    // students see only published content
+    });
     const sanitized = sanitizeSubtree(rawTree);
 
     if (!sanitized) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    const parentIds = new Set<number>();
-    collectParentIds(sanitized, parentIds);
+    // Collect all parent node IDs (nodes that have children)
+    const parentIdsSet = new Set<number>();
+    collectParentIds(sanitized, parentIdsSet);
+    const parentIds = Array.from(parentIdsSet);
 
-    const unlockEntries = await Promise.all(
-      Array.from(parentIds).map(async (parentId) => {
-        const { data, error } = await adminClient.rpc('get_child_unlock_status', {
-          _parent_id: parentId,
-          _user_id: guard.user.id,
-        });
-
-        if (error) {
-          throw new CourseBuilderError('Failed to load unlock status', 500, {
-            details: error.message,
-            parentId,
-            slug: courseSlug,
-          });
-        }
-
-        return [parentId, (data ?? []) as ChildUnlockStatus[]] as const;
-      }),
-    );
-
-    const unlockStatuses: Record<number, ChildUnlockStatus[]> = {};
-    for (const [parentId, rows] of unlockEntries) {
-      unlockStatuses[parentId] = rows;
+    // If no parents, nothing to lock
+    if (parentIds.length === 0) {
+      return NextResponse.json({ course: sanitized, unlockStatuses: {} });
     }
+
+    // Single BULK RPC call instead of N+1
+    const { data: bulkRows, error: bulkError } = await adminClient.rpc('get_child_unlock_status_bulk', {
+      _parent_ids: parentIds,
+      _user_id: guard.user.id,
+    });
+
+    if (bulkError) {
+      throw new CourseBuilderError('Failed to load unlock status', 500, {
+        details: bulkError.message,
+        slug: courseSlug,
+      });
+    }
+
+    // Group rows by parent_id to match frontend shape: Record<parentId, ChildUnlockStatus[]>
+    // Group rows by parent_id to match frontend shape: Record<parentId, ChildUnlockStatus[]>
+const unlockStatuses: Record<number, ChildUnlockStatus[]> = {};
+for (const row of (bulkRows ?? []) as Array<{
+  parent_id: number;
+  child_id: number;
+  child_position: number;
+  is_required: boolean;
+  locked: boolean;
+  reason: string | null;
+}>) {
+  if (!unlockStatuses[row.parent_id]) unlockStatuses[row.parent_id] = [];
+  unlockStatuses[row.parent_id].push({
+    child_id: row.child_id,
+    child_position: row.child_position,
+    is_required: row.is_required,
+    locked: row.locked,
+    reason: row.reason ?? null, // must be string | null
+  });
+}
+
+// (optional but recommended) keep deterministic order for UI
+for (const pid of Object.keys(unlockStatuses)) {
+  unlockStatuses[Number(pid)].sort((a, b) => a.child_position - b.child_position);
+}
+
 
     return NextResponse.json({ course: sanitized, unlockStatuses });
   } catch (error: unknown) {

@@ -59,14 +59,13 @@ export type NodeSubtree = {
 export async function fetchNodeById(nodeId: number) {
   const { data, error } = await adminClient
     .from('content_nodes')
-    .select('*')
+    .select('id, node_type, title, slug, description, state, sequential_unlock')
     .eq('id', nodeId)
     .maybeSingle();
 
   if (error) {
     throw new CourseBuilderError('Failed to load node', 500, { details: error.message, nodeId });
   }
-
   if (!data) {
     throw new CourseBuilderError('Node not found', 404, { nodeId });
   }
@@ -74,10 +73,11 @@ export async function fetchNodeById(nodeId: number) {
   return data as ContentNodeRow;
 }
 
+
 async function fetchNodeChildren(parentId: number) {
   const { data, error } = await adminClient
     .from('node_children')
-    .select('*')
+    .select('parent_id, child_id, position, is_required, label, notes')
     .eq('parent_id', parentId)
     .order('position', { ascending: true });
 
@@ -87,6 +87,7 @@ async function fetchNodeChildren(parentId: number) {
 
   return (data ?? []) as NodeChildRow[];
 }
+
 
 async function fetchNodeBlocks(nodeId: number) {
   const { data, error } = await adminClient
@@ -119,32 +120,48 @@ export async function fetchBlockById(blockId: number) {
 
   return data as ContentBlockRow;
 }
+export async function fetchNodeSubtree(
+  nodeId: number,
+  opts: { includeBlocks?: boolean; allowUnpublished?: boolean } = {},
+  visited = new Set<number>()
+): Promise<NodeSubtree> {
+  const includeBlocks = opts.includeBlocks ?? true;        // Builder default: include blocks
+  const allowUnpublished = opts.allowUnpublished ?? true;  // Builder default: show drafts
 
-export async function fetchNodeSubtree(nodeId: number, visited = new Set<number>()): Promise<NodeSubtree> {
   if (visited.has(nodeId)) {
     throw new CourseBuilderError('Cycle detected in node hierarchy', 500, { nodeId });
   }
-
   visited.add(nodeId);
 
+  // 1) Fetch node (minimal columns are fine)
   const node = await fetchNodeById(nodeId);
-  const blocks = await fetchNodeBlocks(nodeId);
+
+  // 2) For student view we may hide unpublished; builder keeps them
+  if (!allowUnpublished && node.state !== 'published') {
+    visited.delete(nodeId);
+    return { node, blocks: [], children: [] };
+  }
+
+  // 3) Children (always needed for the tree)
   const children = await fetchNodeChildren(nodeId);
 
-  const childSubtrees = [] as NodeSubtree['children'];
-  for (const child of children) {
-    const subtree = await fetchNodeSubtree(child.child_id, visited);
-    childSubtrees.push({ edge: child, subtree });
-  }
+  // 4) Recurse with same options
+  const childSubtrees = await Promise.all(
+    children.map(async (child) => {
+      const subtree = await fetchNodeSubtree(child.child_id, opts, visited);
+      return { edge: child, subtree };
+    })
+  );
 
   visited.delete(nodeId);
 
-  return {
-    node,
-    blocks,
-    children: childSubtrees,
-  };
+  // 5) Include blocks only when requested (builder) — student view passes includeBlocks:false
+  const blocks = includeBlocks ? await fetchNodeBlocks(nodeId) : [];
+
+  return { node, blocks, children: childSubtrees };
 }
+
+
 
 export async function validateNodeRelationship(parentId: number, childNodeType: string) {
   const parent = await fetchNodeById(parentId);

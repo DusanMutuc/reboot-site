@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Button,
@@ -25,7 +25,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 
-const NODE_ICONS: Record<string, JSX.Element> = {
+const NODE_ICONS: Record<string, React.ReactNode> = {
   course: <MenuBookIcon fontSize="small" />,
   lesson: <ArticleIcon fontSize="small" />,
   chapter: <LayersIcon fontSize="small" />,
@@ -53,6 +53,7 @@ type TreeNodeProps = {
   parentId: number | null;
   onToggle: (nodeId: number) => void;
   onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
+  prefetchBlocks: (nodeId: number) => void;
 };
 
 function TreeNode({
@@ -64,6 +65,7 @@ function TreeNode({
   parentId,
   onToggle,
   onSelectContent,
+  prefetchBlocks,
 }: TreeNodeProps) {
   const { node } = subtree;
   const hasChildren = subtree.children.length > 0;
@@ -74,25 +76,22 @@ function TreeNode({
   const isSelected = selectedNodeId === node.id;
   const paddingLeft = 2 + depth * 2;
   const isContentNode = node.node_type === 'lesson' || node.node_type === 'chapter';
+  const canPrefetch = isContentNode && !isLocked;
 
   const handleClick = () => {
     if (isContentNode) {
+      if (canPrefetch) prefetchBlocks(node.id); // warm request just before navigate
       onSelectContent(subtree, lockStatus);
-      if (!hasChildren) {
-        return;
-      }
+      if (!hasChildren) return;
     }
-
-    if (hasChildren) {
-      if (!isExpanded) {
-        onToggle(node.id);
-      }
-    }
+    if (hasChildren && !isExpanded) onToggle(node.id);
   };
 
   const item = (
     <ListItemButton
       onClick={handleClick}
+      onMouseEnter={() => { if (canPrefetch) prefetchBlocks(node.id); }}
+      onFocus={() => { if (canPrefetch) prefetchBlocks(node.id); }}
       selected={isSelected}
       sx={{
         pl: paddingLeft,
@@ -156,6 +155,7 @@ function TreeNode({
                 parentId={subtree.node.id}
                 onToggle={onToggle}
                 onSelectContent={onSelectContent}
+                prefetchBlocks={prefetchBlocks}
               />
             ))}
           </List>
@@ -176,14 +176,26 @@ export default function StudentCourseTree({
   fullHeight = true,
 }: StudentCourseTreeProps) {
   const sequentialUnlock = !!course.node.sequential_unlock;
-  const childLocks = useMemo(
-    () => lockStatuses[course.node.id] ?? {},
-    [course.node.id, lockStatuses],
-  );
+  const childLocks = useMemo(() => lockStatuses[course.node.id] ?? {}, [course.node.id, lockStatuses]);
   const unlockedCount = useMemo(
     () => Object.values(childLocks).filter((status) => !status.locked).length,
     [childLocks],
   );
+
+  // Fire-and-forget prefetcher; uses browser cache or HTTP cache
+  const prefetchBlocks = (nodeId: number) => {
+    const run = () => { void fetch(`/api/nodes/${nodeId}/blocks`, { cache: 'force-cache' }).catch(() => {}); };
+    if (typeof window !== 'undefined') {
+      const ric = (window as any).requestIdleCallback as
+        | undefined
+        | ((cb: () => void, opts?: { timeout: number }) => number);
+      if (ric) {
+        ric(run, { timeout: 500 });
+        return;
+      }
+    }
+    run();
+  };
 
   return (
     <Box
@@ -229,6 +241,7 @@ export default function StudentCourseTree({
               parentId={course.node.id}
               onToggle={onToggle}
               onSelectContent={onSelectContent}
+              prefetchBlocks={prefetchBlocks}
             />
           ))}
         </List>

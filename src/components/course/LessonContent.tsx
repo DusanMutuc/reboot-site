@@ -13,16 +13,13 @@ type LessonContentProps = {
   error?: string | null;
 };
 
-type ResourceState = 'idle' | 'loading' | 'ready' | 'error';
+type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+type ResourceState = LoadState;
 
 function getContentLabels(node: NodeSubtree | null) {
   const type = node?.node.node_type;
-  if (type === 'chapter') {
-    return { title: 'Chapter', lower: 'chapter' };
-  }
-  if (type === 'lesson') {
-    return { title: 'Lesson', lower: 'lesson' };
-  }
+  if (type === 'chapter') return { title: 'Chapter', lower: 'chapter' };
+  if (type === 'lesson') return { title: 'Lesson', lower: 'lesson' };
   return { title: 'Item', lower: 'item' };
 }
 
@@ -41,20 +38,69 @@ function toRenderableBlock(block: ContentBlock): RenderableBlock {
 }
 
 export default function LessonContent({ lesson, loading, error }: LessonContentProps) {
+  // Lazily loaded blocks for the currently selected lesson/chapter
+  const [blocks, setBlocks] = useState<RenderableBlock[]>([]);
+  const [blocksState, setBlocksState] = useState<LoadState>('idle');
+  const [blocksError, setBlocksError] = useState<string | null>(null);
+
+  // Media resources for asset blocks
   const [resources, setResources] = useState<Record<number, RenderableResource>>({});
   const [resourceState, setResourceState] = useState<ResourceState>('idle');
   const [resourceError, setResourceError] = useState<string | null>(null);
 
   const labels = getContentLabels(lesson);
 
-  const assetBlockIds = useMemo(() => {
-    if (!lesson) return [] as number[];
-    return lesson.blocks
-      .filter((block) => block.block_type === 'asset' && block.resource_id)
-      .map((block) => block.resource_id!)
-      .filter((id, index, arr) => arr.indexOf(id) === index);
+  // ===== 1) Lazy-load blocks whenever the selected node changes =====
+  useEffect(() => {
+    if (!lesson) {
+      setBlocks([]);
+      setBlocksState('idle');
+      setBlocksError(null);
+      return;
+    }
+
+    let active = true;
+    setBlocksState('loading');
+    setBlocksError(null);
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/nodes/${lesson.node.id}/blocks`);
+        if (!active) return;
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? 'Failed to load blocks');
+        }
+
+        const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
+        if (!active) return;
+
+        const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
+        setBlocks(renderable);
+        setBlocksState('ready');
+      } catch (e) {
+        if (!active) return;
+        setBlocks([]);
+        setBlocksState('error');
+        setBlocksError(e instanceof Error ? e.message : 'Failed to load blocks');
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
   }, [lesson]);
 
+  // Compute unique resource IDs from the *loaded blocks* (not from lesson.blocks)
+  const assetBlockIds = useMemo(() => {
+    return blocks
+      .filter((b) => b.block_type === 'asset' && b.resource_id)
+      .map((b) => b.resource_id!)
+      .filter((id, idx, arr) => arr.indexOf(id) === idx);
+  }, [blocks]);
+
+  // ===== 2) Load media resources for those asset blocks =====
   useEffect(() => {
     if (!lesson || assetBlockIds.length === 0) {
       setResources({});
@@ -102,6 +148,7 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
     };
   }, [assetBlockIds, lesson]);
 
+  // ===== Top-level loading/error/empty states =====
   if (loading) {
     return (
       <Stack alignItems="center" spacing={2} sx={{ py: 10 }}>
@@ -130,7 +177,6 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
     );
   }
 
-  const blocks = lesson.blocks.map(toRenderableBlock).sort((a, b) => a.position - b.position);
   const showResourceAlert = resourceState === 'error' && resourceError;
 
   return (
@@ -150,15 +196,31 @@ export default function LessonContent({ lesson, loading, error }: LessonContentP
           ) : null}
         </Box>
 
-        {blocks.length === 0 ? (
-          <Alert severity="info">This {labels.lower} doesn’t have any blocks yet.</Alert>
-        ) : (
-          <Stack spacing={3}>
-            {blocks.map((block) => {
-              const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
-              return <BlockRenderer key={block.id} block={block} resource={resource} previewMode />;
-            })}
+        {/* Blocks load state */}
+        {blocksState === 'loading' && (
+          <Stack alignItems="center" spacing={1}>
+            <CircularProgress size={20} />
+            <Typography variant="body2" color="text.secondary">
+              Loading content…
+            </Typography>
           </Stack>
+        )}
+
+        {blocksState === 'error' && <Alert severity="warning">{blocksError}</Alert>}
+
+        {blocksState === 'ready' && (
+          <>
+            {blocks.length === 0 ? (
+              <Alert severity="info">This {labels.lower} doesn’t have any blocks yet.</Alert>
+            ) : (
+              <Stack spacing={3}>
+                {blocks.map((block) => {
+                  const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
+                  return <BlockRenderer key={block.id} block={block} resource={resource} previewMode />;
+                })}
+              </Stack>
+            )}
+          </>
         )}
 
         {resourceState === 'loading' ? (
