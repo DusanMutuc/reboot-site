@@ -644,6 +644,10 @@ export function BlockRenderer({
   previewMode = false,
   onSmartDocProgress,
 }: BlockRendererProps) {
+  const smartDocProgressHandler = useMemo(() => {
+    if (!onSmartDocProgress || block.block_type !== 'smart_doc') return undefined;
+    return (progress: SmartDocClientProgress) => onSmartDocProgress(block.id, progress);
+  }, [onSmartDocProgress, block.id, block.block_type]);
   if (block.block_type === 'divider') {
     return <Divider sx={{ my: 3 }} />;
   }
@@ -706,9 +710,7 @@ export function BlockRenderer({
           docId={block.smart_doc_id}
           contentBlockId={block.id}
           fallbackLabel={block.label}
-          onProgressChange={
-            onSmartDocProgress ? (progress) => onSmartDocProgress(block.id, progress) : undefined
-          }
+          onProgressChange={smartDocProgressHandler}
         />
       );
     }
