@@ -8,6 +8,9 @@ export function useNodeProgress(nodeId: number | null) {
     if (!nodeId || startedRef.current) return;
     startedRef.current = true;
     try {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[progress] markStarted', { nodeId });
+      }
       await fetch('/api/progress', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -23,6 +26,9 @@ export function useNodeProgress(nodeId: number | null) {
     if (!nodeId || completedRef.current) return;
     completedRef.current = true;
     try {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[progress] markCompleted', { nodeId });
+      }
       await fetch('/api/progress', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

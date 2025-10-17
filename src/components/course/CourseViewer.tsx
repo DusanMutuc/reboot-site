@@ -160,6 +160,61 @@ function applyMonotonicUnlocks(
   return result;
 }
 
+function debugLogUnlockStatuses(
+  label: string,
+  unlocks: Record<number, ChildUnlockStatus[]>,
+  course: NodeSubtree,
+) {
+  if (process.env.NODE_ENV === 'production') return;
+
+  try {
+    const { nodeById } = buildMaps(course);
+    const rows: Array<{
+      parentId: number;
+      parentTitle: string;
+      parentSlug: string | null;
+      childId: number;
+      childTitle: string;
+      childSlug: string | null;
+      locked: boolean;
+      required: boolean;
+      reason: string | null;
+    }> = [];
+
+    for (const [parentIdStr, children] of Object.entries(unlocks)) {
+      const parentId = Number(parentIdStr);
+      const parentNode = nodeById.get(parentId)?.node;
+      for (const child of children) {
+        const childNode = nodeById.get(child.child_id)?.node;
+        rows.push({
+          parentId,
+          parentTitle: parentNode?.title ?? '(unknown parent)',
+          parentSlug: parentNode?.slug ?? null,
+          childId: child.child_id,
+          childTitle: childNode?.title ?? '(unknown child)',
+          childSlug: childNode?.slug ?? null,
+          locked: child.locked,
+          required: child.is_required,
+          reason: child.reason,
+        });
+      }
+    }
+
+    if (rows.length === 0) {
+      console.groupCollapsed(`[unlock-debug] ${label}`);
+      console.log('No unlock rows available');
+      console.groupEnd();
+      return;
+    }
+
+    console.groupCollapsed(`[unlock-debug] ${label}`);
+    console.table(rows);
+    console.groupEnd();
+  } catch (error) {
+    console.warn('[unlock-debug] failed to log unlock statuses', error);
+  }
+}
+
 export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
   const router = useRouter();
   const [state, setState] = useState<CourseState>({ status: 'loading' });
@@ -182,6 +237,9 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
         lockStatuses: cached.lockStatuses,
         everUnlocked: cloneEverUnlocked(cached.everUnlocked),
       });
+      if (process.env.NODE_ENV !== 'production') {
+        debugLogUnlockStatuses('hydrate-from-cache', cached.lockStatuses, cached.course);
+      }
     } else {
       setState({ status: 'loading' });
     }
@@ -205,6 +263,9 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
           everUnlocked: cloneEverUnlocked(everUnlocked),
         });
         setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
+        if (process.env.NODE_ENV !== 'production') {
+          debugLogUnlockStatuses('initial-load', lockStatuses, data.course);
+        }
       } catch (error) {
         if (!active) return;
         const message = error instanceof Error ? error.message : 'Failed to load course';
@@ -325,6 +386,11 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   const refreshUnlocks = async (parentIds: number[]) => {
     if (parentIds.length === 0) return;
     try {
+      if (process.env.NODE_ENV !== 'production') {
+        console.groupCollapsed('[unlock-debug] refresh-unlocks request');
+        console.log('parentIds', parentIds);
+        console.groupEnd();
+      }
       const res = await fetch(`/api/courses/${courseSlug}/unlocks`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -360,6 +426,9 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
           lockStatuses: nextLockStatuses,
           everUnlocked: cloneEverUnlocked(nextEverUnlocked),
         });
+        if (process.env.NODE_ENV !== 'production') {
+          debugLogUnlockStatuses('refresh-unlocks', nextLockStatuses, prev.course);
+        }
         return { ...prev, lockStatuses: nextLockStatuses, everUnlocked: nextEverUnlocked };
       });
     } catch {
@@ -371,7 +440,12 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     if (!parentById) return;
     // refresh the immediate parent (this unlocks siblings)
     const parent = parentById.get(nodeId);
-    if (parent != null) refreshUnlocks([parent]);
+    if (parent != null) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[unlock-debug] handleLessonCompleted', { nodeId, parentId: parent });
+      }
+      refreshUnlocks([parent]);
+    }
   };
 
   // ----- inline skeleton instead of white full-page -----
