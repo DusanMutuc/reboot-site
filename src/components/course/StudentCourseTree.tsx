@@ -42,6 +42,8 @@ type StudentCourseTreeProps = {
   onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
   onBackToCourses: () => void;
   fullHeight?: boolean;
+  /** Disable expand/collapse animations (avoids “re-expanding” flicker on nav) */
+  noTransition?: boolean;
 };
 
 type TreeNodeProps = {
@@ -54,6 +56,7 @@ type TreeNodeProps = {
   onToggle: (nodeId: number) => void;
   onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
   prefetchBlocks: (nodeId: number) => void;
+  noTransition?: boolean;
 };
 
 function TreeNode({
@@ -66,6 +69,7 @@ function TreeNode({
   onToggle,
   onSelectContent,
   prefetchBlocks,
+  noTransition = false,
 }: TreeNodeProps) {
   const { node } = subtree;
   const hasChildren = subtree.children.length > 0;
@@ -142,7 +146,12 @@ function TreeNode({
     <>
       {item}
       {hasChildren ? (
-        <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+        <Collapse
+          in={isExpanded}
+          timeout={noTransition ? 0 : 'auto'}
+          unmountOnExit={false}
+          appear={!noTransition}
+        >
           <List disablePadding>
             {subtree.children.map((child) => (
               <TreeNode
@@ -156,6 +165,7 @@ function TreeNode({
                 onToggle={onToggle}
                 onSelectContent={onSelectContent}
                 prefetchBlocks={prefetchBlocks}
+                noTransition={noTransition}
               />
             ))}
           </List>
@@ -174,6 +184,7 @@ export default function StudentCourseTree({
   onSelectContent,
   onBackToCourses,
   fullHeight = true,
+  noTransition = false,
 }: StudentCourseTreeProps) {
   const sequentialUnlock = !!course.node.sequential_unlock;
   const childLocks = useMemo(() => lockStatuses[course.node.id] ?? {}, [course.node.id, lockStatuses]);
@@ -242,6 +253,7 @@ export default function StudentCourseTree({
               onToggle={onToggle}
               onSelectContent={onSelectContent}
               prefetchBlocks={prefetchBlocks}
+              noTransition={noTransition}
             />
           ))}
         </List>

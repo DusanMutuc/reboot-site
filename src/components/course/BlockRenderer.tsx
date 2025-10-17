@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import DOMPurify from 'dompurify';
 import {
   Box,
@@ -112,11 +112,30 @@ const LABEL_SX = {
 
 /** --------------------------------------------------------------------------- */
 
+export type SmartDocClientProgress = {
+  total: number;
+  completed: number;
+  isComplete: boolean;
+};
+
 export type BlockRendererProps = {
   block: RenderableBlock;
   resource: RenderableResource | null;
   previewMode?: boolean;
+  onSmartDocProgress?: (contentBlockId: number, progress: SmartDocClientProgress) => void;
+  onVideoProgress?: (contentBlockId: number, percent: number) => void;
 };
+
+/** --------------------------------------------------------------------------- */
+/** Tiny in-memory cache per SmartDoc placement to hide StrictMode double-mount */
+type SmartDocCacheEntry = {
+  state: SmartDocState;
+  values: Record<number, string>;
+  submitted: boolean;
+};
+const smartDocCache = new Map<string, SmartDocCacheEntry>();
+const cacheKeyFor = (contentBlockId: number, docId: number) => `${contentBlockId}:${docId}`;
+/** --------------------------------------------------------------------------- */
 
 function SmartDocPromptField({
   prompt,
@@ -134,14 +153,12 @@ function SmartDocPromptField({
   const helper = prompt.help_text?.trim();
 
   return (
-    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled}>
+    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled} required>
       <FormLabel sx={LABEL_SX}>
         {label}
-        {prompt.required && (
-          <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
-            *
-          </Box>
-        )}
+        <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
+          *
+        </Box>
       </FormLabel>
 
       {helper && (
@@ -160,116 +177,151 @@ function SmartDocPromptField({
         InputProps={{ disableUnderline: true, sx: FIELD_SX }}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        required
       />
     </FormControl>
   );
 }
-
 function SmartDocPreview({
   docId,
-  contentBlockId, // <--- NEW: placement id (content_blocks.id)
+  contentBlockId, // placement id (content_blocks.id)
   fallbackLabel,
+  onProgressChange,
 }: {
   docId: number;
   contentBlockId: number;
   fallbackLabel: string | null;
+  onProgressChange?: (progress: SmartDocClientProgress) => void;
 }) {
   const [state, setState] = useState<SmartDocState>({ status: 'idle' });
-
-  // Values keyed by prompt_id (string to handle TextField value)
   const [values, setValues] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
-
-  // Debounce timers per prompt
   const timers = useRef<Record<number, number | undefined>>({});
 
+  // Identity for this placement/doc
+  const renderKey = `${contentBlockId}:${docId}`;
+  const lastKeyRef = useRef(renderKey);
+  const identityChanged = lastKeyRef.current !== renderKey;
+
+  // EARLY GUARD: if identity changed, don't render stale content even for a frame
+  if (identityChanged) {
+    const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+    return (
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+        <CircularProgress size={22} />
+        <Typography variant="body2" color="text.secondary">Loading…</Typography>
+      </Stack>
+    );
+  }
+
+  // Reset state BEFORE paint when identity changes
+  useLayoutEffect(() => {
+    if (!identityChanged) return;
+    lastKeyRef.current = renderKey;
+    setState({ status: 'loading' });
+    setValues({});
+    setSubmitted(false);
+  }, [identityChanged, renderKey]);
+
+  // Fetch doc + status + values together; only set "ready" once everything is in
   useEffect(() => {
     let active = true;
-    setState({ status: 'loading' });
 
-    (async () => {
-      // 1) load doc + prompts
-      const { data, error } = await supabase
-        .from('smart_docs')
-        .select(
-          `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
-            id, position, label, prompt_type, help_text, required
-          )`,
-        )
-        .eq('id', docId)
-        .single();
-
-      if (!active) return;
-
-      if (error || !data) {
-        setState({ status: 'error', message: error?.message ?? 'Smart doc not found' });
-        return;
-      }
-
-      const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
-      const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
-        .map((p): SmartDocPrompt => ({
-          id: p.id,
-          position: p.position,
-          label: p.label ?? '',
-          prompt_type: p.prompt_type,
-          help_text: p.help_text,
-          required: p.required,
-        }))
-        .sort((a, b) => a.position - b.position);
-
-      setState({
-        status: 'ready',
-        doc: {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          is_published: data.is_published,
-          prompts,
-        },
-      });
-
-      // 2) load existing submission status
+    async function loadAll() {
       try {
-        const statusRes = await fetch('/api/smartdoc/status', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ content_block_id: contentBlockId }),
+        // 1) Doc + prompts
+        const { data, error } = await supabase
+          .from('smart_docs')
+          .select(
+            `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
+              id, position, label, prompt_type, help_text, required
+            )`,
+          )
+          .eq('id', docId)
+          .single();
+
+        if (!active) return;
+        if (error || !data) {
+          setState({ status: 'error', message: error?.message ?? 'Smart doc not found' });
+          return;
+        }
+
+        const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
+        const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
+          .map((p): SmartDocPrompt => ({
+            id: p.id,
+            position: p.position,
+            label: p.label ?? '',
+            prompt_type: p.prompt_type,
+            help_text: p.help_text,
+            required: true, // product decision: all required
+          }))
+          .sort((a, b) => a.position - b.position);
+
+        // 2) In parallel: status + values (two-step for values)
+        const statusPromise = (async () => {
+          try {
+            const res = await fetch('/api/smartdoc/status', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ content_block_id: contentBlockId }),
+            });
+            if (!res.ok) return { status: 'draft' as const, submitted_at: null as string | null };
+            return (await res.json()) as { status: 'draft' | 'submitted'; submitted_at: string | null };
+          } catch {
+            return { status: 'draft' as const, submitted_at: null as string | null };
+          }
+        })();
+
+        const valuesPromise = (async () => {
+          // envelope row
+          const { data: resp, error: respErr } = await supabase
+            .from('smart_doc_responses')
+            .select('id')
+            .eq('content_block_id', contentBlockId)
+            .maybeSingle();
+
+          if (respErr || !resp?.id) return {} as Record<number, string>;
+
+          const { data: vals } = await supabase
+            .from('smart_doc_response_values')
+            .select('prompt_id, value_json')
+            .eq('response_id', resp.id);
+
+          const map: Record<number, string> = {};
+          for (const row of vals ?? []) {
+            map[row.prompt_id] =
+              typeof row.value_json === 'string'
+                ? row.value_json
+                : row.value_json?.value ?? row.value_json?.text ?? '';
+          }
+          return map;
+        })();
+
+        const [statusData, valueMap] = await Promise.all([statusPromise, valuesPromise]);
+        if (!active) return;
+
+        // Set everything in one go; avoid intermediate "ready with empty values"
+        setSubmitted(statusData.status === 'submitted');
+        setValues(valueMap);
+
+        setState({
+          status: 'ready',
+          doc: {
+            id: data.id,
+            title: data.title,
+            description: data.description,
+            is_published: data.is_published,
+            prompts,
+          },
         });
-        if (statusRes.ok) {
-          const s = (await statusRes.json()) as { status: 'draft' | 'submitted' };
-          if (active) setSubmitted(s.status === 'submitted');
-        }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        if (!active) return;
+        setState({ status: 'error', message: e instanceof Error ? e.message : 'Failed to load smart doc' });
       }
+    }
 
-      // 3) load existing values for this content_block_id (current user via RLS)
-      //   first get (or not) the envelope row id
-      const { data: resp, error: respErr } = await supabase
-        .from('smart_doc_responses')
-        .select('id')
-        .eq('content_block_id', contentBlockId)
-        .maybeSingle();
-
-      if (!active) return;
-
-      if (!respErr && resp?.id) {
-        const { data: vals } = await supabase
-          .from('smart_doc_response_values')
-          .select('prompt_id, value_json')
-          .eq('response_id', resp.id);
-
-        const next: Record<number, string> = {};
-        for (const row of vals ?? []) {
-          next[row.prompt_id] =
-            typeof row.value_json === 'string'
-              ? row.value_json
-              : row.value_json?.value ?? row.value_json?.text ?? '';
-        }
-        if (active) setValues(next);
-      }
-    })();
+    void loadAll();
 
     return () => {
       active = false;
@@ -279,22 +331,28 @@ function SmartDocPreview({
       }
       timers.current = {};
     };
-  }, [docId, contentBlockId]);
+  }, [renderKey, docId, contentBlockId]);
 
-  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+  // ----- progress snapshot -----
+  const progressSnapshot = useMemo<SmartDocClientProgress | null>(() => {
+    if (state.status !== 'ready') return null;
+    const total = state.doc.prompts.length;
+    const completed = state.doc.prompts.filter((p) => (values[p.id]?.trim()?.length ?? 0) > 0).length;
+    return { total, completed, isComplete: total > 0 && completed === total };
+  }, [state, values]);
 
-  switch (state.status) {
-    case 'idle':
-    case 'loading':
-      return (
-        <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
-          <CircularProgress size={22} />
-          <Typography variant="body2" color="text.secondary">
-            Loading…
-          </Typography>
-        </Stack>
-      );
-    case 'error':
+  useEffect(() => {
+    if (!progressSnapshot || !onProgressChange) return;
+    onProgressChange(progressSnapshot);
+  }, [progressSnapshot, onProgressChange]);
+
+  // Guard against stale ready doc
+  const isDocMismatch = state.status === 'ready' && state.doc.id !== docId;
+
+  if (state.status !== 'ready' || isDocMismatch) {
+    const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+
+    if (state.status === 'error' && !isDocMismatch) {
       return (
         <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
           <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
@@ -303,18 +361,19 @@ function SmartDocPreview({
           </Typography>
         </Stack>
       );
-    case 'ready':
-      break;
+    }
+
+    return (
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+        <CircularProgress size={22} />
+        <Typography variant="body2" color="text.secondary">Loading…</Typography>
+      </Stack>
+    );
   }
 
   const { doc } = state;
   const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
-
-  // local progress (required-only), purely for immediate feedback
-  const requiredTotal = doc.prompts.filter((p) => p.required).length;
-  const requiredCompleted = doc.prompts.filter(
-    (p) => p.required && (values[p.id]?.trim()?.length ?? 0) > 0,
-  ).length;
+  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
   const upsertValue = (promptId: number, value: string) => {
     // optimistic UI
@@ -330,11 +389,10 @@ function SmartDocPreview({
           body: JSON.stringify({
             content_block_id: contentBlockId,
             prompt_id: promptId,
-            value, // RPC accepts jsonb; we pass plain string
+            value,
           }),
         });
       } catch (e) {
-        // optional: toast/log
         console.error('smartdoc upsert failed', e);
       }
     }, 400);
@@ -342,7 +400,6 @@ function SmartDocPreview({
 
   return (
     <Stack spacing={3} sx={wrapSx}>
-      {/* Section title */}
       <Typography
         component="h2"
         variant="h2"
@@ -351,19 +408,15 @@ function SmartDocPreview({
         {title}
       </Typography>
 
-      {/* Description */}
       {doc.description?.trim() && (
         <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
           {doc.description}
         </Typography>
       )}
 
-      {/* Prompts */}
       <Box>
         {doc.prompts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No questions yet.
-          </Typography>
+          <Typography variant="body2" color="text.secondary">No questions yet.</Typography>
         ) : (
           doc.prompts.map((p) => (
             <SmartDocPromptField
@@ -376,14 +429,15 @@ function SmartDocPreview({
           ))
         )}
       </Box>
-
-      <Typography variant="caption" color="text.secondary">
-        Progress: {requiredCompleted}/{requiredTotal}
-        {submitted ? ' • Submitted' : ''}
-      </Typography>
     </Stack>
   );
 }
+
+
+/** Memoized version to avoid unnecessary rerenders when parents update */
+const MemoSmartDocPreview = React.memo(SmartDocPreview);
+
+/* --------------------------- Media renderers --------------------------- */
 
 function formatDuration(seconds: number | null) {
   if (!seconds || Number.isNaN(seconds)) return null;
@@ -392,7 +446,160 @@ function formatDuration(seconds: number | null) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function VideoPreview({ resource }: { resource: RenderableResource }) {
+type VimeoPlayerInstance = {
+  on: (event: 'timeupdate', callback: (data: { percent?: number }) => void) => void;
+  off: (event: 'timeupdate', callback: (data: { percent?: number }) => void) => void;
+  destroy: () => Promise<void> | void;
+};
+
+type VimeoPlayerConstructor = new (element: HTMLIFrameElement) => VimeoPlayerInstance;
+
+type VimeoWindow = Window & {
+  Vimeo?: {
+    Player: VimeoPlayerConstructor;
+  };
+};
+
+let vimeoScriptPromise: Promise<void> | null = null;
+
+function loadVimeoPlayerApi(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  const global = window as VimeoWindow;
+  if (global.Vimeo?.Player) return Promise.resolve();
+  if (vimeoScriptPromise) return vimeoScriptPromise;
+
+  vimeoScriptPromise = new Promise<void>((resolve, reject) => {
+    const existingByAttr = document.querySelector<HTMLScriptElement>('script[data-vimeo-player-api="true"]');
+    const existingBySrc =
+      existingByAttr ??
+      document.querySelector<HTMLScriptElement>('script[src="https://player.vimeo.com/api/player.js"]');
+    const existing = existingByAttr ?? existingBySrc;
+    if (existing) {
+      if (existing.dataset.vimeoPlayerLoaded === 'true') {
+        resolve();
+        return;
+      }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener(
+        'error',
+        () => reject(new Error('Failed to load Vimeo player script')),
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://player.vimeo.com/api/player.js';
+    script.async = true;
+    script.dataset.vimeoPlayerApi = 'true';
+    script.onload = () => {
+      script.dataset.vimeoPlayerLoaded = 'true';
+      resolve();
+    };
+    script.onerror = () => reject(new Error('Failed to load Vimeo player script'));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    vimeoScriptPromise = null;
+    throw error;
+  });
+
+  return vimeoScriptPromise;
+}
+
+function VimeoPlayerFrame({
+  videoId,
+  title,
+  onProgress,
+}: {
+  videoId: string;
+  title: string;
+  onProgress?: (percent: number) => void;
+}) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const lastSentRef = useRef(0);
+
+  useEffect(() => {
+    lastSentRef.current = 0;
+    if (typeof window === 'undefined') return undefined;
+
+    let active = true;
+    let player: VimeoPlayerInstance | null = null;
+    const handleTimeUpdate = (data: { percent?: number }) => {
+      if (!active) return;
+      const raw = typeof data?.percent === 'number' ? data.percent : null;
+      if (raw === null || Number.isNaN(raw)) return;
+      const clamped = Math.max(0, Math.min(1, raw));
+      if (clamped <= lastSentRef.current + 0.001) return;
+      lastSentRef.current = clamped;
+      onProgress?.(clamped);
+    };
+
+    const setup = async () => {
+      try {
+        await loadVimeoPlayerApi();
+        if (!active || !iframeRef.current) return;
+        const global = window as VimeoWindow;
+        const PlayerCtor = global.Vimeo?.Player;
+        if (!PlayerCtor) return;
+        player = new PlayerCtor(iframeRef.current);
+        player.on('timeupdate', handleTimeUpdate);
+      } catch (error) {
+        console.error('Failed to initialise Vimeo player', error);
+      }
+    };
+
+    void setup();
+
+    return () => {
+      active = false;
+      if (player) {
+        try {
+          player.off('timeupdate', handleTimeUpdate);
+          const result = player.destroy?.();
+          if (result && typeof (result as Promise<void>).then === 'function') {
+            (result as Promise<void>).catch(() => {});
+          }
+        } catch (error) {
+          console.error('Failed to clean up Vimeo player', error);
+        }
+      }
+    };
+  }, [onProgress, videoId]);
+
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        width: '100%',
+        maxWidth: 860,
+        mx: 'auto',
+        borderRadius: 2,
+        overflow: 'hidden',
+        bgcolor: 'common.black',
+        pb: '56.25%',
+        height: 0,
+      }}
+    >
+      <Box
+        component="iframe"
+        ref={iframeRef}
+        title={title}
+        src={`https://player.vimeo.com/video/${videoId}`}
+        allow="autoplay; fullscreen; picture-in-picture"
+        allowFullScreen
+        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+      />
+    </Box>
+  );
+}
+
+function VideoPreview({
+  resource,
+  onProgress,
+}: {
+  resource: RenderableResource;
+  onProgress?: (percent: number) => void;
+}) {
   if (!resource.url) {
     return (
       <Card variant="outlined">
@@ -461,13 +668,10 @@ function VideoPreview({ resource }: { resource: RenderableResource }) {
 
   if (isVimeo) {
     const segments = resource.url.split('/');
-    const id = segments[segments.length - 1];
+    const idWithQuery = segments[segments.length - 1];
+    const id = idWithQuery?.split('?')[0]?.split('#')[0];
     if (id) {
-      return frameWrapper(
-        `https://player.vimeo.com/video/${id}`,
-        'autoplay; fullscreen; picture-in-picture',
-        resource.title,
-      );
+      return <VimeoPlayerFrame videoId={id} title={resource.title} onProgress={onProgress} />;
     }
   }
 
@@ -620,7 +824,23 @@ function LinkPreview({ resource }: { resource: RenderableResource }) {
   );
 }
 
-export function BlockRenderer({ block, resource, previewMode = false }: BlockRendererProps) {
+export function BlockRenderer({
+  block,
+  resource,
+  previewMode = false,
+  onSmartDocProgress,
+  onVideoProgress,
+}: BlockRendererProps) {
+  const smartDocProgressHandler = useMemo(() => {
+    if (!onSmartDocProgress || block.block_type !== 'smart_doc') return undefined;
+    return (progress: SmartDocClientProgress) => onSmartDocProgress(block.id, progress);
+  }, [onSmartDocProgress, block.id, block.block_type]);
+
+  const videoProgressHandler = useMemo(() => {
+    if (!onVideoProgress || block.block_type !== 'asset') return undefined;
+    return (percent: number) => onVideoProgress(block.id, percent);
+  }, [onVideoProgress, block.block_type, block.id]);
+
   if (block.block_type === 'divider') {
     return <Divider sx={{ my: 3 }} />;
   }
@@ -679,10 +899,11 @@ export function BlockRenderer({ block, resource, previewMode = false }: BlockRen
     if (block.smart_doc_id && previewMode) {
       // pass placement id so inputs can upsert
       return (
-        <SmartDocPreview
+        <MemoSmartDocPreview
           docId={block.smart_doc_id}
           contentBlockId={block.id}
           fallbackLabel={block.label}
+          onProgressChange={smartDocProgressHandler}
         />
       );
     }
@@ -720,19 +941,36 @@ export function BlockRenderer({ block, resource, previewMode = false }: BlockRen
     );
   }
 
-  switch (resource.type) {
-    case 'video':
-      return <VideoPreview resource={resource} />;
-    case 'podcast':
-    case 'audio':
-      return <AudioPreview resource={resource} />;
-    case 'pdf':
-    case 'document':
-      return <PdfPreview resource={resource} />;
-    case 'image':
-      return <ImagePreview resource={resource} />;
-    case 'link':
-    default:
-      return <LinkPreview resource={resource} />;
+  const normalizedType = (resource.type ?? '').toLowerCase();
+  const urlLower = (resource.url ?? '').toLowerCase();
+
+  const treatAsVideo =
+    normalizedType === 'video' ||
+    normalizedType === 'video_link' ||
+    normalizedType === 'vimeo' ||
+    normalizedType === 'youtube' ||
+    normalizedType.includes('video') ||
+    urlLower.includes('vimeo.com') ||
+    urlLower.includes('youtu.be') ||
+    urlLower.includes('youtube.com');
+
+  if (treatAsVideo) {
+    return <VideoPreview resource={resource} onProgress={videoProgressHandler} />;
   }
+
+  const treatAsAudio =
+    normalizedType === 'audio' || normalizedType === 'podcast' || normalizedType.includes('audio');
+  if (treatAsAudio) {
+    return <AudioPreview resource={resource} />;
+  }
+
+  if (normalizedType === 'pdf' || normalizedType === 'document') {
+    return <PdfPreview resource={resource} />;
+  }
+
+  if (normalizedType === 'image') {
+    return <ImagePreview resource={resource} />;
+  }
+
+  return <LinkPreview resource={resource} />;
 }

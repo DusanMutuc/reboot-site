@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 
 import type { ContentBlock, NodeSubtree } from '@/types/course';
-import { BlockRenderer, type RenderableBlock, type RenderableResource } from '@/components/course/BlockRenderer';
+import {
+  BlockRenderer,
+  type RenderableBlock,
+  type RenderableResource,
+  type SmartDocClientProgress,
+} from '@/components/course/BlockRenderer';
 import { supabase } from '@/lib/supabaseClient';
 import { useNodeProgress } from '@/hooks/useNodeProgress';
 
@@ -59,36 +64,58 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }>
   >({});
   const [submitLoading, setSubmitLoading] = useState<Record<number, boolean>>({});
+  const [clientSmartDocProgress, setClientSmartDocProgress] = useState<
+    Record<number, SmartDocClientProgress>
+  >({});
+  const [videoProgressByBlock, setVideoProgressByBlock] = useState<Record<number, number>>({});
 
   const labels = getContentLabels(lesson);
   const nodeId = lesson?.node.id ?? null;
   const { markStarted, markCompleted } = useNodeProgress(nodeId);
   const completedOnceRef = useRef(false);
 
+  const completeLesson = useCallback(async () => {
+    if (!nodeId) return;
+    try {
+      await markCompleted();
+      onCompleted?.(nodeId);
+    } catch (e) {
+      console.error('completeLesson failed', e);
+    }
+  }, [markCompleted, nodeId, onCompleted]);
+
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
   useEffect(() => {
-    if (!lesson) {
+    if (!nodeId) {
       setBlocks([]);
       setBlocksState('idle');
       setBlocksError(null);
       setSmartDocProgress({});
       setSmartDocStatus({});
       setSubmitLoading({});
+      setClientSmartDocProgress({});
+      setVideoProgressByBlock({});
       completedOnceRef.current = false;
       return;
     }
 
     let active = true;
+
+    // Clear immediately so previous lesson’s content doesn’t flash
+    setBlocks([]);
     setBlocksState('loading');
     setBlocksError(null);
     setSmartDocProgress({});
     setSmartDocStatus({});
     setSubmitLoading({});
+    setClientSmartDocProgress({});
+    setVideoProgressByBlock({});
     completedOnceRef.current = false;
 
     (async () => {
       try {
-        const res = await fetch(`/api/nodes/${lesson.node.id}/blocks`);
+        const res = await fetch(`/api/nodes/${nodeId}/blocks`, { cache: 'force-cache' });
+
         if (!active) return;
 
         if (!res.ok) {
@@ -113,7 +140,9 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     return () => {
       active = false;
     };
-  }, [lesson]);
+  }, [nodeId]);
+
+
 
   // Mark STARTED as soon as the content is ready/visible
   useEffect(() => {
@@ -135,9 +164,24 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     return blocks.filter((b) => b.block_type === 'smart_doc').map((b) => b.id);
   }, [blocks]);
 
+  const vimeoVideoBlockIds = useMemo(() => {
+    if (!blocks || blocks.length === 0) return [] as number[];
+
+    return blocks
+      .filter((b) => b.block_type === 'asset' && b.resource_id)
+      .filter((b) => {
+        const resourceId = b.resource_id!;
+        const resource = resources[resourceId];
+        if (!resource) return false;
+        const url = resource.url?.toLowerCase() ?? '';
+        return url.includes('vimeo.com');
+      })
+      .map((b) => b.id);
+  }, [blocks, resources]);
+
   // ===== 2) Load media resources for those asset blocks =====
   useEffect(() => {
-    if (!lesson || assetBlockIds.length === 0) {
+    if (!nodeId || assetBlockIds.length === 0) {
       setResources({});
       setResourceState('idle');
       setResourceError(null);
@@ -181,12 +225,13 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     return () => {
       active = false;
     };
-  }, [assetBlockIds, lesson]);
+  }, [assetBlockIds, nodeId]);
 
   // ===== 3) Smart Doc progress polling (every 5s while lesson open) =====
   useEffect(() => {
     if (blocksState !== 'ready' || smartDocBlockIds.length === 0) {
       setSmartDocProgress({});
+      setClientSmartDocProgress({});
       return;
     }
 
@@ -230,6 +275,49 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     };
   }, [blocksState, smartDocBlockIds]);
 
+  useEffect(() => {
+    if (smartDocBlockIds.length === 0) return;
+    setClientSmartDocProgress((prev) => {
+      const next: Record<number, SmartDocClientProgress> = {};
+      for (const id of smartDocBlockIds) {
+        if (prev[id]) next[id] = prev[id];
+      }
+      return next;
+    });
+  }, [smartDocBlockIds]);
+
+  useEffect(() => {
+    if (vimeoVideoBlockIds.length === 0) {
+      setVideoProgressByBlock((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+      return;
+    }
+
+    setVideoProgressByBlock((prev) => {
+      const next: Record<number, number> = {};
+      let changed = false;
+      for (const id of vimeoVideoBlockIds) {
+        if (typeof prev[id] === 'number') {
+          next[id] = prev[id];
+        }
+      }
+
+      if (Object.keys(prev).length !== Object.keys(next).length) {
+        changed = true;
+      }
+
+      if (!changed) {
+        for (const id of vimeoVideoBlockIds) {
+          if (next[id] !== prev[id]) {
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [vimeoVideoBlockIds]);
+
   // ===== 3b) Smart Doc submission status (on mount/lesson change only) =====
   useEffect(() => {
     if (blocksState !== 'ready' || smartDocBlockIds.length === 0) {
@@ -270,35 +358,61 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   // ===== 4) Completion rules =====
   const allSmartDocsComplete = useMemo(() => {
     if (smartDocBlockIds.length === 0) return false;
+
     return smartDocBlockIds.every((id) => {
-      const p = smartDocProgress[id];
-      return p && p.fields_total > 0 && p.fields_completed >= p.fields_total;
+      const srv = smartDocProgress[id];
+      const cli = clientSmartDocProgress[id];
+
+      // Prefer server when it has a meaningful total
+      if (srv && srv.fields_total > 0) {
+        return (srv.fields_completed ?? 0) >= srv.fields_total;
+      }
+
+      // Fallback to client-snapshot when the server can't tell yet
+      if (cli && cli.total > 0) {
+        return cli.completed >= cli.total;
+      }
+
+      return false;
     });
-  }, [smartDocBlockIds, smartDocProgress]);
+  }, [smartDocBlockIds, smartDocProgress, clientSmartDocProgress]);
+
+  const allVideosComplete = useMemo(() => {
+    if (vimeoVideoBlockIds.length === 0) return false;
+
+    return vimeoVideoBlockIds.every((id) => {
+      const percent = videoProgressByBlock[id] ?? 0;
+      return percent >= 0.8;
+    });
+  }, [vimeoVideoBlockIds, videoProgressByBlock]);
+  
 
   useEffect(() => {
     if (completedOnceRef.current) return;
     if (blocksState !== 'ready' || !nodeId) return;
 
-    // If SmartDocs exist: finish when all are fully completed (submission not required for unlocks)
-    if (smartDocBlockIds.length > 0) {
-      if (allSmartDocsComplete) {
+    const hasSmartDocs = smartDocBlockIds.length > 0;
+    const hasVideos = vimeoVideoBlockIds.length > 0;
+
+    if (hasSmartDocs || hasVideos) {
+      const smartDocsSatisfied = hasSmartDocs ? allSmartDocsComplete : true;
+      const videosSatisfied = hasVideos ? allVideosComplete : true;
+
+      if (smartDocsSatisfied && videosSatisfied) {
         completedOnceRef.current = true;
-        markCompleted();
-        if (nodeId) onCompleted?.(nodeId);
+        void completeLesson();
       }
       return;
     }
 
-    // Fallback: no SmartDocs => complete on 80% scroll
+    // Fallback: no SmartDocs and no trackable videos => complete on 80% scroll
     const onScroll = () => {
       const y = window.scrollY || document.documentElement.scrollTop;
       const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
       if (h > 0 && y / h >= 0.8) {
         if (!completedOnceRef.current) {
           completedOnceRef.current = true;
-          markCompleted();
-          if (nodeId) onCompleted?.(nodeId);
+          void completeLesson();
         }
       }
     };
@@ -307,7 +421,15 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     return () => {
       window.removeEventListener('scroll', onScroll);
     };
-  }, [blocksState, nodeId, smartDocBlockIds.length, allSmartDocsComplete, markCompleted, onCompleted]);
+  }, [
+    blocksState,
+    nodeId,
+    smartDocBlockIds.length,
+    allSmartDocsComplete,
+    vimeoVideoBlockIds.length,
+    allVideosComplete,
+    completeLesson,
+  ]);
 
   // ===== 5) Submit handler for a specific Smart Doc placement =====
   const submitSmartDoc = async (content_block_id: number) => {
@@ -322,18 +444,48 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.details ?? j?.error ?? 'Submit failed');
       }
+  
       const { result } = (await res.json()) as {
-        result: { fields_total: number; fields_completed: number; status: 'submitted' | 'draft'; submitted_at: string | null };
+        result: {
+          fields_total: number;
+          fields_completed: number;
+          status: 'submitted' | 'draft';
+          submitted_at: string | null;
+        };
       };
-      // Update local status + progress
-      setSmartDocStatus((m) => ({ ...m, [content_block_id]: { status: result.status, submitted_at: result.submitted_at } }));
-      setSmartDocProgress((m) => ({
+  
+      // Update local status first
+      setSmartDocStatus((m) => ({
         ...m,
-        [content_block_id]: {
-          fields_total: result.fields_total ?? (m[content_block_id]?.fields_total ?? 0),
-          fields_completed: result.fields_completed ?? (m[content_block_id]?.fields_completed ?? 0),
-        },
+        [content_block_id]: { status: result.status, submitted_at: result.submitted_at },
       }));
+  
+      // Merge progress and immediately check if ALL smart docs are complete (server-first, then client fallback)
+      setSmartDocProgress((prev) => {
+        const next = {
+          ...prev,
+          [content_block_id]: {
+            fields_total: result.fields_total ?? (prev[content_block_id]?.fields_total ?? 0),
+            fields_completed: result.fields_completed ?? (prev[content_block_id]?.fields_completed ?? 0),
+          },
+        };
+  
+        const effectiveAllComplete = smartDocBlockIds.every((id) => {
+          const srv = next[id];
+          if (srv && srv.fields_total > 0) {
+            return (srv.fields_completed ?? 0) >= srv.fields_total;
+          }
+          const cli = clientSmartDocProgress[id];
+          return !!(cli && cli.total > 0 && cli.completed >= cli.total);
+        });
+  
+        if (effectiveAllComplete && nodeId) {
+          // fire-and-forget: write completion and trigger unlock refresh
+          void completeLesson();
+        }
+  
+        return next;
+      });
     } catch (e) {
       // You may want a toast; keeping silent here per your current pattern
       console.error(e);
@@ -341,6 +493,22 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       setSubmitLoading((m) => ({ ...m, [content_block_id]: false }));
     }
   };
+  
+
+  const handleClientSmartDocProgress = useCallback(
+    (contentBlockId: number, progress: SmartDocClientProgress) => {
+      setClientSmartDocProgress((prev) => ({ ...prev, [contentBlockId]: progress }));
+    },
+  []);
+
+  const handleVideoProgress = useCallback((contentBlockId: number, percent: number) => {
+    const clamped = Math.max(0, Math.min(1, percent));
+    setVideoProgressByBlock((prev) => {
+      const current = prev[contentBlockId] ?? 0;
+      if (clamped <= current + 0.001) return prev;
+      return { ...prev, [contentBlockId]: clamped };
+    });
+  }, []);
 
   // ===== Top-level loading/error/empty states =====
   if (loading) {
@@ -413,17 +581,46 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                   const isSmart = block.block_type === 'smart_doc';
                   const s = isSmart ? smartDocStatus[block.id] : undefined;
                   const p = isSmart ? smartDocProgress[block.id] : undefined;
-                  const canSubmit = isSmart && p && p.fields_total > 0 && p.fields_completed >= p.fields_total && s?.status !== 'submitted';
+                  const clientProgress = clientSmartDocProgress[block.id];
+                  const hasServerTotals = Boolean(p && p.fields_total > 0);
+                  const serverComplete = hasServerTotals
+                    ? (p?.fields_completed ?? 0) >= (p?.fields_total ?? 0)
+                    : undefined;
+                  const effectiveComplete = serverComplete ?? clientProgress?.isComplete ?? false;
+                  const canSubmit = isSmart && s?.status !== 'submitted' && effectiveComplete;
+                  const progressLabel = (() => {
+                    const hasNumbers = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+                    if (p && hasNumbers(p.fields_total) && p.fields_total > 0) {
+                      const total = p.fields_total;
+                      const completed = hasNumbers(p.fields_completed)
+                        ? Math.min(p.fields_completed, total)
+                        : 0;
+                      return `Progress: ${completed}/${total}`;
+                    }
+                    if (clientProgress) {
+                      return clientProgress.total > 0
+                        ? `Progress: ${clientProgress.completed}/${clientProgress.total}`
+                        : 'Progress: —';
+                    }
+                    if (p && hasNumbers(p.fields_completed) && hasNumbers(p.fields_total)) {
+                      return `Progress: ${p.fields_completed}/${p.fields_total}`;
+                    }
+                    return 'Progress: —';
+                  })();
 
                   return (
                     <Box key={block.id}>
-                      <BlockRenderer block={block} resource={resource} previewMode />
+                      <BlockRenderer
+                        block={block}
+                        resource={resource}
+                        previewMode
+                        onSmartDocProgress={handleClientSmartDocProgress}
+                        onVideoProgress={handleVideoProgress}
+                      />
                       {isSmart && (
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
                           <Typography variant="caption" color="text.secondary">
-                            {p
-                              ? `Progress: ${p.fields_completed}/${p.fields_total}`
-                              : 'Progress: —'}
+                            {progressLabel}
                             {s?.status === 'submitted' ? ' • Submitted' : ''}
                           </Typography>
                           <Box sx={{ flex: 1 }} />
