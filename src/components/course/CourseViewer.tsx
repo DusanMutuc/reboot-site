@@ -240,6 +240,8 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     });
   };
 
+  const nestedLockMap = lockMap;
+
   const handleSelectContent = (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => {
     if (!isContentNodeType(node.node.node_type)) return;
 
@@ -250,19 +252,38 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
       return;
     }
 
-    if (!node.node.slug) {
-      setSnackbar(`This ${label.toLowerCase()} is missing a slug and cannot be opened.`);
-      return;
-    }
-
     if (!parentById) {
       setSnackbar('Course outline is still loading. Try again in a moment.');
       return;
     }
 
-    const pathParents = collectParentPath(node.node.id, parentById);
-    setExpanded((prev) => new Set([...prev, ...pathParents]));
-    router.push(`/courses/${courseSlug}/${node.node.slug}`);
+    const navigateToNode = (target: NodeSubtree) => {
+      const targetLabel = formatContentLabel(target.node.node_type).toLowerCase();
+      if (!target.node.slug) {
+        setSnackbar(`This ${targetLabel} is missing a slug and cannot be opened.`);
+        return;
+      }
+
+      const pathParents = collectParentPath(target.node.id, parentById);
+      setExpanded((prev) => new Set([...prev, ...pathParents]));
+      router.push(`/courses/${courseSlug}/${target.node.slug}`);
+    };
+
+    if (node.node.node_type === 'lesson' && node.children.length > 0) {
+      const childLocks = nestedLockMap[node.node.id] ?? {};
+      const firstUnlockedChild = node.children.find((child) => {
+        const childNode = child.subtree.node;
+        if (!isContentNodeType(childNode.node_type)) return false;
+        return !(childLocks[childNode.id]?.locked ?? false);
+      });
+
+      if (firstUnlockedChild) {
+        navigateToNode(firstUnlockedChild.subtree);
+        return;
+      }
+    }
+
+    navigateToNode(node);
   };
 
   useEffect(() => {
@@ -271,7 +292,6 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     setExpanded((prev) => new Set([...prev, ...pathParents]));
   }, [parentById, selectedContent]);
 
-  const nestedLockMap = lockMap;
   const treeSelectedId = selectedContent?.node.id ?? (contentError && requestedContentId ? requestedContentId : null);
 
   useEffect(() => {
