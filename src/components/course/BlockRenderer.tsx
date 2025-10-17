@@ -112,10 +112,17 @@ const LABEL_SX = {
 
 /** --------------------------------------------------------------------------- */
 
+export type SmartDocClientProgress = {
+  total: number;
+  completed: number;
+  isComplete: boolean;
+};
+
 export type BlockRendererProps = {
   block: RenderableBlock;
   resource: RenderableResource | null;
   previewMode?: boolean;
+  onSmartDocProgress?: (contentBlockId: number, progress: SmartDocClientProgress) => void;
 };
 
 function SmartDocPromptField({
@@ -134,14 +141,12 @@ function SmartDocPromptField({
   const helper = prompt.help_text?.trim();
 
   return (
-    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled}>
+    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled} required>
       <FormLabel sx={LABEL_SX}>
         {label}
-        {prompt.required && (
-          <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
-            *
-          </Box>
-        )}
+        <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
+          *
+        </Box>
       </FormLabel>
 
       {helper && (
@@ -160,6 +165,7 @@ function SmartDocPromptField({
         InputProps={{ disableUnderline: true, sx: FIELD_SX }}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        required
       />
     </FormControl>
   );
@@ -169,10 +175,12 @@ function SmartDocPreview({
   docId,
   contentBlockId, // <--- NEW: placement id (content_blocks.id)
   fallbackLabel,
+  onProgressChange,
 }: {
   docId: number;
   contentBlockId: number;
   fallbackLabel: string | null;
+  onProgressChange?: (progress: SmartDocClientProgress) => void;
 }) {
   const [state, setState] = useState<SmartDocState>({ status: 'idle' });
 
@@ -214,7 +222,7 @@ function SmartDocPreview({
           label: p.label ?? '',
           prompt_type: p.prompt_type,
           help_text: p.help_text,
-          required: p.required,
+          required: true,
         }))
         .sort((a, b) => a.position - b.position);
 
@@ -281,40 +289,54 @@ function SmartDocPreview({
     };
   }, [docId, contentBlockId]);
 
-  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+  const progressSnapshot = useMemo<SmartDocClientProgress | null>(() => {
+    if (state.status !== 'ready') return null;
+    const prompts = state.doc.prompts;
+    const total = prompts.length;
+    const completed = prompts.filter((p) => (values[p.id]?.trim()?.length ?? 0) > 0).length;
+    return {
+      total,
+      completed,
+      isComplete: total > 0 && completed === total,
+    };
+  }, [state, values]);
 
-  switch (state.status) {
-    case 'idle':
-    case 'loading':
-      return (
-        <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
-          <CircularProgress size={22} />
-          <Typography variant="body2" color="text.secondary">
-            Loading…
-          </Typography>
-        </Stack>
-      );
-    case 'error':
-      return (
-        <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
-          <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
-          <Typography variant="body2" color="error.main">
-            Failed to load: {state.message}
-          </Typography>
-        </Stack>
-      );
-    case 'ready':
-      break;
+  useEffect(() => {
+    if (!progressSnapshot || !onProgressChange) return;
+    onProgressChange(progressSnapshot);
+  }, [progressSnapshot, onProgressChange]);
+
+  if (state.status !== 'ready') {
+    const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+
+    switch (state.status) {
+      case 'idle':
+      case 'loading':
+        return (
+          <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+            <CircularProgress size={22} />
+            <Typography variant="body2" color="text.secondary">
+              Loading…
+            </Typography>
+          </Stack>
+        );
+      case 'error':
+        return (
+          <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
+            <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
+            <Typography variant="body2" color="error.main">
+              Failed to load: {state.message}
+            </Typography>
+          </Stack>
+        );
+      default:
+        return null;
+    }
   }
 
   const { doc } = state;
   const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
-
-  // local progress (required-only), purely for immediate feedback
-  const requiredTotal = doc.prompts.filter((p) => p.required).length;
-  const requiredCompleted = doc.prompts.filter(
-    (p) => p.required && (values[p.id]?.trim()?.length ?? 0) > 0,
-  ).length;
+  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
   const upsertValue = (promptId: number, value: string) => {
     // optimistic UI
@@ -377,10 +399,6 @@ function SmartDocPreview({
         )}
       </Box>
 
-      <Typography variant="caption" color="text.secondary">
-        Progress: {requiredCompleted}/{requiredTotal}
-        {submitted ? ' • Submitted' : ''}
-      </Typography>
     </Stack>
   );
 }
@@ -620,7 +638,12 @@ function LinkPreview({ resource }: { resource: RenderableResource }) {
   );
 }
 
-export function BlockRenderer({ block, resource, previewMode = false }: BlockRendererProps) {
+export function BlockRenderer({
+  block,
+  resource,
+  previewMode = false,
+  onSmartDocProgress,
+}: BlockRendererProps) {
   if (block.block_type === 'divider') {
     return <Divider sx={{ my: 3 }} />;
   }
@@ -683,6 +706,9 @@ export function BlockRenderer({ block, resource, previewMode = false }: BlockRen
           docId={block.smart_doc_id}
           contentBlockId={block.id}
           fallbackLabel={block.label}
+          onProgressChange={
+            onSmartDocProgress ? (progress) => onSmartDocProgress(block.id, progress) : undefined
+          }
         />
       );
     }

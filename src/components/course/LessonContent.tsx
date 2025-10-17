@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
 
 import type { ContentBlock, NodeSubtree } from '@/types/course';
-import { BlockRenderer, type RenderableBlock, type RenderableResource } from '@/components/course/BlockRenderer';
+import {
+  BlockRenderer,
+  type RenderableBlock,
+  type RenderableResource,
+  type SmartDocClientProgress,
+} from '@/components/course/BlockRenderer';
 import { supabase } from '@/lib/supabaseClient';
 import { useNodeProgress } from '@/hooks/useNodeProgress';
 
@@ -59,6 +64,9 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }>
   >({});
   const [submitLoading, setSubmitLoading] = useState<Record<number, boolean>>({});
+  const [clientSmartDocProgress, setClientSmartDocProgress] = useState<
+    Record<number, SmartDocClientProgress>
+  >({});
 
   const labels = getContentLabels(lesson);
   const nodeId = lesson?.node.id ?? null;
@@ -74,6 +82,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       setSmartDocProgress({});
       setSmartDocStatus({});
       setSubmitLoading({});
+      setClientSmartDocProgress({});
       completedOnceRef.current = false;
       return;
     }
@@ -84,6 +93,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     setSmartDocProgress({});
     setSmartDocStatus({});
     setSubmitLoading({});
+    setClientSmartDocProgress({});
     completedOnceRef.current = false;
 
     (async () => {
@@ -187,6 +197,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   useEffect(() => {
     if (blocksState !== 'ready' || smartDocBlockIds.length === 0) {
       setSmartDocProgress({});
+      setClientSmartDocProgress({});
       return;
     }
 
@@ -229,6 +240,17 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       clearInterval(t);
     };
   }, [blocksState, smartDocBlockIds]);
+
+  useEffect(() => {
+    if (smartDocBlockIds.length === 0) return;
+    setClientSmartDocProgress((prev) => {
+      const next: Record<number, SmartDocClientProgress> = {};
+      for (const id of smartDocBlockIds) {
+        if (prev[id]) next[id] = prev[id];
+      }
+      return next;
+    });
+  }, [smartDocBlockIds]);
 
   // ===== 3b) Smart Doc submission status (on mount/lesson change only) =====
   useEffect(() => {
@@ -342,6 +364,12 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     }
   };
 
+  const handleClientSmartDocProgress = useCallback(
+    (contentBlockId: number, progress: SmartDocClientProgress) => {
+      setClientSmartDocProgress((prev) => ({ ...prev, [contentBlockId]: progress }));
+    },
+  []);
+
   // ===== Top-level loading/error/empty states =====
   if (loading) {
     return (
@@ -413,17 +441,45 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                   const isSmart = block.block_type === 'smart_doc';
                   const s = isSmart ? smartDocStatus[block.id] : undefined;
                   const p = isSmart ? smartDocProgress[block.id] : undefined;
-                  const canSubmit = isSmart && p && p.fields_total > 0 && p.fields_completed >= p.fields_total && s?.status !== 'submitted';
+                  const clientProgress = clientSmartDocProgress[block.id];
+                  const hasServerTotals = Boolean(p && p.fields_total > 0);
+                  const serverComplete = hasServerTotals
+                    ? (p?.fields_completed ?? 0) >= (p?.fields_total ?? 0)
+                    : undefined;
+                  const effectiveComplete = serverComplete ?? clientProgress?.isComplete ?? false;
+                  const canSubmit = isSmart && s?.status !== 'submitted' && effectiveComplete;
+                  const progressLabel = (() => {
+                    const hasNumbers = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+                    if (p && hasNumbers(p.fields_total) && p.fields_total > 0) {
+                      const total = p.fields_total;
+                      const completed = hasNumbers(p.fields_completed)
+                        ? Math.min(p.fields_completed, total)
+                        : 0;
+                      return `Progress: ${completed}/${total}`;
+                    }
+                    if (clientProgress) {
+                      return clientProgress.total > 0
+                        ? `Progress: ${clientProgress.completed}/${clientProgress.total}`
+                        : 'Progress: —';
+                    }
+                    if (p && hasNumbers(p.fields_completed) && hasNumbers(p.fields_total)) {
+                      return `Progress: ${p.fields_completed}/${p.fields_total}`;
+                    }
+                    return 'Progress: —';
+                  })();
 
                   return (
                     <Box key={block.id}>
-                      <BlockRenderer block={block} resource={resource} previewMode />
+                      <BlockRenderer
+                        block={block}
+                        resource={resource}
+                        previewMode
+                        onSmartDocProgress={handleClientSmartDocProgress}
+                      />
                       {isSmart && (
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
                           <Typography variant="caption" color="text.secondary">
-                            {p
-                              ? `Progress: ${p.fields_completed}/${p.fields_total}`
-                              : 'Progress: —'}
+                            {progressLabel}
                             {s?.status === 'submitted' ? ' • Submitted' : ''}
                           </Typography>
                           <Box sx={{ flex: 1 }} />
