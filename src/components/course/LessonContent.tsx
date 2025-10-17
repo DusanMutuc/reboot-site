@@ -74,63 +74,60 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   const completedOnceRef = useRef(false);
 
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
-  // ===== 1) Lazy-load blocks whenever the selected node changes =====
-// ===== 1) Lazy-load blocks whenever the selected node changes =====
-useEffect(() => {
-  if (!lesson) {
+  useEffect(() => {
+    if (!nodeId) {
+      setBlocks([]);
+      setBlocksState('idle');
+      setBlocksError(null);
+      setSmartDocProgress({});
+      setSmartDocStatus({});
+      setSubmitLoading({});
+      setClientSmartDocProgress({});
+      completedOnceRef.current = false;
+      return;
+    }
+
+    let active = true;
+
+    // Clear immediately so previous lesson’s content doesn’t flash
     setBlocks([]);
-    setBlocksState('idle');
+    setBlocksState('loading');
     setBlocksError(null);
     setSmartDocProgress({});
     setSmartDocStatus({});
     setSubmitLoading({});
     setClientSmartDocProgress({});
     completedOnceRef.current = false;
-    return;
-  }
 
-  let active = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/nodes/${nodeId}/blocks`, { cache: 'force-cache' });
 
-  // Clear immediately so previous lesson’s content doesn’t flash
-  setBlocks([]);
-  setBlocksState('loading');
-  setBlocksError(null);
-  setSmartDocProgress({});
-  setSmartDocStatus({});
-  setSubmitLoading({});
-  setClientSmartDocProgress({});
-  completedOnceRef.current = false;
+        if (!active) return;
 
-  (async () => {
-    try {
-      // ⬇️ THIS is the change:
-      const res = await fetch(`/api/nodes/${lesson.node.id}/blocks`, { cache: 'force-cache' });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data?.error ?? 'Failed to load blocks');
+        }
 
-      if (!active) return;
+        const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
+        if (!active) return;
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? 'Failed to load blocks');
+        const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
+        setBlocks(renderable);
+        setBlocksState('ready');
+      } catch (e) {
+        if (!active) return;
+        setBlocks([]);
+        setBlocksState('error');
+        setBlocksError(e instanceof Error ? e.message : 'Failed to load blocks');
       }
+    })();
 
-      const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
-      if (!active) return;
-
-      const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
-      setBlocks(renderable);
-      setBlocksState('ready');
-    } catch (e) {
-      if (!active) return;
-      setBlocks([]);
-      setBlocksState('error');
-      setBlocksError(e instanceof Error ? e.message : 'Failed to load blocks');
-    }
-  })();
-
-  return () => {
-    active = false;
-  };
-}, [lesson]);
+    return () => {
+      active = false;
+    };
+  }, [nodeId]);
 
 
 
@@ -156,7 +153,7 @@ useEffect(() => {
 
   // ===== 2) Load media resources for those asset blocks =====
   useEffect(() => {
-    if (!lesson || assetBlockIds.length === 0) {
+    if (!nodeId || assetBlockIds.length === 0) {
       setResources({});
       setResourceState('idle');
       setResourceError(null);
@@ -200,7 +197,7 @@ useEffect(() => {
     return () => {
       active = false;
     };
-  }, [assetBlockIds, lesson]);
+  }, [assetBlockIds, nodeId]);
 
   // ===== 3) Smart Doc progress polling (every 5s while lesson open) =====
   useEffect(() => {
