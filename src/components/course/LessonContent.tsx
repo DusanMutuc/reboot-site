@@ -67,11 +67,22 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   const [clientSmartDocProgress, setClientSmartDocProgress] = useState<
     Record<number, SmartDocClientProgress>
   >({});
+  const [videoProgressByBlock, setVideoProgressByBlock] = useState<Record<number, number>>({});
 
   const labels = getContentLabels(lesson);
   const nodeId = lesson?.node.id ?? null;
   const { markStarted, markCompleted } = useNodeProgress(nodeId);
   const completedOnceRef = useRef(false);
+
+  const completeLesson = useCallback(async () => {
+    if (!nodeId) return;
+    try {
+      await markCompleted();
+      onCompleted?.(nodeId);
+    } catch (e) {
+      console.error('completeLesson failed', e);
+    }
+  }, [markCompleted, nodeId, onCompleted]);
 
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
   useEffect(() => {
@@ -83,6 +94,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       setSmartDocStatus({});
       setSubmitLoading({});
       setClientSmartDocProgress({});
+      setVideoProgressByBlock({});
       completedOnceRef.current = false;
       return;
     }
@@ -97,6 +109,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     setSmartDocStatus({});
     setSubmitLoading({});
     setClientSmartDocProgress({});
+    setVideoProgressByBlock({});
     completedOnceRef.current = false;
 
     (async () => {
@@ -150,6 +163,21 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   const smartDocBlockIds = useMemo(() => {
     return blocks.filter((b) => b.block_type === 'smart_doc').map((b) => b.id);
   }, [blocks]);
+
+  const vimeoVideoBlockIds = useMemo(() => {
+    if (!blocks || blocks.length === 0) return [] as number[];
+
+    return blocks
+      .filter((b) => b.block_type === 'asset' && b.resource_id)
+      .filter((b) => {
+        const resourceId = b.resource_id!;
+        const resource = resources[resourceId];
+        if (!resource) return false;
+        const url = resource.url?.toLowerCase() ?? '';
+        return url.includes('vimeo.com');
+      })
+      .map((b) => b.id);
+  }, [blocks, resources]);
 
   // ===== 2) Load media resources for those asset blocks =====
   useEffect(() => {
@@ -258,6 +286,38 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     });
   }, [smartDocBlockIds]);
 
+  useEffect(() => {
+    if (vimeoVideoBlockIds.length === 0) {
+      setVideoProgressByBlock((prev) => (Object.keys(prev).length > 0 ? {} : prev));
+      return;
+    }
+
+    setVideoProgressByBlock((prev) => {
+      const next: Record<number, number> = {};
+      let changed = false;
+      for (const id of vimeoVideoBlockIds) {
+        if (typeof prev[id] === 'number') {
+          next[id] = prev[id];
+        }
+      }
+
+      if (Object.keys(prev).length !== Object.keys(next).length) {
+        changed = true;
+      }
+
+      if (!changed) {
+        for (const id of vimeoVideoBlockIds) {
+          if (next[id] !== prev[id]) {
+            changed = true;
+            break;
+          }
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [vimeoVideoBlockIds]);
+
   // ===== 3b) Smart Doc submission status (on mount/lesson change only) =====
   useEffect(() => {
     if (blocksState !== 'ready' || smartDocBlockIds.length === 0) {
@@ -298,49 +358,61 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   // ===== 4) Completion rules =====
   const allSmartDocsComplete = useMemo(() => {
     if (smartDocBlockIds.length === 0) return false;
-  
+
     return smartDocBlockIds.every((id) => {
       const srv = smartDocProgress[id];
       const cli = clientSmartDocProgress[id];
-  
+
       // Prefer server when it has a meaningful total
       if (srv && srv.fields_total > 0) {
         return (srv.fields_completed ?? 0) >= srv.fields_total;
       }
-  
+
       // Fallback to client-snapshot when the server can't tell yet
       if (cli && cli.total > 0) {
         return cli.completed >= cli.total;
       }
-  
+
       return false;
     });
   }, [smartDocBlockIds, smartDocProgress, clientSmartDocProgress]);
+
+  const allVideosComplete = useMemo(() => {
+    if (vimeoVideoBlockIds.length === 0) return false;
+
+    return vimeoVideoBlockIds.every((id) => {
+      const percent = videoProgressByBlock[id] ?? 0;
+      return percent >= 0.8;
+    });
+  }, [vimeoVideoBlockIds, videoProgressByBlock]);
   
 
   useEffect(() => {
     if (completedOnceRef.current) return;
     if (blocksState !== 'ready' || !nodeId) return;
 
-    // If SmartDocs exist: finish when all are fully completed (submission not required for unlocks)
-    if (smartDocBlockIds.length > 0) {
-      if (allSmartDocsComplete) {
+    const hasSmartDocs = smartDocBlockIds.length > 0;
+    const hasVideos = vimeoVideoBlockIds.length > 0;
+
+    if (hasSmartDocs || hasVideos) {
+      const smartDocsSatisfied = hasSmartDocs ? allSmartDocsComplete : true;
+      const videosSatisfied = hasVideos ? allVideosComplete : true;
+
+      if (smartDocsSatisfied && videosSatisfied) {
         completedOnceRef.current = true;
-        markCompleted();
-        if (nodeId) onCompleted?.(nodeId);
+        void completeLesson();
       }
       return;
     }
 
-    // Fallback: no SmartDocs => complete on 80% scroll
+    // Fallback: no SmartDocs and no trackable videos => complete on 80% scroll
     const onScroll = () => {
       const y = window.scrollY || document.documentElement.scrollTop;
       const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
       if (h > 0 && y / h >= 0.8) {
         if (!completedOnceRef.current) {
           completedOnceRef.current = true;
-          markCompleted();
-          if (nodeId) onCompleted?.(nodeId);
+          void completeLesson();
         }
       }
     };
@@ -349,7 +421,15 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     return () => {
       window.removeEventListener('scroll', onScroll);
     };
-  }, [blocksState, nodeId, smartDocBlockIds.length, allSmartDocsComplete, markCompleted, onCompleted]);
+  }, [
+    blocksState,
+    nodeId,
+    smartDocBlockIds.length,
+    allSmartDocsComplete,
+    vimeoVideoBlockIds.length,
+    allVideosComplete,
+    completeLesson,
+  ]);
 
   // ===== 5) Submit handler for a specific Smart Doc placement =====
   const submitSmartDoc = async (content_block_id: number) => {
@@ -401,14 +481,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   
         if (effectiveAllComplete && nodeId) {
           // fire-and-forget: write completion and trigger unlock refresh
-          (async () => {
-            try {
-              await markCompleted();
-              onCompleted?.(nodeId);
-            } catch (e) {
-              console.error('markCompleted failed', e);
-            }
-          })();
+          void completeLesson();
         }
   
         return next;
@@ -427,6 +500,15 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       setClientSmartDocProgress((prev) => ({ ...prev, [contentBlockId]: progress }));
     },
   []);
+
+  const handleVideoProgress = useCallback((contentBlockId: number, percent: number) => {
+    const clamped = Math.max(0, Math.min(1, percent));
+    setVideoProgressByBlock((prev) => {
+      const current = prev[contentBlockId] ?? 0;
+      if (clamped <= current + 0.001) return prev;
+      return { ...prev, [contentBlockId]: clamped };
+    });
+  }, []);
 
   // ===== Top-level loading/error/empty states =====
   if (loading) {
@@ -533,6 +615,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                         resource={resource}
                         previewMode
                         onSmartDocProgress={handleClientSmartDocProgress}
+                        onVideoProgress={handleVideoProgress}
                       />
                       {isSmart && (
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
