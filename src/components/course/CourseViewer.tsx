@@ -254,15 +254,23 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
         const data = (await res.json()) as { course: NodeSubtree; unlockStatuses: Record<number, ChildUnlockStatus[]> };
         if (!active) return;
 
-        const everUnlocked = seedEverUnlocked(data.unlockStatuses);
-        const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
+        // AFTER
+// prefer existing everUnlocked (from cache or current state) so unlocks are truly monotonic across reloads
+const priorEver =
+(courseCache.get(courseSlug)?.everUnlocked && cloneEverUnlocked(courseCache.get(courseSlug)!.everUnlocked)) ||
+(state.status === 'ready' && cloneEverUnlocked(state.everUnlocked)) ||
+null;
 
-        courseCache.set(courseSlug, {
-          course: data.course,
-          lockStatuses,
-          everUnlocked: cloneEverUnlocked(everUnlocked),
-        });
-        setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
+const everUnlocked = priorEver ?? seedEverUnlocked(data.unlockStatuses);
+const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
+
+courseCache.set(courseSlug, {
+course: data.course,
+lockStatuses,
+everUnlocked: cloneEverUnlocked(everUnlocked),
+});
+setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
+
         if (process.env.NODE_ENV !== 'production') {
           debugLogUnlockStatuses('initial-load', lockStatuses, data.course);
         }
