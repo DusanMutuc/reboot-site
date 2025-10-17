@@ -16,10 +16,16 @@ export async function POST(request: NextRequest) {
 
   try {
     if (body.action === 'start') {
-      const { error } = await supabase.rpc('mark_node_started', { _node_id: body.nodeId });
+      const { error } = await supabase.rpc('update_user_node_progress', {
+        _node_id: body.nodeId,
+        _status: 'in_progress',
+      });
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabase.rpc('mark_node_completed', { _node_id: body.nodeId });
+      const { error } = await supabase.rpc('update_user_node_progress', {
+        _node_id: body.nodeId,
+        _status: 'completed',
+      });
       if (error) throw new Error(error.message);
     }
     return NextResponse.json({ ok: true });
