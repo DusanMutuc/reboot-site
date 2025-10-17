@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import DOMPurify from 'dompurify';
 import {
   Box,
@@ -125,6 +125,17 @@ export type BlockRendererProps = {
   onSmartDocProgress?: (contentBlockId: number, progress: SmartDocClientProgress) => void;
 };
 
+/** --------------------------------------------------------------------------- */
+/** Tiny in-memory cache per SmartDoc placement to hide StrictMode double-mount */
+type SmartDocCacheEntry = {
+  state: SmartDocState;
+  values: Record<number, string>;
+  submitted: boolean;
+};
+const smartDocCache = new Map<string, SmartDocCacheEntry>();
+const cacheKeyFor = (contentBlockId: number, docId: number) => `${contentBlockId}:${docId}`;
+/** --------------------------------------------------------------------------- */
+
 function SmartDocPromptField({
   prompt,
   value,
@@ -170,10 +181,9 @@ function SmartDocPromptField({
     </FormControl>
   );
 }
-
 function SmartDocPreview({
   docId,
-  contentBlockId, // <--- NEW: placement id (content_blocks.id)
+  contentBlockId, // placement id (content_blocks.id)
   fallbackLabel,
   onProgressChange,
 }: {
@@ -183,101 +193,134 @@ function SmartDocPreview({
   onProgressChange?: (progress: SmartDocClientProgress) => void;
 }) {
   const [state, setState] = useState<SmartDocState>({ status: 'idle' });
-
-  // Values keyed by prompt_id (string to handle TextField value)
   const [values, setValues] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
-
-  // Debounce timers per prompt
   const timers = useRef<Record<number, number | undefined>>({});
 
+  // Identity for this placement/doc
+  const renderKey = `${contentBlockId}:${docId}`;
+  const lastKeyRef = useRef(renderKey);
+  const identityChanged = lastKeyRef.current !== renderKey;
+
+  // EARLY GUARD: if identity changed, don't render stale content even for a frame
+  if (identityChanged) {
+    const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+    return (
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+        <CircularProgress size={22} />
+        <Typography variant="body2" color="text.secondary">Loading…</Typography>
+      </Stack>
+    );
+  }
+
+  // Reset state BEFORE paint when identity changes
+  useLayoutEffect(() => {
+    if (!identityChanged) return;
+    lastKeyRef.current = renderKey;
+    setState({ status: 'loading' });
+    setValues({});
+    setSubmitted(false);
+  }, [identityChanged, renderKey]);
+
+  // Fetch doc + status + values together; only set "ready" once everything is in
   useEffect(() => {
     let active = true;
-    setState({ status: 'loading' });
 
-    (async () => {
-      // 1) load doc + prompts
-      const { data, error } = await supabase
-        .from('smart_docs')
-        .select(
-          `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
-            id, position, label, prompt_type, help_text, required
-          )`,
-        )
-        .eq('id', docId)
-        .single();
-
-      if (!active) return;
-
-      if (error || !data) {
-        setState({ status: 'error', message: error?.message ?? 'Smart doc not found' });
-        return;
-      }
-
-      const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
-      const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
-        .map((p): SmartDocPrompt => ({
-          id: p.id,
-          position: p.position,
-          label: p.label ?? '',
-          prompt_type: p.prompt_type,
-          help_text: p.help_text,
-          required: true,
-        }))
-        .sort((a, b) => a.position - b.position);
-
-      setState({
-        status: 'ready',
-        doc: {
-          id: data.id,
-          title: data.title,
-          description: data.description,
-          is_published: data.is_published,
-          prompts,
-        },
-      });
-
-      // 2) load existing submission status
+    async function loadAll() {
       try {
-        const statusRes = await fetch('/api/smartdoc/status', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ content_block_id: contentBlockId }),
+        // 1) Doc + prompts
+        const { data, error } = await supabase
+          .from('smart_docs')
+          .select(
+            `id, title, description, is_published, smart_doc_prompts:smart_doc_prompts (
+              id, position, label, prompt_type, help_text, required
+            )`,
+          )
+          .eq('id', docId)
+          .single();
+
+        if (!active) return;
+        if (error || !data) {
+          setState({ status: 'error', message: error?.message ?? 'Smart doc not found' });
+          return;
+        }
+
+        const rawPrompts = (data.smart_doc_prompts ?? []) as SmartDocPromptRow[];
+        const prompts: SmartDocPrompt[] = (rawPrompts ?? [])
+          .map((p): SmartDocPrompt => ({
+            id: p.id,
+            position: p.position,
+            label: p.label ?? '',
+            prompt_type: p.prompt_type,
+            help_text: p.help_text,
+            required: true, // product decision: all required
+          }))
+          .sort((a, b) => a.position - b.position);
+
+        // 2) In parallel: status + values (two-step for values)
+        const statusPromise = (async () => {
+          try {
+            const res = await fetch('/api/smartdoc/status', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ content_block_id: contentBlockId }),
+            });
+            if (!res.ok) return { status: 'draft' as const, submitted_at: null as string | null };
+            return (await res.json()) as { status: 'draft' | 'submitted'; submitted_at: string | null };
+          } catch {
+            return { status: 'draft' as const, submitted_at: null as string | null };
+          }
+        })();
+
+        const valuesPromise = (async () => {
+          // envelope row
+          const { data: resp, error: respErr } = await supabase
+            .from('smart_doc_responses')
+            .select('id')
+            .eq('content_block_id', contentBlockId)
+            .maybeSingle();
+
+          if (respErr || !resp?.id) return {} as Record<number, string>;
+
+          const { data: vals } = await supabase
+            .from('smart_doc_response_values')
+            .select('prompt_id, value_json')
+            .eq('response_id', resp.id);
+
+          const map: Record<number, string> = {};
+          for (const row of vals ?? []) {
+            map[row.prompt_id] =
+              typeof row.value_json === 'string'
+                ? row.value_json
+                : row.value_json?.value ?? row.value_json?.text ?? '';
+          }
+          return map;
+        })();
+
+        const [statusData, valueMap] = await Promise.all([statusPromise, valuesPromise]);
+        if (!active) return;
+
+        // Set everything in one go; avoid intermediate "ready with empty values"
+        setSubmitted(statusData.status === 'submitted');
+        setValues(valueMap);
+
+        setState({
+          status: 'ready',
+          doc: {
+            id: data.id,
+            title: data.title,
+            description: data.description,
+            is_published: data.is_published,
+            prompts,
+          },
         });
-        if (statusRes.ok) {
-          const s = (await statusRes.json()) as { status: 'draft' | 'submitted' };
-          if (active) setSubmitted(s.status === 'submitted');
-        }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        if (!active) return;
+        setState({ status: 'error', message: e instanceof Error ? e.message : 'Failed to load smart doc' });
       }
+    }
 
-      // 3) load existing values for this content_block_id (current user via RLS)
-      //   first get (or not) the envelope row id
-      const { data: resp, error: respErr } = await supabase
-        .from('smart_doc_responses')
-        .select('id')
-        .eq('content_block_id', contentBlockId)
-        .maybeSingle();
-
-      if (!active) return;
-
-      if (!respErr && resp?.id) {
-        const { data: vals } = await supabase
-          .from('smart_doc_response_values')
-          .select('prompt_id, value_json')
-          .eq('response_id', resp.id);
-
-        const next: Record<number, string> = {};
-        for (const row of vals ?? []) {
-          next[row.prompt_id] =
-            typeof row.value_json === 'string'
-              ? row.value_json
-              : row.value_json?.value ?? row.value_json?.text ?? '';
-        }
-        if (active) setValues(next);
-      }
-    })();
+    void loadAll();
 
     return () => {
       active = false;
@@ -287,18 +330,14 @@ function SmartDocPreview({
       }
       timers.current = {};
     };
-  }, [docId, contentBlockId]);
+  }, [renderKey, docId, contentBlockId]);
 
+  // ----- progress snapshot -----
   const progressSnapshot = useMemo<SmartDocClientProgress | null>(() => {
     if (state.status !== 'ready') return null;
-    const prompts = state.doc.prompts;
-    const total = prompts.length;
-    const completed = prompts.filter((p) => (values[p.id]?.trim()?.length ?? 0) > 0).length;
-    return {
-      total,
-      completed,
-      isComplete: total > 0 && completed === total,
-    };
+    const total = state.doc.prompts.length;
+    const completed = state.doc.prompts.filter((p) => (values[p.id]?.trim()?.length ?? 0) > 0).length;
+    return { total, completed, isComplete: total > 0 && completed === total };
   }, [state, values]);
 
   useEffect(() => {
@@ -306,32 +345,29 @@ function SmartDocPreview({
     onProgressChange(progressSnapshot);
   }, [progressSnapshot, onProgressChange]);
 
-  if (state.status !== 'ready') {
+  // Guard against stale ready doc
+  const isDocMismatch = state.status === 'ready' && state.doc.id !== docId;
+
+  if (state.status !== 'ready' || isDocMismatch) {
     const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
-    switch (state.status) {
-      case 'idle':
-      case 'loading':
-        return (
-          <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
-            <CircularProgress size={22} />
-            <Typography variant="body2" color="text.secondary">
-              Loading…
-            </Typography>
-          </Stack>
-        );
-      case 'error':
-        return (
-          <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
-            <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
-            <Typography variant="body2" color="error.main">
-              Failed to load: {state.message}
-            </Typography>
-          </Stack>
-        );
-      default:
-        return null;
+    if (state.status === 'error' && !isDocMismatch) {
+      return (
+        <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
+          <Typography variant="h6">{fallbackLabel ?? 'Smart doc'}</Typography>
+          <Typography variant="body2" color="error.main">
+            Failed to load: {state.message}
+          </Typography>
+        </Stack>
+      );
     }
+
+    return (
+      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
+        <CircularProgress size={22} />
+        <Typography variant="body2" color="text.secondary">Loading…</Typography>
+      </Stack>
+    );
   }
 
   const { doc } = state;
@@ -352,11 +388,10 @@ function SmartDocPreview({
           body: JSON.stringify({
             content_block_id: contentBlockId,
             prompt_id: promptId,
-            value, // RPC accepts jsonb; we pass plain string
+            value,
           }),
         });
       } catch (e) {
-        // optional: toast/log
         console.error('smartdoc upsert failed', e);
       }
     }, 400);
@@ -364,7 +399,6 @@ function SmartDocPreview({
 
   return (
     <Stack spacing={3} sx={wrapSx}>
-      {/* Section title */}
       <Typography
         component="h2"
         variant="h2"
@@ -373,19 +407,15 @@ function SmartDocPreview({
         {title}
       </Typography>
 
-      {/* Description */}
       {doc.description?.trim() && (
         <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
           {doc.description}
         </Typography>
       )}
 
-      {/* Prompts */}
       <Box>
         {doc.prompts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No questions yet.
-          </Typography>
+          <Typography variant="body2" color="text.secondary">No questions yet.</Typography>
         ) : (
           doc.prompts.map((p) => (
             <SmartDocPromptField
@@ -398,10 +428,15 @@ function SmartDocPreview({
           ))
         )}
       </Box>
-
     </Stack>
   );
 }
+
+
+/** Memoized version to avoid unnecessary rerenders when parents update */
+const MemoSmartDocPreview = React.memo(SmartDocPreview);
+
+/* --------------------------- Media renderers --------------------------- */
 
 function formatDuration(seconds: number | null) {
   if (!seconds || Number.isNaN(seconds)) return null;
@@ -648,6 +683,7 @@ export function BlockRenderer({
     if (!onSmartDocProgress || block.block_type !== 'smart_doc') return undefined;
     return (progress: SmartDocClientProgress) => onSmartDocProgress(block.id, progress);
   }, [onSmartDocProgress, block.id, block.block_type]);
+
   if (block.block_type === 'divider') {
     return <Divider sx={{ my: 3 }} />;
   }
@@ -706,7 +742,7 @@ export function BlockRenderer({
     if (block.smart_doc_id && previewMode) {
       // pass placement id so inputs can upsert
       return (
-        <SmartDocPreview
+        <MemoSmartDocPreview
           docId={block.smart_doc_id}
           contentBlockId={block.id}
           fallbackLabel={block.label}

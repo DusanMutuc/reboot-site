@@ -74,56 +74,65 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   const completedOnceRef = useRef(false);
 
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
-  useEffect(() => {
-    if (!lesson) {
-      setBlocks([]);
-      setBlocksState('idle');
-      setBlocksError(null);
-      setSmartDocProgress({});
-      setSmartDocStatus({});
-      setSubmitLoading({});
-      setClientSmartDocProgress({});
-      completedOnceRef.current = false;
-      return;
-    }
-
-    let active = true;
-    setBlocksState('loading');
+  // ===== 1) Lazy-load blocks whenever the selected node changes =====
+// ===== 1) Lazy-load blocks whenever the selected node changes =====
+useEffect(() => {
+  if (!lesson) {
+    setBlocks([]);
+    setBlocksState('idle');
     setBlocksError(null);
     setSmartDocProgress({});
     setSmartDocStatus({});
     setSubmitLoading({});
     setClientSmartDocProgress({});
     completedOnceRef.current = false;
+    return;
+  }
 
-    (async () => {
-      try {
-        const res = await fetch(`/api/nodes/${lesson.node.id}/blocks`);
-        if (!active) return;
+  let active = true;
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data?.error ?? 'Failed to load blocks');
-        }
+  // Clear immediately so previous lesson’s content doesn’t flash
+  setBlocks([]);
+  setBlocksState('loading');
+  setBlocksError(null);
+  setSmartDocProgress({});
+  setSmartDocStatus({});
+  setSubmitLoading({});
+  setClientSmartDocProgress({});
+  completedOnceRef.current = false;
 
-        const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
-        if (!active) return;
+  (async () => {
+    try {
+      // ⬇️ THIS is the change:
+      const res = await fetch(`/api/nodes/${lesson.node.id}/blocks`, { cache: 'force-cache' });
 
-        const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
-        setBlocks(renderable);
-        setBlocksState('ready');
-      } catch (e) {
-        if (!active) return;
-        setBlocks([]);
-        setBlocksState('error');
-        setBlocksError(e instanceof Error ? e.message : 'Failed to load blocks');
+      if (!active) return;
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? 'Failed to load blocks');
       }
-    })();
 
-    return () => {
-      active = false;
-    };
-  }, [lesson]);
+      const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
+      if (!active) return;
+
+      const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
+      setBlocks(renderable);
+      setBlocksState('ready');
+    } catch (e) {
+      if (!active) return;
+      setBlocks([]);
+      setBlocksState('error');
+      setBlocksError(e instanceof Error ? e.message : 'Failed to load blocks');
+    }
+  })();
+
+  return () => {
+    active = false;
+  };
+}, [lesson]);
+
+
 
   // Mark STARTED as soon as the content is ready/visible
   useEffect(() => {
@@ -292,11 +301,25 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   // ===== 4) Completion rules =====
   const allSmartDocsComplete = useMemo(() => {
     if (smartDocBlockIds.length === 0) return false;
+  
     return smartDocBlockIds.every((id) => {
-      const p = smartDocProgress[id];
-      return p && p.fields_total > 0 && p.fields_completed >= p.fields_total;
+      const srv = smartDocProgress[id];
+      const cli = clientSmartDocProgress[id];
+  
+      // Prefer server when it has a meaningful total
+      if (srv && srv.fields_total > 0) {
+        return (srv.fields_completed ?? 0) >= srv.fields_total;
+      }
+  
+      // Fallback to client-snapshot when the server can't tell yet
+      if (cli && cli.total > 0) {
+        return cli.completed >= cli.total;
+      }
+  
+      return false;
     });
-  }, [smartDocBlockIds, smartDocProgress]);
+  }, [smartDocBlockIds, smartDocProgress, clientSmartDocProgress]);
+  
 
   useEffect(() => {
     if (completedOnceRef.current) return;
@@ -344,18 +367,55 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.details ?? j?.error ?? 'Submit failed');
       }
+  
       const { result } = (await res.json()) as {
-        result: { fields_total: number; fields_completed: number; status: 'submitted' | 'draft'; submitted_at: string | null };
+        result: {
+          fields_total: number;
+          fields_completed: number;
+          status: 'submitted' | 'draft';
+          submitted_at: string | null;
+        };
       };
-      // Update local status + progress
-      setSmartDocStatus((m) => ({ ...m, [content_block_id]: { status: result.status, submitted_at: result.submitted_at } }));
-      setSmartDocProgress((m) => ({
+  
+      // Update local status first
+      setSmartDocStatus((m) => ({
         ...m,
-        [content_block_id]: {
-          fields_total: result.fields_total ?? (m[content_block_id]?.fields_total ?? 0),
-          fields_completed: result.fields_completed ?? (m[content_block_id]?.fields_completed ?? 0),
-        },
+        [content_block_id]: { status: result.status, submitted_at: result.submitted_at },
       }));
+  
+      // Merge progress and immediately check if ALL smart docs are complete (server-first, then client fallback)
+      setSmartDocProgress((prev) => {
+        const next = {
+          ...prev,
+          [content_block_id]: {
+            fields_total: result.fields_total ?? (prev[content_block_id]?.fields_total ?? 0),
+            fields_completed: result.fields_completed ?? (prev[content_block_id]?.fields_completed ?? 0),
+          },
+        };
+  
+        const effectiveAllComplete = smartDocBlockIds.every((id) => {
+          const srv = next[id];
+          if (srv && srv.fields_total > 0) {
+            return (srv.fields_completed ?? 0) >= srv.fields_total;
+          }
+          const cli = clientSmartDocProgress[id];
+          return !!(cli && cli.total > 0 && cli.completed >= cli.total);
+        });
+  
+        if (effectiveAllComplete && nodeId) {
+          // fire-and-forget: write completion and trigger unlock refresh
+          (async () => {
+            try {
+              await markCompleted();
+              onCompleted?.(nodeId);
+            } catch (e) {
+              console.error('markCompleted failed', e);
+            }
+          })();
+        }
+  
+        return next;
+      });
     } catch (e) {
       // You may want a toast; keeping silent here per your current pattern
       console.error(e);
@@ -363,6 +423,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       setSubmitLoading((m) => ({ ...m, [content_block_id]: false }));
     }
   };
+  
 
   const handleClientSmartDocProgress = useCallback(
     (contentBlockId: number, progress: SmartDocClientProgress) => {
