@@ -21,10 +21,17 @@ type CourseViewerProps = {
   lessonSlug?: string;
 };
 
+type EverUnlockedMap = Record<number, Set<number>>;
+
 type CourseState =
   | { status: 'loading' }
   | { status: 'error'; message: string }
-  | { status: 'ready'; course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]> };
+  | {
+      status: 'ready';
+      course: NodeSubtree;
+      lockStatuses: Record<number, ChildUnlockStatus[]>;
+      everUnlocked: EverUnlockedMap;
+    };
 
 type Maps = {
   nodeById: Map<number, NodeSubtree>;
@@ -101,8 +108,57 @@ function isNodeLocked(
 /** ------- simple per-session cache to avoid white flashes on remounts ------- */
 const courseCache = new Map<
   string,
-  { course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]> }
+  { course: NodeSubtree; lockStatuses: Record<number, ChildUnlockStatus[]>; everUnlocked: EverUnlockedMap }
 >();
+
+function cloneEverUnlocked(source: EverUnlockedMap): EverUnlockedMap {
+  const copy: EverUnlockedMap = {};
+  for (const [parentIdStr, set] of Object.entries(source)) {
+    const parentId = Number(parentIdStr);
+    copy[parentId] = new Set(set);
+  }
+  return copy;
+}
+
+function seedEverUnlocked(unlocks: Record<number, ChildUnlockStatus[]>): EverUnlockedMap {
+  const seeded: EverUnlockedMap = {};
+  for (const [parentIdStr, rows] of Object.entries(unlocks)) {
+    const parentId = Number(parentIdStr);
+    for (const row of rows) {
+      if (!row.locked) {
+        if (!seeded[parentId]) seeded[parentId] = new Set();
+        seeded[parentId].add(row.child_id);
+      }
+    }
+  }
+  return seeded;
+}
+
+function applyMonotonicUnlocks(
+  unlocks: Record<number, ChildUnlockStatus[]>,
+  everUnlocked: EverUnlockedMap,
+): Record<number, ChildUnlockStatus[]> {
+  const result: Record<number, ChildUnlockStatus[]> = {};
+  for (const [parentIdStr, rows] of Object.entries(unlocks)) {
+    const parentId = Number(parentIdStr);
+    const seen = everUnlocked[parentId] ?? new Set<number>();
+    const adjusted = rows.map((row) => {
+      if (!row.locked) {
+        seen.add(row.child_id);
+        return row;
+      }
+      if (seen.has(row.child_id)) {
+        return { ...row, locked: false, reason: null };
+      }
+      return row;
+    });
+    if (!everUnlocked[parentId] && seen.size > 0) {
+      everUnlocked[parentId] = seen;
+    }
+    result[parentId] = adjusted;
+  }
+  return result;
+}
 
 export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
   const router = useRouter();
@@ -120,7 +176,12 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
     const cached = courseCache.get(courseSlug);
     if (cached) {
-      setState({ status: 'ready', course: cached.course, lockStatuses: cached.lockStatuses });
+      setState({
+        status: 'ready',
+        course: cached.course,
+        lockStatuses: cached.lockStatuses,
+        everUnlocked: cloneEverUnlocked(cached.everUnlocked),
+      });
     } else {
       setState({ status: 'loading' });
     }
@@ -135,8 +196,15 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
         const data = (await res.json()) as { course: NodeSubtree; unlockStatuses: Record<number, ChildUnlockStatus[]> };
         if (!active) return;
 
-        courseCache.set(courseSlug, { course: data.course, lockStatuses: data.unlockStatuses });
-        setState({ status: 'ready', course: data.course, lockStatuses: data.unlockStatuses });
+        const everUnlocked = seedEverUnlocked(data.unlockStatuses);
+        const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
+
+        courseCache.set(courseSlug, {
+          course: data.course,
+          lockStatuses,
+          everUnlocked: cloneEverUnlocked(everUnlocked),
+        });
+        setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
       } catch (error) {
         if (!active) return;
         const message = error instanceof Error ? error.message : 'Failed to load course';
@@ -268,12 +336,31 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
       setState((prev) => {
         if (prev.status !== 'ready') return prev;
         const nextLockStatuses: Record<number, ChildUnlockStatus[]> = { ...prev.lockStatuses };
+        const nextEverUnlocked = cloneEverUnlocked(prev.everUnlocked);
+
         for (const [pidStr, rows] of Object.entries(unlockStatuses)) {
           const pid = Number(pidStr);
-          nextLockStatuses[pid] = rows;
+          const seen = nextEverUnlocked[pid] ?? new Set<number>();
+          const adjusted = rows.map((row) => {
+            if (!row.locked) {
+              seen.add(row.child_id);
+              return row;
+            }
+            if (seen.has(row.child_id)) {
+              return { ...row, locked: false, reason: null };
+            }
+            return row;
+          });
+          nextEverUnlocked[pid] = seen;
+          nextLockStatuses[pid] = adjusted;
         }
-        courseCache.set(courseSlug, { course: prev.course, lockStatuses: nextLockStatuses });
-        return { ...prev, lockStatuses: nextLockStatuses };
+
+        courseCache.set(courseSlug, {
+          course: prev.course,
+          lockStatuses: nextLockStatuses,
+          everUnlocked: cloneEverUnlocked(nextEverUnlocked),
+        });
+        return { ...prev, lockStatuses: nextLockStatuses, everUnlocked: nextEverUnlocked };
       });
     } catch {
       // ignore; next navigation will naturally refresh
