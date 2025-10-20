@@ -27,6 +27,12 @@ import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 import { supabase } from '@/lib/supabaseClient';
+import {
+  parseTextBlockSettings,
+  serializeTextBlockSettings,
+  TEXT_BLOCK_FONT_OPTIONS,
+  type TextBlockSettings,
+} from '@/lib/textBlockSettings';
 
 export type NodeDraft = {
   title: string;
@@ -194,6 +200,13 @@ export default function Properties({
   const nodeScopeKey = subtree?.node.id ?? null;
   const blockScopeKey = selectedBlock?.id ?? null;
   const isPendingBlock = (selectedBlock?.id ?? 0) < 0;
+
+  const textBlockSettings = useMemo<TextBlockSettings>(() => {
+    if (!selectedBlock || selectedBlock.block_type !== 'text') {
+      return { fontFamily: null, backgroundColor: null };
+    }
+    return parseTextBlockSettings(selectedBlock.settings ?? null);
+  }, [selectedBlock]);
 
   const titleInput = useUndoRedoInput({
     value: nodeDraft?.title ?? '',
@@ -913,6 +926,20 @@ export default function Properties({
     scopeKey: blockScopeKey,
   });
 
+  const handleTextBlockSettingsChange = useCallback(
+    (patch: { fontFamily?: string | null; backgroundColor?: string | null }) => {
+      if (!selectedBlock || selectedBlock.block_type !== 'text') return;
+      const merged = {
+        fontFamily: textBlockSettings.fontFamily,
+        backgroundColor: textBlockSettings.backgroundColor,
+        ...patch,
+      };
+      const normalized = serializeTextBlockSettings(merged);
+      onUpdateBlock(selectedBlock.id, { settings: normalized });
+    },
+    [onUpdateBlock, selectedBlock, textBlockSettings],
+  );
+
   useEffect(() => {
     if (availableChildTypes.length > 0 && !availableChildTypes.includes(childType)) {
       setChildType(availableChildTypes[0]);
@@ -1103,7 +1130,50 @@ export default function Properties({
         )}
 
         {selectedBlock.block_type === 'text' ? (
-          <Alert severity="info">Text blocks are edited inline on the canvas.</Alert>
+          <Stack spacing={2}>
+            <Alert severity="info">Text blocks are edited inline on the canvas.</Alert>
+            <TextField
+              label="Font"
+              select
+              value={textBlockSettings.fontFamily ?? ''}
+              onChange={(event) =>
+                handleTextBlockSettingsChange({ fontFamily: event.target.value || null })
+              }
+              disabled={isPendingBlock}
+            >
+              {TEXT_BLOCK_FONT_OPTIONS.map((option) => (
+                <MenuItem key={option.value || 'default'} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Stack spacing={1}>
+              <TextField
+                label="Background color"
+                type="color"
+                value={textBlockSettings.backgroundColor ?? '#ffffff'}
+                onChange={(event) =>
+                  handleTextBlockSettingsChange({ backgroundColor: event.target.value })
+                }
+                InputLabelProps={{ shrink: true }}
+                disabled={isPendingBlock}
+              />
+              <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                <Typography variant="caption" color="text.secondary">
+                  {textBlockSettings.backgroundColor
+                    ? `Current: ${textBlockSettings.backgroundColor}`
+                    : 'No background color applied'}
+                </Typography>
+                <Button
+                  size="small"
+                  onClick={() => handleTextBlockSettingsChange({ backgroundColor: null })}
+                  disabled={!textBlockSettings.backgroundColor || isPendingBlock}
+                >
+                  Clear
+                </Button>
+              </Stack>
+            </Stack>
+          </Stack>
         ) : null}
 
         {selectedBlock.block_type === 'smart_doc'

@@ -23,6 +23,8 @@ type TipTapHtmlEditorProps = {
   onCancel?: () => void;
   initialValue?: string;
   autoFocus?: boolean;
+  fontFamily?: string | null;
+  backgroundColor?: string | null;
 };
 
 export default function TipTapHtmlEditor({
@@ -33,6 +35,8 @@ export default function TipTapHtmlEditor({
   onCancel,
   initialValue,
   autoFocus,
+  fontFamily,
+  backgroundColor,
 }: TipTapHtmlEditorProps) {
   const editor = useEditor({
     extensions: [
@@ -157,9 +161,12 @@ export default function TipTapHtmlEditor({
           borderColor: 'divider',
           borderRadius: 2,
           p: 2,
+          backgroundColor: backgroundColor ?? 'background.paper',
           '& .ProseMirror': {
             outline: 'none',
             minHeight: 120,
+            fontFamily: fontFamily ?? undefined,
+            backgroundColor: 'transparent',
           },
         }}
       >

@@ -17,7 +17,9 @@ export async function GET(request: NextRequest, { params }: { params: { nodeId: 
     // Load blocks (include updated_at so we can build a stable version/ETag)
     const { data, error } = await adminClient
       .from('content_blocks')
-      .select('id, node_id, block_type, position, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, updated_at')
+      .select(
+        'id, node_id, block_type, position, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, settings, updated_at',
+      )
       .eq('node_id', nodeIdNum)
       .order('position', { ascending: true });
 

@@ -27,6 +27,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 
 import { supabase } from '@/lib/supabaseClient';
+import { parseTextBlockSettings } from '@/lib/textBlockSettings';
 
 export type RenderableBlock = {
   id: number;
@@ -38,6 +39,7 @@ export type RenderableBlock = {
   start_ms: number | null;
   end_ms: number | null;
   label: string | null;
+  settings?: Record<string, unknown> | null;
 };
 
 export type RenderableResource = {
@@ -862,7 +864,9 @@ export function BlockRenderer({
       );
     }
 
-    return (
+    const { fontFamily, backgroundColor } = parseTextBlockSettings(block.settings ?? null);
+
+    const content = (
       <Box
         sx={{
           '& h1, & h2, & h3, & h4, & h5, & h6': {
@@ -889,9 +893,18 @@ export function BlockRenderer({
             px: 0.5,
             borderRadius: 1,
           },
+          fontFamily: fontFamily ?? undefined,
         }}
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
       />
+    );
+
+    if (!backgroundColor) {
+      return content;
+    }
+
+    return (
+      <Box sx={{ backgroundColor, borderRadius: 2, px: { xs: 2, md: 3 }, py: { xs: 1.5, md: 2 } }}>{content}</Box>
     );
   }
 

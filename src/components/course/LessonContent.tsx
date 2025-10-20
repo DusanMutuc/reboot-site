@@ -41,6 +41,7 @@ function toRenderableBlock(block: ContentBlock): RenderableBlock {
     start_ms: block.start_ms,
     end_ms: block.end_ms,
     label: block.label,
+    settings: block.settings,
   };
 }
 

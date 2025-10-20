@@ -16,6 +16,7 @@ import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { BlockRenderer } from '@/components/course/BlockRenderer';
 import BlockDndContext from '../dnd/dndContext';
 import TipTapHtmlEditor from '../text/TipTapHtmlEditor';
+import { parseTextBlockSettings } from '@/lib/textBlockSettings';
 
 export type CanvasProps = {
   subtree: NodeSubtree | null;
@@ -222,6 +223,9 @@ export default function Canvas({
                   const isSelected = selectedBlockId === block.id;
                   const isEditing = editingBlockId === block.id;
                   const resource = block.resource_id ? resources[block.resource_id] ?? null : null;
+                  const textSettings = block.block_type === 'text' ? parseTextBlockSettings(block.settings ?? null) : null;
+                  const fontFamily = textSettings?.fontFamily ?? null;
+                  const backgroundColor = textSettings?.backgroundColor ?? null;
                   return (
                     <Fragment key={block.id}>
                       {indicatorIndex === index ? <DropIndicator /> : null}
@@ -238,48 +242,50 @@ export default function Canvas({
                               onStartEdit(block.id);
                             }
                           }}
-                        >
-                          {block.block_type === 'text' && isEditing && canEditBlocks ? (
-                            <TipTapHtmlEditor
-                              value={
-                                editingSnapshot && editingSnapshot.blockId === block.id
-                                  ? editingSnapshot.draftHtml
-                                  : block.text_md ?? ''
-                              }
-                              onChange={(html) => {
-                                setEditingSnapshot((previous) => {
-                                  if (!previous || previous.blockId !== block.id) {
-                                    return previous;
-                                  }
-                                  return { ...previous, draftHtml: html };
-                                });
-                                onChangeText(block.id, html);
-                              }}
-                              onSubmit={(html) => {
-                                onChangeText(block.id, html, { debounce: false });
-                                onExitEdit();
-                              }}
-                              onCancel={() => {
-                                if (pendingCancelRef.current) return;
-                                pendingCancelRef.current = true;
-                                const snapshot =
+                          >
+                            {block.block_type === 'text' && isEditing && canEditBlocks ? (
+                              <TipTapHtmlEditor
+                                value={
+                                  editingSnapshot && editingSnapshot.blockId === block.id
+                                    ? editingSnapshot.draftHtml
+                                    : block.text_md ?? ''
+                                }
+                                onChange={(html) => {
+                                  setEditingSnapshot((previous) => {
+                                    if (!previous || previous.blockId !== block.id) {
+                                      return previous;
+                                    }
+                                    return { ...previous, draftHtml: html };
+                                  });
+                                  onChangeText(block.id, html);
+                                }}
+                                onSubmit={(html) => {
+                                  onChangeText(block.id, html, { debounce: false });
+                                  onExitEdit();
+                                }}
+                                onCancel={() => {
+                                  if (pendingCancelRef.current) return;
+                                  pendingCancelRef.current = true;
+                                  const snapshot =
+                                    editingSnapshot && editingSnapshot.blockId === block.id
+                                      ? editingSnapshot.initialHtml
+                                      : block.text_md ?? '';
+                                  onChangeText(block.id, snapshot, { debounce: false });
+                                  onExitEdit();
+                                }}
+                                initialValue={
                                   editingSnapshot && editingSnapshot.blockId === block.id
                                     ? editingSnapshot.initialHtml
-                                    : block.text_md ?? '';
-                                onChangeText(block.id, snapshot, { debounce: false });
-                                onExitEdit();
-                              }}
-                              initialValue={
-                                editingSnapshot && editingSnapshot.blockId === block.id
-                                  ? editingSnapshot.initialHtml
-                                  : block.text_md ?? ''
-                              }
-                              autoFocus
-                              onBlur={() => {
-                                if (pendingCancelRef.current) return;
-                                onExitEdit();
-                              }}
-                            />
+                                    : block.text_md ?? ''
+                                }
+                                autoFocus
+                                fontFamily={fontFamily}
+                                backgroundColor={backgroundColor}
+                                onBlur={() => {
+                                  if (pendingCancelRef.current) return;
+                                  onExitEdit();
+                                }}
+                              />
                           ) : (
                             <BlockRenderer
                               block={block}
