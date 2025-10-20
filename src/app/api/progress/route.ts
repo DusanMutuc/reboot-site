@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   if (!guard.ok) return guard.res;
 
   const { supabase } = guard;
-  const body = await request.json().catch(() => null) as
+  const body = (await request.json().catch(() => null)) as
     | { action: 'start' | 'complete'; nodeId: number }
     | null;
 
@@ -21,11 +21,13 @@ export async function POST(request: NextRequest) {
       });
       if (error) throw new Error(`mark_node_started failed: ${error.message}`);
     } else {
-      const { error } = await supabase.rpc('mark_node_completed', {
+      // 🔁 switched to the cascading RPC
+      const { error } = await supabase.rpc('mark_completed_and_cascade', {
         _node_id: body.nodeId,
       });
-      if (error) throw new Error(`mark_node_completed failed: ${error.message}`);
+      if (error) throw new Error(`mark_completed_and_cascade failed: ${error.message}`);
     }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Unknown error';

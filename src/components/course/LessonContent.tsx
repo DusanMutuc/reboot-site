@@ -114,9 +114,14 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
     (async () => {
       try {
-        const res = await fetch(`/api/nodes/${nodeId}/blocks`, { cache: 'force-cache' });
+        const res = await fetch(`/api/nodes/${nodeId}/blocks`);
 
         if (!active) return;
+
+        if (res.status === 304) {
+          setBlocksState('ready');
+          return;
+        }
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
@@ -126,7 +131,10 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
         if (!active) return;
 
-        const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
+        const renderable = (blocks ?? [])
+          .map(toRenderableBlock)
+          .sort((a, b) => a.position - b.position);
+
         setBlocks(renderable);
         setBlocksState('ready');
       } catch (e) {
@@ -141,8 +149,6 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       active = false;
     };
   }, [nodeId]);
-
-
 
   // Mark STARTED as soon as the content is ready/visible
   useEffect(() => {
@@ -356,36 +362,19 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   }, [blocksState, smartDocBlockIds]);
 
   // ===== 4) Completion rules =====
-  const allSmartDocsComplete = useMemo(() => {
+  // Rule change: completion requires *submitted* smart docs, not just "all fields filled"
+  const allSmartDocsSubmitted = useMemo(() => {
     if (smartDocBlockIds.length === 0) return false;
-
-    return smartDocBlockIds.every((id) => {
-      const srv = smartDocProgress[id];
-      const cli = clientSmartDocProgress[id];
-
-      // Prefer server when it has a meaningful total
-      if (srv && srv.fields_total > 0) {
-        return (srv.fields_completed ?? 0) >= srv.fields_total;
-      }
-
-      // Fallback to client-snapshot when the server can't tell yet
-      if (cli && cli.total > 0) {
-        return cli.completed >= cli.total;
-      }
-
-      return false;
-    });
-  }, [smartDocBlockIds, smartDocProgress, clientSmartDocProgress]);
+    return smartDocBlockIds.every((id) => smartDocStatus[id]?.status === 'submitted');
+  }, [smartDocBlockIds, smartDocStatus]);
 
   const allVideosComplete = useMemo(() => {
     if (vimeoVideoBlockIds.length === 0) return false;
-
     return vimeoVideoBlockIds.every((id) => {
       const percent = videoProgressByBlock[id] ?? 0;
       return percent >= 0.8;
     });
   }, [vimeoVideoBlockIds, videoProgressByBlock]);
-  
 
   useEffect(() => {
     if (completedOnceRef.current) return;
@@ -395,7 +384,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     const hasVideos = vimeoVideoBlockIds.length > 0;
 
     if (hasSmartDocs || hasVideos) {
-      const smartDocsSatisfied = hasSmartDocs ? allSmartDocsComplete : true;
+      const smartDocsSatisfied = hasSmartDocs ? allSmartDocsSubmitted : true; // ⬅️ require submission
       const videosSatisfied = hasVideos ? allVideosComplete : true;
 
       if (smartDocsSatisfied && videosSatisfied) {
@@ -425,7 +414,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     blocksState,
     nodeId,
     smartDocBlockIds.length,
-    allSmartDocsComplete,
+    allSmartDocsSubmitted, // ⬅️ dependency changed
     vimeoVideoBlockIds.length,
     allVideosComplete,
     completeLesson,
@@ -444,7 +433,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         const j = await res.json().catch(() => ({}));
         throw new Error(j?.details ?? j?.error ?? 'Submit failed');
       }
-  
+
       const { result } = (await res.json()) as {
         result: {
           fields_total: number;
@@ -453,53 +442,47 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
           submitted_at: string | null;
         };
       };
-  
-      // Update local status first
+
+      // Update local status first (this is the gate for completion)
       setSmartDocStatus((m) => ({
         ...m,
         [content_block_id]: { status: result.status, submitted_at: result.submitted_at },
       }));
-  
-      // Merge progress and immediately check if ALL smart docs are complete (server-first, then client fallback)
-      setSmartDocProgress((prev) => {
-        const next = {
-          ...prev,
-          [content_block_id]: {
-            fields_total: result.fields_total ?? (prev[content_block_id]?.fields_total ?? 0),
-            fields_completed: result.fields_completed ?? (prev[content_block_id]?.fields_completed ?? 0),
-          },
-        };
-  
-        const effectiveAllComplete = smartDocBlockIds.every((id) => {
-          const srv = next[id];
-          if (srv && srv.fields_total > 0) {
-            return (srv.fields_completed ?? 0) >= srv.fields_total;
-          }
-          const cli = clientSmartDocProgress[id];
-          return !!(cli && cli.total > 0 && cli.completed >= cli.total);
-        });
-  
-        if (effectiveAllComplete && nodeId) {
-          // fire-and-forget: write completion and trigger unlock refresh
-          void completeLesson();
-        }
-  
-        return next;
-      });
+
+      // Merge progress for UI labels (does not trigger completion anymore)
+      setSmartDocProgress((prev) => ({
+        ...prev,
+        [content_block_id]: {
+          fields_total: result.fields_total ?? (prev[content_block_id]?.fields_total ?? 0),
+          fields_completed: result.fields_completed ?? (prev[content_block_id]?.fields_completed ?? 0),
+        },
+      }));
+
+      // Immediately re-check submission-based completion after this submit
+      const submittedNow = smartDocBlockIds.every(
+        (id) => (id === content_block_id ? result.status === 'submitted' : smartDocStatus[id]?.status === 'submitted')
+      );
+      const videosSatisfied =
+        vimeoVideoBlockIds.length === 0 ||
+        vimeoVideoBlockIds.every((id) => (videoProgressByBlock[id] ?? 0) >= 0.8);
+
+      if (!completedOnceRef.current && submittedNow && videosSatisfied && nodeId) {
+        completedOnceRef.current = true;
+        void completeLesson();
+      }
     } catch (e) {
-      // You may want a toast; keeping silent here per your current pattern
       console.error(e);
     } finally {
       setSubmitLoading((m) => ({ ...m, [content_block_id]: false }));
     }
   };
-  
 
   const handleClientSmartDocProgress = useCallback(
     (contentBlockId: number, progress: SmartDocClientProgress) => {
       setClientSmartDocProgress((prev) => ({ ...prev, [contentBlockId]: progress }));
     },
-  []);
+    []
+  );
 
   const handleVideoProgress = useCallback((contentBlockId: number, percent: number) => {
     const clamped = Math.max(0, Math.min(1, percent));
@@ -587,14 +570,17 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                     ? (p?.fields_completed ?? 0) >= (p?.fields_total ?? 0)
                     : undefined;
                   const effectiveComplete = serverComplete ?? clientProgress?.isComplete ?? false;
+
+                  // Submit button enabled when all fields are filled, but we only mark lesson/chapter
+                  // complete after *submit* (handled above).
                   const canSubmit = isSmart && s?.status !== 'submitted' && effectiveComplete;
+
                   const progressLabel = (() => {
-                    const hasNumbers = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+                    const hasNumbers = (value: unknown): value is number =>
+                      typeof value === 'number' && Number.isFinite(value);
                     if (p && hasNumbers(p.fields_total) && p.fields_total > 0) {
                       const total = p.fields_total;
-                      const completed = hasNumbers(p.fields_completed)
-                        ? Math.min(p.fields_completed, total)
-                        : 0;
+                      const completed = hasNumbers(p.fields_completed) ? Math.min(p.fields_completed, total) : 0;
                       return `Progress: ${completed}/${total}`;
                     }
                     if (clientProgress) {

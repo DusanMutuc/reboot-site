@@ -53,6 +53,8 @@ type TreeNodeProps = {
   lockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
   selectedNodeId: number | null;
   parentId: number | null;
+  /** True if any ancestor up the chain is locked */
+  ancestorLocked?: boolean;
   onToggle: (nodeId: number) => void;
   onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
   prefetchBlocks: (nodeId: number) => void;
@@ -66,6 +68,7 @@ function TreeNode({
   lockStatuses,
   selectedNodeId,
   parentId,
+  ancestorLocked = false,
   onToggle,
   onSelectContent,
   prefetchBlocks,
@@ -74,8 +77,14 @@ function TreeNode({
   const { node } = subtree;
   const hasChildren = subtree.children.length > 0;
   const isExpanded = expanded.has(node.id);
+
+  // Lock state for THIS node relative to its parent
   const lockStatus = parentId != null ? lockStatuses[parentId]?.[node.id] : undefined;
-  const isLocked = !!lockStatus?.locked;
+  const isLockedSelf = !!lockStatus?.locked;
+
+  // Effective lock = this node locked OR any ancestor locked
+  const isLocked = ancestorLocked || isLockedSelf;
+
   const icon = NODE_ICONS[node.node_type] ?? NODE_ICONS.lesson;
   const isSelected = selectedNodeId === node.id;
   const paddingLeft = 2 + depth * 2;
@@ -83,6 +92,8 @@ function TreeNode({
   const canPrefetch = isContentNode && !isLocked;
 
   const handleClick = () => {
+    if (isLocked) return; // prevent navigation into locked nodes
+
     if (isContentNode) {
       if (canPrefetch) prefetchBlocks(node.id); // warm request just before navigate
       onSelectContent(subtree, lockStatus);
@@ -162,6 +173,7 @@ function TreeNode({
                 lockStatuses={lockStatuses}
                 selectedNodeId={selectedNodeId}
                 parentId={subtree.node.id}
+                ancestorLocked={isLocked} // propagate effective lock to descendants
                 onToggle={onToggle}
                 onSelectContent={onSelectContent}
                 prefetchBlocks={prefetchBlocks}
@@ -193,9 +205,9 @@ export default function StudentCourseTree({
     [childLocks],
   );
 
-  // Fire-and-forget prefetcher; uses browser cache or HTTP cache
+  // Fire-and-forget prefetcher; uses HTTP conditional cache (ETag)
   const prefetchBlocks = (nodeId: number) => {
-    const run = () => { void fetch(`/api/nodes/${nodeId}/blocks`, { cache: 'force-cache' }).catch(() => {}); };
+    const run = () => { void fetch(`/api/nodes/${nodeId}/blocks`).catch(() => {}); };
     if (typeof window !== 'undefined') {
       const ric = (window as any).requestIdleCallback as
         | undefined

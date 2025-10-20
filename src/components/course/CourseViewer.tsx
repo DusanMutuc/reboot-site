@@ -446,15 +446,17 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
 
   const handleLessonCompleted = (nodeId: number) => {
     if (!parentById) return;
-    // refresh the immediate parent (this unlocks siblings)
-    const parent = parentById.get(nodeId);
-    if (parent != null) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[unlock-debug] handleLessonCompleted', { nodeId, parentId: parent });
-      }
-      refreshUnlocks([parent]);
+  
+    const parent = parentById.get(nodeId) ?? null;          // chapter -> lesson, lesson -> course
+    const grandparent = parent != null ? (parentById.get(parent) ?? null) : null; // chapter -> course
+  
+    const toRefresh = [parent, grandparent].filter((n): n is number => n != null);
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[unlock-debug] handleLessonCompleted', { nodeId, parent, grandparent, toRefresh });
     }
+    refreshUnlocks(toRefresh);
   };
+  
 
   // ----- inline skeleton instead of white full-page -----
   if (state.status === 'loading') {
