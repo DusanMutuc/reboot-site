@@ -309,6 +309,7 @@ function CoursesList({
   activeCourseId,
   courseStats,
   onCreateCourse,
+  previewMode,
 }: {
   courses: NodeSubtree[];
   search: string;
@@ -318,6 +319,7 @@ function CoursesList({
   activeCourseId: number | null;
   courseStats: Map<number, { lessons: number; chapters: number }>;
   onCreateCourse: () => void;
+  previewMode: boolean;
 }) {
   const searchInput = useUndoRedoInput({
     value: search,
@@ -337,10 +339,29 @@ function CoursesList({
 
   return (
     <Stack spacing={2} sx={{ height: '100%', p: 3 }}>
-      <Box>
-        <Typography variant="subtitle1" gutterBottom>
-          Courses
-        </Typography>
+      <Stack spacing={1.5}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1,
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            Courses
+          </Typography>
+          {!previewMode ? (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<AddIcon fontSize="small" />}
+              onClick={onCreateCourse}
+            >
+              New course
+            </Button>
+          ) : null}
+        </Box>
         <TextField
           size="small"
           fullWidth
@@ -356,7 +377,7 @@ function CoursesList({
             ),
           }}
         />
-      </Box>
+      </Stack>
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         {hasCourses ? (
           filtered.length > 0 ? (
@@ -1135,6 +1156,7 @@ export default function Tree({
           activeCourseId={activeCourseId}
           courseStats={courseStats}
           onCreateCourse={onCreateCourse}
+          previewMode={previewMode}
         />
       ) : activeCourse ? (
         <OutlinePanel
@@ -1172,6 +1194,7 @@ export default function Tree({
           activeCourseId={activeCourseId}
           courseStats={courseStats}
           onCreateCourse={onCreateCourse}
+          previewMode={previewMode}
         />
       )}
     </Paper>
