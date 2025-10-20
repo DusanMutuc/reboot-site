@@ -338,9 +338,17 @@ function CoursesList({
   return (
     <Stack spacing={2} sx={{ height: '100%', p: 3 }}>
       <Box>
-        <Typography variant="subtitle1" gutterBottom>
-          Courses
-        </Typography>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+          <Typography variant="subtitle1">Courses</Typography>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon fontSize="small" />}
+            onClick={onCreateCourse}
+          >
+            New course
+          </Button>
+        </Stack>
         <TextField
           size="small"
           fullWidth
