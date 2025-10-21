@@ -891,7 +891,7 @@ export function BlockRenderer({
           },
           '& p[style*="background-color"], & h1[style*="background-color"], & h2[style*="background-color"], & h3[style*="background-color"], & h4[style*="background-color"], & h5[style*="background-color"], & h6[style*="background-color"]': {
             padding: `${theme.spacing(1)} ${theme.spacing(1.5)}`,
-            borderRadius: theme.shape.borderRadius * 2,
+            borderRadius: 0,
           },
         })}
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
