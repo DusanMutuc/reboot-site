@@ -864,7 +864,7 @@ export function BlockRenderer({
 
     return (
       <Box
-        sx={{
+        sx={(theme) => ({
           '& h1, & h2, & h3, & h4, & h5, & h6': {
             fontWeight: 600,
             mt: 3,
@@ -889,7 +889,11 @@ export function BlockRenderer({
             px: 0.5,
             borderRadius: 1,
           },
-        }}
+          '& p[style*="background-color"], & h1[style*="background-color"], & h2[style*="background-color"], & h3[style*="background-color"], & h4[style*="background-color"], & h5[style*="background-color"], & h6[style*="background-color"]': {
+            padding: `${theme.spacing(1)} ${theme.spacing(1.5)}`,
+            borderRadius: 0,
+          },
+        })}
         dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
       />
     );
