@@ -830,7 +830,7 @@ function CourseEditorInner() {
   }, [selectedLessonSubtree, setAddChildDialog]);
 
   const handleNodeFieldChange = useCallback(
-    (field: keyof NodeDraft, value: string) => {
+    (field: keyof NodeDraft, value: string, options?: { immediate?: boolean }) => {
       if (!selectedSubtree) return;
       setNodeDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
       const nodeId = selectedSubtree.node.id;
@@ -838,13 +838,13 @@ function CourseEditorInner() {
       if (field === 'metadata') {
         if (!value.trim()) {
           setMetadataError(null);
-          queueNodeUpdate(nodeId, { metadata: null });
+          queueNodeUpdate(nodeId, { metadata: null }, { debounce: !(options?.immediate ?? false) });
           return;
         }
         try {
           const parsed = JSON.parse(value);
           setMetadataError(null);
-          queueNodeUpdate(nodeId, { metadata: parsed });
+          queueNodeUpdate(nodeId, { metadata: parsed }, { debounce: !(options?.immediate ?? false) });
         } catch {
           setMetadataError('Metadata must be valid JSON');
         }
@@ -854,7 +854,7 @@ function CourseEditorInner() {
       const mapped: Partial<ContentNode> = {
         [field]: value ? value : null,
       } as Partial<ContentNode>;
-      queueNodeUpdate(nodeId, mapped);
+      queueNodeUpdate(nodeId, mapped, { debounce: !(options?.immediate ?? false) });
     },
     [queueNodeUpdate, selectedSubtree],
   );

@@ -27,6 +27,7 @@ import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 import { supabase } from '@/lib/supabaseClient';
+import CourseHeroManager from './CourseHeroManager';
 
 export type NodeDraft = {
   title: string;
@@ -140,7 +141,7 @@ export type PropertiesProps = {
   subtree: NodeSubtree | null;
   nodeDraft: NodeDraft | null;
   metadataError: string | null;
-  onNodeFieldChange: (field: keyof NodeDraft, value: string) => void;
+  onNodeFieldChange: (field: keyof NodeDraft, value: string, options?: { immediate?: boolean }) => void;
   onRequestAddChild: (mode: 'create' | 'attach', options?: { type?: NodeType }) => void;
   onReorderChild: (childId: number, direction: 'up' | 'down') => void;
   onUpdateChild: (childId: number, updates: Partial<NodeChild>) => void;
@@ -968,12 +969,20 @@ export default function Properties({
           onChange={(event) => descriptionInput.handleChange(event.target.value)}
           onKeyDown={descriptionInput.handleKeyDown}
         />
-        <TextField
-          label="Hero image URL"
-          value={nodeDraft.hero_image}
-          onChange={(event) => heroImageInput.handleChange(event.target.value)}
-          onKeyDown={heroImageInput.handleKeyDown}
-        />
+        {subtree.node.node_type === 'course' ? (
+          <CourseHeroManager
+            courseId={subtree.node.id}
+            currentPath={nodeDraft.hero_image ? nodeDraft.hero_image : null}
+            onChanged={(value) => onNodeFieldChange('hero_image', value, { immediate: true })}
+          />
+        ) : (
+          <TextField
+            label="Hero image URL"
+            value={nodeDraft.hero_image}
+            onChange={(event) => heroImageInput.handleChange(event.target.value)}
+            onKeyDown={heroImageInput.handleKeyDown}
+          />
+        )}
         <TextField
           label="Icon"
           value={nodeDraft.icon}
