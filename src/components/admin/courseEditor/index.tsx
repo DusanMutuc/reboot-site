@@ -45,6 +45,7 @@ import AddChildDialog from './Sidebar/AddChildDialog';
 import DeleteDialog from './Sidebar/DeleteDialog';
 import DuplicateDialog from './Sidebar/DuplicateDialog';
 import { supabase } from '@/lib/supabaseClient';
+import HeroImageManagerDialog from '@/components/admin/courseEditor/HeroImageManagerDialog';
 
 function cloneSubtree(subtree: NodeSubtree): NodeSubtree {
   return {
@@ -313,6 +314,11 @@ function CourseEditorInner() {
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [menuNodeId, setMenuNodeId] = useState<number | null>(null);
   const [resourceDialogOpen, setResourceDialogOpen] = useState(false);
+  const [heroDialog, setHeroDialog] = useState<{ open: boolean; nodeId: number | null }>({ open: false, nodeId: null });
+  const heroNode = heroDialog.nodeId ? findSubtree(trees, heroDialog.nodeId) : null;
+  const heroCourseId = heroNode?.node.id ?? null;
+  const heroCurrentPath = heroNode?.node.hero_image ?? null;
+  
   const [resourceDialogMode, setResourceDialogMode] = useState<{ type: 'insert' | 'update'; index?: number; blockId?: number } | null>(null);
   const [addChildDialog, setAddChildDialog] = useState<{
     open: boolean;
@@ -377,7 +383,10 @@ function CourseEditorInner() {
     setCourseSearch,
     setOutlineSearch,
   ]);
+  
+  
 
+  
   useEffect(() => {
     void loadData();
   }, [loadData]);
@@ -724,6 +733,10 @@ function CourseEditorInner() {
     },
     [flushNodeUpdate],
   );
+  const handleHeroPathChange = useCallback((newPath: string | null) => {
+    if (!heroCourseId) return;
+    queueNodeUpdate(heroCourseId, { hero_image: newPath }, { debounce: false });
+  }, [heroCourseId, queueNodeUpdate]);
 
   const ensureResource = useCallback(
     async (resourceId: number) => {
@@ -1432,6 +1445,16 @@ function CourseEditorInner() {
           >
             <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
           </MenuItem>
+          <MenuItem
+  onClick={() => {
+    if (!menuNodeId) return;
+    setMenuAnchor(null);
+    setHeroDialog({ open: true, nodeId: menuNodeId });
+  }}
+>
+  🖼️ Change hero image
+</MenuItem>
+
         </Menu>
       ) : null}
 
@@ -1443,6 +1466,14 @@ function CourseEditorInner() {
         }}
         onSelect={handleResourceSelected}
       />
+      <HeroImageManagerDialog
+  open={heroDialog.open}
+  courseId={heroCourseId}
+  currentPath={heroCurrentPath}
+  onClose={() => setHeroDialog({ open: false, nodeId: null })}
+  onChangePath={handleHeroPathChange}
+/>
+
 
       <AddChildDialog
         open={addChildDialog.open}

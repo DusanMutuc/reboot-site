@@ -1,14 +1,22 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
+      // Object endpoint (no transform)
       {
         protocol: 'https',
         hostname: 'zmkmgxrnhdnbpiblkkkk.supabase.co',
         pathname: '/storage/v1/object/public/course-heroes/**',
       },
+      // Render endpoint (used when getPublicUrl has { transform })
+      {
+        protocol: 'https',
+        hostname: 'zmkmgxrnhdnbpiblkkkk.supabase.co',
+        pathname: '/storage/v1/render/image/public/course-heroes/**',
+      },
     ],
-    // optional: if you ever serve svgs from storage
+    // If you ever serve SVGs from storage:
     // dangerouslyAllowSVG: true,
   },
 
@@ -28,4 +36,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;

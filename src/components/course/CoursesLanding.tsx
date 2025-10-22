@@ -11,32 +11,21 @@ import {
   CardActionArea,
   CardContent,
   Container,
+  CircularProgress,
   IconButton,
   Skeleton,
   Stack,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import { supabase } from '@/lib/supabaseClient'; // <-- add this
-
-// ----- Storage helpers -----
-const BUCKET = 'course-heroes'; // change if your bucket name is different
-
-function pathToPublicUrl(path?: string | null) {
-  if (!path) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path; // already a URL
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path, {
-    transform: { width: 1200, quality: 80 },
-  });
-  return data.publicUrl ?? null;
-}
+import { supabase } from '@/lib/supabaseClient';
 
 type CourseSummary = {
   id: number;
   title: string | null;
   slug: string | null;
   description: string | null;
-  hero_image: string | null; // stores storage path OR full URL
+  hero_image: string | null; // storage path like "42/uuid.webp" OR a full URL (legacy)
   icon: string | null;
   objectives: string | null;
   metadata: Record<string, unknown> | null;
@@ -74,15 +63,33 @@ function SkeletonCard() {
   );
 }
 
+/** Convert DB value → usable <Image src>
+ *  - If it's already a full URL, return it unchanged.
+ *  - If it's a storage path, build a public URL from the "course-heroes" bucket.
+ */
+function resolveHeroSrc(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const v = value.trim();
+
+  // If DB already has a full URL (legacy), use it directly
+  if (/^https?:\/\//i.test(v)) return v;
+
+  // Otherwise treat it as a storage path and build a plain /object/ URL
+  const { data } = supabase.storage.from('course-heroes').getPublicUrl(v);
+  return data?.publicUrl ?? null;
+}
+
+
+
 type CourseCardProps = {
   course: CourseSummary;
 };
 
 function CourseCard({ course }: CourseCardProps) {
   const slug = course.slug ?? '';
-  const imageUrl = useMemo(() => pathToPublicUrl(course.hero_image), [course.hero_image]);
+  const heroSrc = resolveHeroSrc(course.hero_image);
 
-  // Optional progress support (0–100). If you don’t have it yet, leave as 0.
+  // Optional progress support (0–100). If you don’t have it yet, leave as 0 or null to hide bar.
   const progress =
     typeof (course.metadata as any)?.progressPct === 'number'
       ? Math.max(0, Math.min(100, (course.metadata as any).progressPct))
@@ -99,10 +106,7 @@ function CourseCard({ course }: CourseCardProps) {
         bgcolor: 'background.paper',
         overflow: 'hidden',
         transition: 'transform .25s ease, box-shadow .25s ease',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: 6,
-        },
+        '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
       }}
     >
       <CardActionArea
@@ -113,9 +117,9 @@ function CourseCard({ course }: CourseCardProps) {
       >
         {/* Hero image (fixed 16:9) */}
         <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9' }}>
-          {imageUrl ? (
+          {heroSrc ? (
             <Image
-              src={imageUrl}
+              src={heroSrc}
               alt=""
               fill
               sizes="(max-width: 600px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -165,27 +169,28 @@ function CourseCard({ course }: CourseCardProps) {
           )}
 
           {/* Progress */}
-          <Stack spacing={0.75}>
-            <Stack direction="row" justifyContent="space-between">
-              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
-                Progress
-              </Typography>
-              <Typography variant="caption" fontWeight={700}>
-                {progress}%
-              </Typography>
+          {typeof progress === 'number' && (
+            <Stack spacing={0.75}>
+              <Stack direction="row" justifyContent="space-between">
+                <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
+                  Progress
+                </Typography>
+                <Typography variant="caption" fontWeight={700}>
+                  {progress}%
+                </Typography>
+              </Stack>
+              <Box sx={{ height: 8, borderRadius: 999, bgcolor: 'grey.100', overflow: 'hidden' }}>
+                <Box
+                  sx={(theme) => ({
+                    height: '100%',
+                    width: `${progress}%`,
+                    background: `linear-gradient(90deg, ${theme.palette.success.main}, ${theme.palette.success.dark})`,
+                    transition: 'width .35s ease',
+                  })}
+                />
+              </Box>
             </Stack>
-            <Box sx={{ height: 8, borderRadius: 999, bgcolor: 'grey.100', overflow: 'hidden' }}>
-              <Box
-                sx={{
-                  height: '100%',
-                  width: `${progress}%`,
-                  background: (theme) =>
-                    `linear-gradient(90deg, ${theme.palette.success.main}, ${theme.palette.success.dark})`,
-                  transition: 'width .35s ease',
-                }}
-              />
-            </Box>
-          </Stack>
+          )}
 
           <Button
             variant="contained"
@@ -211,7 +216,6 @@ export default function CoursesLanding() {
 
   useEffect(() => {
     let active = true;
-
     (async () => {
       try {
         const res = await fetch('/api/courses');
@@ -220,23 +224,14 @@ export default function CoursesLanding() {
           throw new Error(data.error ?? 'Failed to load courses');
         }
         const data = (await res.json()) as { courses: CourseSummary[] };
-
         if (!active) return;
-
-        // Map storage paths to public URLs here (so CourseCard is simpler)
-        const coursesWithUrls = (data.courses ?? []).map((c) => ({
-          ...c,
-          hero_image: pathToPublicUrl(c.hero_image),
-        }));
-
-        setState({ status: 'ready', courses: coursesWithUrls });
+        setState({ status: 'ready', courses: data.courses ?? [] });
       } catch (error) {
         if (!active) return;
         const message = error instanceof Error ? error.message : 'Failed to load courses';
         setState({ status: 'error', message });
       }
     })();
-
     return () => {
       active = false;
     };
@@ -273,7 +268,7 @@ export default function CoursesLanding() {
       );
     }
 
-    if (state.courses.length === 0) {
+    if (state.status === 'ready' && state.courses.length === 0) {
       return (
         <Stack alignItems="center" spacing={2} sx={{ py: 10 }}>
           <Typography variant="h6">No courses available yet</Typography>
@@ -297,10 +292,11 @@ export default function CoursesLanding() {
           alignItems: 'stretch',
         }}
       >
-        {state.courses.map((course) => {
-          if (!course.slug) return null;
-          return <CourseCard key={course.id} course={course} />;
-        })}
+        {state.status === 'ready' &&
+          state.courses.map((course) => {
+            if (!course.slug) return null;
+            return <CourseCard key={course.id} course={course} />;
+          })}
       </Box>
     );
   }, [state]);
