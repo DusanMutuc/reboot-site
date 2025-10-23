@@ -12,6 +12,7 @@ import { ThemeProvider, CssBaseline } from '@mui/material';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
 import AdminActionRequired from '@/components/admin/AdminActionRequired';
 import CourseEditor from '@/components/admin/courseEditor';
+import StudentProgressView from '@/components/coach/StudentProgressView';
 
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
@@ -177,6 +178,7 @@ export default function AdminPage() {
             <Tab label="Resource Library" />
             <Tab label="Course Builder" />
             <Tab label="Action Required" />
+            <Tab label="Student Progress" />   {/* NEW */}
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -198,6 +200,9 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value={tab} index={5}>
               <AdminActionRequired />
+            </TabPanel>
+            <TabPanel value={tab} index={6}>
+              <StudentProgressView mode="admin" />
             </TabPanel>
           </Box>
         </Paper>
