@@ -80,20 +80,18 @@ function resolveHeroSrc(value: string | null | undefined): string | null {
 }
 
 
-
 type CourseCardProps = {
   course: CourseSummary;
+  progressPct?: number; // 0–100
 };
 
-function CourseCard({ course }: CourseCardProps) {
+function CourseCard({ course, progressPct }: CourseCardProps) {
   const slug = course.slug ?? '';
   const heroSrc = resolveHeroSrc(course.hero_image);
 
-  // Optional progress support (0–100). If you don’t have it yet, leave as 0 or null to hide bar.
-  const progress =
-    typeof (course.metadata as any)?.progressPct === 'number'
-      ? Math.max(0, Math.min(100, (course.metadata as any).progressPct))
-      : 0;
+  const progress = typeof progressPct === 'number'
+    ? Math.max(0, Math.min(100, progressPct))
+    : 0;
 
   return (
     <Card
@@ -154,9 +152,7 @@ function CourseCard({ course }: CourseCardProps) {
               boxShadow: 2,
               mt: -4,
             }}
-          >
-            {/* optional icon */}
-          </Avatar>
+          />
 
           <Typography variant="h6" sx={{ fontWeight: 700, ...clampLines(2) }}>
             {course.title ?? 'Untitled course'}
@@ -169,39 +165,32 @@ function CourseCard({ course }: CourseCardProps) {
           )}
 
           {/* Progress */}
-          {typeof progress === 'number' && (
-            <Stack spacing={0.75}>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
-                  Progress
-                </Typography>
-                <Typography variant="caption" fontWeight={700}>
-                  {progress}%
-                </Typography>
-              </Stack>
-              <Box sx={{ height: 8, borderRadius: 999, bgcolor: 'grey.100', overflow: 'hidden' }}>
-                <Box
-                  sx={(theme) => ({
-                    height: '100%',
-                    width: `${progress}%`,
-                    background: `linear-gradient(90deg, ${theme.palette.success.main}, ${theme.palette.success.dark})`,
-                    transition: 'width .35s ease',
-                  })}
-                />
-              </Box>
+          <Stack spacing={0.75}>
+            <Stack direction="row" justifyContent="space-between">
+              <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
+                Progress
+              </Typography>
+              <Typography variant="caption" fontWeight={700}>
+                {progress}%
+              </Typography>
             </Stack>
-          )}
+            <Box sx={{ height: 8, borderRadius: 999, bgcolor: 'grey.100', overflow: 'hidden' }}>
+              <Box
+                sx={(theme) => ({
+                  height: '100%',
+                  width: `${progress}%`,
+                  background: `linear-gradient(90deg, ${theme.palette.success.main}, ${theme.palette.success.dark})`,
+                  transition: 'width .35s ease',
+                })}
+              />
+            </Box>
+          </Stack>
 
           <Button
             variant="contained"
             fullWidth
             disableElevation
-            sx={{
-              textTransform: 'none',
-              fontWeight: 700,
-              borderRadius: 2,
-              py: 1.25,
-            }}
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1.25 }}
           >
             {progress > 0 ? 'Continue' : 'Start'}
           </Button>
@@ -213,6 +202,9 @@ function CourseCard({ course }: CourseCardProps) {
 
 export default function CoursesLanding() {
   const [state, setState] = useState<FetchState>({ status: 'loading' });
+
+  // NEW: courseId -> integer percent (0–100)
+  const [progressByCourse, setProgressByCourse] = useState<Record<number, number>>({});
 
   useEffect(() => {
     let active = true;
@@ -232,10 +224,45 @@ export default function CoursesLanding() {
         setState({ status: 'error', message });
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, []);
+
+  // NEW: once courses are ready, compute progress for the logged-in user
+  useEffect(() => {
+    if (state.status !== 'ready' || state.courses.length === 0) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const { data: userRes, error: userErr } = await supabase.auth.getUser();
+      if (userErr || !userRes?.user) {
+        // not logged in or error — leave progress empty
+        return;
+      }
+      const userId = userRes.user.id;
+
+      const entries = await Promise.all(
+        state.courses.map(async (c) => {
+          const { data, error } = await supabase.rpc('get_user_course_progress', {
+            _user_id: userId,
+            _course_id: c.id,
+          });
+          if (error) return [c.id, 0] as const;
+
+          // function returns a single row table: [{ total_leaves, completed_leaves, progress }]
+          const row = Array.isArray(data) ? data[0] : data;
+          const pct = row?.progress ? Math.round(row.progress * 100) : 0;
+          return [c.id, pct] as const;
+        })
+      );
+
+      if (!cancelled) {
+        setProgressByCourse(Object.fromEntries(entries));
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [state]);
 
   const content = useMemo(() => {
     if (state.status === 'loading') {
@@ -244,11 +271,7 @@ export default function CoursesLanding() {
           sx={{
             display: 'grid',
             gap: 3,
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, minmax(0, 1fr))',
-              lg: 'repeat(3, minmax(0, 1fr))',
-            },
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' },
             alignItems: 'stretch',
           }}
         >
@@ -284,30 +307,22 @@ export default function CoursesLanding() {
         sx={{
           display: 'grid',
           gap: 3,
-          gridTemplateColumns: {
-            xs: '1fr',
-            sm: 'repeat(2, minmax(0, 1fr))',
-            lg: 'repeat(3, minmax(0, 1fr))',
-          },
+          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' },
           alignItems: 'stretch',
         }}
       >
         {state.status === 'ready' &&
           state.courses.map((course) => {
             if (!course.slug) return null;
-            return <CourseCard key={course.id} course={course} />;
+            const pct = progressByCourse[course.id] ?? 0;
+            return <CourseCard key={course.id} course={course} progressPct={pct} />;
           })}
       </Box>
     );
-  }, [state]);
+  }, [state, progressByCourse]);
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)',
-      }}
-    >
+    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)' }}>
       {/* Header */}
       <Box
         sx={{
@@ -338,3 +353,4 @@ export default function CoursesLanding() {
     </Box>
   );
 }
+
