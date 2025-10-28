@@ -63,6 +63,7 @@ function SkeletonCard() {
   );
 }
 
+
 /** Convert DB value → usable <Image src>
  *  - If it's already a full URL, return it unchanged.
  *  - If it's a storage path, build a public URL from the "course-heroes" bucket.
