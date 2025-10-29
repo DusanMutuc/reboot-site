@@ -14,6 +14,11 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Chip,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
@@ -51,6 +56,53 @@ type Props = {
   onOpenHeroDialog: (nodeId: number) => void;
 };
 
+type CtxState = {
+  open: boolean;
+  x: number;
+  y: number;
+  nodeId: number | null;
+  parentId: number | null;
+  nodeType: NodeType | null;
+};
+
+// --- helpers for status ---
+type NodeState = 'published' | 'draft';
+function getNodeState(node: NodeSubtree['node']): NodeState {
+  const s = (node as any).state;
+  return s === 'published' ? 'published' : 'draft';
+}
+function StatusDot({ state }: { state: NodeState }) {
+  const color = state === 'published' ? 'success.main' : 'text.disabled';
+  const title = state === 'published' ? 'Published' : 'Draft';
+  return (
+    <Tooltip title={title}>
+      <Box
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          bgcolor: color,
+          flexShrink: 0,
+        }}
+      />
+    </Tooltip>
+  );
+}
+function StatusChip({ state }: { state: NodeState }) {
+  return (
+    <Chip
+      size="small"
+      variant={state === 'published' ? 'filled' : 'outlined'}
+      label={state === 'published' ? 'Published' : 'Draft'}
+      color={state === 'published' ? 'success' : 'default'}
+      sx={{
+        height: 20,
+        '& .MuiChip-label': { px: 0.75, py: 0 },
+      }}
+    />
+  );
+}
+
 export default function LibraryList({
   rootSubtree,
   selectedNodeId,
@@ -79,10 +131,11 @@ export default function LibraryList({
         setHeroMap(new Map());
         return;
       }
-      const topIds = children.map(c => c.subtree.node.id);
+      const topIds = children.map((c) => c.subtree.node.id);
+      // library: chapters under lessons
       const nestedIds = children
-        .filter(c => c.subtree.node.node_type === 'chapter')
-        .flatMap(c => c.subtree.children.map(cc => cc.subtree.node.id));
+        .filter((c) => c.subtree.node.node_type === 'lesson')
+        .flatMap((c) => c.subtree.children.map((cc) => cc.subtree.node.id));
       const ids = Array.from(new Set([...topIds, ...nestedIds]));
       if (!ids.length) {
         setHeroMap(new Map());
@@ -107,10 +160,12 @@ export default function LibraryList({
       if (!cancelled) setHeroMap(next);
     }
     loadThumbs();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [rootSubtree, children]);
 
-  // ---------- NEW: "Name new item" dialog state ----------
+  // ---------- Name dialog ----------
   const [nameOpen, setNameOpen] = useState(false);
   const [nameValue, setNameValue] = useState('');
   const [pendingParentId, setPendingParentId] = useState<number | null>(null);
@@ -137,14 +192,46 @@ export default function LibraryList({
     handleCloseNameDialog();
   };
 
-  // focus field when dialog opens
   useEffect(() => {
     if (nameOpen && inputRef.current) {
       inputRef.current.focus();
       inputRef.current.select();
     }
   }, [nameOpen]);
-  // -------------------------------------------------------
+
+  // ---------- Context menu ----------
+  const [ctx, setCtx] = useState<CtxState>({
+    open: false,
+    x: 0,
+    y: 0,
+    nodeId: null,
+    parentId: null,
+    nodeType: null,
+  });
+
+  const openContextMenu = (e: React.MouseEvent, nodeId: number, nodeType: NodeType, parentId: number | null) => {
+    e.preventDefault();
+    setCtx({ open: true, x: e.clientX, y: e.clientY, nodeId, parentId, nodeType });
+  };
+  const closeContextMenu = () => setCtx((s) => ({ ...s, open: false }));
+
+  const handleCtxAddChild = (childType: NodeType) => {
+    if (ctx.nodeId == null) return;
+    handleOpenNameDialog(ctx.nodeId, childType);
+    closeContextMenu();
+  };
+
+  const handleCtxDuplicate = () => {
+    if (ctx.nodeId == null) return;
+    onDuplicateNode(ctx.nodeId);
+    closeContextMenu();
+  };
+
+  const handleCtxDetach = () => {
+    if (ctx.parentId == null || ctx.nodeId == null) return;
+    onDetachChild(ctx.parentId, ctx.nodeId);
+    closeContextMenu();
+  };
 
   if (!rootSubtree) {
     return (
@@ -164,9 +251,7 @@ export default function LibraryList({
       {/* Header */}
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-          <Typography variant="h6" fontWeight={600}>
-            Library
-          </Typography>
+          <Typography variant="h6" fontWeight={600}>Library</Typography>
           <Tooltip title="Change library hero">
             <IconButton size="small" onClick={() => onOpenHeroDialog(rootSubtree.node.id)}>
               <ImageIcon fontSize="small" />
@@ -184,7 +269,7 @@ export default function LibraryList({
             startIcon={<AddIcon />}
             onClick={() => handleOpenNameDialog(rootSubtree.node.id, 'lesson')}
           >
-            New Item
+            New Lesson
           </Button>
         )}
       </Box>
@@ -198,12 +283,14 @@ export default function LibraryList({
 
             const title = subtree.node.title as string | undefined;
             const description = (subtree.node as any).description as string | undefined;
-            const isChapter = subtree.node.node_type === 'chapter';
-            const childRows = isChapter
+            const isLesson = subtree.node.node_type === 'lesson';
+            const childRows = isLesson
               ? [...subtree.children].sort((a, b) => a.edge.position - b.edge.position)
               : [];
-
             const heroUrl = heroMap.get(subtree.node.id);
+            const canAddChapterHere = isLesson && getAvailableChildTypes(subtree.node.id).includes('chapter');
+
+            const state = getNodeState(subtree.node);
 
             return (
               <Fragment key={subtree.node.id}>
@@ -211,6 +298,7 @@ export default function LibraryList({
                   onMouseEnter={() => setHoveredId(subtree.node.id)}
                   onMouseLeave={() => setHoveredId(null)}
                   onClick={() => onSelectNode(subtree.node.id)}
+                  onContextMenu={(e) => openContextMenu(e, subtree.node.id, subtree.node.node_type as NodeType, rootSubtree.node.id)}
                   sx={{
                     position: 'relative',
                     display: 'flex',
@@ -262,18 +350,43 @@ export default function LibraryList({
 
                   {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      variant="body2"
-                      fontWeight={600}
-                      sx={{
-                        color: isSelected ? 'primary.main' : 'text.primary',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {title || (isChapter ? 'Untitled section' : 'Untitled item')}
-                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <StatusDot state={state} />
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        sx={{
+                          color: isSelected ? 'primary.main' : 'text.primary',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          flex: 1,
+                        }}
+                      >
+                        {title || (isLesson ? 'Untitled lesson' : 'Untitled item')}
+                      </Typography>
+
+                      {/* compact chip on the right for quick scan */}
+                      <StatusChip state={state} />
+
+                      {/* + Chapter (hover) */}
+                      {isHovered && canAddChapterHere && (
+                        <Tooltip title="Add chapter">
+                          <span>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenNameDialog(subtree.node.id, 'chapter');
+                              }}
+                            >
+                              <AddIcon fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+                    </Stack>
+
                     <Typography
                       variant="caption"
                       color="text.secondary"
@@ -285,7 +398,7 @@ export default function LibraryList({
                         mt: 0.5,
                       }}
                     >
-                      {description || (isChapter ? 'Section' : 'Page')}
+                      {description || (isLesson ? 'Lesson' : 'Item')}
                     </Typography>
                   </Box>
 
@@ -350,8 +463,8 @@ export default function LibraryList({
                   )}
                 </Box>
 
-                {/* Indented children for chapters */}
-                {isChapter && childRows.length > 0 && (
+                {/* Indented chapters under lessons */}
+                {isLesson && childRows.length > 0 && (
                   <Box sx={{ pl: 4 }}>
                     <Stack spacing={1}>
                       {childRows.map(({ edge: chEdge, subtree: chTree }) => {
@@ -360,8 +473,9 @@ export default function LibraryList({
 
                         const chTitle = chTree.node.title as string | undefined;
                         const chDescription = (chTree.node as any).description as string | undefined;
-
                         const chHeroUrl = heroMap.get(chTree.node.id);
+                        const availableForChapter = getAvailableChildTypes(chTree.node.id);
+                        const chState = getNodeState(chTree.node);
 
                         return (
                           <Box
@@ -369,6 +483,9 @@ export default function LibraryList({
                             onMouseEnter={() => setHoveredId(chTree.node.id)}
                             onMouseLeave={() => setHoveredId(null)}
                             onClick={() => onSelectNode(chTree.node.id)}
+                            onContextMenu={(e) =>
+                              openContextMenu(e, chTree.node.id, chTree.node.node_type as NodeType, subtree.node.id)
+                            }
                             sx={{
                               position: 'relative',
                               display: 'flex',
@@ -408,18 +525,24 @@ export default function LibraryList({
                             </Box>
 
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Typography
-                                variant="body2"
-                                fontWeight={600}
-                                sx={{
-                                  color: chIsSelected ? 'primary.main' : 'text.primary',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                {chTitle || 'Untitled page'}
-                              </Typography>
+                              <Stack direction="row" alignItems="center" spacing={1}>
+                                <StatusDot state={chState} />
+                                <Typography
+                                  variant="body2"
+                                  fontWeight={600}
+                                  sx={{
+                                    color: chIsSelected ? 'primary.main' : 'text.primary',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    flex: 1,
+                                  }}
+                                >
+                                  {chTitle || 'Untitled chapter'}
+                                </Typography>
+                                <StatusChip state={chState} />
+                              </Stack>
+
                               <Typography
                                 variant="caption"
                                 color="text.secondary"
@@ -431,7 +554,7 @@ export default function LibraryList({
                                   mt: 0.5,
                                 }}
                               >
-                                {chDescription || 'Page'}
+                                {chDescription || 'Chapter'}
                               </Typography>
                             </Box>
 
@@ -477,7 +600,7 @@ export default function LibraryList({
                                     <ContentCopyIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title="Remove from section">
+                                <Tooltip title="Remove from lesson">
                                   <IconButton
                                     size="small"
                                     color="error"
@@ -502,14 +625,64 @@ export default function LibraryList({
         </Stack>
       </Box>
 
-      {/* ---------- NEW: Name dialog ---------- */}
-      <Dialog
-        open={nameOpen}
-        onClose={handleCloseNameDialog}
-        fullWidth
-        maxWidth="xs"
+      {/* Context Menu */}
+      <Menu
+        open={ctx.open}
+        onClose={closeContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={ctx.open ? { top: ctx.y, left: ctx.x } : undefined}
       >
-        <DialogTitle>Name new item</DialogTitle>
+        {/* Add options depend on node type + allowed child types */}
+        {ctx.nodeId != null && ctx.nodeType === 'lesson' && getAvailableChildTypes(ctx.nodeId).includes('chapter') && (
+          <MenuItem onClick={() => handleCtxAddChild('chapter')}>
+            <ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Add chapter" />
+          </MenuItem>
+        )}
+
+        {ctx.nodeId != null && ctx.nodeType === 'chapter' && (() => {
+          const avail = getAvailableChildTypes(ctx.nodeId);
+          if (avail.length === 0) return null;
+          return avail.map((t) => (
+            <MenuItem key={t} onClick={() => handleCtxAddChild(t)}>
+              <ListItemIcon><AddIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primary={`Add ${t}`} />
+            </MenuItem>
+          ));
+        })()}
+
+        {ctx.nodeId != null && (
+          <MenuItem onClick={handleCtxDuplicate}>
+            <ListItemIcon><ContentCopyIcon fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Duplicate" />
+          </MenuItem>
+        )}
+
+        {ctx.nodeId != null && (
+          <MenuItem
+            onClick={() => {
+              onOpenHeroDialog(ctx.nodeId!);
+              closeContextMenu();
+            }}
+          >
+            <ListItemIcon><ImageIcon fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Change thumbnail" />
+          </MenuItem>
+        )}
+
+        {ctx.nodeId != null && ctx.parentId != null && (
+          <MenuItem onClick={handleCtxDetach} sx={{ color: 'error.main' }}>
+            <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText primary={ctx.nodeType === 'chapter' ? 'Remove from lesson' : 'Remove from library'} />
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* Name dialog */}
+      <Dialog open={nameOpen} onClose={handleCloseNameDialog} fullWidth maxWidth="xs">
+        <DialogTitle>
+          {pendingType === 'lesson' ? 'Name new lesson' : pendingType === 'chapter' ? 'Name new chapter' : 'Name new item'}
+        </DialogTitle>
         <DialogContent>
           <TextField
             inputRef={inputRef}
@@ -517,7 +690,13 @@ export default function LibraryList({
             fullWidth
             margin="dense"
             label="Title"
-            placeholder="e.g. Negotiation Basics"
+            placeholder={
+              pendingType === 'lesson'
+                ? 'e.g. Negotiation Basics'
+                : pendingType === 'chapter'
+                ? 'e.g. Framing the Offer'
+                : 'e.g. New item'
+            }
             value={nameValue}
             onChange={(e) => setNameValue(e.target.value)}
             onKeyDown={(e) => {
@@ -530,16 +709,11 @@ export default function LibraryList({
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseNameDialog}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleCreateWithName}
-            disabled={!nameValue.trim()}
-          >
+          <Button variant="contained" onClick={handleCreateWithName} disabled={!nameValue.trim()}>
             Create
           </Button>
         </DialogActions>
       </Dialog>
-      {/* ------------------------------------- */}
     </Stack>
   );
 }
