@@ -11,6 +11,7 @@ import { supabase } from '@/lib/supabaseClient';
 
 type SidebarItem = {
   id: number;
+  slug: string;
   title: string | null;
   description?: string | null;
   hero_image?: string | null; // public URL
@@ -26,17 +27,17 @@ function toPublicUrl(keyOrUrl?: string | null) {
 
 const LibrarySidebar = memo(function LibrarySidebar({
   items,
-  selectedId,
+  selectedSlug,
   onOpenItem,
 }: {
   items: SidebarItem[];
-  selectedId: number | null;
-  onOpenItem: (id: number) => void;
+  selectedSlug: string | null;
+  onOpenItem: (slug: string) => void;
 }) {
   return (
     <Box
       sx={{
-        width: 360, // wider sidebar
+        width: 360,
         bgcolor: 'background.paper',
         borderRight: 1,
         borderColor: 'divider',
@@ -61,11 +62,11 @@ const LibrarySidebar = memo(function LibrarySidebar({
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
         <Stack spacing={1.25}>
           {items.map((item) => {
-            const isSelected = item.id === selectedId;
+            const isSelected = item.slug === selectedSlug;
             return (
               <Box
                 key={item.id}
-                onClick={() => onOpenItem(item.id)}
+                onClick={() => onOpenItem(item.slug)}
                 sx={{
                   display: 'flex',
                   gap: 2,
@@ -126,12 +127,11 @@ const LibrarySidebar = memo(function LibrarySidebar({
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'normal',
-                      minHeight: '2.5em', // ensures consistent height for up to 2 lines
+                      minHeight: '2.5em',
                     }}
                   >
                     {item.title || 'Untitled item'}
                   </Typography>
-                  {/* subtitle removed per request */}
                 </Box>
               </Box>
             );
@@ -146,10 +146,10 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const router = useRouter();
 
-  // derive selected id from /library/123
-  const selectedId = (() => {
-    const m = pathname?.match(/\/library\/(\d+)/);
-    return m ? Number(m[1]) : null;
+  // derive selected slug from /library/<slug>
+  const selectedSlug = (() => {
+    const m = pathname?.match(/\/library\/([^\/?#]+)/);
+    return m ? decodeURIComponent(m[1]) : null;
   })();
 
   const [rootId, setRootId] = useState<number | null>(null);
@@ -193,7 +193,7 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; };
   }, []);
 
-  // Load children once (when root known). This state persists across route changes.
+  // Load children of root (persist across route changes)
   useEffect(() => {
     if (!rootId) return;
     let cancelled = false;
@@ -214,14 +214,18 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
 
       const { data: nodes, error: nodeErr } = await supabase
         .from('content_nodes')
-        .select('id, title, description, node_type, hero_image')
+        .select('id, slug, title, description, node_type, hero_image')
         .in('id', childIds);
       if (nodeErr) return;
 
       const map = new Map<number, SidebarItem>();
       (nodes ?? []).forEach(n => {
         map.set(n.id as number, {
-          ...n,
+          id: n.id as number,
+          slug: n.slug as string,
+          title: n.title ?? null,
+          description: n.description ?? null,
+          node_type: n.node_type as string,
           hero_image: toPublicUrl(n.hero_image) ?? undefined,
         } as SidebarItem);
       });
@@ -233,13 +237,13 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
     return () => { cancelled = true; };
   }, [rootId]);
 
-  const openItem = useCallback((id: number) => {
-    if (selectedId !== id) router.push(`/library/${id}`);
-  }, [router, selectedId]);
+  const openItem = useCallback((slug: string) => {
+    if (selectedSlug !== slug) router.push(`/library/${slug}`);
+  }, [router, selectedSlug]);
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'grey.50' }}>
-      <LibrarySidebar items={items} selectedId={selectedId} onOpenItem={openItem} />
+      <LibrarySidebar items={items} selectedSlug={selectedSlug} onOpenItem={openItem} />
       <Box sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.100' }}>
         {children}
       </Box>

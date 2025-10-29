@@ -1,18 +1,18 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Stack, Typography, Alert, Skeleton, Divider, Container } from '@mui/material';
-import { useParams } from 'next/navigation';
+import { Box, Stack, Typography, Alert, Skeleton, Container } from '@mui/material';
+import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import type { ContentBlock } from '@/types/course';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { BlockRenderer } from '@/components/course/BlockRenderer';
 
-type NodeRow = { id: number; title: string | null; description?: string | null };
+type NodeRow = { id: number; slug: string | null; title: string | null; description?: string | null };
 
 export default function LibraryDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const nodeId = Number(id);
+  const router = useRouter();
+  const { slug } = useParams<{ slug: string }>();
 
   const [loading, setLoading] = useState(true);
   const [node, setNode] = useState<NodeRow | null>(null);
@@ -20,31 +20,49 @@ export default function LibraryDetailPage() {
   const [resources, setResources] = useState<Record<number, RenderableResource>>({});
   const [error, setError] = useState<string | null>(null);
 
+  // If someone hits /library/123, redirect to its slug
+  useEffect(() => {
+    (async () => {
+      if (!slug) return;
+      if (/^\d+$/.test(slug)) {
+        const id = Number(slug);
+        const { data } = await supabase.from('content_nodes').select('slug').eq('id', id).maybeSingle();
+        if (data?.slug) router.replace(`/library/${data.slug}`);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
+
   useEffect(() => {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
-  }, [nodeId]);
+  }, [slug]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (!slug) return;
       setLoading(true);
       setError(null);
       try {
+        // 1) fetch node by slug
         const { data: nodeRow, error: nErr } = await supabase
           .from('content_nodes')
-          .select('id,title,description')
-          .eq('id', nodeId)
-          .single();
+          .select('id,slug,title,description')
+          .eq('slug', slug)
+          .maybeSingle();
         if (nErr) throw nErr;
         if (!nodeRow) throw new Error('Not found');
 
+        // 2) blocks for this node id
+        const nodeId = nodeRow.id as number;
         const { data: blockRows, error: bErr } = await supabase
           .from('content_blocks')
-          .select('id, node_id, position, block_type, text_md, resource_id')
+          .select('id, node_id, position, block_type, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, settings')
           .eq('node_id', nodeId)
           .order('position', { ascending: true });
         if (bErr) throw bErr;
 
+        // 3) gather resources
         const resourceIds = Array.from(
           new Set((blockRows ?? []).map((b) => b.resource_id).filter(Boolean) as number[])
         );
@@ -74,7 +92,7 @@ export default function LibraryDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [nodeId]);
+  }, [slug]);
 
   const content = useMemo(() => {
     if (loading) {
@@ -108,33 +126,16 @@ export default function LibraryDetailPage() {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>
-      {/* Header section with subtle background */}
-      <Box sx={{ 
-        bgcolor: 'background.paper', 
-        borderBottom: '1px solid', 
-        borderColor: 'divider',
-        py: { xs: 4, md: 5 }
-      }}>
+      {/* Header */}
+      <Box sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 4, md: 5 } }}>
         <Container maxWidth="md">
           {!loading ? (
             <>
-              <Typography 
-                variant="h3" 
-                component="h1" 
-                sx={{ 
-                  fontWeight: 700, 
-                  mb: 1.5,
-                  fontSize: { xs: '2rem', md: '2.5rem' }
-                }}
-              >
+              <Typography variant="h3" component="h1" sx={{ fontWeight: 700, mb: 1.5, fontSize: { xs: '2rem', md: '2.5rem' } }}>
                 {node?.title ?? 'Untitled'}
               </Typography>
               {node?.description && (
-                <Typography 
-                  variant="body1" 
-                  color="text.secondary" 
-                  sx={{ fontSize: '1.125rem', lineHeight: 1.6 }}
-                >
+                <Typography variant="body1" color="text.secondary" sx={{ fontSize: '1.125rem', lineHeight: 1.6 }}>
                   {node.description}
                 </Typography>
               )}
@@ -148,16 +149,9 @@ export default function LibraryDetailPage() {
         </Container>
       </Box>
 
-      {/* Content section */}
+      {/* Content */}
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
-        <Box sx={{
-          bgcolor: 'background.paper',
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          p: { xs: 3, md: 5 },
-          minHeight: 400
-        }}>
+        <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider', p: { xs: 3, md: 5 }, minHeight: 400 }}>
           {content}
         </Box>
       </Container>
