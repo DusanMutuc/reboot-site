@@ -13,6 +13,13 @@ import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import LinkIcon from '@mui/icons-material/Link';
 import CodeIcon from '@mui/icons-material/Code';
 import FormatColorFillIcon from '@mui/icons-material/FormatColorFill';
+
+// ✅ NEW: alignment icons
+import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
+import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter';
+import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight';
+import FormatAlignJustifyIcon from '@mui/icons-material/FormatAlignJustify';
+
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -22,6 +29,8 @@ import Highlight from '@tiptap/extension-highlight';
 import FontFamily from '@tiptap/extension-font-family';
 import Paragraph from '@tiptap/extension-paragraph';
 import Heading from '@tiptap/extension-heading';
+// ✅ NEW: alignment extension
+import TextAlign from '@tiptap/extension-text-align';
 
 type TipTapHtmlEditorProps = {
   value: string;
@@ -61,7 +70,7 @@ export default function TipTapHtmlEditor({
             ...this.parent?.(),
             backgroundColor: {
               default: null,
-              parseHTML: el => el.style.backgroundColor || null,
+              parseHTML: el => (el as HTMLElement).style.backgroundColor || null,
               renderHTML: attrs =>
                 attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {},
             },
@@ -74,13 +83,19 @@ export default function TipTapHtmlEditor({
             ...this.parent?.(),
             backgroundColor: {
               default: null,
-              parseHTML: el => el.style.backgroundColor || null,
+              parseHTML: el => (el as HTMLElement).style.backgroundColor || null,
               renderHTML: attrs =>
                 attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {},
             },
           };
         },
       }).configure({ levels: [2, 3] }),
+
+      // ✅ Alignment for headings & paragraphs
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+        alignments: ['left', 'center', 'right', 'justify'],
+      }),
 
       // StarterKit v3 includes Link by default; we want custom Link options,
       // so disable it here and add our configured Link below.
@@ -144,6 +159,21 @@ export default function TipTapHtmlEditor({
   const toggleBulletList = () => editor.chain().focus().toggleBulletList().run();
   const toggleOrderedList = () => editor.chain().focus().toggleOrderedList().run();
   const toggleCode = () => editor.chain().focus().toggleCode().run();
+
+  // ✅ Alignment helpers
+  const setAlign = (value: 'left' | 'center' | 'right' | 'justify') =>
+    editor.chain().focus().setTextAlign(value).run();
+  const isAligned = (value: 'left' | 'center' | 'right' | 'justify') =>
+    editor.isActive({ textAlign: value });
+
+  // Optional: left acts as "toggle off" if already left-aligned (removes the style)
+  const toggleLeft = () => {
+    if (isAligned('left')) {
+      editor.chain().focus().unsetTextAlign().run();
+    } else {
+      setAlign('left');
+    }
+  };
 
   const handleLink = () => {
     const previous = editor.getAttributes('link').href as string | undefined;
@@ -216,63 +246,74 @@ export default function TipTapHtmlEditor({
             <CodeIcon fontSize="small" />
           </ToolbarButton>
 
+          {/* ✅ Alignment buttons */}
+          <ToolbarButton tooltip="Align left" onClick={toggleLeft} active={isAligned('left')}>
+            <FormatAlignLeftIcon fontSize="small" />
+          </ToolbarButton>
+          <ToolbarButton tooltip="Align center" onClick={() => setAlign('center')} active={isAligned('center')}>
+            <FormatAlignCenterIcon fontSize="small" />
+          </ToolbarButton>
+          <ToolbarButton tooltip="Align right" onClick={() => setAlign('right')} active={isAligned('right')}>
+            <FormatAlignRightIcon fontSize="small" />
+          </ToolbarButton>
+          <ToolbarButton tooltip="Justify" onClick={() => setAlign('justify')} active={isAligned('justify')}>
+            <FormatAlignJustifyIcon fontSize="small" />
+          </ToolbarButton>
+
           {/* Font Family selector */}
           <Tooltip title="Font">
-          <Select
-  size="small"
-  value={getCurrentFont()}
-  onMouseDownCapture={() => {
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    savedSelRef.current = { from, to };
-  }}
-  onOpen={() => {
-    if (!editor) return;
-    const { from, to } = editor.state.selection;
-    savedSelRef.current = { from, to };
-  }}
-  onChange={(e) => {
-    const family = String(e.target.value);
-    const sel = savedSelRef.current ?? { from: editor.state.selection.from, to: editor.state.selection.to };
-    editor.chain().setTextSelection(sel).focus().setMark('textStyle', { fontFamily: family || null }).run();
-    savedSelRef.current = null;
-  }}
-  MenuProps={{
-    disablePortal: true,
-    onClose: () => {
-      editor?.commands.focus();
-    },
-  }}
-  // ✅ Use OutlinedInput so the `notched` prop stays on a component that expects it
-  input={<OutlinedInput />}
-  displayEmpty
-  sx={(theme) => ({
-    ml: 0.5,
-    height: 36, // OutlinedInput height
-    // keep the font preview on the trigger text
-    '& .MuiSelect-select': {
-      fontFamily: getCurrentFont() || 'inherit',
-      py: 0.25,
-    },
-    // optional: make the outline look like your previous border
-    '& .MuiOutlinedInput-notchedOutline': {
-      borderColor: theme.palette.divider,
-    },
-    '&:hover .MuiOutlinedInput-notchedOutline': {
-      borderColor: theme.palette.text.secondary,
-    },
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-      borderColor: theme.palette.primary.main,
-    },
-  })}
->
-  {FONT_OPTIONS.map((opt) => (
-    <MenuItem key={opt.label} value={opt.value} sx={{ fontFamily: opt.value || 'inherit' }}>
-      {opt.label}
-    </MenuItem>
-  ))}
-</Select>
-
+            <Select
+              size="small"
+              value={getCurrentFont()}
+              onMouseDownCapture={() => {
+                if (!editor) return;
+                const { from, to } = editor.state.selection;
+                savedSelRef.current = { from, to };
+              }}
+              onOpen={() => {
+                if (!editor) return;
+                const { from, to } = editor.state.selection;
+                savedSelRef.current = { from, to };
+              }}
+              onChange={(e) => {
+                const family = String(e.target.value);
+                const sel = savedSelRef.current ?? { from: editor.state.selection.from, to: editor.state.selection.to };
+                editor.chain().setTextSelection(sel).focus().setMark('textStyle', { fontFamily: family || null }).run();
+                savedSelRef.current = null;
+              }}
+              MenuProps={{
+                disablePortal: true,
+                onClose: () => {
+                  editor?.commands.focus();
+                },
+              }}
+              // Keep the `notched` prop on OutlinedInput to avoid DOM warning
+              input={<OutlinedInput />}
+              displayEmpty
+              sx={(theme) => ({
+                ml: 0.5,
+                height: 36,
+                '& .MuiSelect-select': {
+                  fontFamily: getCurrentFont() || 'inherit',
+                  py: 0.25,
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.divider,
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.text.secondary,
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: theme.palette.primary.main,
+                },
+              })}
+            >
+              {FONT_OPTIONS.map((opt) => (
+                <MenuItem key={opt.label} value={opt.value} sx={{ fontFamily: opt.value || 'inherit' }}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </Select>
           </Tooltip>
 
           {/* Block background color (color wheel) */}

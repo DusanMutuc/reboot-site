@@ -1,7 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Stack, Typography } from '@mui/material';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  Typography,
+} from '@mui/material';
 
 import type { ContentBlock, NodeSubtree } from '@/types/course';
 import {
@@ -64,15 +75,17 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }>
   >({});
   const [submitLoading, setSubmitLoading] = useState<Record<number, boolean>>({});
-  const [clientSmartDocProgress, setClientSmartDocProgress] = useState<
-    Record<number, SmartDocClientProgress>
-  >({});
+  const [clientSmartDocProgress, setClientSmartDocProgress] = useState<Record<number, SmartDocClientProgress>>({});
   const [videoProgressByBlock, setVideoProgressByBlock] = useState<Record<number, number>>({});
 
   const labels = getContentLabels(lesson);
   const nodeId = lesson?.node.id ?? null;
   const { markStarted, markCompleted } = useNodeProgress(nodeId);
   const completedOnceRef = useRef(false);
+
+  // ✨ EDIT MODE state
+  const [editingSmartDoc, setEditingSmartDoc] = useState<Record<number, boolean>>({});
+  const [pendingEditBlockId, setPendingEditBlockId] = useState<number | null>(null);
 
   const completeLesson = useCallback(async () => {
     if (!nodeId) return;
@@ -95,6 +108,8 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       setSubmitLoading({});
       setClientSmartDocProgress({});
       setVideoProgressByBlock({});
+      setEditingSmartDoc({}); // ✨ reset edit flags
+      setPendingEditBlockId(null);
       completedOnceRef.current = false;
       return;
     }
@@ -110,6 +125,8 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     setSubmitLoading({});
     setClientSmartDocProgress({});
     setVideoProgressByBlock({});
+    setEditingSmartDoc({}); // ✨ reset edit flags
+    setPendingEditBlockId(null);
     completedOnceRef.current = false;
 
     (async () => {
@@ -131,9 +148,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         const { blocks } = (await res.json()) as { blocks: ContentBlock[] };
         if (!active) return;
 
-        const renderable = (blocks ?? [])
-          .map(toRenderableBlock)
-          .sort((a, b) => a.position - b.position);
+        const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
 
         setBlocks(renderable);
         setBlocksState('ready');
@@ -420,8 +435,8 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     completeLesson,
   ]);
 
-  // ===== 5) Submit handler for a specific Smart Doc placement =====
-  const submitSmartDoc = async (content_block_id: number) => {
+  // ===== 5) Submit/Update handler for a specific Smart Doc placement =====
+  const submitSmartDoc = async (content_block_id: number, mode: 'submit' | 'update' = 'submit') => {
     setSubmitLoading((m) => ({ ...m, [content_block_id]: true }));
     try {
       const res = await fetch('/api/smartdoc/submit', {
@@ -458,9 +473,14 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         },
       }));
 
-      // Immediately re-check submission-based completion after this submit
-      const submittedNow = smartDocBlockIds.every(
-        (id) => (id === content_block_id ? result.status === 'submitted' : smartDocStatus[id]?.status === 'submitted')
+      // If this was an update, lock it back (read-only overlay)
+      if (mode === 'update') {
+        setEditingSmartDoc((prev) => ({ ...prev, [content_block_id]: false }));
+      }
+
+      // Immediately re-check submission-based completion after this submit/update
+      const submittedNow = smartDocBlockIds.every((id) =>
+        id === content_block_id ? result.status === 'submitted' : smartDocStatus[id]?.status === 'submitted'
       );
       const videosSatisfied =
         vimeoVideoBlockIds.length === 0 ||
@@ -524,6 +544,14 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
   const showResourceAlert = resourceState === 'error' && resourceError;
 
+  // ✨ confirm dialog actions
+  const confirmEdit = () => {
+    if (pendingEditBlockId == null) return;
+    setEditingSmartDoc((prev) => ({ ...prev, [pendingEditBlockId]: true }));
+    setPendingEditBlockId(null);
+  };
+  const cancelEdit = () => setPendingEditBlockId(null);
+
   return (
     <Box sx={{ py: { xs: 4, md: 6 } }}>
       <Stack spacing={3} sx={{ maxWidth: 860, mx: 'auto', px: { xs: 2, md: 4 } }}>
@@ -571,31 +599,19 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                     : undefined;
                   const effectiveComplete = serverComplete ?? clientProgress?.isComplete ?? false;
 
-                  // Submit button enabled when all fields are filled, but we only mark lesson/chapter
-                  // complete after *submit* (handled above).
-                  const canSubmit = isSmart && s?.status !== 'submitted' && effectiveComplete;
+                  // Submit button enabled rules
+                  const isSubmitted = s?.status === 'submitted';
+                  const isEditing = !!editingSmartDoc[block.id];
+                  const canSubmit = isSmart && !isSubmitted && effectiveComplete;
+                  const canUpdate = isSmart && isSubmitted && isEditing && effectiveComplete;
 
-                  const progressLabel = (() => {
-                    const hasNumbers = (value: unknown): value is number =>
-                      typeof value === 'number' && Number.isFinite(value);
-                    if (p && hasNumbers(p.fields_total) && p.fields_total > 0) {
-                      const total = p.fields_total;
-                      const completed = hasNumbers(p.fields_completed) ? Math.min(p.fields_completed, total) : 0;
-                      return `Progress: ${completed}/${total}`;
-                    }
-                    if (clientProgress) {
-                      return clientProgress.total > 0
-                        ? `Progress: ${clientProgress.completed}/${clientProgress.total}`
-                        : 'Progress: —';
-                    }
-                    if (p && hasNumbers(p.fields_completed) && hasNumbers(p.fields_total)) {
-                      return `Progress: ${p.fields_completed}/${p.fields_total}`;
-                    }
-                    return 'Progress: —';
-                  })();
+                  const buttonLabel =
+                    submitLoading[block.id]
+                      ? (isSubmitted ? 'Updating…' : 'Submitting…')
+                      : (isSubmitted ? (isEditing ? 'Update' : 'Submitted') : 'Submit');
 
                   return (
-                    <Box key={block.id}>
+                    <Box key={block.id} sx={{ position: 'relative' }}>
                       <BlockRenderer
                         block={block}
                         resource={resource}
@@ -603,20 +619,76 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                         onSmartDocProgress={handleClientSmartDocProgress}
                         onVideoProgress={handleVideoProgress}
                       />
+
+                      {/* ✨ Read-only overlay for submitted SmartDocs (until user confirms edit) */}
+                      {isSmart && isSubmitted && !isEditing && (
+                        <Box
+                          role="button"
+                          aria-label="Edit submitted answer"
+                          tabIndex={0}
+                          onClick={() => setPendingEditBlockId(block.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setPendingEditBlockId(block.id);
+                            }
+                          }}
+                          sx={{
+                            position: 'absolute',
+                            inset: 0,
+                            cursor: 'pointer',
+                            // subtle veil to hint it's locked but interactive
+                            background:
+                              'linear-gradient(rgba(255,255,255,0.0), rgba(255,255,255,0.0))',
+                            // ensure it sits above inputs
+                            zIndex: 2,
+                          }}
+                        />
+                      )}
+
                       {isSmart && (
                         <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
                           <Typography variant="caption" color="text.secondary">
-                            {progressLabel}
-                            {s?.status === 'submitted' ? ' • Submitted' : ''}
+                            {(() => {
+                              const hasNumbers = (value: unknown): value is number =>
+                                typeof value === 'number' && Number.isFinite(value);
+                              if (p && hasNumbers(p.fields_total) && p.fields_total > 0) {
+                                const total = p.fields_total;
+                                const completed = hasNumbers(p.fields_completed)
+                                  ? Math.min(p.fields_completed, total)
+                                  : 0;
+                                return `Progress: ${completed}/${total}${isSubmitted ? ' • Submitted' : ''}`;
+                              }
+                              if (clientProgress) {
+                                return clientProgress.total > 0
+                                  ? `Progress: ${clientProgress.completed}/${clientProgress.total}${
+                                      isSubmitted ? ' • Submitted' : ''
+                                    }`
+                                  : `Progress: —${isSubmitted ? ' • Submitted' : ''}`;
+                              }
+                              if (p && hasNumbers(p.fields_completed) && hasNumbers(p.fields_total)) {
+                                return `Progress: ${p.fields_completed}/${p.fields_total}${
+                                  isSubmitted ? ' • Submitted' : ''
+                                }`;
+                              }
+                              return `Progress: —${isSubmitted ? ' • Submitted' : ''}`;
+                            })()}
                           </Typography>
                           <Box sx={{ flex: 1 }} />
+
                           <Button
                             size="small"
                             variant="contained"
-                            disabled={!canSubmit || !!submitLoading[block.id]}
-                            onClick={() => submitSmartDoc(block.id)}
+                            disabled={
+                              (!!submitLoading[block.id]) ||
+                              (!isSubmitted && !canSubmit) ||
+                              (isSubmitted && !canUpdate)
+                            }
+                            onClick={() =>
+                              submitSmartDoc(block.id, isSubmitted ? 'update' : 'submit')
+                            }
                           >
-                            {s?.status === 'submitted' ? 'Submitted' : submitLoading[block.id] ? 'Submitting…' : 'Submit'}
+                            {buttonLabel}
                           </Button>
                         </Stack>
                       )}
@@ -636,6 +708,23 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
         {showResourceAlert ? <Alert severity="warning">{resourceError}</Alert> : null}
       </Stack>
+
+      {/* ✨ Confirm edit dialog */}
+      <Dialog open={pendingEditBlockId != null} onClose={cancelEdit}>
+        <DialogTitle>Edit your answer?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            This Smart Doc has already been submitted. Do you want to edit your answer?
+            You can make changes and then click <strong>Update</strong>.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelEdit}>Cancel</Button>
+          <Button variant="contained" onClick={confirmEdit} autoFocus>
+            Yes, edit
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

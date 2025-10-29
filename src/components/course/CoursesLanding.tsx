@@ -45,7 +45,6 @@ function clampLines(lines: number) {
     overflow: 'hidden',
   };
 }
-
 function SkeletonCard() {
   return (
     <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
@@ -53,8 +52,8 @@ function SkeletonCard() {
         <Skeleton variant="rectangular" width="100%" height="100%" />
       </Box>
       <Box sx={{ p: 2.5 }}>
-        <Skeleton variant="circular" width={56} height={56} sx={{ mt: -4 }} />
-        <Skeleton variant="text" sx={{ fontSize: '1.25rem', mt: 2 }} />
+        {/* removed circular skeleton */}
+        <Skeleton variant="text" sx={{ fontSize: '1.25rem', mt: 1 }} />
         <Skeleton variant="text" />
         <Skeleton variant="rectangular" height={8} sx={{ mt: 1.5, borderRadius: 999 }} />
         <Skeleton variant="rectangular" height={40} sx={{ mt: 2, borderRadius: 2 }} />
@@ -62,6 +61,7 @@ function SkeletonCard() {
     </Card>
   );
 }
+
 
 
 /** Convert DB value → usable <Image src>
@@ -89,7 +89,6 @@ type CourseCardProps = {
 function CourseCard({ course, progressPct }: CourseCardProps) {
   const slug = course.slug ?? '';
   const heroSrc = resolveHeroSrc(course.hero_image);
-
   const progress = typeof progressPct === 'number'
     ? Math.max(0, Math.min(100, progressPct))
     : 0;
@@ -114,7 +113,6 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
         sx={{ alignItems: 'stretch' }}
         aria-label={`Open course ${course.title ?? 'Untitled'}`}
       >
-        {/* Hero image (fixed 16:9) */}
         <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9' }}>
           {heroSrc ? (
             <Image
@@ -125,36 +123,13 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
               style={{ objectFit: 'cover' }}
             />
           ) : (
-            <Box
-              sx={{
-                position: 'absolute',
-                inset: 0,
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              }}
-            />
+            <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} />
           )}
-          <Box
-            sx={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(to top, rgba(0,0,0,.22), rgba(0,0,0,0))',
-            }}
-          />
+          <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,.22), rgba(0,0,0,0))' }} />
         </Box>
 
-        <CardContent sx={{ display: 'grid', gap: 2.25 }}>
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: 56,
-              height: 56,
-              bgcolor: 'success.main',
-              color: 'common.white',
-              boxShadow: 2,
-              mt: -4,
-            }}
-          />
-
+        {/* reduced gap since avatar is gone */}
+        <CardContent sx={{ display: 'grid', gap: 1.75 }}>
           <Typography variant="h6" sx={{ fontWeight: 700, ...clampLines(2) }}>
             {course.title ?? 'Untitled course'}
           </Typography>
@@ -165,7 +140,6 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
             </Typography>
           )}
 
-          {/* Progress */}
           <Stack spacing={0.75}>
             <Stack direction="row" justifyContent="space-between">
               <Typography variant="caption" color="text.secondary" sx={{ letterSpacing: 0.6 }}>
@@ -187,12 +161,7 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
             </Box>
           </Stack>
 
-          <Button
-            variant="contained"
-            fullWidth
-            disableElevation
-            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1.25 }}
-          >
+          <Button variant="contained" fullWidth disableElevation sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1.25 }}>
             {progress > 0 ? 'Continue' : 'Start'}
           </Button>
         </CardContent>
@@ -200,6 +169,7 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
     </Card>
   );
 }
+
 
 export default function CoursesLanding() {
   const [state, setState] = useState<FetchState>({ status: 'loading' });

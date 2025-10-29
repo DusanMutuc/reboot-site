@@ -215,7 +215,7 @@ export default function HeroImageManagerDialog(props: {
     (e.currentTarget as HTMLInputElement).value = '';
     if (!file || !courseId) return;
     if (!file.type.startsWith('image/')) return alert('Please choose an image file.');
-    if (file.size > 5 * 1024 * 1024) return alert('Max file size is 5MB.');
+    if (file.size > 15 * 1024 * 1024) return alert('Max file size is 15MB.');
     if (!courseFolder) return alert('Missing course folder.');
 
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();

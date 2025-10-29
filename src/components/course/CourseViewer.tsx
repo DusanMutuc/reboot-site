@@ -215,6 +215,42 @@ function debugLogUnlockStatuses(
   }
 }
 
+/** ---------- NEW: find first unlocked content slug ---------- */
+function findFirstUnlockedContentSlug(
+  course: NodeSubtree,
+  lockMap: Record<number, Record<number, ChildUnlockStatus>>,
+): string | null {
+  const walk = (parent: NodeSubtree): string | null => {
+    const parentId = parent.node.id;
+    const locks = lockMap[parentId] ?? {};
+
+    for (const child of parent.children) {
+      const subtree = child.subtree;
+      const childId = subtree.node.id;
+      const locked = locks[childId]?.locked ?? false;
+      if (locked) continue;
+
+      const isContent = isContentNodeType(subtree.node.node_type);
+
+      // Prefer deeper unlocked lessons if present
+      if (subtree.children.length > 0) {
+        const deeper = walk(subtree);
+        if (deeper) return deeper;
+      }
+
+      if (isContent && subtree.node.slug) {
+        return subtree.node.slug;
+      }
+
+      const deeperAnyway = walk(subtree);
+      if (deeperAnyway) return deeperAnyway;
+    }
+    return null;
+  };
+
+  return walk(course);
+}
+
 export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
   const router = useRouter();
   const [state, setState] = useState<CourseState>({ status: 'loading' });
@@ -255,21 +291,22 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
         if (!active) return;
 
         // AFTER
-// prefer existing everUnlocked (from cache or current state) so unlocks are truly monotonic across reloads
-const priorEver =
-(courseCache.get(courseSlug)?.everUnlocked && cloneEverUnlocked(courseCache.get(courseSlug)!.everUnlocked)) ||
-(state.status === 'ready' && cloneEverUnlocked(state.everUnlocked)) ||
-null;
+        // prefer existing everUnlocked (from cache or current state) so unlocks are truly monotonic across reloads
+        const priorEver =
+          (courseCache.get(courseSlug)?.everUnlocked &&
+            cloneEverUnlocked(courseCache.get(courseSlug)!.everUnlocked)) ||
+          (state.status === 'ready' && cloneEverUnlocked(state.everUnlocked)) ||
+          null;
 
-const everUnlocked = priorEver ?? seedEverUnlocked(data.unlockStatuses);
-const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
+        const everUnlocked = priorEver ?? seedEverUnlocked(data.unlockStatuses);
+        const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
 
-courseCache.set(courseSlug, {
-course: data.course,
-lockStatuses,
-everUnlocked: cloneEverUnlocked(everUnlocked),
-});
-setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
+        courseCache.set(courseSlug, {
+          course: data.course,
+          lockStatuses,
+          everUnlocked: cloneEverUnlocked(everUnlocked),
+        });
+        setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
 
         if (process.env.NODE_ENV !== 'production') {
           debugLogUnlockStatuses('initial-load', lockStatuses, data.course);
@@ -390,6 +427,17 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
     setExpanded((prev) => new Set([...prev, ...pathParents]));
   }, [contentError, parentById, requestedContentId]);
 
+  /** ------- NEW: Auto-redirect to first unlocked node when opening course root ------- */
+  useEffect(() => {
+    if (state.status !== 'ready') return;
+    if (lessonSlug) return; // user explicitly asked for a specific item
+
+    const firstSlug = findFirstUnlockedContentSlug(state.course, lockMap);
+    if (firstSlug) {
+      router.replace(`/courses/${courseSlug}/${firstSlug}`);
+    }
+  }, [state, lessonSlug, lockMap, router, courseSlug]);
+
   /** ------- Unlock refresh after completion -------- */
   const refreshUnlocks = async (parentIds: number[]) => {
     if (parentIds.length === 0) return;
@@ -446,17 +494,16 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
 
   const handleLessonCompleted = (nodeId: number) => {
     if (!parentById) return;
-  
-    const parent = parentById.get(nodeId) ?? null;          // chapter -> lesson, lesson -> course
+
+    const parent = parentById.get(nodeId) ?? null; // chapter -> lesson, lesson -> course
     const grandparent = parent != null ? (parentById.get(parent) ?? null) : null; // chapter -> course
-  
+
     const toRefresh = [parent, grandparent].filter((n): n is number => n != null);
     if (process.env.NODE_ENV !== 'production') {
       console.debug('[unlock-debug] handleLessonCompleted', { nodeId, parent, grandparent, toRefresh });
     }
     refreshUnlocks(toRefresh);
   };
-  
 
   // ----- inline skeleton instead of white full-page -----
   if (state.status === 'loading') {
@@ -502,7 +549,6 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
     return null;
   }
 
-
   const HEADER_OFFSET = 0; // set to your AppBar height (e.g. 64) if you have a fixed header
 
   return (
@@ -521,12 +567,12 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
           noTransition
         />
       </Box>
-  
+
       {/* desktop/tablet: fixed left rail + spacer */}
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         {/* spacer keeps content pushed over; visible but empty */}
         <Box sx={{ width: { xs: 0, md: 340 }, display: { xs: 'none', md: 'block' } }} />
-  
+
         {/* the actual fixed sidebar */}
         <Box
           sx={{
@@ -556,7 +602,7 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
             />
           </Box>
         </Box>
-  
+
         {/* content column */}
         <Box sx={{ flex: 1, minWidth: 0, bgcolor: 'background.default' }}>
           {lessonSlug ? null : (
@@ -570,7 +616,7 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
               <Divider sx={{ my: 4 }} />
             </Box>
           )}
-  
+
           <LessonContent
             lesson={selectedContent}
             loading={false}
@@ -579,7 +625,7 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
           />
         </Box>
       </Box>
-  
+
       <Snackbar
         open={!!snackbar}
         autoHideDuration={6000}
@@ -592,5 +638,4 @@ setState({ status: 'ready', course: data.course, lockStatuses, everUnlocked });
       </Snackbar>
     </Box>
   );
-  
 }

@@ -36,7 +36,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
   return (
     <Box
       sx={{
-        width: 320,
+        width: 360, // wider sidebar
         bgcolor: 'background.paper',
         borderRight: 1,
         borderColor: 'divider',
@@ -46,20 +46,20 @@ const LibrarySidebar = memo(function LibrarySidebar({
     >
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <BookIcon sx={{ color: 'primary.main', fontSize: 28 }} />
-            <Typography variant="h6" fontWeight={600}>Library</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+            <BookIcon sx={{ color: 'primary.main', fontSize: 32 }} />
+            <Typography variant="h6" fontWeight={700}>Library</Typography>
           </Box>
           <Tooltip title="Back to grid view">
-            <IconButton size="small" component={Link} href="/library">
+            <IconButton size="medium" component={Link} href="/library">
               <GridViewIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         </Stack>
       </Box>
 
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
-        <Stack spacing={1}>
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+        <Stack spacing={1.25}>
           {items.map((item) => {
             const isSelected = item.id === selectedId;
             return (
@@ -68,9 +68,9 @@ const LibrarySidebar = memo(function LibrarySidebar({
                 onClick={() => onOpenItem(item.id)}
                 sx={{
                   display: 'flex',
-                  gap: 1.5,
-                  p: 1.5,
-                  borderRadius: 2,
+                  gap: 2,
+                  p: 2,
+                  borderRadius: 2.5,
                   border: 1,
                   borderColor: isSelected ? 'primary.main' : 'divider',
                   bgcolor: isSelected ? 'primary.50' : 'background.paper',
@@ -82,23 +82,56 @@ const LibrarySidebar = memo(function LibrarySidebar({
                   },
                 }}
               >
-                <Box sx={{ width: 80, height: 56, borderRadius: 1, bgcolor: 'grey.200', overflow: 'hidden', flexShrink: 0 }}>
+                <Box
+                  sx={{
+                    width: 96,
+                    height: 64,
+                    borderRadius: 1.25,
+                    bgcolor: 'grey.200',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                  }}
+                >
                   {item.hero_image ? (
-                    <img src={item.hero_image} alt={item.title || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img
+                      src={item.hero_image}
+                      alt={item.title || ''}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
                   ) : (
-                    <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ImageIcon sx={{ color: 'grey.400' }} />
+                    <Box
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <ImageIcon sx={{ color: 'grey.400', fontSize: 28 }} />
                     </Box>
                   )}
                 </Box>
+
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={600} noWrap sx={{ color: isSelected ? 'primary.main' : 'text.primary' }}>
+                  <Typography
+                    sx={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      lineHeight: 1.25,
+                      color: isSelected ? 'primary.main' : 'text.primary',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'normal',
+                      minHeight: '2.5em', // ensures consistent height for up to 2 lines
+                    }}
+                  >
                     {item.title || 'Untitled item'}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {item.node_type === 'chapter' ? 'Section' : 'Page'}
-                    {item.description ? ` · ${item.description}` : ''}
-                  </Typography>
+                  {/* subtitle removed per request */}
                 </Box>
               </Box>
             );
@@ -201,7 +234,6 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
   }, [rootId]);
 
   const openItem = useCallback((id: number) => {
-    // Link is fine too; this makes sure we don't push the same id
     if (selectedId !== id) router.push(`/library/${id}`);
   }, [router, selectedId]);
 

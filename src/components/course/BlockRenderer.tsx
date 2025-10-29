@@ -459,6 +459,43 @@ type VimeoWindow = Window & {
     Player: VimeoPlayerConstructor;
   };
 };
+// ---- Vimeo helpers (paste above vimeoScriptPromise) ----
+
+// Extract a numeric Vimeo ID from many URL shapes (or accept raw "123456789")
+function extractVimeoId(input: string): string | null {
+  try {
+    const url = new URL(input);
+    const parts = url.pathname.split('/').filter(Boolean);
+    // handles: vimeo.com/12345, /channels/x/12345, /groups/g/videos/12345,
+    // player.vimeo.com/video/12345, vimeo.com/manage/videos/12345, etc.
+    const id = [...parts].reverse().find((p) => /^\d+$/.test(p));
+    return id ?? null;
+  } catch {
+    return /^\d+$/.test(input) ? input : null;
+  }
+}
+
+// Build a locked-down embed URL (hides Vimeo logo and extra UI)
+function buildVimeoEmbedUrl(idOrUrl: string, extra: Record<string, string | number | boolean> = {}) {
+  const id = extractVimeoId(idOrUrl);
+  if (!id) return null;
+
+  const params: Record<string, string | number> = {
+    vimeo_logo: 0, // hides bottom-right Vimeo button
+    title: 0,
+    byline: 0,
+    portrait: 0,
+    badge: 0,
+    pip: 0,
+    dnt: 1,        // Do-Not-Track
+    ...extra,
+  };
+
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
+  return `https://player.vimeo.com/video/${id}?${qs.toString()}`;
+}
+
 
 let vimeoScriptPromise: Promise<void> | null = null;
 
@@ -584,7 +621,7 @@ function VimeoPlayerFrame({
         component="iframe"
         ref={iframeRef}
         title={title}
-        src={`https://player.vimeo.com/video/${videoId}`}
+        src={buildVimeoEmbedUrl(videoId) ?? `https://player.vimeo.com/video/${videoId}`}
         allow="autoplay; fullscreen; picture-in-picture"
         allowFullScreen
         sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}

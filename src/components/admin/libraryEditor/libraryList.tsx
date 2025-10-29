@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Box,
   Button,
@@ -9,6 +9,11 @@ import {
   Typography,
   Tooltip,
   Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
@@ -22,12 +27,10 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import type { NodeSubtree, NodeType } from '@/types/course';
 import { supabase } from '@/lib/supabaseClient';
 
-// --- same resolver style you use in the student view ---
 const BUCKET = 'course-heroes';
 function toPublicUrl(keyOrUrl?: string | null) {
   if (!keyOrUrl) return null;
   if (/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl;
-  // strip leading slashes and accidental "course-heroes/" prefix
   let p = keyOrUrl.replace(/^\/+/, '');
   if (p.startsWith(`${BUCKET}/`)) p = p.slice(BUCKET.length + 1);
   return supabase.storage.from(BUCKET).getPublicUrl(p).data.publicUrl ?? null;
@@ -67,9 +70,8 @@ export default function LibraryList({
     return [...rootSubtree.children].sort((a, b) => a.edge.position - b.edge.position);
   }, [rootSubtree]);
 
-  // -------- NEW: client-side image overlay (id -> public URL) --------
+  // thumbs overlay
   const [heroMap, setHeroMap] = useState<Map<number, string>>(new Map());
-
   useEffect(() => {
     let cancelled = false;
     async function loadThumbs() {
@@ -77,7 +79,6 @@ export default function LibraryList({
         setHeroMap(new Map());
         return;
       }
-      // collect visible node ids (top-level + one nested level for chapters)
       const topIds = children.map(c => c.subtree.node.id);
       const nestedIds = children
         .filter(c => c.subtree.node.node_type === 'chapter')
@@ -108,6 +109,42 @@ export default function LibraryList({
     loadThumbs();
     return () => { cancelled = true; };
   }, [rootSubtree, children]);
+
+  // ---------- NEW: "Name new item" dialog state ----------
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameValue, setNameValue] = useState('');
+  const [pendingParentId, setPendingParentId] = useState<number | null>(null);
+  const [pendingType, setPendingType] = useState<NodeType>('lesson');
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleOpenNameDialog = (parentId: number | null, nodeType: NodeType = 'lesson') => {
+    setPendingParentId(parentId);
+    setPendingType(nodeType);
+    setNameValue('');
+    setNameOpen(true);
+  };
+
+  const handleCloseNameDialog = () => {
+    setNameOpen(false);
+    setNameValue('');
+    setPendingParentId(null);
+  };
+
+  const handleCreateWithName = () => {
+    const trimmed = nameValue.trim();
+    if (!trimmed) return;
+    onCreateNode(pendingParentId ?? null, { node_type: pendingType, title: trimmed });
+    handleCloseNameDialog();
+  };
+
+  // focus field when dialog opens
+  useEffect(() => {
+    if (nameOpen && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [nameOpen]);
+  // -------------------------------------------------------
 
   if (!rootSubtree) {
     return (
@@ -145,12 +182,7 @@ export default function LibraryList({
             fullWidth
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() =>
-              onCreateNode(rootSubtree.node.id, {
-                node_type: 'lesson',
-                title: 'New Item',
-              })
-            }
+            onClick={() => handleOpenNameDialog(rootSubtree.node.id, 'lesson')}
           >
             New Item
           </Button>
@@ -171,7 +203,6 @@ export default function LibraryList({
               ? [...subtree.children].sort((a, b) => a.edge.position - b.edge.position)
               : [];
 
-            // pull resolved URL from the overlay
             const heroUrl = heroMap.get(subtree.node.id);
 
             return (
@@ -470,6 +501,45 @@ export default function LibraryList({
           })}
         </Stack>
       </Box>
+
+      {/* ---------- NEW: Name dialog ---------- */}
+      <Dialog
+        open={nameOpen}
+        onClose={handleCloseNameDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Name new item</DialogTitle>
+        <DialogContent>
+          <TextField
+            inputRef={inputRef}
+            autoFocus
+            fullWidth
+            margin="dense"
+            label="Title"
+            placeholder="e.g. Negotiation Basics"
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && nameValue.trim()) {
+                e.preventDefault();
+                handleCreateWithName();
+              }
+            }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseNameDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateWithName}
+            disabled={!nameValue.trim()}
+          >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* ------------------------------------- */}
     </Stack>
   );
 }

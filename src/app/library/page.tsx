@@ -1,12 +1,22 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import {
-    Box, Container, Paper, Stack, Typography, Card, CardActionArea,
-    CardContent, CardMedia, CircularProgress, Alert, IconButton
-  } from '@mui/material';
-  import Grid from '@mui/material/Grid';
+  Box,
+  Container,
+  Stack,
+  Typography,
+  Card,
+  CardActionArea,
+  CardContent,
+  CircularProgress,
+  Alert,
+  IconButton,
+  Skeleton,
+} from '@mui/material';
+import Grid from '@mui/material/Grid';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -27,10 +37,49 @@ type ChildRow = {
 
 const BUCKET = 'course-heroes';
 
-function toPublicUrl(keyOrUrl: string | null | undefined): string | null {
-  if (!keyOrUrl) return null;
-  if (/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl;
-  return supabase.storage.from(BUCKET).getPublicUrl(keyOrUrl.replace(/^\/+/, '')).data.publicUrl ?? null;
+// --- visuals/parity helpers (mirrors CoursesLanding) ---
+function clampLines(lines: number) {
+  return {
+    display: '-webkit-box',
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: 'vertical' as const,
+    overflow: 'hidden',
+  };
+}
+
+function SkeletonCard() {
+  return (
+    <Card
+      elevation={0}
+      sx={{
+        borderRadius: 3,
+        border: '1px solid',
+        borderColor: 'grey.200',
+        overflow: 'hidden',
+        height: '100%',
+      }}
+    >
+      <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9' }}>
+        <Skeleton variant="rectangular" width="100%" height="100%" />
+      </Box>
+      <Box sx={{ p: 2.5 }}>
+        <Skeleton variant="text" sx={{ fontSize: '1.25rem', width: '80%' }} />
+        <Skeleton variant="text" sx={{ width: '60%' }} />
+      </Box>
+    </Card>
+  );
+}
+
+/** Convert DB hero value → usable <Image src>
+ *  - If it's already a full URL, return it unchanged.
+ *  - If it's a storage path, build a public URL from the "course-heroes" bucket.
+ */
+function resolveHeroSrc(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const v = value.trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  const { data } = supabase.storage.from(BUCKET).getPublicUrl(v.replace(/^\/+/, ''));
+  return data?.publicUrl ?? null;
 }
 
 export default function LibraryPage() {
@@ -109,30 +158,30 @@ export default function LibraryPage() {
           .eq('parent_id', rootId)
           .order('position', { ascending: true });
         if (linkErr) throw linkErr;
-  
+
         const childIds = (links ?? []).map(l => l.child_id);
         if (childIds.length === 0) {
           if (!cancelled) setItems([]);
           return;
         }
-  
+
         // 2) fetch the child nodes
         const { data: nodes, error: nodeErr } = await supabase
           .from('content_nodes')
           .select('id, title, description, slug, node_type, hero_image')
           .in('id', childIds);
         if (nodeErr) throw nodeErr;
-  
+
         const nodeMap = new Map<number, NodeRow>();
         (nodes ?? []).forEach(n => nodeMap.set(n.id as number, n as unknown as NodeRow));
-  
+
         // 3) stitch back preserving order
         const stitched: ChildRow[] = (links ?? []).map(l => ({
           child_id: l.child_id,
           position: l.position,
           child: nodeMap.get(l.child_id)!,
         })).filter(row => !!row.child);
-  
+
         if (!cancelled) setItems(stitched);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Failed to load Library items');
@@ -143,60 +192,102 @@ export default function LibraryPage() {
     void loadChildren();
     return () => { cancelled = true; };
   }, [rootId]);
-  
 
-  const content = useMemo(() => {
+  const gridContent = useMemo(() => {
     if (loading) {
       return (
-        <Stack alignItems="center" spacing={1} sx={{ py: 8 }}>
-          <CircularProgress />
-          <Typography variant="body2" color="text.secondary">Loading Library…</Typography>
-        </Stack>
+        <Grid container spacing={3}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Grid key={i} size={{ xs: 12, sm: 6, md: 4 }}>
+              <SkeletonCard />
+            </Grid>
+          ))}
+        </Grid>
       );
     }
     if (error) {
       return (
-        <Alert severity="error" sx={{ my: 3 }}>
-          {error}
-        </Alert>
+        <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
+          <Alert severity="error">{error}</Alert>
+        </Stack>
       );
     }
     if (items.length === 0) {
       return (
-        <Alert severity="info" sx={{ my: 3 }}>
-          No items in the Library yet.
-        </Alert>
+        <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
+          <Typography variant="h6">No items in the Library yet</Typography>
+          <Typography color="text.secondary" align="center">
+            Add resources or connect content to this collection to see them here.
+          </Typography>
+        </Stack>
       );
     }
 
     return (
-      <Grid container spacing={2}>
+      <Grid container spacing={3}>
         {items.map(({ child }) => {
-          const url = toPublicUrl(child.hero_image ?? null);
+          const heroSrc = resolveHeroSrc(child.hero_image ?? null);
           const href = `/library/${child.id}`;
           return (
             <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>
-              <Card variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                <CardActionArea component={Link} href={href} sx={{ alignItems: 'stretch' }}>
-                  {url ? (
-                    <CardMedia
-                      component="img"
-                      src={url}
-                      alt=""
-                      loading="lazy"
-                      sx={{ aspectRatio: '16 / 9', objectFit: 'cover' }}
+              <Card
+                elevation={0}
+                sx={{
+                  height: '100%',
+                  borderRadius: 3,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  bgcolor: 'background.paper',
+                  overflow: 'hidden',
+                  transition: 'transform .25s ease, box-shadow .25s ease',
+                  '&:hover': { transform: 'translateY(-4px)', boxShadow: 6 },
+                }}
+              >
+                <CardActionArea
+                  LinkComponent={Link}
+                  href={href}
+                  sx={{ alignItems: 'stretch' }}
+                  aria-label={`Open ${child.title ?? 'item'}`}
+                >
+                  {/* Hero image (fixed 16:9) */}
+                  <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9' }}>
+                    {heroSrc ? (
+                      <Image
+                        src={heroSrc}
+                        alt=""
+                        fill
+                        sizes="(max-width: 600px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        style={{ objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          inset: 0,
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        }}
+                      />
+                    )}
+                    {/* top fade overlay */}
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(0,0,0,.22), rgba(0,0,0,0))',
+                      }}
                     />
-                  ) : (
-                    <Box sx={{ aspectRatio: '16 / 9', bgcolor: 'action.hover' }} />
-                  )}
-                  <CardContent>
-                    <Typography variant="subtitle1" noWrap>
+                  </Box>
+
+                  <CardContent sx={{ display: 'grid', gap: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, ...clampLines(2) }}>
                       {child.title || 'Untitled'}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" noWrap>
-                      {child.node_type === 'chapter' ? 'Section' : 'Page'}
-                      {child.description ? ` · ${child.description}` : ''}
-                    </Typography>
+                    {(child.description || child.node_type) && (
+                      <Typography variant="body2" color="text.secondary" sx={clampLines(2)}>
+                        {(child.node_type === 'chapter' ? 'Section' : 'Page') +
+                          (child.description ? ` · ${child.description}` : '')}
+                      </Typography>
+                    )}
                   </CardContent>
                 </CardActionArea>
               </Card>
@@ -208,18 +299,35 @@ export default function LibraryPage() {
   }, [loading, error, items]);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 3 }}>
-      {/* Top bar */}
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-        <IconButton component={Link} href="/dashboard" aria-label="Back to dashboard">
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h5" fontWeight={700}>Library</Typography>
-      </Stack>
+    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)' }}>
+      {/* Sticky translucent header — matches CoursesLanding */}
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          backdropFilter: 'saturate(180%) blur(8px)',
+          backgroundColor: 'rgba(255,255,255,0.75)',
+          borderBottom: '1px solid',
+          borderColor: 'grey.100',
+        }}
+      >
+        <Container maxWidth="lg" sx={{ py: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <IconButton LinkComponent={Link} href="/dashboard" aria-label="Back to Home" size="medium">
+              <ArrowBackIcon />
+            </IconButton>
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              Library
+            </Typography>
+          </Stack>
+        </Container>
+      </Box>
 
-      <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-        {content}
-      </Paper>
-    </Container>
+      {/* Content */}
+      <Container maxWidth="lg" sx={{ py: 8 }}>
+        {gridContent}
+      </Container>
+    </Box>
   );
 }

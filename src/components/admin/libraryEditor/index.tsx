@@ -123,6 +123,9 @@ function LibraryEditorInner() {
     setSelectedBlockId,
     setEditingBlockId,
     setSavingState,
+    // 🔹 add preview support like course editor
+    editorMode,
+    setEditorMode,
   } = useEditorStore();
 
   const [trees, setTrees] = useState<NodeSubtree[]>([]);
@@ -289,8 +292,6 @@ function LibraryEditorInner() {
   // ensure resources cache
   const ensureResource = useCallback(
     async (resourceId: number) => {
-      // identical to CourseEditor
-      // (kept for smart doc/resource previews in Canvas)
       // @ts-ignore
       if (resourceCache[resourceId]) return resourceCache[resourceId];
       const { data, error } = await supabase
@@ -435,9 +436,8 @@ function LibraryEditorInner() {
     if (!subtree) return;
     const ordered = [...subtree.children].sort((a, b) => a.edge.position - b.edge.position);
     const index = ordered.findIndex((c) => c.edge.child_id === childId);
-    if (index === -1) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= ordered.length) return;
+    if (index === -1 || targetIndex < 0 || targetIndex >= ordered.length) return;
     const nextOrder = [...ordered];
     const [moved] = nextOrder.splice(index, 1);
     nextOrder.splice(targetIndex, 0, moved);
@@ -564,6 +564,14 @@ function LibraryEditorInner() {
     queueNodeUpdate(selectedSubtree.node.id, { state }, { debounce: false });
   }, [queueNodeUpdate, selectedSubtree]);
 
+  // 🔹 Clear editing when entering preview (parity with course editor)
+  useEffect(() => {
+    if (editorMode === 'preview') {
+      setSelectedBlockId(null);
+      setEditingBlockId(null);
+    }
+  }, [editorMode, setEditingBlockId, setSelectedBlockId]);
+
   if (loading) {
     return <Box sx={{ p: 6, display: 'grid', placeItems: 'center' }}><CircularProgress /></Box>;
   }
@@ -588,6 +596,10 @@ function LibraryEditorInner() {
           onShowDetails={() => {
             setSelectedBlockId(null);
             setEditingBlockId(null);
+            // 🔹 leave preview when details are requested (same UX as course editor)
+            if (editorMode === 'preview') {
+              setEditorMode('edit');
+            }
           }}
         />
 
@@ -596,7 +608,11 @@ function LibraryEditorInner() {
             flex: 1,
             minHeight: 0,
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: '360px minmax(0, 1fr) 360px' },
+            // 🔹 collapse right Properties panel in preview
+            gridTemplateColumns:
+              editorMode === 'preview'
+                ? { xs: '1fr', md: '360px minmax(0, 1fr)' }
+                : { xs: '1fr', md: '360px minmax(0, 1fr) 360px' },
           }}
         >
           {/* Left: Library list (not a tree) */}
@@ -616,7 +632,13 @@ function LibraryEditorInner() {
           </Box>
 
           {/* Middle: Canvas */}
-          <Box sx={{ borderRight: { md: '1px solid' }, borderColor: 'divider', minHeight: 0 }}>
+          <Box
+            sx={{
+              borderRight: editorMode === 'preview' ? undefined : { md: '1px solid' },
+              borderColor: 'divider',
+              minHeight: 0,
+            }}
+          >
             <Canvas
               subtree={selectedSubtree}
               resources={resourceCache}
@@ -628,54 +650,58 @@ function LibraryEditorInner() {
               onInsertBlock={handleInsertBlock}
               onReorderBlocks={handleReorderBlocks}
               onChangeText={handleTextChange}
+              // 🔹 actually tell Canvas it’s in preview
+              previewMode={editorMode === 'preview'}
             />
           </Box>
 
-          {/* Right: Properties */}
-          <Box sx={{ minHeight: 0 }}>
-            <Properties
-              subtree={selectedSubtree}
-              nodeDraft={nodeDraft}
-              metadataError={metadataError}
-              onNodeFieldChange={handleNodeFieldChange}
-              onRequestAddChild={(mode, options) =>
-                selectedSubtree && handleAddChild(selectedSubtree.node.id, {
-                  node_type: (options?.type ?? 'lesson') as NodeType,
-                  title: 'Untitled',
-                })
-              }
-              onReorderChild={(childId, direction) =>
-                selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)}
-              onUpdateChild={(childId, updates) =>
-                selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)}
-              onRemoveChild={(childId) =>
-                selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)}
-              selectedBlock={sortedBlocks.find((b) => b.id === selectedBlockId) ?? null}
-              onClearBlockSelection={() => { setSelectedBlockId(null); setEditingBlockId(null); }}
-              onUpdateBlock={(blockId, updates, opts) => queueBlockUpdate(blockId, updates, opts)}
-              onDeleteBlock={async (blockId) => {
-                await runMutation(async () => {
-                  const subtree = await deleteBlock(blockId);
-                  return { subtree };
-                }, { message: 'Block deleted' });
-                setSelectedBlockId((prev) => (prev === blockId ? null : prev));
-                setEditingBlockId((prev) => (prev === blockId ? null : prev));
-              }}
-              onOpenResourcePicker={(mode, blockId) => {
-                setResourceDialogMode({ type: mode, blockId });
-                setResourceDialogOpen(true);
-              }}
-              onFinalizeSmartDocBlock={async (block, docId) => {
-                if (block.smart_doc_id !== docId) {
-                  queueBlockUpdate(block.id, { smart_doc_id: docId }, { debounce: false });
+          {/* Right: Properties — hidden in preview */}
+          {editorMode === 'edit' && (
+            <Box sx={{ minHeight: 0 }}>
+              <Properties
+                subtree={selectedSubtree}
+                nodeDraft={nodeDraft}
+                metadataError={metadataError}
+                onNodeFieldChange={handleNodeFieldChange}
+                onRequestAddChild={(mode, options) =>
+                  selectedSubtree && handleAddChild(selectedSubtree.node.id, {
+                    node_type: (options?.type ?? 'lesson') as NodeType,
+                    title: 'Untitled',
+                  })
                 }
-              }}
-              resources={resourceCache}
-              savingState={savingState}
-              savingMessage={savingMessage}
-              availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
-            />
-          </Box>
+                onReorderChild={(childId, direction) =>
+                  selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)}
+                onUpdateChild={(childId, updates) =>
+                  selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)}
+                onRemoveChild={(childId) =>
+                  selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)}
+                selectedBlock={sortedBlocks.find((b) => b.id === selectedBlockId) ?? null}
+                onClearBlockSelection={() => { setSelectedBlockId(null); setEditingBlockId(null); }}
+                onUpdateBlock={(blockId, updates, opts) => queueBlockUpdate(blockId, updates, opts)}
+                onDeleteBlock={async (blockId) => {
+                  await runMutation(async () => {
+                    const subtree = await deleteBlock(blockId);
+                    return { subtree };
+                  }, { message: 'Block deleted' });
+                  setSelectedBlockId((prev) => (prev === blockId ? null : prev));
+                  setEditingBlockId((prev) => (prev === blockId ? null : prev));
+                }}
+                onOpenResourcePicker={(mode, blockId) => {
+                  setResourceDialogMode({ type: mode, blockId });
+                  setResourceDialogOpen(true);
+                }}
+                onFinalizeSmartDocBlock={async (block, docId) => {
+                  if (block.smart_doc_id !== docId) {
+                    queueBlockUpdate(block.id, { smart_doc_id: docId }, { debounce: false });
+                  }
+                }}
+                resources={resourceCache}
+                savingState={savingState}
+                savingMessage={savingMessage}
+                availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
+              />
+            </Box>
+          )}
         </Box>
       </Stack>
 
