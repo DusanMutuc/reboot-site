@@ -42,16 +42,17 @@ function collectParentIds(subtree: NodeSubtree, acc: Set<number>) {
   }
 }
 
-export async function GET(request: NextRequest, { params }: { params: { courseSlug: string } }) {
-  const guard = await requireUser(request);
+export async function GET(req: NextRequest, context: unknown) {
+  const guard = await requireUser(req);
   if (!guard.ok) {
     return guard.res;
   }
 
+  const { params } = context as { params: { courseSlug?: string } };
   const courseSlug = params.courseSlug;
 
   try {
-    // Ensure we're looking at a published course
+    // 1) load the course row
     const { data: courseRow, error: courseError } = await adminClient
       .from('content_nodes')
       .select('id, node_type, state')
@@ -59,17 +60,20 @@ export async function GET(request: NextRequest, { params }: { params: { courseSl
       .maybeSingle();
 
     if (courseError) {
-      throw new CourseBuilderError('Failed to load course', 500, { details: courseError.message, slug: courseSlug });
+      throw new CourseBuilderError('Failed to load course', 500, {
+        details: courseError.message,
+        slug: courseSlug,
+      });
     }
 
     if (!courseRow || courseRow.node_type !== 'course' || courseRow.state !== 'published') {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    // Build the sanitized tree (published-only)
+    // 2) build sanitized tree (published-only, no blocks)
     const rawTree = await fetchNodeSubtree(courseRow.id, {
-      includeBlocks: false,       // we lazy-load per selected node
-      allowUnpublished: false,    // students see only published content
+      includeBlocks: false, // we lazy-load per selected node
+      allowUnpublished: false, // students see only published content
     });
     const sanitized = sanitizeSubtree(rawTree);
 
@@ -77,17 +81,17 @@ export async function GET(request: NextRequest, { params }: { params: { courseSl
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    // Collect all parent node IDs (nodes that have children)
+    // 3) collect all parent node IDs (nodes that have children)
     const parentIdsSet = new Set<number>();
     collectParentIds(sanitized, parentIdsSet);
     const parentIds = Array.from(parentIdsSet);
 
-    // If no parents, nothing to lock
+    // if no parents, nothing to lock
     if (parentIds.length === 0) {
       return NextResponse.json({ course: sanitized, unlockStatuses: {} });
     }
 
-    // Single BULK RPC call instead of N+1
+    // 4) bulk RPC to get unlock statuses for this user
     const { data: bulkRows, error: bulkError } = await adminClient.rpc('get_child_unlock_status_bulk', {
       _parent_ids: parentIds,
       _user_id: guard.user.id,
@@ -100,32 +104,30 @@ export async function GET(request: NextRequest, { params }: { params: { courseSl
       });
     }
 
-    // Group rows by parent_id to match frontend shape: Record<parentId, ChildUnlockStatus[]>
-    // Group rows by parent_id to match frontend shape: Record<parentId, ChildUnlockStatus[]>
-const unlockStatuses: Record<number, ChildUnlockStatus[]> = {};
-for (const row of (bulkRows ?? []) as Array<{
-  parent_id: number;
-  child_id: number;
-  child_position: number;
-  is_required: boolean;
-  locked: boolean;
-  reason: string | null;
-}>) {
-  if (!unlockStatuses[row.parent_id]) unlockStatuses[row.parent_id] = [];
-  unlockStatuses[row.parent_id].push({
-    child_id: row.child_id,
-    child_position: row.child_position,
-    is_required: row.is_required,
-    locked: row.locked,
-    reason: row.reason ?? null, // must be string | null
-  });
-}
+    // 5) group rows by parent
+    const unlockStatuses: Record<number, ChildUnlockStatus[]> = {};
+    for (const row of (bulkRows ?? []) as Array<{
+      parent_id: number;
+      child_id: number;
+      child_position: number;
+      is_required: boolean;
+      locked: boolean;
+      reason: string | null;
+    }>) {
+      if (!unlockStatuses[row.parent_id]) unlockStatuses[row.parent_id] = [];
+      unlockStatuses[row.parent_id].push({
+        child_id: row.child_id,
+        child_position: row.child_position,
+        is_required: row.is_required,
+        locked: row.locked,
+        reason: row.reason ?? null,
+      });
+    }
 
-// (optional but recommended) keep deterministic order for UI
-for (const pid of Object.keys(unlockStatuses)) {
-  unlockStatuses[Number(pid)].sort((a, b) => a.child_position - b.child_position);
-}
-
+    // keep deterministic order for UI
+    for (const pid of Object.keys(unlockStatuses)) {
+      unlockStatuses[Number(pid)].sort((a, b) => a.child_position - b.child_position);
+    }
 
     return NextResponse.json({ course: sanitized, unlockStatuses });
   } catch (error: unknown) {

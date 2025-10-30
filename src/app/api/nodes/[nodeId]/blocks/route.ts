@@ -4,10 +4,11 @@ import { CourseBuilderError, adminClient, handleCourseBuilderError } from '@/lib
 
 export const revalidate = 0; // let the browser handle conditional caching
 
-export async function GET(request: NextRequest, { params }: { params: { nodeId: string } }) {
-  const guard = await requireUser(request);
+export async function GET(req: NextRequest, context: unknown) {
+  const guard = await requireUser(req);
   if (!guard.ok) return guard.res;
 
+  const { params } = context as { params: { nodeId?: string } };
   const nodeIdNum = Number(params.nodeId);
   if (!Number.isFinite(nodeIdNum)) {
     return NextResponse.json({ error: 'Invalid node id' }, { status: 400 });
@@ -17,12 +18,17 @@ export async function GET(request: NextRequest, { params }: { params: { nodeId: 
     // Load blocks (include updated_at so we can build a stable version/ETag)
     const { data, error } = await adminClient
       .from('content_blocks')
-      .select('id, node_id, block_type, position, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, updated_at')
+      .select(
+        'id, node_id, block_type, position, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, updated_at'
+      )
       .eq('node_id', nodeIdNum)
       .order('position', { ascending: true });
 
     if (error) {
-      throw new CourseBuilderError('Failed to load content blocks', 500, { details: error.message, nodeId: nodeIdNum });
+      throw new CourseBuilderError('Failed to load content blocks', 500, {
+        details: error.message,
+        nodeId: nodeIdNum,
+      });
     }
 
     const blocks = data ?? [];
@@ -35,7 +41,7 @@ export async function GET(request: NextRequest, { params }: { params: { nodeId: 
     const etag = `W/"node-${nodeIdNum}-${count}-${maxUpdatedMs}"`;
 
     // If client already has this version, return 304 (no body)
-    const inm = request.headers.get('if-none-match');
+    const inm = req.headers.get('if-none-match');
     if (inm && inm === etag) {
       return new NextResponse(null, {
         status: 304,
