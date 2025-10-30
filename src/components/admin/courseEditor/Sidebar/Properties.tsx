@@ -38,12 +38,14 @@ export type NodeDraft = {
   metadata: string;
 };
 
+// 👇 PATCH: add position here
 type SmartDocPromptDraft = {
   id: number | null;
   label: string;
   prompt_type: 'text' | 'textarea';
   help_text: string;
   required: boolean;
+  position: number | null; // <-- added
 };
 
 type SmartDocDraft = {
@@ -61,13 +63,15 @@ type SmartDocDraft = {
   } | null;
 };
 
-function createEmptyPromptDraft(): SmartDocPromptDraft {
+// 👇 PATCH: include position in empty draft too
+function createEmptyPromptDraft(position: number | null = 0): SmartDocPromptDraft {
   return {
     id: null,
     label: '',
     prompt_type: 'text',
     help_text: '',
     required: false,
+    position,
   };
 }
 
@@ -89,11 +93,12 @@ function createEmptySmartDocDraft(docId: number | null = null): SmartDocDraft {
     title: '',
     description: '',
     is_published: false,
-    prompts: [createEmptyPromptDraft()],
+    prompts: [createEmptyPromptDraft(0)],
     original: null,
   };
 }
 
+// 👇 PATCH: compare position too (but tolerate null)
 function promptsEqual(a: SmartDocPromptDraft[], b: SmartDocPromptDraft[]): boolean {
   if (a.length !== b.length) {
     return false;
@@ -106,7 +111,8 @@ function promptsEqual(a: SmartDocPromptDraft[], b: SmartDocPromptDraft[]): boole
       left.label !== right.label ||
       left.prompt_type !== right.prompt_type ||
       (left.help_text ?? '') !== (right.help_text ?? '') ||
-      !!left.required !== !!right.required
+      !!left.required !== !!right.required ||
+      (left.position ?? index) !== (right.position ?? index)
     ) {
       return false;
     }
@@ -351,14 +357,16 @@ export default function Properties({
           const prompts = (data.smart_doc_prompts ?? [])
             .slice()
             .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-            .map((prompt) => ({
+            .map((prompt, index): SmartDocPromptDraft => ({
               id: prompt.id ?? null,
               label: prompt.label ?? '',
               prompt_type: (prompt.prompt_type as 'text' | 'textarea') ?? 'text',
               help_text: prompt.help_text ?? '',
               required: !!prompt.required,
+              // 👇 PATCH: keep position from DB, fallback to index
+              position: typeof prompt.position === 'number' ? prompt.position : index,
             }));
-          const normalizedPrompts = prompts.length > 0 ? prompts : [createEmptyPromptDraft()];
+          const normalizedPrompts = prompts.length > 0 ? prompts : [createEmptyPromptDraft(0)];
           const next: SmartDocDraft = {
             docId: data.id ?? docId,
             title: data.title ?? '',
@@ -448,7 +456,8 @@ export default function Properties({
   const handleAddPrompt = useCallback(() => {
     setSmartDocDraft((prev) => {
       if (!prev) return prev;
-      return { ...prev, prompts: [...prev.prompts, createEmptyPromptDraft()] };
+      const nextPosition = prev.prompts.length;
+      return { ...prev, prompts: [...prev.prompts, createEmptyPromptDraft(nextPosition)] };
     });
     setSmartDocError(null);
     setSmartDocMessage(null);
@@ -460,8 +469,8 @@ export default function Properties({
       if (prev.prompts.length <= 1) {
         return prev;
       }
-      const prompts = prev.prompts.filter((_, idx) => idx !== index);
-      return { ...prev, prompts: prompts.length > 0 ? prompts : [createEmptyPromptDraft()] };
+      const prompts = prev.prompts.filter((_, idx) => idx !== index).map((p, idx) => ({ ...p, position: idx }));
+      return { ...prev, prompts: prompts.length > 0 ? prompts : [createEmptyPromptDraft(0)] };
     });
     setSmartDocError(null);
     setSmartDocMessage(null);
@@ -477,7 +486,9 @@ export default function Properties({
       const prompts = [...prev.prompts];
       const [prompt] = prompts.splice(index, 1);
       prompts.splice(nextIndex, 0, prompt);
-      return { ...prev, prompts };
+      // reassign positions so DB stays in sync
+      const reordered = prompts.map((p, idx) => ({ ...p, position: idx }));
+      return { ...prev, prompts: reordered };
     });
     setSmartDocError(null);
     setSmartDocMessage(null);
@@ -569,6 +580,7 @@ export default function Properties({
           throw new Error(updateError.message);
         }
 
+        // 👇 PATCH: make sure every prompt has a position
         const nextPrompts = smartDocDraft.prompts.map((prompt, index) => ({
           ...prompt,
           position: index,
@@ -600,7 +612,7 @@ export default function Properties({
             previous.prompt_type !== prompt.prompt_type ||
             (previous.help_text ?? '') !== (prompt.help_text ?? '') ||
             !!previous.required !== !!prompt.required ||
-            previous.position !== prompt.position
+            (previous.position ?? 0) !== (prompt.position ?? 0)
           ) {
             logSmartDocDebug('Updating prompt', {
               docId,
@@ -695,14 +707,15 @@ export default function Properties({
       const prompts = (refreshed?.smart_doc_prompts ?? [])
         .slice()
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map((prompt) => ({
+        .map((prompt, index): SmartDocPromptDraft => ({
           id: prompt.id ?? null,
           label: prompt.label ?? '',
           prompt_type: (prompt.prompt_type as 'text' | 'textarea') ?? 'text',
           help_text: prompt.help_text ?? '',
           required: !!prompt.required,
+          position: typeof prompt.position === 'number' ? prompt.position : index,
         }));
-      const normalizedPrompts = prompts.length > 0 ? prompts : [createEmptyPromptDraft()];
+      const normalizedPrompts = prompts.length > 0 ? prompts : [createEmptyPromptDraft(0)];
 
       setSmartDocDraft({
         docId: refreshed?.id ?? docId!,
@@ -833,7 +846,9 @@ export default function Properties({
                   label="Prompt type"
                   select
                   value={prompt.prompt_type}
-                  onChange={(event) => handlePromptChange(index, 'prompt_type', event.target.value as 'text' | 'textarea')}
+                  onChange={(event) =>
+                    handlePromptChange(index, 'prompt_type', event.target.value as 'text' | 'textarea')
+                  }
                 >
                   <MenuItem value="text">Short text</MenuItem>
                   <MenuItem value="textarea">Paragraph</MenuItem>
@@ -878,19 +893,13 @@ export default function Properties({
   };
 
   const startInput = useUndoRedoInput({
-    value:
-      selectedBlock && selectedBlock.start_ms != null
-        ? String(selectedBlock.start_ms)
-        : '',
+    value: selectedBlock && selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : '',
     onChange: (next) => handleNumericField('start_ms', next),
     scopeKey: blockScopeKey,
   });
 
   const endInput = useUndoRedoInput({
-    value:
-      selectedBlock && selectedBlock.end_ms != null
-        ? String(selectedBlock.end_ms)
-        : '',
+    value: selectedBlock && selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : '',
     onChange: (next) => handleNumericField('end_ms', next),
     scopeKey: blockScopeKey,
   });
@@ -1029,10 +1038,16 @@ export default function Properties({
             .slice()
             .sort((a, b) => a.edge.position - b.edge.position)
             .map((child, index, arr) => (
-              <Stack key={child.edge.child_id} spacing={1} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+              <Stack
+                key={child.edge.child_id}
+                spacing={1}
+                sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}
+              >
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Stack spacing={0.5}>
-                    <Typography variant="subtitle2">{child.subtree.node.title ?? `Node #${child.subtree.node.id}`}</Typography>
+                    <Typography variant="subtitle2">
+                      {child.subtree.node.title ?? `Node #${child.subtree.node.id}`}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary">
                       {child.subtree.node.node_type}
                     </Typography>
@@ -1040,14 +1055,22 @@ export default function Properties({
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Tooltip title="Move up">
                       <span>
-                        <IconButton size="small" disabled={index === 0} onClick={() => onReorderChild(child.edge.child_id, 'up')}>
+                        <IconButton
+                          size="small"
+                          disabled={index === 0}
+                          onClick={() => onReorderChild(child.edge.child_id, 'up')}
+                        >
                           <ArrowUpwardIcon fontSize="small" />
                         </IconButton>
                       </span>
                     </Tooltip>
                     <Tooltip title="Move down">
                       <span>
-                        <IconButton size="small" disabled={index === arr.length - 1} onClick={() => onReorderChild(child.edge.child_id, 'down')}>
+                        <IconButton
+                          size="small"
+                          disabled={index === arr.length - 1}
+                          onClick={() => onReorderChild(child.edge.child_id, 'down')}
+                        >
                           <ArrowDownwardIcon fontSize="small" />
                         </IconButton>
                       </span>
@@ -1098,9 +1121,7 @@ export default function Properties({
           </Button>
         </Stack>
 
-        {!canEditBlocks && (
-          <Alert severity="info">Blocks can only be edited on leaf nodes.</Alert>
-        )}
+        {!canEditBlocks && <Alert severity="info">Blocks can only be edited on leaf nodes.</Alert>}
 
         {selectedBlock.block_type === 'text' ? (
           <Alert severity="info">Text blocks are edited inline on the canvas.</Alert>
@@ -1184,7 +1205,12 @@ export default function Properties({
         )}
 
         <Box>
-          <Button color="error" startIcon={<DeleteIcon />} onClick={() => onDeleteBlock(selectedBlock.id)} disabled={isPendingBlock}>
+          <Button
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={() => onDeleteBlock(selectedBlock.id)}
+            disabled={isPendingBlock}
+          >
             Delete block
           </Button>
         </Box>
