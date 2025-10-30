@@ -21,15 +21,18 @@ function parseNodeId(value: string | undefined) {
 
 export async function POST(
   request: NextRequest,
-  context: { params: { nodeId: string } }
+  context: unknown
 ) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
+  // ✅ narrow here
+  const { params } = context as { params: { nodeId?: string } };
+
   try {
-    const nodeId = parseNodeId(context.params.nodeId);
+    const nodeId = parseNodeId(params?.nodeId);
     const body = (await request.json().catch(() => ({}))) as { on?: unknown };
 
     if (typeof body.on !== 'boolean') {
