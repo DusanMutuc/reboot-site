@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
-  Box, CircularProgress, Divider, ListItemButton, ListItemText, Stack, Typography, List, LinearProgress
+  Box,
+  CircularProgress,
+  Divider,
+  ListItemButton,
+  ListItemText,
+  Stack,
+  Typography,
+  List,
+  LinearProgress,
 } from '@mui/material';
 
 const COACH_UI_SCALE = 1.0;
@@ -16,7 +24,11 @@ type ProgressRow = { total_leaves: number; completed_leaves: number; progress: n
 const PAGE_SIZE = 25;
 
 export default function UserListWithProgress({
-  mode, courseId, search, selectedUserId, onSelectUser
+  mode,
+  courseId,
+  search,
+  selectedUserId,
+  onSelectUser,
 }: {
   mode: Mode;
   courseId: number | null;
@@ -35,6 +47,7 @@ export default function UserListWithProgress({
   const scrollRef = useRef<HTMLUListElement | null>(null);
   const didAutoSelectOnce = useRef(false);
 
+  // reset when course changes
   useEffect(() => {
     setUsers([]);
     setProgressMap({});
@@ -44,14 +57,18 @@ export default function UserListWithProgress({
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
     });
     didAutoSelectOnce.current = false;
-  }, [courseId]); // eslint-disable-line
+    // we intentionally don't include onSelectUser in deps to avoid resetting on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
 
+  // fetch users
   useEffect(() => {
     let active = true;
     (async () => {
       if (!courseId) return;
       setLoading(true);
 
+      // note: your RPC ignores course for now (_course_id: null)
       const { data, error } = await supabase.rpc('get_all_users', { _course_id: null });
       if (!active) return;
 
@@ -63,7 +80,9 @@ export default function UserListWithProgress({
       }
       setLoading(false);
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [courseId]);
 
   const filtered = useMemo(() => {
@@ -78,7 +97,7 @@ export default function UserListWithProgress({
     };
 
     return users
-      .filter(u => (u.full_name ?? '').toLowerCase().includes(q))
+      .filter((u) => (u.full_name ?? '').toLowerCase().includes(q))
       .sort((a, b) => {
         const sa = score(a.full_name ?? '');
         const sb = score(b.full_name ?? '');
@@ -87,6 +106,7 @@ export default function UserListWithProgress({
       });
   }, [users, search]);
 
+  // reset page on search
   useEffect(() => {
     setPage(0);
     requestAnimationFrame(() => {
@@ -99,6 +119,7 @@ export default function UserListWithProgress({
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
+  // auto-select first user once
   useEffect(() => {
     if (!didAutoSelectOnce.current && selectedUserId == null && filtered.length > 0) {
       didAutoSelectOnce.current = true;
@@ -108,7 +129,7 @@ export default function UserListWithProgress({
       });
       return;
     }
-    if (selectedUserId && !filtered.some(u => u.user_id === selectedUserId)) {
+    if (selectedUserId && !filtered.some((u) => u.user_id === selectedUserId)) {
       onSelectUser(null);
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -116,6 +137,7 @@ export default function UserListWithProgress({
     }
   }, [filtered, selectedUserId, onSelectUser]);
 
+  // fetch per-user progress for the currently visible page
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -125,19 +147,31 @@ export default function UserListWithProgress({
         paged.map(async (u) => {
           const { data, error } = await supabase.rpc('get_user_course_progress', {
             _user_id: u.user_id,
-            _course_id: courseId
+            _course_id: courseId,
           });
           if (error) return [u.user_id, 0] as const;
-          const row: ProgressRow | undefined = Array.isArray(data) ? data[0] : (data as any);
+
+          // data can be array or single row; normalize:
+          let row: ProgressRow | undefined;
+          if (Array.isArray(data)) {
+            row = data[0] as ProgressRow | undefined;
+          } else if (data && typeof data === 'object') {
+            row = data as ProgressRow;
+          } else {
+            row = undefined;
+          }
+
           const pct = row?.progress ? Math.round(row.progress * 100) : 0;
           return [u.user_id, pct] as const;
         })
       );
       if (!cancelled) {
-        setProgressMap(prev => ({ ...prev, ...Object.fromEntries(entries) }));
+        setProgressMap((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [courseId, paged]);
 
   return (
@@ -152,25 +186,25 @@ export default function UserListWithProgress({
       }}
     >
       {/* Header */}
-      <Stack 
-        direction="row" 
-        justifyContent="space-between" 
-        alignItems="center" 
-        sx={{ 
-          px: 2.5, 
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{
+          px: 2.5,
           py: 2,
           bgcolor: 'grey.50',
           borderBottom: '2px solid',
-          borderColor: 'grey.200'
+          borderColor: 'grey.200',
         }}
       >
-        <Typography 
-          variant="subtitle2" 
-          sx={{ 
-            fontWeight: 800, 
+        <Typography
+          variant="subtitle2"
+          sx={{
+            fontWeight: 800,
             fontSize: sz(15),
             color: 'text.primary',
-            letterSpacing: 0.3
+            letterSpacing: 0.3,
           }}
         >
           Students {courseId ? '' : '(pick a course)'}
@@ -200,8 +234,8 @@ export default function UserListWithProgress({
               key={user_id}
               selected={isSelected}
               onClick={() => onSelectUser(user_id)}
-              sx={{ 
-                py: 2, 
+              sx={{
+                py: 2,
                 px: 2.5,
                 mx: 0.5,
                 mb: 0.5,
@@ -218,19 +252,21 @@ export default function UserListWithProgress({
                   borderColor: 'primary.main',
                   '&:hover': {
                     bgcolor: 'primary.100',
-                  }
-                }
+                  },
+                },
               }}
             >
               <ListItemText
                 disableTypography
                 primary={
                   <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                    <Typography sx={{ 
-                      fontWeight: isSelected ? 700 : 600, 
-                      fontSize: sz(15),
-                      color: isSelected ? 'primary.main' : 'text.primary',
-                    }}>
+                    <Typography
+                      sx={{
+                        fontWeight: isSelected ? 700 : 600,
+                        fontSize: sz(15),
+                        color: isSelected ? 'primary.main' : 'text.primary',
+                      }}
+                    >
                       {full_name}
                     </Typography>
                     <Box
@@ -241,7 +277,8 @@ export default function UserListWithProgress({
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderRadius: 1,
-                        bgcolor: pct === 100 ? 'success.main' : pct > 0 ? 'warning.main' : 'grey.300',
+                        bgcolor:
+                          pct === 100 ? 'success.main' : pct > 0 ? 'warning.main' : 'grey.300',
                         color: 'white',
                         fontWeight: 700,
                         fontSize: sz(13),
@@ -278,16 +315,16 @@ export default function UserListWithProgress({
       <Divider sx={{ borderColor: 'grey.200' }} />
 
       {/* Footer */}
-      <Stack 
-        direction="row" 
-        justifyContent="space-between" 
-        alignItems="center" 
-        sx={{ 
-          px: 2.5, 
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{
+          px: 2.5,
           py: 1.5,
           bgcolor: 'grey.50',
           borderTop: '1px solid',
-          borderColor: 'grey.200'
+          borderColor: 'grey.200',
         }}
       >
         <Typography sx={{ fontSize: sz(13), color: 'text.secondary', fontWeight: 500 }}>
@@ -303,7 +340,7 @@ export default function UserListWithProgress({
               color: page === 0 ? 'text.disabled' : 'primary.main',
               cursor: page === 0 ? 'default' : 'pointer',
               transition: 'color 0.2s',
-              '&:hover': page === 0 ? {} : { color: 'primary.dark' }
+              '&:hover': page === 0 ? {} : { color: 'primary.dark' },
             }}
             onClick={() => page > 0 && setPage((p) => p - 1)}
           >
@@ -316,7 +353,8 @@ export default function UserListWithProgress({
               color: (page + 1) * PAGE_SIZE >= filtered.length ? 'text.disabled' : 'primary.main',
               cursor: (page + 1) * PAGE_SIZE >= filtered.length ? 'default' : 'pointer',
               transition: 'color 0.2s',
-              '&:hover': (page + 1) * PAGE_SIZE >= filtered.length ? {} : { color: 'primary.dark' }
+              '&:hover':
+                (page + 1) * PAGE_SIZE >= filtered.length ? {} : { color: 'primary.dark' },
             }}
             onClick={() => (page + 1) * PAGE_SIZE < filtered.length && setPage((p) => p + 1)}
           >

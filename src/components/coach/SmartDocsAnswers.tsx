@@ -4,8 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabaseClient';
 import {
-  Accordion, AccordionSummary, AccordionDetails,
-  Box, Chip, CircularProgress, FormControlLabel, Stack, Switch, Typography, Paper, Tooltip, Button
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Box,
+  Chip,
+  CircularProgress,
+  FormControlLabel,
+  Stack,
+  Switch,
+  Typography,
+  Paper,
+  Tooltip,
+  Button,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -16,6 +27,15 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 const COACH_UI_SCALE = 1.07;
 
 type Mode = 'coach' | 'admin';
+
+// generic json type for Supabase
+type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json }
+  | Json[];
 
 type InstanceRow = {
   lesson_id: number;
@@ -42,7 +62,7 @@ type AnswerRow = {
   prompt_type: string | null;
   prompt_position: number | null;
   value_text: string | null;
-  value_json: any | null;
+  value_json: Json | null;
   updated_at: string | null;
   status: string | null;
   submitted_at: string | null;
@@ -104,19 +124,27 @@ export default function SmartDocsAnswers({
       }
     })();
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [courseId, userId, onlySubmitted]);
 
   const grouped = useMemo(() => {
-    const lessons = new Map<number, {
-      lesson_title: string | null;
-      lesson_position: number;
-      chapters: Map<number, {
-        chapter_title: string | null;
-        chapter_position: number;
-        items: InstanceRow[];
-      }>;
-    }>();
+    const lessons = new Map<
+      number,
+      {
+        lesson_title: string | null;
+        lesson_position: number;
+        chapters: Map<
+          number,
+          {
+            chapter_title: string | null;
+            chapter_position: number;
+            items: InstanceRow[];
+          }
+        >;
+      }
+    >();
 
     for (const row of instances) {
       if (!lessons.has(row.lesson_id)) {
@@ -142,7 +170,7 @@ export default function SmartDocsAnswers({
       .map(([lesson_id, v]) => ({ lesson_id, ...v }))
       .sort((a, b) => a.lesson_position - b.lesson_position);
 
-    return lessonArr.map(l => ({
+    return lessonArr.map((l) => ({
       ...l,
       chapters: Array.from(l.chapters.entries())
         .map(([chapter_id, v]) => ({ chapter_id, ...v }))
@@ -151,26 +179,46 @@ export default function SmartDocsAnswers({
   }, [instances]);
 
   // Fetch answers for a single content block (returns Promise so we can await it)
-  const ensureAnswers = useCallback(async (contentBlockId: number) => {
-    if (answers[contentBlockId]?.rows || answers[contentBlockId]?.loading) return;
+  const ensureAnswers = useCallback(
+    async (contentBlockId: number) => {
+      // functional set to avoid capturing `answers` in deps
+      let shouldFetch = false;
+      setAnswers((prev) => {
+        const existing = prev[contentBlockId];
+        if (existing?.rows || existing?.loading) {
+          return prev;
+        }
+        shouldFetch = true;
+        return {
+          ...prev,
+          [contentBlockId]: { loading: true, rows: null },
+        };
+      });
 
-    setAnswers(prev => ({ ...prev, [contentBlockId]: { loading: true, rows: null } }));
-    const { data, error } = await supabase.rpc('get_user_smartdoc_answers', {
-      _user_id: userId,
-      _content_block_id: contentBlockId,
-    });
-    setAnswers(prev => ({
-      ...prev,
-      [contentBlockId]: { loading: false, rows: !error && Array.isArray(data) ? (data as AnswerRow[]) : [] },
-    }));
-  }, [answers, userId]);
+      if (!shouldFetch) return;
+
+      const { data, error } = await supabase.rpc('get_user_smartdoc_answers', {
+        _user_id: userId,
+        _content_block_id: contentBlockId,
+      });
+
+      setAnswers((prev) => ({
+        ...prev,
+        [contentBlockId]: {
+          loading: false,
+          rows: !error && Array.isArray(data) ? (data as AnswerRow[]) : [],
+        },
+      }));
+    },
+    [userId]
+  );
 
   // Preload answers for everything so print view is fully populated
   const prefetchAllAnswers = useCallback(async () => {
-    const ids = Array.from(new Set(instances.map(i => i.content_block_id)));
+    const ids = Array.from(new Set(instances.map((i) => i.content_block_id)));
     const BATCH = 8;
     for (let i = 0; i < ids.length; i += BATCH) {
-      await Promise.all(ids.slice(i, i + BATCH).map(id => ensureAnswers(id)));
+      await Promise.all(ids.slice(i, i + BATCH).map((id) => ensureAnswers(id)));
     }
   }, [instances, ensureAnswers]);
 
@@ -250,7 +298,7 @@ export default function SmartDocsAnswers({
         bgcolor: row.answered_prompts === row.total_prompts ? 'success.50' : 'grey.100',
         color: row.answered_prompts === row.total_prompts ? 'success.dark' : 'text.secondary',
         fontWeight: 600,
-        '& .MuiChip-label': { fontSize: sz(12), px: 1.5 }
+        '& .MuiChip-label': { fontSize: sz(12), px: 1.5 },
       }}
     />
   );
@@ -258,27 +306,27 @@ export default function SmartDocsAnswers({
   // ------- PRINT VIEW (rendered into portal) -------
   const PrintView = () => (
     <Box sx={{ p: 0 /* padding handled via @page margin rule below */ }}>
-      <Typography sx={{ fontWeight: 800, fontSize: sz(20), mb: 2 }}>
-        SmartDocs – Answers
-      </Typography>
+      <Typography sx={{ fontWeight: 800, fontSize: sz(20), mb: 2 }}>SmartDocs – Answers</Typography>
 
       <Stack spacing={3.5}>
-        {grouped.map(lesson => (
+        {grouped.map((lesson) => (
           <Box key={`p-${lesson.lesson_id}`} sx={{ breakInside: 'avoid' }}>
-            <Typography sx={{
-              fontWeight: 800,
-              mb: 2,
-              fontSize: sz(18),
-              color: 'text.primary',
-              pb: 1,
-              borderBottom: '2px solid',
-              borderColor: 'primary.main'
-            }}>
+            <Typography
+              sx={{
+                fontWeight: 800,
+                mb: 2,
+                fontSize: sz(18),
+                color: 'text.primary',
+                pb: 1,
+                borderBottom: '2px solid',
+                borderColor: 'primary.main',
+              }}
+            >
               {lesson.lesson_title ?? `Lesson ${lesson.lesson_position}`}
             </Typography>
 
             <Stack spacing={2}>
-              {lesson.chapters.map(ch => (
+              {lesson.chapters.map((ch) => (
                 <Box key={`p-${lesson.lesson_id}-${ch.chapter_id}`} sx={{ breakInside: 'avoid' }}>
                   <Typography
                     variant="body2"
@@ -288,14 +336,14 @@ export default function SmartDocsAnswers({
                       fontSize: sz(15),
                       color: 'text.secondary',
                       textTransform: 'uppercase',
-                      letterSpacing: 0.5
+                      letterSpacing: 0.5,
                     }}
                   >
                     {ch.chapter_title ?? `Chapter ${ch.chapter_position}`}
                   </Typography>
 
                   <Stack spacing={1.5}>
-                    {ch.items.map(inst => {
+                    {ch.items.map((inst) => {
                       const a = answers[inst.content_block_id];
                       const rows = a?.rows ?? [];
                       return (
@@ -308,7 +356,7 @@ export default function SmartDocsAnswers({
                             borderRadius: 2,
                             bgcolor: 'grey.50',
                             mb: 1.5,
-                            breakInside: 'avoid'
+                            breakInside: 'avoid',
                           }}
                         >
                           <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 1.5 }}>
@@ -332,13 +380,13 @@ export default function SmartDocsAnswers({
                             )}
                           </Stack>
 
-                          {(!a || a.loading) ? (
+                          {!a || a.loading ? (
                             <Typography variant="body2" sx={{ fontSize: sz(14), fontStyle: 'italic' }}>
                               Loading…
                             </Typography>
                           ) : rows.length > 0 ? (
                             <Stack spacing={2}>
-                              {rows.map(it => (
+                              {rows.map((it) => (
                                 <Box
                                   key={`p-q-${it.prompt_id}`}
                                   sx={{
@@ -347,7 +395,7 @@ export default function SmartDocsAnswers({
                                     borderColor: 'grey.200',
                                     borderRadius: 2,
                                     bgcolor: 'white',
-                                    breakInside: 'avoid'
+                                    breakInside: 'avoid',
                                   }}
                                 >
                                   <Typography sx={{ fontWeight: 700, fontSize: sz(14), mb: 0.5 }}>
@@ -360,7 +408,7 @@ export default function SmartDocsAnswers({
                                       fontSize: sz(14),
                                       color: 'text.secondary',
                                       lineHeight: 1.6,
-                                      fontStyle: it.value_text ? 'normal' : 'italic'
+                                      fontStyle: it.value_text ? 'normal' : 'italic',
                                     }}
                                   >
                                     {it.value_text || 'No answer provided'}
@@ -377,10 +425,7 @@ export default function SmartDocsAnswers({
                               ))}
                             </Stack>
                           ) : (
-                            <Typography
-                              variant="body2"
-                              sx={{ fontSize: sz(14), fontStyle: 'italic' }}
-                            >
+                            <Typography variant="body2" sx={{ fontSize: sz(14), fontStyle: 'italic' }}>
                               No answers yet
                             </Typography>
                           )}
@@ -426,8 +471,6 @@ export default function SmartDocsAnswers({
   }
 `}</style>
 
-
-
       {/* PRINT VIEW rendered into body portal only when exporting */}
       {showPrintView && printRoot && createPortal(<PrintView />, printRoot)}
 
@@ -442,13 +485,15 @@ export default function SmartDocsAnswers({
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
         }}
       >
-        <Box sx={{
-          px: 3,
-          py: 2,
-          bgcolor: 'grey.50',
-          borderBottom: '2px solid',
-          borderColor: 'grey.200'
-        }}>
+        <Box
+          sx={{
+            px: 3,
+            py: 2,
+            bgcolor: 'grey.50',
+            borderBottom: '2px solid',
+            borderColor: 'grey.200',
+          }}
+        >
           <Stack direction="row" alignItems="center" spacing={2}>
             <Typography
               variant="subtitle2"
@@ -456,7 +501,7 @@ export default function SmartDocsAnswers({
                 fontWeight: 800,
                 fontSize: sz(16),
                 color: 'text.primary',
-                letterSpacing: 0.3
+                letterSpacing: 0.3,
               }}
             >
               SmartDocs Answers
@@ -467,13 +512,7 @@ export default function SmartDocsAnswers({
                 ml: 1,
                 '& .MuiFormControlLabel-label': { fontSize: sz(13), fontWeight: 500 },
               }}
-              control={
-                <Switch
-                  size="small"
-                  checked={onlySubmitted}
-                  onChange={(e) => setOnlySubmitted(e.target.checked)}
-                />
-              }
+              control={<Switch size="small" checked={onlySubmitted} onChange={(e) => setOnlySubmitted(e.target.checked)} />}
               label="Submitted only"
             />
 
@@ -488,7 +527,7 @@ export default function SmartDocsAnswers({
                     bgcolor: 'primary.50',
                     color: 'primary.main',
                     fontWeight: 600,
-                    '& .MuiChip-label': { fontSize: sz(12), px: 1.5 }
+                    '& .MuiChip-label': { fontSize: sz(12), px: 1.5 },
                   }}
                 />
               )}
@@ -526,22 +565,24 @@ export default function SmartDocsAnswers({
         ) : (
           <Box sx={{ p: 3 }}>
             <Stack spacing={3.5}>
-              {grouped.map(lesson => (
+              {grouped.map((lesson) => (
                 <Box key={lesson.lesson_id}>
-                  <Typography sx={{
-                    fontWeight: 800,
-                    mb: 2,
-                    fontSize: sz(18),
-                    color: 'text.primary',
-                    pb: 1,
-                    borderBottom: '2px solid',
-                    borderColor: 'primary.main'
-                  }}>
+                  <Typography
+                    sx={{
+                      fontWeight: 800,
+                      mb: 2,
+                      fontSize: sz(18),
+                      color: 'text.primary',
+                      pb: 1,
+                      borderBottom: '2px solid',
+                      borderColor: 'primary.main',
+                    }}
+                  >
                     {lesson.lesson_title ?? `Lesson ${lesson.lesson_position}`}
                   </Typography>
 
                   <Stack spacing={2}>
-                    {lesson.chapters.map(ch => (
+                    {lesson.chapters.map((ch) => (
                       <Box key={ch.chapter_id}>
                         <Typography
                           variant="body2"
@@ -551,14 +592,14 @@ export default function SmartDocsAnswers({
                             fontSize: sz(15),
                             color: 'text.secondary',
                             textTransform: 'uppercase',
-                            letterSpacing: 0.5
+                            letterSpacing: 0.5,
                           }}
                         >
                           {ch.chapter_title ?? `Chapter ${ch.chapter_position}`}
                         </Typography>
 
                         <Stack spacing={1.5}>
-                          {ch.items.map(inst => {
+                          {ch.items.map((inst) => {
                             const a = answers[inst.content_block_id];
                             return (
                               <Accordion
@@ -579,20 +620,22 @@ export default function SmartDocsAnswers({
                                   '&.Mui-expanded': {
                                     margin: 0,
                                     boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                                  }
+                                  },
                                 }}
-                                onChange={(_, expanded) => { if (expanded) ensureAnswers(inst.content_block_id); }}
+                                onChange={(_, expanded) => {
+                                  if (expanded) ensureAnswers(inst.content_block_id);
+                                }}
                               >
                                 <AccordionSummary
                                   expandIcon={<ExpandMoreIcon sx={{ fontSize: sz(22) }} />}
                                   sx={{
                                     '& .MuiAccordionSummary-content': {
                                       my: 1.5,
-                                      alignItems: 'center'
+                                      alignItems: 'center',
                                     },
                                     px: 2.5,
                                     bgcolor: 'grey.50',
-                                    '&:hover': { bgcolor: 'grey.100' }
+                                    '&:hover': { bgcolor: 'grey.100' },
                                   }}
                                 >
                                   <Stack
@@ -601,19 +644,19 @@ export default function SmartDocsAnswers({
                                     spacing={1.5}
                                     sx={{ width: '100%', pr: 1 }}
                                   >
-                                    <Typography sx={{
-                                      fontWeight: 700,
-                                      flex: 1,
-                                      fontSize: sz(15),
-                                      color: 'text.primary'
-                                    }}>
+                                    <Typography
+                                      sx={{
+                                        fontWeight: 700,
+                                        flex: 1,
+                                        fontSize: sz(15),
+                                        color: 'text.primary',
+                                      }}
+                                    >
                                       {inst.doc_title ?? `Smart Doc #${inst.doc_id}`}
                                     </Typography>
 
                                     <Stack direction="row" spacing={1} alignItems="center">
-                                      <Tooltip title="Answered / Total questions">
-                                        {progressChip(inst)}
-                                      </Tooltip>
+                                      <Tooltip title="Answered / Total questions">{progressChip(inst)}</Tooltip>
 
                                       {statusChip(inst)}
 
@@ -635,13 +678,13 @@ export default function SmartDocsAnswers({
                                 </AccordionSummary>
 
                                 <AccordionDetails sx={{ p: 2.5, bgcolor: 'white' }}>
-                                  {(!a || a.loading) ? (
+                                  {!a || a.loading ? (
                                     <Box sx={{ py: 3, display: 'flex', justifyContent: 'center' }}>
                                       <CircularProgress size={sz(24)} />
                                     </Box>
-                                  ) : (a.rows && a.rows.length > 0) ? (
+                                  ) : a.rows && a.rows.length > 0 ? (
                                     <Stack spacing={2}>
-                                      {a.rows.map(it => (
+                                      {a.rows.map((it) => (
                                         <Box
                                           key={it.prompt_id}
                                           sx={{
@@ -654,15 +697,17 @@ export default function SmartDocsAnswers({
                                             '&:hover': {
                                               bgcolor: 'grey.100',
                                               borderColor: 'grey.300',
-                                            }
+                                            },
                                           }}
                                         >
                                           <Stack spacing={1}>
-                                            <Typography sx={{
-                                              fontWeight: 700,
-                                              fontSize: sz(14),
-                                              color: 'text.primary'
-                                            }}>
+                                            <Typography
+                                              sx={{
+                                                fontWeight: 700,
+                                                fontSize: sz(14),
+                                                color: 'text.primary',
+                                              }}
+                                            >
                                               {it.prompt_label ?? `Question ${it.prompt_id}`}
                                             </Typography>
 
@@ -673,7 +718,7 @@ export default function SmartDocsAnswers({
                                                 fontSize: sz(14),
                                                 color: 'text.secondary',
                                                 lineHeight: 1.6,
-                                                fontStyle: it.value_text ? 'normal' : 'italic'
+                                                fontStyle: it.value_text ? 'normal' : 'italic',
                                               }}
                                             >
                                               {it.value_text || 'No answer provided'}
@@ -685,7 +730,7 @@ export default function SmartDocsAnswers({
                                                 sx={{
                                                   fontSize: sz(12),
                                                   color: 'text.disabled',
-                                                  mt: 0.5
+                                                  mt: 0.5,
                                                 }}
                                               >
                                                 Updated {new Date(it.updated_at).toLocaleString()}
@@ -720,7 +765,6 @@ export default function SmartDocsAnswers({
           </Box>
         )}
       </Paper>
-
     </>
   );
 }

@@ -105,8 +105,12 @@ function TreeNode({
   const item = (
     <ListItemButton
       onClick={handleClick}
-      onMouseEnter={() => { if (canPrefetch) prefetchBlocks(node.id); }}
-      onFocus={() => { if (canPrefetch) prefetchBlocks(node.id); }}
+      onMouseEnter={() => {
+        if (canPrefetch) prefetchBlocks(node.id);
+      }}
+      onFocus={() => {
+        if (canPrefetch) prefetchBlocks(node.id);
+      }}
       selected={isSelected}
       sx={{
         pl: paddingLeft,
@@ -157,12 +161,7 @@ function TreeNode({
     <>
       {item}
       {hasChildren ? (
-        <Collapse
-          in={isExpanded}
-          timeout={noTransition ? 0 : 'auto'}
-          unmountOnExit={false}
-          appear={!noTransition}
-        >
+        <Collapse in={isExpanded} timeout={noTransition ? 0 : 'auto'} unmountOnExit={false} appear={!noTransition}>
           <List disablePadding>
             {subtree.children.map((child) => (
               <TreeNode
@@ -202,21 +201,25 @@ export default function StudentCourseTree({
   const childLocks = useMemo(() => lockStatuses[course.node.id] ?? {}, [course.node.id, lockStatuses]);
   const unlockedCount = useMemo(
     () => Object.values(childLocks).filter((status) => !status.locked).length,
-    [childLocks],
+    [childLocks]
   );
 
   // Fire-and-forget prefetcher; uses HTTP conditional cache (ETag)
   const prefetchBlocks = (nodeId: number) => {
-    const run = () => { void fetch(`/api/nodes/${nodeId}/blocks`).catch(() => {}); };
+    const run = () => {
+      void fetch(`/api/nodes/${nodeId}/blocks`).catch(() => {});
+    };
+
     if (typeof window !== 'undefined') {
-      const ric = (window as any).requestIdleCallback as
-        | undefined
-        | ((cb: () => void, opts?: { timeout: number }) => number);
-      if (ric) {
-        ric(run, { timeout: 500 });
+      // narrow window to possibly have requestIdleCallback
+      const maybeRIC = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number })
+        .requestIdleCallback;
+      if (maybeRIC) {
+        maybeRIC(run, { timeout: 500 });
         return;
       }
     }
+
     run();
   };
 

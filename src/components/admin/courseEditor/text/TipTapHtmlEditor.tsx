@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import type { ReactNode } from 'react';
 import { alpha } from '@mui/material/styles';
 import { Box, IconButton, Stack, Tooltip, MenuItem, Select, OutlinedInput } from '@mui/material';
 
@@ -70,8 +71,8 @@ export default function TipTapHtmlEditor({
             ...this.parent?.(),
             backgroundColor: {
               default: null,
-              parseHTML: el => (el as HTMLElement).style.backgroundColor || null,
-              renderHTML: attrs =>
+              parseHTML: (el) => (el as HTMLElement).style.backgroundColor || null,
+              renderHTML: (attrs) =>
                 attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {},
             },
           };
@@ -83,8 +84,8 @@ export default function TipTapHtmlEditor({
             ...this.parent?.(),
             backgroundColor: {
               default: null,
-              parseHTML: el => (el as HTMLElement).style.backgroundColor || null,
-              renderHTML: attrs =>
+              parseHTML: (el) => (el as HTMLElement).style.backgroundColor || null,
+              renderHTML: (attrs) =>
                 attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {},
             },
           };
@@ -161,10 +162,8 @@ export default function TipTapHtmlEditor({
   const toggleCode = () => editor.chain().focus().toggleCode().run();
 
   // ✅ Alignment helpers
-  const setAlign = (value: 'left' | 'center' | 'right' | 'justify') =>
-    editor.chain().focus().setTextAlign(value).run();
-  const isAligned = (value: 'left' | 'center' | 'right' | 'justify') =>
-    editor.isActive({ textAlign: value });
+  const setAlign = (val: 'left' | 'center' | 'right' | 'justify') => editor.chain().focus().setTextAlign(val).run();
+  const isAligned = (val: 'left' | 'center' | 'right' | 'justify') => editor.isActive({ textAlign: val });
 
   // Optional: left acts as "toggle off" if already left-aligned (removes the style)
   const toggleLeft = () => {
@@ -277,8 +276,13 @@ export default function TipTapHtmlEditor({
               }}
               onChange={(e) => {
                 const family = String(e.target.value);
-                const sel = savedSelRef.current ?? { from: editor.state.selection.from, to: editor.state.selection.to };
-                editor.chain().setTextSelection(sel).focus().setMark('textStyle', { fontFamily: family || null }).run();
+                const sel = savedSelRef.current ?? {
+                  from: editor.state.selection.from,
+                  to: editor.state.selection.to,
+                };
+                // restore selection, then set font via helper (so setFont isn't "unused")
+                editor.chain().setTextSelection(sel).focus().run();
+                setFont(family);
                 savedSelRef.current = null;
               }}
               MenuProps={{
@@ -287,7 +291,6 @@ export default function TipTapHtmlEditor({
                   editor?.commands.focus();
                 },
               }}
-              // Keep the `notched` prop on OutlinedInput to avoid DOM warning
               input={<OutlinedInput />}
               displayEmpty
               sx={(theme) => ({
@@ -377,8 +380,11 @@ export default function TipTapHtmlEditor({
               onBlur?.();
             }}
             onKeyDown={(event) => {
-              // TS-safe IME composition check on React SyntheticEvent
-              if ((event.nativeEvent as any).isComposing) return;
+              // ✅ TS-safe IME composition check
+              const nativeEvt = event.nativeEvent as {
+                isComposing?: boolean;
+              };
+              if (nativeEvt.isComposing) return;
 
               if (event.key === 'Enter') {
                 if (event.shiftKey) {
@@ -411,7 +417,7 @@ type ToolbarButtonProps = {
   tooltip: string;
   onClick: () => void;
   active?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 function ToolbarButton({ tooltip, onClick, active, children }: ToolbarButtonProps) {
