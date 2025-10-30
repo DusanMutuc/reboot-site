@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient, type SupabaseClient } from '@supabase/ssr';
-import type { User } from '@supabase/supabase-js';
+import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient, User } from '@supabase/supabase-js';
 
 export type RequireUserSuccess = {
   ok: true;
@@ -26,12 +26,15 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
         {
           cookies: {
             get: (name: string) => request.cookies.get(name)?.value,
+            // we don't set cookies here because in this helper
+            // we just want to *read* the session from the incoming req
             set: () => {},
             remove: () => {},
           },
         },
       );
     } else {
+      // fallback for calling this helper from server-only code without a NextRequest
       const { getServerAnonClient } = await import('./supabaseServer');
       supabase = await getServerAnonClient();
     }
@@ -44,7 +47,10 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
     if (error) {
       return {
         ok: false,
-        res: NextResponse.json({ error: 'Authentication failed', details: error.message }, { status: 401 }),
+        res: NextResponse.json(
+          { error: 'Authentication failed', details: error.message },
+          { status: 401 },
+        ),
       };
     }
 
