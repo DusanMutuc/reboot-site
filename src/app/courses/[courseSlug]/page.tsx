@@ -1,15 +1,15 @@
-// app/courses/[courseSlug]/page.tsx
+// src/app/courses/[courseSlug]/page.tsx
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 
-// Works on Next 14 (object) and 15 (Promise) params:
+// Next 15 is giving us params as a Promise, so we match that
 export default async function CourseRootPage({
   params,
 }: {
-  params: { courseSlug: string } | Promise<{ courseSlug: string }>;
+  params: Promise<{ courseSlug: string }>;
 }) {
-  const { courseSlug } = await Promise.resolve(params);
+  const { courseSlug } = await params;
 
   // Build absolute base URL from incoming request
   const h = await headers();
@@ -42,11 +42,9 @@ export default async function CourseRootPage({
   const lastSlug = findLastUnlockedContentSlug(data.course, lockMap);
 
   if (lastSlug) {
-    // Server-side redirect: no intermediate flash
     redirect(`/courses/${courseSlug}/${lastSlug}`);
   }
 
-  // If nothing is unlocked yet, render a tiny placeholder or redirect somewhere else
   return (
     <div style={{ padding: 24 }}>
       <h1>{data.course.node.title ?? 'Course'}</h1>
@@ -78,8 +76,6 @@ function isContentNodeType(nodeType: string) {
 
 /**
  * Find the LAST unlocked content slug in tree order.
- * We traverse children in order and keep the most recent unlocked content we see.
- * For each child, we walk deeper first (to prefer deeper items), then record the child if it's content.
  */
 function findLastUnlockedContentSlug(
   course: NodeSubtree,
@@ -97,7 +93,6 @@ function findLastUnlockedContentSlug(
       const locked = locks[childId]?.locked ?? false;
       if (locked) continue;
 
-      // Go deeper first so deeper items can win; we'll still record this node after.
       if (subtree.children.length > 0) {
         walk(subtree);
       }

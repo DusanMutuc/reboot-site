@@ -9,7 +9,6 @@ type LessonParams = {
 export default async function LessonPage({
   params,
 }: {
-  // 👇 match Next 15’s idea of PageProps: params is a Promise
   params: Promise<LessonParams>;
 }) {
   const { courseSlug, lessonSlug } = await params;
