@@ -1,3 +1,4 @@
+// src/app/courses/[courseSlug]/[lessonSlug]/page.tsx
 import CourseViewer from '@/components/course/CourseViewer';
 
 type LessonParams = {
