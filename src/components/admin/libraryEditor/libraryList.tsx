@@ -28,6 +28,7 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ImageIcon from '@mui/icons-material/Image';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import NextImage from 'next/image';
 
 import type { NodeSubtree, NodeType } from '@/types/course';
 import { supabase } from '@/lib/supabaseClient';
@@ -47,7 +48,7 @@ type Props = {
   onSelectNode: (nodeId: number) => void;
 
   onCreateNode: (parentId: number | null, payload: { node_type: NodeType; title: string }) => void;
-  onAttachChild: (parentId: number, childId: number) => void;
+  // onAttachChild was unused here; keep it in the parent component where it's actually used.
   onDetachChild: (parentId: number, childId: number) => void;
   onDuplicateNode: (nodeId: number) => void;
   onReorderChild: (parentId: number, childId: number, direction: 'up' | 'down') => void;
@@ -68,7 +69,7 @@ type CtxState = {
 // --- helpers for status ---
 type NodeState = 'published' | 'draft';
 function getNodeState(node: NodeSubtree['node']): NodeState {
-  const s = (node as any).state;
+  const s = (node as { state?: string | null }).state;
   return s === 'published' ? 'published' : 'draft';
 }
 function StatusDot({ state }: { state: NodeState }) {
@@ -108,7 +109,6 @@ export default function LibraryList({
   selectedNodeId,
   onSelectNode,
   onCreateNode,
-  onAttachChild,
   onDetachChild,
   onDuplicateNode,
   onReorderChild,
@@ -281,8 +281,10 @@ export default function LibraryList({
             const isSelected = subtree.node.id === selectedNodeId;
             const isHovered = hoveredId === subtree.node.id;
 
-            const title = subtree.node.title as string | undefined;
-            const description = (subtree.node as any).description as string | undefined;
+            const title = subtree.node.title ?? undefined;
+            const description =
+              typeof subtree.node.description === 'string' ? subtree.node.description : undefined;
+
             const isLesson = subtree.node.node_type === 'lesson';
             const childRows = isLesson
               ? [...subtree.children].sort((a, b) => a.edge.position - b.edge.position)
@@ -326,6 +328,7 @@ export default function LibraryList({
                   {/* Thumbnail */}
                   <Box
                     sx={{
+                      position: 'relative',
                       width: 80,
                       height: 56,
                       borderRadius: 1,
@@ -335,11 +338,12 @@ export default function LibraryList({
                     }}
                   >
                     {heroUrl ? (
-                      <img
+                      <NextImage
                         src={heroUrl}
                         alt={title || 'Item thumbnail'}
-                        loading="lazy"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        fill
+                        sizes="80px"
+                        style={{ objectFit: 'cover' }}
                       />
                     ) : (
                       <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -471,10 +475,10 @@ export default function LibraryList({
                         const chIsSelected = chTree.node.id === selectedNodeId;
                         const chIsHovered = hoveredId === chTree.node.id;
 
-                        const chTitle = chTree.node.title as string | undefined;
-                        const chDescription = (chTree.node as any).description as string | undefined;
+                        const chTitle = chTree.node.title ?? undefined;
+                        const chDescription =
+                          typeof chTree.node.description === 'string' ? chTree.node.description : undefined;
                         const chHeroUrl = heroMap.get(chTree.node.id);
-                        const availableForChapter = getAvailableChildTypes(chTree.node.id);
                         const chState = getNodeState(chTree.node);
 
                         return (
@@ -509,13 +513,24 @@ export default function LibraryList({
                               <DragIndicatorIcon fontSize="small" />
                             </Box>
 
-                            <Box sx={{ width: 60, height: 42, borderRadius: 1, bgcolor: 'grey.200', overflow: 'hidden', flexShrink: 0 }}>
+                            <Box
+                              sx={{
+                                position: 'relative',
+                                width: 60,
+                                height: 42,
+                                borderRadius: 1,
+                                bgcolor: 'grey.200',
+                                overflow: 'hidden',
+                                flexShrink: 0,
+                              }}
+                            >
                               {chHeroUrl ? (
-                                <img
+                                <NextImage
                                   src={chHeroUrl}
                                   alt={chTitle || 'Item thumbnail'}
-                                  loading="lazy"
-                                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                  fill
+                                  sizes="60px"
+                                  style={{ objectFit: 'cover' }}
                                 />
                               ) : (
                                 <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

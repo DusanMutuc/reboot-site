@@ -29,11 +29,15 @@ import { supabase } from '@/lib/supabaseClient';
 
 const BUCKET = 'course-heroes';
 
+type StorageMetadata = {
+  mimetype?: string;
+} | null | undefined;
+
 type StorageItem = {
   name: string; // relative name within current prefix (e.g. "uuid.webp" or "42")
   id?: string;
   updated_at?: string;
-  metadata?: any; // files have metadata.mimetype; folders generally do not
+  metadata?: StorageMetadata; // files have metadata.mimetype; folders generally do not
 };
 
 function slugifyForFolder(title: string | null, id: number | null) {
@@ -60,6 +64,11 @@ function resolveStorageSrc(value: string | null | undefined): string | null {
   if (/^https?:\/\//i.test(v)) return v;
   const { data } = supabase.storage.from(BUCKET).getPublicUrl(v);
   return data?.publicUrl ?? null;
+}
+
+// Helper: folder detection (no mimetype => treat as folder)
+function isFolderItem(it: StorageItem): boolean {
+  return !it?.metadata || !('mimetype' in (it.metadata as object)) || !(it.metadata as Record<string, unknown>).mimetype;
 }
 
 export default function HeroImageManagerDialog(props: {
@@ -177,7 +186,7 @@ export default function HeroImageManagerDialog(props: {
   }, [open, courseFolder]);
 
   // Helpers
-  const isFolder = (it: StorageItem) => !it?.metadata?.mimetype;
+  const isFolder = (it: StorageItem) => isFolderItem(it);
   const join = (base: string, name: string) => (base ? `${base.replace(/\/?$/, '/')}${name}` : name);
 
   // Listing
@@ -236,8 +245,9 @@ export default function HeroImageManagerDialog(props: {
         onChangePath(key);
         setFetchedPath(null); // preview should now reflect the prop
         onClose();
-      } catch (err: any) {
-        alert(err?.message || 'Upload failed');
+      } catch (err: unknown) {
+        const msg = err && typeof err === 'object' && 'message' in err ? String((err as { message?: string }).message) : 'Upload failed';
+        alert(msg);
       } finally {
         setBusy(false);
       }
@@ -316,7 +326,7 @@ export default function HeroImageManagerDialog(props: {
   // Migration (old numeric -> slug)
   const [migrating, setMigrating] = useState(false);
   const [oldFolderExists, setOldFolderExists] = useState(false);
-  const oldNumericFolder = courseId ? `${courseId}/` : '';
+  const oldNumericFolder = useMemo(() => (courseId ? `${courseId}/` : ''), [courseId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -325,7 +335,7 @@ export default function HeroImageManagerDialog(props: {
         setOldFolderExists(false);
         return;
       }
-      if (`${courseId}/` === `${courseFolder}/`) {
+      if (oldNumericFolder === `${courseFolder}/`) {
         setOldFolderExists(false);
         return;
       }
@@ -336,7 +346,7 @@ export default function HeroImageManagerDialog(props: {
     return () => {
       cancelled = true;
     };
-  }, [open, courseId, courseFolder]);
+  }, [open, courseId, courseFolder, oldNumericFolder]);
 
   async function listAllUnder(pref: string) {
     const pageSize = 200;
@@ -349,7 +359,7 @@ export default function HeroImageManagerDialog(props: {
         .list(pref, { limit: pageSize, offset, sortBy: { column: 'updated_at', order: 'desc' } });
       if (error) break;
       if (!data || data.length === 0) break;
-      out.push(...data);
+      out.push(...(data as StorageItem[]));
       if (data.length < pageSize) break;
       offset += pageSize;
     }
@@ -382,8 +392,9 @@ export default function HeroImageManagerDialog(props: {
       await load();
       setOldFolderExists(false);
       alert('Migration complete.');
-    } catch (e: any) {
-      alert(e?.message ?? 'Migration failed');
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: string }).message) : 'Migration failed';
+      alert(msg);
     } finally {
       setMigrating(false);
     }
@@ -398,16 +409,16 @@ export default function HeroImageManagerDialog(props: {
 
   // Filter + sort for display
   const filtered = useMemo(() => {
-    let arr = (items ?? []).filter(
+    const base = (items ?? []).filter(
       (it) =>
         !it.name.startsWith('.') &&
         it.name !== '.emptyFolderPlaceholder' &&
         (query ? it.name.toLowerCase().includes(query.toLowerCase()) : true)
     );
     // folders first
-    arr.sort((a, b) => {
-      const af = isFolder(a),
-        bf = isFolder(b);
+    const arr = [...base].sort((a, b) => {
+      const af = isFolder(a);
+      const bf = isFolder(b);
       if (af !== bf) return af ? -1 : 1;
       if (sort === 'name') return a.name.localeCompare(b.name);
       // "updated" order already approximated by list() result; preserve it
@@ -456,8 +467,9 @@ export default function HeroImageManagerDialog(props: {
         .upload(key, new Blob([]), { upsert: true, contentType: 'text/plain' });
       if (error) throw error;
       await load();
-    } catch (e: any) {
-      alert(e.message || 'Failed to create folder');
+    } catch (e: unknown) {
+      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: string }).message) : 'Failed to create folder';
+      alert(msg);
     } finally {
       setBusy(false);
     }
@@ -651,7 +663,7 @@ export default function HeroImageManagerDialog(props: {
       >
         <Tabs
           value={tab}
-          onChange={(_, v) => setTab(v)}
+          onChange={(_, v: 'upload' | 'reuse') => setTab(v)}
           aria-label="Upload or reuse"
           sx={{ position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper' }}
         >
@@ -705,7 +717,9 @@ export default function HeroImageManagerDialog(props: {
                 size="small"
                 label="Sort"
                 value={sort}
-                onChange={(e) => setSort(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setSort(e.target.value as 'updated' | 'name')
+                }
                 SelectProps={{ native: true }}
               >
                 <option value="updated">Recently updated</option>

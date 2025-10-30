@@ -127,15 +127,6 @@ export type BlockRendererProps = {
 };
 
 /** --------------------------------------------------------------------------- */
-/** Tiny in-memory cache per SmartDoc placement to hide StrictMode double-mount */
-type SmartDocCacheEntry = {
-  state: SmartDocState;
-  values: Record<number, string>;
-  submitted: boolean;
-};
-const smartDocCache = new Map<string, SmartDocCacheEntry>();
-const cacheKeyFor = (contentBlockId: number, docId: number) => `${contentBlockId}:${docId}`;
-/** --------------------------------------------------------------------------- */
 
 function SmartDocPromptField({
   prompt,
@@ -182,6 +173,7 @@ function SmartDocPromptField({
     </FormControl>
   );
 }
+
 function SmartDocPreview({
   docId,
   contentBlockId, // placement id (content_blocks.id)
@@ -203,18 +195,7 @@ function SmartDocPreview({
   const lastKeyRef = useRef(renderKey);
   const identityChanged = lastKeyRef.current !== renderKey;
 
-  // EARLY GUARD: if identity changed, don't render stale content even for a frame
-  if (identityChanged) {
-    const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
-    return (
-      <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
-        <CircularProgress size={22} />
-        <Typography variant="body2" color="text.secondary">Loading…</Typography>
-      </Stack>
-    );
-  }
-
-  // Reset state BEFORE paint when identity changes
+  // Reset state BEFORE paint when identity changes (unconditional hook)
   useLayoutEffect(() => {
     if (!identityChanged) return;
     lastKeyRef.current = renderKey;
@@ -321,6 +302,7 @@ function SmartDocPreview({
       }
     }
 
+    // If we just reset to loading (identityChanged), allow load to proceed.
     void loadAll();
 
     return () => {
@@ -349,9 +331,9 @@ function SmartDocPreview({
   // Guard against stale ready doc
   const isDocMismatch = state.status === 'ready' && state.doc.id !== docId;
 
-  if (state.status !== 'ready' || isDocMismatch) {
-    const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
+  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
+  if (state.status !== 'ready' || isDocMismatch) {
     if (state.status === 'error' && !isDocMismatch) {
       return (
         <Stack spacing={1} sx={{ ...wrapSx, py: 2 }}>
@@ -363,6 +345,7 @@ function SmartDocPreview({
       );
     }
 
+    // Loading shell (also used immediately when identity changes)
     return (
       <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
         <CircularProgress size={22} />
@@ -373,7 +356,6 @@ function SmartDocPreview({
 
   const { doc } = state;
   const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
-  const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
 
   const upsertValue = (promptId: number, value: string) => {
     // optimistic UI
@@ -433,7 +415,6 @@ function SmartDocPreview({
   );
 }
 
-
 /** Memoized version to avoid unnecessary rerenders when parents update */
 const MemoSmartDocPreview = React.memo(SmartDocPreview);
 
@@ -459,7 +440,6 @@ type VimeoWindow = Window & {
     Player: VimeoPlayerConstructor;
   };
 };
-// ---- Vimeo helpers (paste above vimeoScriptPromise) ----
 
 // Extract a numeric Vimeo ID from many URL shapes (or accept raw "123456789")
 function extractVimeoId(input: string): string | null {
@@ -487,7 +467,7 @@ function buildVimeoEmbedUrl(idOrUrl: string, extra: Record<string, string | numb
     portrait: 0,
     badge: 0,
     pip: 0,
-    dnt: 1,        // Do-Not-Track
+    dnt: 1, // Do-Not-Track
     ...extra,
   };
 
@@ -495,7 +475,6 @@ function buildVimeoEmbedUrl(idOrUrl: string, extra: Record<string, string | numb
   Object.entries(params).forEach(([k, v]) => qs.set(k, String(v)));
   return `https://player.vimeo.com/video/${id}?${qs.toString()}`;
 }
-
 
 let vimeoScriptPromise: Promise<void> | null = null;
 
@@ -512,7 +491,7 @@ function loadVimeoPlayerApi(): Promise<void> {
       document.querySelector<HTMLScriptElement>('script[src="https://player.vimeo.com/api/player.js"]');
     const existing = existingByAttr ?? existingBySrc;
     if (existing) {
-      if (existing.dataset.vimeoPlayerLoaded === 'true') {
+      if ((existing as any).dataset?.vimeoPlayerLoaded === 'true') {
         resolve();
         return;
       }
@@ -528,9 +507,10 @@ function loadVimeoPlayerApi(): Promise<void> {
     const script = document.createElement('script');
     script.src = 'https://player.vimeo.com/api/player.js';
     script.async = true;
-    script.dataset.vimeoPlayerApi = 'true';
+    (script as any).dataset = (script as any).dataset || {};
+    (script as any).dataset.vimeoPlayerApi = 'true';
     script.onload = () => {
-      script.dataset.vimeoPlayerLoaded = 'true';
+      (script as any).dataset.vimeoPlayerLoaded = 'true';
       resolve();
     };
     script.onerror = () => reject(new Error('Failed to load Vimeo player script'));

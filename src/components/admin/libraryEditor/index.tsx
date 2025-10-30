@@ -27,7 +27,6 @@ import {
   createBlock,
   createNode,
   deleteBlock,
-  deleteNode,
   detachChild,
   duplicateNode,
   fetchCourseTrees,
@@ -51,7 +50,9 @@ function cloneSubtree(subtree: NodeSubtree): NodeSubtree {
   };
 }
 function isNodeSubtree(v: unknown): v is NodeSubtree {
-  return !!v && typeof v === 'object' && Array.isArray((v as any).blocks) && Array.isArray((v as any).children);
+  if (!v || typeof v !== 'object') return false;
+  const obj = v as Record<string, unknown>;
+  return Array.isArray(obj.blocks) && Array.isArray(obj.children) && typeof obj.node === 'object' && obj.node !== null;
 }
 function findSubtree(list: NodeSubtree[], nodeId: number): NodeSubtree | null {
   for (const t of list) {
@@ -291,8 +292,7 @@ function LibraryEditorInner() {
 
   // ensure resources cache
   const ensureResource = useCallback(
-    async (resourceId: number) => {
-      // @ts-ignore
+    async (resourceId: number): Promise<RenderableResource | null> => {
       if (resourceCache[resourceId]) return resourceCache[resourceId];
       const { data, error } = await supabase
         .from('resources')
@@ -320,25 +320,6 @@ function LibraryEditorInner() {
   }, [selectedSubtree, resourceCache, ensureResource]);
 
   // hero image save
-  const handleHeroPathChange = useCallback((newPath: string | null) => {
-    if (!heroCourseId) return;
-    queueNodeUpdate(heroCourseId, { hero_image: newPath }, { debounce: false });
-  }, [heroCourseId]);
-
-  // --- block/node queue (trimmed) ---
-  const flushNodeUpdate = useCallback(async (nodeId: number) => {
-    const pending = nodeUpdateQueue.current.get(nodeId);
-    if (!pending) return;
-    nodeUpdateQueue.current.delete(nodeId);
-    const timer = nodeDebounceTimers.current.get(nodeId);
-    if (timer) { clearTimeout(timer); nodeDebounceTimers.current.delete(nodeId); }
-
-    await runMutation(async () => {
-      const subtree = await updateNode(nodeId, pending);
-      return { subtree };
-    }, { silent: true });
-  }, [runMutation]);
-
   const queueNodeUpdate = useCallback((nodeId: number, updates: Partial<ContentNode>, options: { debounce?: boolean } = { debounce: true }) => {
     setTrees((prev) => {
       if (!optimisticSnapshot.current) optimisticSnapshot.current = prev.map((t) => cloneSubtree(t));
@@ -355,7 +336,27 @@ function LibraryEditorInner() {
     } else {
       void flushNodeUpdate(nodeId);
     }
-  }, [flushNodeUpdate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // defined here so we can add it to deps where needed
+
+  const handleHeroPathChange = useCallback((newPath: string | null) => {
+    if (!heroCourseId) return;
+    queueNodeUpdate(heroCourseId, { hero_image: newPath }, { debounce: false });
+  }, [heroCourseId, queueNodeUpdate]);
+
+  // --- block/node queue (trimmed) ---
+  const flushNodeUpdate = useCallback(async (nodeId: number) => {
+    const pending = nodeUpdateQueue.current.get(nodeId);
+    if (!pending) return;
+    nodeUpdateQueue.current.delete(nodeId);
+    const timer = nodeDebounceTimers.current.get(nodeId);
+    if (timer) { clearTimeout(timer); nodeDebounceTimers.current.delete(nodeId); }
+
+    await runMutation(async () => {
+      const subtree = await updateNode(nodeId, pending);
+      return { subtree };
+    }, { silent: true });
+  }, [runMutation]);
 
   const flushBlockUpdate = useCallback(async (blockId: number) => {
     const pending = blockUpdateQueue.current.get(blockId);
@@ -514,7 +515,7 @@ function LibraryEditorInner() {
       type === 'text'
         ? { block_type: 'text', text_md: normalizeHtmlContent('') }
         : type === 'smart_doc'
-        ? { block_type: 'smart_doc', smart_doc_id: null as any }
+        ? { block_type: 'smart_doc', smart_doc_id: null }
         : { block_type: 'divider' };
 
     void runMutation(async () => {
@@ -622,7 +623,6 @@ function LibraryEditorInner() {
               selectedNodeId={selectedNodeId}
               onSelectNode={handleSelectNode}
               onCreateNode={handleAddChild}
-              onAttachChild={handleAttachChild}
               onDetachChild={handleDetachChild}
               onDuplicateNode={handleDuplicateNode}
               onReorderChild={handleReorderChild}
