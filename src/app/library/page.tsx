@@ -11,7 +11,6 @@ import {
   Card,
   CardActionArea,
   CardContent,
-  CircularProgress,
   Alert,
   IconButton,
   Skeleton,
@@ -70,10 +69,7 @@ function SkeletonCard() {
   );
 }
 
-/** Convert DB hero value → usable <Image src>
- *  - If it's already a full URL, return it unchanged.
- *  - If it's a storage path, build a public URL from the "course-heroes" bucket.
- */
+/** Convert DB hero value → usable <Image src> */
 function resolveHeroSrc(value: string | null | undefined): string | null {
   if (!value) return null;
   const v = value.trim();
@@ -133,14 +129,17 @@ export default function LibraryPage() {
         }
 
         if (!cancelled) setRootId(root);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Failed to load');
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'Failed to load';
+        if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     void resolveRoot();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load children (direct items in Library)
@@ -159,7 +158,7 @@ export default function LibraryPage() {
           .order('position', { ascending: true });
         if (linkErr) throw linkErr;
 
-        const childIds = (links ?? []).map(l => l.child_id);
+        const childIds = (links ?? []).map((l) => l.child_id);
         if (childIds.length === 0) {
           if (!cancelled) setItems([]);
           return;
@@ -172,25 +171,44 @@ export default function LibraryPage() {
           .in('id', childIds);
         if (nodeErr) throw nodeErr;
 
-        const nodeMap = new Map<number, NodeRow>();
-        (nodes ?? []).forEach(n => nodeMap.set(n.id as number, n as unknown as NodeRow));
-
         // 3) stitch back preserving order
-        const stitched: ChildRow[] = (links ?? []).map(l => ({
-          child_id: l.child_id,
-          position: l.position,
-          child: nodeMap.get(l.child_id)!,
-        })).filter(row => !!row.child);
+        const nodeMap = new Map<number, NodeRow>();
+        (nodes ?? []).forEach((n) => {
+          nodeMap.set(n.id as number, {
+            id: n.id as number,
+            title: n.title ?? null,
+            description: n.description ?? null,
+            slug: n.slug ?? null,
+            node_type: n.node_type ?? 'page',
+            hero_image: n.hero_image ?? null,
+          });
+        });
+
+        const stitched: ChildRow[] = (links ?? [])
+          .map((l) => {
+            const child = nodeMap.get(l.child_id);
+            if (!child) return null;
+            return {
+              child_id: l.child_id,
+              position: l.position,
+              child,
+            };
+          })
+          .filter((row): row is ChildRow => row !== null);
 
         if (!cancelled) setItems(stitched);
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Failed to load Library items');
+      } catch (e: unknown) {
+        const message =
+          e instanceof Error ? e.message : 'Failed to load Library items';
+        if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
     void loadChildren();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [rootId]);
 
   const gridContent = useMemo(() => {
@@ -227,7 +245,8 @@ export default function LibraryPage() {
       <Grid container spacing={3}>
         {items.map(({ child }) => {
           const heroSrc = resolveHeroSrc(child.hero_image ?? null);
-          const href = `/library/${child.id}`;
+          // prefer slug if present
+          const href = child.slug ? `/library/${child.slug}` : `/library/${child.id}`;
           return (
             <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>
               <Card

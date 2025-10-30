@@ -57,7 +57,9 @@ export default function LibraryDetailPage() {
         const nodeId = nodeRow.id as number;
         const { data: blockRows, error: bErr } = await supabase
           .from('content_blocks')
-          .select('id, node_id, position, block_type, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, settings')
+          .select(
+            'id, node_id, position, block_type, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, settings'
+          )
           .eq('node_id', nodeId)
           .order('position', { ascending: true });
         if (bErr) throw bErr;
@@ -73,9 +75,7 @@ export default function LibraryDetailPage() {
             .select('id,title,type,url,thumbnail,duration')
             .in('id', resourceIds);
           if (rErr) throw rErr;
-          resourceMap = Object.fromEntries(
-            (resRows ?? []).map((r) => [r.id, r as unknown as RenderableResource])
-          );
+          resourceMap = Object.fromEntries((resRows ?? []).map((r) => [r.id, r as unknown as RenderableResource]));
         }
 
         if (!cancelled) {
@@ -83,8 +83,9 @@ export default function LibraryDetailPage() {
           setBlocks((blockRows ?? []) as ContentBlock[]);
           setResources(resourceMap);
         }
-      } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? 'Failed to load');
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : 'Failed to load';
+        if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -117,7 +118,7 @@ export default function LibraryDetailPage() {
     return (
       <Stack spacing={4}>
         {blocks.map((block) => {
-          const res = block.resource_id ? (resources[block.resource_id] ?? null) : null;
+          const res = block.resource_id ? resources[block.resource_id] ?? null : null;
           return <BlockRenderer key={block.id} block={block} resource={res} previewMode />;
         })}
       </Stack>
@@ -151,7 +152,16 @@ export default function LibraryDetailPage() {
 
       {/* Content */}
       <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
-        <Box sx={{ bgcolor: 'background.paper', borderRadius: 2, border: '1px solid', borderColor: 'divider', p: { xs: 3, md: 5 }, minHeight: 400 }}>
+        <Box
+          sx={{
+            bgcolor: 'background.paper',
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            p: { xs: 3, md: 5 },
+            minHeight: 400,
+          }}
+        >
           {content}
         </Box>
       </Container>

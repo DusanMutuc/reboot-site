@@ -239,7 +239,7 @@ function SmartDocPreview({
           }))
           .sort((a, b) => a.position - b.position);
 
-        // 2) In parallel: status + values (two-step for values)
+        // 2) In parallel: status + values
         const statusPromise = (async () => {
           try {
             const res = await fetch('/api/smartdoc/status', {
@@ -255,7 +255,6 @@ function SmartDocPreview({
         })();
 
         const valuesPromise = (async () => {
-          // envelope row
           const { data: resp, error: respErr } = await supabase
             .from('smart_doc_responses')
             .select('id')
@@ -282,7 +281,6 @@ function SmartDocPreview({
         const [statusData, valueMap] = await Promise.all([statusPromise, valuesPromise]);
         if (!active) return;
 
-        // Set everything in one go; avoid intermediate "ready with empty values"
         setSubmitted(statusData.status === 'submitted');
         setValues(valueMap);
 
@@ -298,24 +296,25 @@ function SmartDocPreview({
         });
       } catch (e) {
         if (!active) return;
-        setState({ status: 'error', message: e instanceof Error ? e.message : 'Failed to load smart doc' });
+        setState({
+          status: 'error',
+          message: e instanceof Error ? e.message : 'Failed to load smart doc',
+        });
       }
     }
 
-    // If we just reset to loading (identityChanged), allow load to proceed.
     void loadAll();
 
     return () => {
       active = false;
       // clear any pending timers
       for (const k of Object.keys(timers.current)) {
-        window.clearTimeout(timers.current[+k]);
+        window.clearTimeout(timers.current[Number(k)]);
       }
       timers.current = {};
     };
   }, [renderKey, docId, contentBlockId]);
 
-  // ----- progress snapshot -----
   const progressSnapshot = useMemo<SmartDocClientProgress | null>(() => {
     if (state.status !== 'ready') return null;
     const total = state.doc.prompts.length;
@@ -328,7 +327,6 @@ function SmartDocPreview({
     onProgressChange(progressSnapshot);
   }, [progressSnapshot, onProgressChange]);
 
-  // Guard against stale ready doc
   const isDocMismatch = state.status === 'ready' && state.doc.id !== docId;
 
   const wrapSx = { maxWidth: 920, mx: 'auto', px: { xs: 2, sm: 0 } } as const;
@@ -345,11 +343,12 @@ function SmartDocPreview({
       );
     }
 
-    // Loading shell (also used immediately when identity changes)
     return (
       <Stack spacing={2} alignItems="center" justifyContent="center" sx={{ ...wrapSx, py: 4 }}>
         <CircularProgress size={22} />
-        <Typography variant="body2" color="text.secondary">Loading…</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Loading…
+        </Typography>
       </Stack>
     );
   }
@@ -358,10 +357,8 @@ function SmartDocPreview({
   const title = doc.title?.trim() || fallbackLabel || 'Smart doc';
 
   const upsertValue = (promptId: number, value: string) => {
-    // optimistic UI
     setValues((v) => ({ ...v, [promptId]: value }));
 
-    // debounce one request per prompt
     window.clearTimeout(timers.current[promptId]);
     timers.current[promptId] = window.setTimeout(async () => {
       try {
@@ -374,8 +371,8 @@ function SmartDocPreview({
             value,
           }),
         });
-      } catch (e) {
-        console.error('smartdoc upsert failed', e);
+      } catch (err) {
+        console.error('smartdoc upsert failed', err);
       }
     }, 400);
   };
@@ -398,7 +395,9 @@ function SmartDocPreview({
 
       <Box>
         {doc.prompts.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">No questions yet.</Typography>
+          <Typography variant="body2" color="text.secondary">
+            No questions yet.
+          </Typography>
         ) : (
           doc.prompts.map((p) => (
             <SmartDocPromptField
@@ -415,7 +414,6 @@ function SmartDocPreview({
   );
 }
 
-/** Memoized version to avoid unnecessary rerenders when parents update */
 const MemoSmartDocPreview = React.memo(SmartDocPreview);
 
 /* --------------------------- Media renderers --------------------------- */
@@ -446,8 +444,6 @@ function extractVimeoId(input: string): string | null {
   try {
     const url = new URL(input);
     const parts = url.pathname.split('/').filter(Boolean);
-    // handles: vimeo.com/12345, /channels/x/12345, /groups/g/videos/12345,
-    // player.vimeo.com/video/12345, vimeo.com/manage/videos/12345, etc.
     const id = [...parts].reverse().find((p) => /^\d+$/.test(p));
     return id ?? null;
   } catch {
@@ -456,18 +452,21 @@ function extractVimeoId(input: string): string | null {
 }
 
 // Build a locked-down embed URL (hides Vimeo logo and extra UI)
-function buildVimeoEmbedUrl(idOrUrl: string, extra: Record<string, string | number | boolean> = {}) {
+function buildVimeoEmbedUrl(
+  idOrUrl: string,
+  extra: Record<string, string | number | boolean> = {},
+) {
   const id = extractVimeoId(idOrUrl);
   if (!id) return null;
 
   const params: Record<string, string | number> = {
-    vimeo_logo: 0, // hides bottom-right Vimeo button
+    vimeo_logo: 0,
     title: 0,
     byline: 0,
     portrait: 0,
     badge: 0,
     pip: 0,
-    dnt: 1, // Do-Not-Track
+    dnt: 1,
     ...extra,
   };
 
@@ -478,6 +477,13 @@ function buildVimeoEmbedUrl(idOrUrl: string, extra: Record<string, string | numb
 
 let vimeoScriptPromise: Promise<void> | null = null;
 
+type VimeoScriptEl = HTMLScriptElement & {
+  dataset: DOMStringMap & {
+    vimeoPlayerApi?: string;
+    vimeoPlayerLoaded?: string;
+  };
+};
+
 function loadVimeoPlayerApi(): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
   const global = window as VimeoWindow;
@@ -485,37 +491,41 @@ function loadVimeoPlayerApi(): Promise<void> {
   if (vimeoScriptPromise) return vimeoScriptPromise;
 
   vimeoScriptPromise = new Promise<void>((resolve, reject) => {
-    const existingByAttr = document.querySelector<HTMLScriptElement>('script[data-vimeo-player-api="true"]');
+    const existingByAttr = document.querySelector<HTMLScriptElement>(
+      'script[data-vimeo-player-api="true"]',
+    );
     const existingBySrc =
       existingByAttr ??
       document.querySelector<HTMLScriptElement>('script[src="https://player.vimeo.com/api/player.js"]');
     const existing = existingByAttr ?? existingBySrc;
+
     if (existing) {
-      if ((existing as any).dataset?.vimeoPlayerLoaded === 'true') {
+      const existingScript = existing as VimeoScriptEl;
+      if (existingScript.dataset?.vimeoPlayerLoaded === 'true') {
         resolve();
         return;
       }
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener(
+      existingScript.addEventListener('load', () => resolve(), { once: true });
+      existingScript.addEventListener(
         'error',
         () => reject(new Error('Failed to load Vimeo player script')),
-        { once: true }
+        { once: true },
       );
       return;
     }
 
-    const script = document.createElement('script');
+    const script = document.createElement('script') as VimeoScriptEl;
     script.src = 'https://player.vimeo.com/api/player.js';
     script.async = true;
-    (script as any).dataset = (script as any).dataset || {};
-    (script as any).dataset.vimeoPlayerApi = 'true';
+    script.dataset.vimeoPlayerApi = 'true';
     script.onload = () => {
-      (script as any).dataset.vimeoPlayerLoaded = 'true';
+      script.dataset.vimeoPlayerLoaded = 'true';
       resolve();
     };
     script.onerror = () => reject(new Error('Failed to load Vimeo player script'));
     document.head.appendChild(script);
   }).catch((error) => {
+    // reset so we can try again
     vimeoScriptPromise = null;
     throw error;
   });
@@ -679,7 +689,7 @@ function VideoPreview({
         );
       }
     } catch {
-      // fall back
+      // ignore — fallback below
     }
   }
 
@@ -695,7 +705,12 @@ function VideoPreview({
   return (
     <Card variant="outlined">
       {resource.thumbnail && (
-        <CardMedia component="img" image={resource.thumbnail} alt={resource.title} sx={{ maxHeight: 320, objectFit: 'cover' }} />
+        <CardMedia
+          component="img"
+          image={resource.thumbnail}
+          alt={resource.title}
+          sx={{ maxHeight: 320, objectFit: 'cover' }}
+        />
       )}
       <CardContent>
         <Stack spacing={1}>
@@ -918,7 +933,6 @@ export function BlockRenderer({
 
   if (block.block_type === 'smart_doc') {
     if (block.smart_doc_id && previewMode) {
-      // pass placement id so inputs can upsert
       return (
         <MemoSmartDocPreview
           docId={block.smart_doc_id}

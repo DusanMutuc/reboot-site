@@ -6,6 +6,7 @@ import BookIcon from '@mui/icons-material/Book';
 import GridViewIcon from '@mui/icons-material/GridView';
 import ImageIcon from '@mui/icons-material/Image';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter, useSelectedLayoutSegment } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -20,21 +21,58 @@ type SidebarItem = {
   children?: SidebarItem[];
 };
 
+// Shape we expect back from `content_nodes`
+type DbNode = {
+  id: number;
+  slug: string | null;
+  title: string | null;
+  description: string | null;
+  node_type: string | null;
+  hero_image: string | null;
+  state: 'published' | 'draft' | string | null;
+};
+
 const BUCKET = 'course-heroes';
 function toPublicUrl(keyOrUrl?: string | null) {
   if (!keyOrUrl) return null;
   if (/^https?:\/\//i.test(keyOrUrl)) return keyOrUrl;
-  return supabase.storage.from(BUCKET).getPublicUrl(keyOrUrl.replace(/^\/+/, '')).data.publicUrl ?? null;
+  return (
+    supabase.storage.from(BUCKET).getPublicUrl(keyOrUrl.replace(/^\/+/, '')).data.publicUrl ?? null
+  );
 }
 
 /** Compact thumbnail */
 function Thumb({ src, alt, w, h }: { src?: string | null; alt?: string; w: number; h: number }) {
   return (
-    <Box sx={{ width: w, height: h, borderRadius: 1.25, bgcolor: 'grey.200', overflow: 'hidden', flexShrink: 0 }}>
+    <Box
+      sx={{
+        width: w,
+        height: h,
+        borderRadius: 1.25,
+        bgcolor: 'grey.200',
+        overflow: 'hidden',
+        flexShrink: 0,
+        position: 'relative',
+      }}
+    >
       {src ? (
-        <img src={src} alt={alt || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        <Image
+          src={src}
+          alt={alt || ''}
+          fill
+          sizes={`${w}px`}
+          style={{ objectFit: 'cover' }}
+        />
       ) : (
-        <Box sx={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box
+          sx={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
           <ImageIcon sx={{ color: 'grey.400', fontSize: Math.max(16, Math.min(w, h) - 20) }} />
         </Box>
       )}
@@ -87,9 +125,13 @@ const ChapterRow = memo(function ChapterRow({
       />
       <Typography
         sx={{
-          flex: 1, fontSize: 13, fontWeight: 600,
+          flex: 1,
+          fontSize: 13,
+          fontWeight: 600,
           color: selected ? 'teal.700' : 'text.primary',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
           transition: 'color 0.2s',
         }}
         title={ch.title || undefined}
@@ -110,7 +152,7 @@ const LessonCard = memo(function LessonCard({
   onOpen: (slug: string) => void;
 }) {
   const selectedLesson = lesson.slug === selectedSlug;
-  const hasSelectedChild = lesson.children?.some(ch => ch.slug === selectedSlug);
+  const hasSelectedChild = lesson.children?.some((ch) => ch.slug === selectedSlug);
   const isActive = selectedLesson || hasSelectedChild;
 
   return (
@@ -130,15 +172,23 @@ const LessonCard = memo(function LessonCard({
         },
       }}
     >
-      <Box onClick={() => onOpen(lesson.slug)} sx={{ display: 'flex', gap: 2, alignItems: 'center', cursor: 'pointer', p: 2 }}>
+      <Box
+        onClick={() => onOpen(lesson.slug)}
+        sx={{ display: 'flex', gap: 2, alignItems: 'center', cursor: 'pointer', p: 2 }}
+      >
         <Thumb src={lesson.hero_image} alt={lesson.title || ''} w={72} h={48} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography
             sx={{
-              fontSize: 14, fontWeight: 700, lineHeight: 1.3,
+              fontSize: 14,
+              fontWeight: 700,
+              lineHeight: 1.3,
               color: selectedLesson ? 'teal.700' : 'text.primary',
-              overflow: 'hidden', textOverflow: 'ellipsis',
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
               transition: 'color .2s',
             }}
             title={lesson.title || undefined}
@@ -149,7 +199,14 @@ const LessonCard = memo(function LessonCard({
       </Box>
 
       {lesson.children?.length ? (
-        <Box sx={{ padding: '8px 16px 12px', background: 'rgba(0, 150, 136, 0.025)', borderTop: '1px solid', borderColor: 'rgba(0, 0, 0, 0.06)' }}>
+        <Box
+          sx={{
+            padding: '8px 16px 12px',
+            background: 'rgba(0, 150, 136, 0.025)',
+            borderTop: '1px solid',
+            borderColor: 'rgba(0, 0, 0, 0.06)',
+          }}
+        >
           <Stack spacing={0}>
             {lesson.children.map((ch) => (
               <ChapterRow key={ch.id} ch={ch} selected={selectedSlug === ch.slug} onOpen={onOpen} />
@@ -171,12 +228,23 @@ const LibrarySidebar = memo(function LibrarySidebar({
   onOpenItem: (slug: string) => void;
 }) {
   return (
-    <Box sx={{ width: 360, bgcolor: 'background.paper', borderRight: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column' }}>
+    <Box
+      sx={{
+        width: 360,
+        bgcolor: 'background.paper',
+        borderRight: 1,
+        borderColor: 'divider',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
             <BookIcon sx={{ color: 'primary.main', fontSize: 32 }} />
-            <Typography variant="h6" fontWeight={700}>Library</Typography>
+            <Typography variant="h6" fontWeight={700}>
+              Library
+            </Typography>
           </Box>
           <Tooltip title="Back to grid view">
             <IconButton size="medium" component={Link} href="/library">
@@ -240,7 +308,9 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
 
       if (!cancelled && root) setRootId(root);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Load lessons & chapters once per rootId (no refetch on slug change)
@@ -261,21 +331,23 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
         return;
       }
 
-      const { data: lessonRows } = await supabase
+      const { data: lessonRowsRaw } = await supabase
         .from('content_nodes')
         .select('id, slug, title, description, node_type, hero_image, state')
         .in('id', lessonIds);
 
+      const lessonRows = (lessonRowsRaw ?? []) as DbNode[];
+
       const lessonsMap = new Map<number, SidebarItem>();
-      (lessonRows ?? []).forEach((n) => {
-        lessonsMap.set(n.id as number, {
-          id: n.id as number,
-          slug: n.slug as string,
+      lessonRows.forEach((n) => {
+        lessonsMap.set(n.id, {
+          id: n.id,
+          slug: (n.slug ?? '') as string,
           title: n.title ?? null,
           description: n.description ?? null,
-          node_type: (n.node_type as any) ?? 'lesson',
+          node_type: n.node_type ?? 'lesson',
           hero_image: toPublicUrl(n.hero_image) ?? undefined,
-          state: (n as any).state ?? null,
+          state: n.state ?? null,
           children: [],
         });
       });
@@ -287,25 +359,26 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
         .order('position', { ascending: true });
 
       const chapterIds = (chLinks ?? []).map((l) => l.child_id);
-      let chaptersRows: any[] = [];
+
+      let chaptersRows: DbNode[] = [];
       if (chapterIds.length) {
-        const { data: chRows } = await supabase
+        const { data: chRowsRaw } = await supabase
           .from('content_nodes')
           .select('id, slug, title, description, node_type, hero_image, state')
           .in('id', chapterIds);
-        chaptersRows = chRows ?? [];
+        chaptersRows = (chRowsRaw ?? []) as DbNode[];
       }
 
       const chapterMap = new Map<number, SidebarItem>();
       chaptersRows.forEach((n) => {
-        chapterMap.set(n.id as number, {
-          id: n.id as number,
-          slug: n.slug as string,
+        chapterMap.set(n.id, {
+          id: n.id,
+          slug: (n.slug ?? '') as string,
           title: n.title ?? null,
           description: n.description ?? null,
-          node_type: (n.node_type as any) ?? 'chapter',
+          node_type: n.node_type ?? 'chapter',
           hero_image: toPublicUrl(n.hero_image) ?? undefined,
-          state: (n as any).state ?? null,
+          state: n.state ?? null,
         });
       });
 
@@ -324,12 +397,14 @@ export default function LibraryLayout({ children }: { children: React.ReactNode 
           lesson.children = lessonChildrenOrder.get(lesson.id) ?? [];
           return lesson;
         })
-        .filter(Boolean) as SidebarItem[];
+        .filter((x): x is SidebarItem => Boolean(x));
 
       if (!cancelled) setItems(lessonsOrdered);
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [rootId]);
 
   // Auto-open first chapter when landing on a lesson URL directly
