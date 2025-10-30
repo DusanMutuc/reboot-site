@@ -8,8 +8,8 @@ import {
   handleCourseBuilderError,
 } from '@/lib/courseBuilder';
 
-function parseNodeId(value: string | string[] | undefined) {
-  if (!value || Array.isArray(value)) {
+function parseNodeId(value: string | undefined) {
+  if (!value) {
     throw new CourseBuilderError('Invalid node id', 400);
   }
   const parsed = Number(value);
@@ -19,14 +19,17 @@ function parseNodeId(value: string | string[] | undefined) {
   return parsed;
 }
 
-export async function POST(request: NextRequest, { params }: { params: { nodeId: string } }) {
+export async function POST(
+  request: NextRequest,
+  context: { params: { nodeId: string } }
+) {
   const guard = await requireAdmin(request);
   if (!guard.ok) {
     return guard.res;
   }
 
   try {
-    const nodeId = parseNodeId(params.nodeId);
+    const nodeId = parseNodeId(context.params.nodeId);
     const body = (await request.json().catch(() => ({}))) as { on?: unknown };
 
     if (typeof body.on !== 'boolean') {
