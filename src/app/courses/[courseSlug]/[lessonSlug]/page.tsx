@@ -1,9 +1,16 @@
 import CourseViewer from '@/components/course/CourseViewer';
 
-type LessonPageProps = {
-  params: { courseSlug: string; lessonSlug: string };
+type LessonParams = {
+  courseSlug: string;
+  lessonSlug: string;
 };
 
-export default function LessonPage({ params }: LessonPageProps) {
-  return <CourseViewer courseSlug={params.courseSlug} lessonSlug={params.lessonSlug} />;
+export default async function LessonPage({
+  params,
+}: {
+  params: LessonParams | Promise<LessonParams>;
+}) {
+  const { courseSlug, lessonSlug } = await Promise.resolve(params);
+
+  return <CourseViewer courseSlug={courseSlug} lessonSlug={lessonSlug} />;
 }
