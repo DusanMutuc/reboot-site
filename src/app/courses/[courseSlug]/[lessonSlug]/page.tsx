@@ -6,11 +6,17 @@ type LessonParams = {
   lessonSlug: string;
 };
 
-export default async function LessonPage(props: { params: any }) {
-  // Next 15 sometimes gives params as a Promise, sometimes as an object.
-  const { courseSlug, lessonSlug } = await Promise.resolve(
-    props.params as LessonParams
-  );
+// We tell TS: "params is an object with those 2 strings."
+// At runtime, if Next gives us a Promise, we normalize it below.
+export default async function LessonPage({
+  params,
+}: {
+  params: LessonParams;
+}) {
+  // Next 15 sometimes gives a Promise, sometimes not.
+  // We normalize without using `any`.
+  const resolved = (await Promise.resolve(params)) as LessonParams;
+  const { courseSlug, lessonSlug } = resolved;
 
   return <CourseViewer courseSlug={courseSlug} lessonSlug={lessonSlug} />;
 }
