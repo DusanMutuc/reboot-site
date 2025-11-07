@@ -12,6 +12,57 @@ type ProfileRow = {
   ghl_user_id: string | null;
 };
 
+// Shape of the *raw* event coming back from GHL
+type RawGhlContact = {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+};
+
+type RawGhlEvent = {
+  id?: string;
+  _id?: string;
+  calendarId?: string;
+  groupId?: string | null;
+  title?: string | null;
+  name?: string | null;
+  appointmentStatus?: string | null;
+  status?: string | null;
+  startTime?: string | number;
+  start?: string | number;
+  from?: string | number;
+  endTime?: string | number;
+  end?: string | number;
+  to?: string | number;
+  contactId?: string | null;
+  contact?: RawGhlContact | null;
+  address?: string | null;
+  meetingLocation?: string | null;
+};
+
+type GhlEventsEnvelope = {
+  events?: RawGhlEvent[];
+};
+
+type ApiEvent = {
+  id: string;
+  calendarId: string;
+  groupId: string | null;
+  title: string | null;
+  status: string | null;
+  start: string; // ISO UTC (server normalized)
+  end: string;   // ISO UTC
+  contact: {
+    id: string | null;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  location: string | null;
+};
+
+type ApiResponse = { timezone: string; items: ApiEvent[] };
+
 function clampDays(n: number) {
   return n === 1 || n === 7 || n === 14 ? n : 14;
 }
@@ -142,8 +193,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const payload = (await res.json()) as { events?: unknown[] } | unknown[];
-    const events = Array.isArray(payload) ? payload : payload?.events ?? [];
+    const payload = (await res.json()) as GhlEventsEnvelope | RawGhlEvent[];
+
+    let events: RawGhlEvent[];
+    if (Array.isArray(payload)) {
+      events = payload as RawGhlEvent[];
+    } else {
+      events = (payload.events ?? []) as RawGhlEvent[];
+    }
 
     // 5) (Optional) exclude specific calendarIds here if desired
     const EXCLUDE = new Set<string>([
@@ -151,7 +208,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // 6) Normalize
-    const items = (events as Record<string, unknown>[])
+    const items: ApiEvent[] = events
       .filter((e) => !EXCLUDE.has(String(e.calendarId ?? "")))
       .map((e) => {
         const start = toIsoUtc(e.startTime ?? e.start ?? e.from);
@@ -161,23 +218,24 @@ export async function GET(req: NextRequest) {
           calendarId: String(e.calendarId ?? ""),
           groupId: e.groupId ?? null,
           title: e.title ?? e.name ?? null,
-          status: (e as any).appointmentStatus ?? (e as any).status ?? null,
-          start, // ISO UTC
-          end,   // ISO UTC
+          status: e.appointmentStatus ?? e.status ?? null,
+          start: start ?? "", // we'll filter out empties below
+          end: end ?? "",
           contact: {
-            id: (e as any).contactId ?? null,
-            name: (e as any).contact?.name ?? null,
-            email: (e as any).contact?.email ?? null,
-            phone: (e as any).contact?.phone ?? null,
+            id: e.contactId ?? null,
+            name: e.contact?.name ?? null,
+            email: e.contact?.email ?? null,
+            phone: e.contact?.phone ?? null,
           },
-          location: (e as any).address ?? (e as any).meetingLocation ?? null, // Zoom link or other
+          location: e.address ?? e.meetingLocation ?? null, // Zoom link or other
         };
       })
-      .filter((it) => it.start && it.end)
-      .sort((a, b) => (a.start! < b.start! ? -1 : 1));
+      .filter((it) => Boolean(it.start) && Boolean(it.end))
+      .sort((a, b) => (a.start < b.start ? -1 : 1));
 
     // 7) Return viewer tz for consistent rendering client-side
-    return NextResponse.json({ timezone: tz, items });
+    const response: ApiResponse = { timezone: tz, items };
+    return NextResponse.json(response);
   } catch (err: unknown) {
     return NextResponse.json(
       { message: "Unexpected error", detail: String((err as Error)?.message ?? err) },
