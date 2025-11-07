@@ -7,8 +7,8 @@ import { GHL } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
-type CoachProfileRow = {
-  user_id: string;
+type ProfileRow = {
+  id: string;
   ghl_user_id: string | null;
 };
 
@@ -61,8 +61,8 @@ async function getLoggedInUserId(): Promise<string | null> {
   return data.user.id;
 }
 
-async function getCoachProfile(userId: string): Promise<CoachProfileRow | null> {
-  // Query using the same SSR client (inherits RLS from the session)
+async function getProfileWithGhlUserId(userId: string): Promise<ProfileRow | null> {
+  // Query using the same SSR-style client (inherits RLS from the session)
   const cookieStore = await cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,14 +79,14 @@ async function getCoachProfile(userId: string): Promise<CoachProfileRow | null> 
   );
 
   const { data, error } = await supabase
-    .from("coach_profiles")
-    .select("user_id, ghl_user_id")
-    .eq("user_id", userId)
+    .from("profiles")
+    .select("id, ghl_user_id")
+    .eq("id", userId)
     .maybeSingle();
 
   if (error) {
     // Surface a friendly message but avoid leaking internals
-    throw new Error(`DB error loading coach profile`);
+    throw new Error(`DB error loading profile`);
   }
   return data;
 }
@@ -104,12 +104,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // 2) Coach profile → ghl_user_id
-    const coach = await getCoachProfile(userId);
-    const ghlUserId = coach?.ghl_user_id?.trim();
+    // 2) Profile → ghl_user_id (now from profiles, not coach_profiles)
+    const profile = await getProfileWithGhlUserId(userId);
+    const ghlUserId = profile?.ghl_user_id?.trim();
     if (!ghlUserId) {
       return NextResponse.json(
-        { message: "No GHL user id stored for this coach." },
+        { message: "No GHL user id stored for this user." },
         { status: 400 }
       );
     }
@@ -161,16 +161,16 @@ export async function GET(req: NextRequest) {
           calendarId: String(e.calendarId ?? ""),
           groupId: e.groupId ?? null,
           title: e.title ?? e.name ?? null,
-          status: e.appointmentStatus ?? e.status ?? null,
+          status: (e as any).appointmentStatus ?? (e as any).status ?? null,
           start, // ISO UTC
           end,   // ISO UTC
           contact: {
-            id: e.contactId ?? null,
-            name: (e.contact as Record<string, unknown>)?.name ?? null,
-            email: (e.contact as Record<string, unknown>)?.email ?? null,
-            phone: (e.contact as Record<string, unknown>)?.phone ?? null,
+            id: (e as any).contactId ?? null,
+            name: (e as any).contact?.name ?? null,
+            email: (e as any).contact?.email ?? null,
+            phone: (e as any).contact?.phone ?? null,
           },
-          location: e.address ?? e.meetingLocation ?? null, // Zoom link or other
+          location: (e as any).address ?? (e as any).meetingLocation ?? null, // Zoom link or other
         };
       })
       .filter((it) => it.start && it.end)
