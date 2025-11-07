@@ -14,6 +14,7 @@ import AdminActionRequired from '@/components/admin/AdminActionRequired';
 import CourseEditor from '@/components/admin/courseEditor';
 import StudentProgressView from '@/components/coach/StudentProgressView';
 import LibraryEditor from '@/components/admin/libraryEditor';
+import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin'; // 👈 NEW
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -164,40 +165,54 @@ export default function AdminPage() {
         </Typography>
 
         <Paper elevation={1} sx={{ borderRadius: 2 }}>
-        <Tabs
-  value={tab}
-  onChange={(_, v) => setTab(v)}
-  variant="scrollable"
-  textColor="primary"
-  indicatorColor="primary"
-  sx={{ borderBottom: 1, borderColor: 'divider' }}
->
-  <Tab label="Add User" />            {/* 0 */}
-  <Tab label="Assign / Change Coach" /> {/* 1 */}
-  <Tab label="Coach Rosters" />       {/* 2 */}
-  <Tab label="Resource Library" />    {/* 3 (unchanged) */}
-  <Tab label="Course Builder" />      {/* 4 */}
-  <Tab label="Library" />             {/* 5 NEW */}
-  <Tab label="Action Required" />     {/* 6 (shifted) */}
-  <Tab label="Student Progress" />    {/* 7 (shifted) */}
-</Tabs>
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v)}
+            variant="scrollable"
+            textColor="primary"
+            indicatorColor="primary"
+            sx={{ borderBottom: 1, borderColor: 'divider' }}
+          >
+            <Tab label="Add User" />                {/* 0 */}
+            <Tab label="Assign / Change Coach" />   {/* 1 */}
+            <Tab label="Coach Profiles" />          {/* 2 NEW */}
+            <Tab label="Coach Rosters" />           {/* 3 */}
+            <Tab label="Resource Library" />        {/* 4 */}
+            <Tab label="Course Builder" />          {/* 5 */}
+            <Tab label="Library" />                 {/* 6 */}
+            <Tab label="Action Required" />         {/* 7 */}
+            <Tab label="Student Progress" />        {/* 8 */}
+          </Tabs>
 
-<Box sx={{ p: 3 }}>
-  <TabPanel value={tab} index={0}><AddUserForm /></TabPanel>
-  <TabPanel value={tab} index={1}><AssignCoachPanel /></TabPanel>
-  <TabPanel value={tab} index={2}><CoachRosters /></TabPanel>
-  <TabPanel value={tab} index={3}><ResourceLibraryAdmin /></TabPanel>
-  <TabPanel value={tab} index={4}><CourseEditor /></TabPanel>
-
-  {/* NEW Library tab mounts your libraryEditor/index.tsx */}
-  <TabPanel value={tab} index={5}>
-    <LibraryEditor />
-  </TabPanel>
-
-  <TabPanel value={tab} index={6}><AdminActionRequired /></TabPanel>
-  <TabPanel value={tab} index={7}><StudentProgressView mode="admin" /></TabPanel>
-</Box>
-
+          <Box sx={{ p: 3 }}>
+            <TabPanel value={tab} index={0}>
+              <AddUserForm />
+            </TabPanel>
+            <TabPanel value={tab} index={1}>
+              <AssignCoachPanel />
+            </TabPanel>
+            <TabPanel value={tab} index={2}>
+              <CoachProfilesAdmin />   {/* 👈 NEW */}
+            </TabPanel>
+            <TabPanel value={tab} index={3}>
+              <CoachRosters />
+            </TabPanel>
+            <TabPanel value={tab} index={4}>
+              <ResourceLibraryAdmin />
+            </TabPanel>
+            <TabPanel value={tab} index={5}>
+              <CourseEditor />
+            </TabPanel>
+            <TabPanel value={tab} index={6}>
+              <LibraryEditor />
+            </TabPanel>
+            <TabPanel value={tab} index={7}>
+              <AdminActionRequired />
+            </TabPanel>
+            <TabPanel value={tab} index={8}>
+              <StudentProgressView mode="admin" />
+            </TabPanel>
+          </Box>
         </Paper>
       </Container>
     </ThemeProvider>

@@ -5,13 +5,21 @@ import { getAdminClient } from '@/lib/supabaseAdmin';
 
 const COURSE_ID = 2;
 
+type RelationshipType = 'primary' | 'implementation';
+
 type AssignCoachBody = {
   user_id: string;
   coach_id: string;
   replace?: boolean;
+  relationship_type?: RelationshipType;
 };
 
-type CoachSummary = { id: string; name: string; email: string };
+type CoachSummary = {
+  id: string;
+  name: string;
+  email: string;
+  relationship_type: RelationshipType;
+};
 
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin(request);
@@ -29,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   const { data: rows, error } = await supa
     .from('user_coaches')
-    .select('coach_id')
+    .select('coach_id, relationship_type')
     .eq('user_id', user_id)
     .eq('course_id', COURSE_ID)
     .eq('is_active', true);
@@ -39,16 +47,17 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const coachIds = Array.from(
-    new Set(
-      (rows || [])
-        .map((r) => r.coach_id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0)
-    )
-  );
-  if (coachIds.length === 0) {
+  const filteredRows =
+    (rows || []).filter(
+      (r): r is { coach_id: string; relationship_type: RelationshipType | null } =>
+        typeof r.coach_id === 'string' && r.coach_id.length > 0
+    );
+
+  if (filteredRows.length === 0) {
     return NextResponse.json({ items: [] as CoachSummary[] });
   }
+
+  const coachIds = Array.from(new Set(filteredRows.map((r) => r.coach_id)));
 
   const { data: profiles, error: profErr } = await supa
     .from('profiles')
@@ -63,9 +72,11 @@ export async function GET(request: NextRequest) {
   const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
 
   const items: CoachSummary[] = await Promise.all(
-    coachIds.map(async (coachId) => {
+    filteredRows.map(async (row) => {
+      const coachId = row.coach_id;
       const prof = profileMap.get(coachId);
       let email = '';
+
       try {
         const { data: authData, error: authError } = await supa.auth.admin.getUserById(coachId);
         if (authError) {
@@ -78,7 +89,10 @@ export async function GET(request: NextRequest) {
       }
 
       const name = `${prof?.first_name ?? ''} ${prof?.last_name ?? ''}`.trim();
-      return { id: coachId, name, email };
+      const relationship_type: RelationshipType =
+        row.relationship_type === 'implementation' ? 'implementation' : 'primary';
+
+      return { id: coachId, name, email, relationship_type };
     })
   );
 
@@ -95,23 +109,42 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as AssignCoachBody;
     console.log('📝 assign-coach: Request body:', body);
 
-    const { user_id, coach_id, replace = true } = body;
+    const {
+      user_id,
+      coach_id,
+      replace = true,
+      relationship_type = 'primary',
+    } = body;
+
     if (!user_id || !coach_id) {
       console.error('❌ assign-coach: Missing required fields');
       return NextResponse.json({ error: 'Missing user_id or coach_id' }, { status: 400 });
     }
 
-    console.log('🎯 assign-coach: Assigning user', user_id, 'to coach', coach_id, 'replace:', replace);
+    console.log(
+      '🎯 assign-coach: Assigning user',
+      user_id,
+      'to coach',
+      coach_id,
+      'replace:',
+      replace,
+      'relationship_type:',
+      relationship_type
+    );
+
     const supa = getAdminClient();
 
     if (replace) {
-      console.log('🔄 assign-coach: Deactivating existing assignments');
+      console.log(
+        '🔄 assign-coach: Deactivating existing assignments of same relationship_type'
+      );
       const { error } = await supa
         .from('user_coaches')
         .update({ is_active: false, ended_at: new Date().toISOString() })
         .eq('user_id', user_id)
         .eq('course_id', COURSE_ID)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .eq('relationship_type', relationship_type);
 
       if (error) {
         console.error('❌ assign-coach: Error deactivating existing assignments:', error);
@@ -125,6 +158,7 @@ export async function POST(request: NextRequest) {
       coach_id,
       course_id: COURSE_ID,
       is_active: true,
+      relationship_type, // 👈 store primary/implementation
       // assigned_at will be set automatically by DEFAULT now()
     });
 
