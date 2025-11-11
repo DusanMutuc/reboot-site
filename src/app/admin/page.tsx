@@ -14,7 +14,8 @@ import AdminActionRequired from '@/components/admin/AdminActionRequired';
 import CourseEditor from '@/components/admin/courseEditor';
 import StudentProgressView from '@/components/coach/StudentProgressView';
 import LibraryEditor from '@/components/admin/libraryEditor';
-import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin'; // 👈 NEW
+import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin';
+import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin'; // 👈 NEW
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -29,7 +30,15 @@ import {
   Button,
 } from '@mui/material';
 
-function TabPanel({ index, value, children }: { index: number; value: number; children: ReactNode }) {
+function TabPanel({
+  index,
+  value,
+  children,
+}: {
+  index: number;
+  value: number;
+  children: ReactNode;
+}) {
   if (value !== index) return null;
   return <Box sx={{ mt: 2 }}>{children}</Box>;
 }
@@ -174,14 +183,15 @@ export default function AdminPage() {
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
             <Tab label="Add User" />                {/* 0 */}
-            <Tab label="Assign / Change Coach" />   {/* 1 */}
-            <Tab label="Coach Profiles" />          {/* 2 NEW */}
-            <Tab label="Coach Rosters" />           {/* 3 */}
-            <Tab label="Resource Library" />        {/* 4 */}
-            <Tab label="Course Builder" />          {/* 5 */}
-            <Tab label="Library" />                 {/* 6 */}
-            <Tab label="Action Required" />         {/* 7 */}
-            <Tab label="Student Progress" />        {/* 8 */}
+            <Tab label="User Profiles" />            {/* 1 NEW */}
+            <Tab label="Assign / Change Coach" />   {/* 2 */}
+            <Tab label="Coach Profiles" />          {/* 3 */}
+            <Tab label="Coach Rosters" />           {/* 4 */}
+            <Tab label="Resource Library" />        {/* 5 */}
+            <Tab label="Course Builder" />          {/* 6 */}
+            <Tab label="Library" />                 {/* 7 */}
+            <Tab label="Action Required" />         {/* 8 */}
+            <Tab label="Student Progress" />        {/* 9 */}
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -189,27 +199,30 @@ export default function AdminPage() {
               <AddUserForm />
             </TabPanel>
             <TabPanel value={tab} index={1}>
-              <AssignCoachPanel />
+              <UserProfilesAdmin />   {/* NEW */}
             </TabPanel>
             <TabPanel value={tab} index={2}>
-              <CoachProfilesAdmin />   {/* 👈 NEW */}
+              <AssignCoachPanel />
             </TabPanel>
             <TabPanel value={tab} index={3}>
-              <CoachRosters />
+              <CoachProfilesAdmin />
             </TabPanel>
             <TabPanel value={tab} index={4}>
-              <ResourceLibraryAdmin />
+              <CoachRosters />
             </TabPanel>
             <TabPanel value={tab} index={5}>
-              <CourseEditor />
+              <ResourceLibraryAdmin />
             </TabPanel>
             <TabPanel value={tab} index={6}>
-              <LibraryEditor />
+              <CourseEditor />
             </TabPanel>
             <TabPanel value={tab} index={7}>
-              <AdminActionRequired />
+              <LibraryEditor />
             </TabPanel>
             <TabPanel value={tab} index={8}>
+              <AdminActionRequired />
+            </TabPanel>
+            <TabPanel value={tab} index={9}>
               <StudentProgressView mode="admin" />
             </TabPanel>
           </Box>

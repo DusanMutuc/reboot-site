@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Box } from '@mui/material';
 import TopNav from '@/components/topNav';
 import ImportantLinks from '@/components/importantLinks';
 import PodcastSection from '@/components/podcastSection';
@@ -11,6 +10,7 @@ import HelpSteps from '@/components/helpSteps';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
 import { useLookerLink } from '@/hooks/useLookerLink';
+import CoachSchedule from '@/components/coach/CoachSchedule';
 
 export default function DashboardPage() {
   const { lookerLink, loading, error } = useLookerLink();
@@ -24,7 +24,10 @@ export default function DashboardPage() {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     window.addEventListener('resize', update);
-    return () => { ro.disconnect(); window.removeEventListener('resize', update); };
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
   }, []);
 
   if (loading)     return <Loading />;
@@ -39,6 +42,10 @@ export default function DashboardPage() {
 
       <section id="links" style={sectionOffsetStyle}>
         <ImportantLinks mode="user" />
+      </section>
+
+      <section id="schedule" style={sectionOffsetStyle}>
+        <CoachSchedule />
       </section>
 
       <section id="podcast" style={sectionOffsetStyle}>

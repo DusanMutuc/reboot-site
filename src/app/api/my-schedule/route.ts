@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 type ProfileRow = {
   id: string;
   ghl_user_id: string | null;
+  role_codes: string[];
 };
+
+type RawGhlEvent = Record<string, any>;
+
+const COACH_ROLE_CODES = ["coach", "implementation_coach"];
 
 function clampDays(n: number) {
   return n === 1 || n === 7 || n === 14 ? n : 14;
@@ -35,10 +40,9 @@ function toIsoUtc(v: unknown): string | null {
   return null;
 }
 
-async function getLoggedInUserId(): Promise<string | null> {
-  // Supabase SSR client wired to Next.js cookies
+async function getSupabaseServerClient() {
   const cookieStore = await cookies();
-  const supabase = createServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -47,7 +51,7 @@ async function getLoggedInUserId(): Promise<string | null> {
           return cookieStore.get(name)?.value;
         },
         set() {
-          // Next.js App Router cookies are immutable per request; no-op is fine here.
+          // App Router cookies are immutable per request
         },
         remove() {
           // no-op
@@ -55,40 +59,77 @@ async function getLoggedInUserId(): Promise<string | null> {
       },
     }
   );
+}
 
+async function getLoggedInUserId(): Promise<string | null> {
+  const supabase = await getSupabaseServerClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;
   return data.user.id;
 }
 
-async function getProfileWithGhlUserId(userId: string): Promise<ProfileRow | null> {
-  // Query using the same SSR-style client (inherits RLS from the session)
-  const cookieStore = await cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set() {},
-        remove() {},
-      },
-    }
-  );
+async function getProfileWithGhlAndRoles(userId: string): Promise<ProfileRow | null> {
+  const supabase = await getSupabaseServerClient();
 
-  const { data, error } = await supabase
+  // Profiles
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("id, ghl_user_id")
     .eq("id", userId)
     .maybeSingle();
 
-  if (error) {
-    // Surface a friendly message but avoid leaking internals
-    throw new Error(`DB error loading profile`);
+  if (profileError) {
+    throw new Error("DB error loading profile");
   }
-  return data;
+  if (!profile) return null;
+
+  // Roles: user_roles → roles.code
+  const { data: rolesRows, error: rolesError } = await supabase
+    .from("user_roles")
+    .select("roles ( code )")
+    .eq("user_id", userId);
+
+  if (rolesError) {
+    throw new Error("DB error loading roles");
+  }
+
+  const role_codes =
+    rolesRows?.map((row: any) => row.roles?.code).filter((c: string | null | undefined) => !!c) ??
+    [];
+
+  return {
+    id: profile.id,
+    ghl_user_id: profile.ghl_user_id,
+    role_codes,
+  };
+}
+
+function normalizeEvents(events: RawGhlEvent[], excludeCalendarIds: Set<string>) {
+  return events
+    .filter((e) => !excludeCalendarIds.has(String(e.calendarId ?? "")))
+    .map((e) => {
+      const start = toIsoUtc(e.startTime ?? e.start ?? e.from);
+      const end = toIsoUtc(e.endTime ?? e.end ?? e.to);
+
+      return {
+        id: String(e.id ?? e._id ?? `${e.calendarId ?? "cal"}-${start ?? Date.now()}`),
+        calendarId: String(e.calendarId ?? ""),
+        groupId: e.groupId ?? null,
+        title: e.title ?? e.name ?? null,
+        status: e.appointmentStatus ?? e.status ?? null,
+        start,
+        end,
+        contact: {
+          id: e.contactId ?? e.contact?.id ?? null,
+          name: e.contact?.name ?? null,
+          email: e.contact?.email ?? null,
+          phone: e.contact?.phone ?? null,
+        },
+        location: e.address ?? e.meetingLocation ?? null,
+      };
+    })
+    .filter((it) => it.start && it.end)
+    .sort((a, b) => (a.start! < b.start! ? -1 : 1));
 }
 
 export async function GET(req: NextRequest) {
@@ -104,26 +145,46 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
-    // 2) Profile → ghl_user_id (now from profiles, not coach_profiles)
-    const profile = await getProfileWithGhlUserId(userId);
-    const ghlUserId = profile?.ghl_user_id?.trim();
-    if (!ghlUserId) {
+    // 2) Profile + roles → interpret ghl_user_id
+    const profile = await getProfileWithGhlAndRoles(userId);
+    if (!profile) {
+      return NextResponse.json({ message: "Profile not found" }, { status: 404 });
+    }
+
+    const { ghl_user_id, role_codes } = profile;
+    const isCoach = role_codes.some((code) => COACH_ROLE_CODES.includes(code));
+
+    if (!ghl_user_id) {
       return NextResponse.json(
-        { message: "No GHL user id stored for this user." },
+        {
+          message: isCoach
+            ? "No GHL user id stored for this coach."
+            : "No GHL contact id stored for this user.",
+        },
         { status: 400 }
       );
     }
 
-    // 3) Date range in the viewer's tz → epoch ms
-    const { startMs, endMs } = rangeToEpochMillis(days, tz);
+    const trimmedGhlId = ghl_user_id.trim();
 
-    // 4) Call GHL events by user
-    const locationId = GHL.LOCATION_ID; // hardcoded via env
-    const apiUrl =
-      `${GHL.BASE}/calendars/events` +
-      `?locationId=${encodeURIComponent(locationId)}` +
-      `&userId=${encodeURIComponent(ghlUserId)}` +
-      `&startTime=${startMs}&endTime=${endMs}`;
+    // 3) Date range in viewer tz → epoch ms
+    const { startMs, endMs } = rangeToEpochMillis(days, tz);
+    const locationId = GHL.LOCATION_ID;
+
+    // 4) Build correct GHL URL depending on role
+    let apiUrl: string;
+
+    if (isCoach) {
+      // Coach/staff: use calendars/events with userId
+      apiUrl =
+        `${GHL.BASE}/calendars/events` +
+        `?locationId=${encodeURIComponent(locationId)}` +
+        `&userId=${encodeURIComponent(trimmedGhlId)}` +
+        `&startTime=${startMs}&endTime=${endMs}`;
+    } else {
+      // Member: use contact appointments (then filter by range)
+      apiUrl = `${GHL.BASE}/contacts/${encodeURIComponent(trimmedGhlId)}/appointments`;
+    }
 
     const res = await fetch(apiUrl, {
       headers: {
@@ -137,50 +198,46 @@ export async function GET(req: NextRequest) {
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       return NextResponse.json(
-        { message: `GHL error ${res.status}`, detail: detail.slice(0, 2000) },
+        {
+          message: `GHL error ${res.status}`,
+          detail: detail.slice(0, 2000),
+        },
         { status: 502 }
       );
     }
 
-    const payload = (await res.json()) as { events?: unknown[] } | unknown[];
-    const events = Array.isArray(payload) ? payload : payload?.events ?? [];
+    const payload = (await res.json()) as any;
 
-    // 5) (Optional) exclude specific calendarIds here if desired
+    // calendars/events usually → { events: [...] }
+    // contact appointments usually → { appointments: [...] } or bare array
+    const events: RawGhlEvent[] = Array.isArray(payload)
+      ? payload
+      : payload?.events ??
+        payload?.appointments ??
+        [];
+
     const EXCLUDE = new Set<string>([
-      // "Yt09j3xdpLgpyFl9y5Yx", // e.g., Bri's Assistant Onboarding
+      // "Yt09j3xdpLgpyFl9y5Yx",
     ]);
 
-    // 6) Normalize
-    const items = (events as Record<string, unknown>[])
-      .filter((e) => !EXCLUDE.has(String(e.calendarId ?? "")))
-      .map((e) => {
-        const start = toIsoUtc(e.startTime ?? e.start ?? e.from);
-        const end = toIsoUtc(e.endTime ?? e.end ?? e.to);
-        return {
-          id: String(e.id ?? e._id ?? `${e.calendarId ?? "cal"}-${start ?? Date.now()}`),
-          calendarId: String(e.calendarId ?? ""),
-          groupId: e.groupId ?? null,
-          title: e.title ?? e.name ?? null,
-          status: (e as any).appointmentStatus ?? (e as any).status ?? null,
-          start, // ISO UTC
-          end,   // ISO UTC
-          contact: {
-            id: (e as any).contactId ?? null,
-            name: (e as any).contact?.name ?? null,
-            email: (e as any).contact?.email ?? null,
-            phone: (e as any).contact?.phone ?? null,
-          },
-          location: (e as any).address ?? (e as any).meetingLocation ?? null, // Zoom link or other
-        };
-      })
-      .filter((it) => it.start && it.end)
-      .sort((a, b) => (a.start! < b.start! ? -1 : 1));
+    let items = normalizeEvents(events, EXCLUDE);
 
-    // 7) Return viewer tz for consistent rendering client-side
+    // For contact appointments, if endpoint ignores date range, filter it manually
+    if (!isCoach) {
+      items = items.filter((it) => {
+        const ms = DateTime.fromISO(it.start!).toMillis();
+        return ms >= startMs && ms < endMs;
+      });
+    }
+
+    // 5) Return viewer tz for consistent rendering client-side
     return NextResponse.json({ timezone: tz, items });
   } catch (err: unknown) {
     return NextResponse.json(
-      { message: "Unexpected error", detail: String((err as Error)?.message ?? err) },
+      {
+        message: "Unexpected error",
+        detail: String((err as Error)?.message ?? err),
+      },
       { status: 500 }
     );
   }

@@ -17,14 +17,15 @@ function isUuid(id: string) {
 async function fetchUserPayload(userId: string) {
   const supa = getAdminClient();
 
-  const [{ data: profile, error: profileErr }, { data: authData, error: authErr }] = await Promise.all([
-    supa
-      .from('profiles')
-      .select('first_name, last_name, looker_link')
-      .eq('id', userId)
-      .maybeSingle(),
-    supa.auth.admin.getUserById(userId),
-  ]);
+  const [{ data: profile, error: profileErr }, { data: authData, error: authErr }] =
+    await Promise.all([
+      supa
+        .from('profiles')
+        .select('first_name, last_name, looker_link, ghl_user_id')
+        .eq('id', userId)
+        .maybeSingle(),
+      supa.auth.admin.getUserById(userId),
+    ]);
 
   if (profileErr) {
     return { error: profileErr.message, status: 400 } as const;
@@ -46,6 +47,7 @@ async function fetchUserPayload(userId: string) {
       first_name: profile.first_name ?? '',
       last_name: profile.last_name ?? '',
       looker_link: profile.looker_link?.trim() ?? '',
+      ghl_user_id: profile.ghl_user_id?.trim() ?? '',
     },
   } as const;
 }
@@ -87,11 +89,12 @@ export async function PATCH(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  const { first_name, last_name, looker_link, phone } = body as Partial<{
+  const { first_name, last_name, looker_link, phone, ghl_user_id } = body as Partial<{
     first_name: string;
     last_name: string;
     looker_link: string | null;
     phone: string | null;
+    ghl_user_id: string | null;
   }>;
 
   const profileUpdates: Record<string, string | null> = {};
@@ -106,6 +109,15 @@ export async function PATCH(request: NextRequest, context: Params) {
     profileUpdates.looker_link = looker_link.trim();
   } else if (looker_link === null) {
     profileUpdates.looker_link = '';
+  }
+
+  // NEW: ghl_user_id handling
+  if (typeof ghl_user_id === 'string') {
+    const trimmed = ghl_user_id.trim();
+    // store NULL if empty, otherwise the trimmed ID
+    profileUpdates.ghl_user_id = trimmed === '' ? null : trimmed;
+  } else if (ghl_user_id === null) {
+    profileUpdates.ghl_user_id = null;
   }
 
   const supa = getAdminClient();
@@ -123,7 +135,9 @@ export async function PATCH(request: NextRequest, context: Params) {
 
   if (typeof phone === 'string' || phone === null) {
     const nextPhone = phone === null ? '' : phone.trim();
-    const { error: phoneErr } = await supa.auth.admin.updateUserById(userId, { phone: nextPhone });
+    const { error: phoneErr } = await supa.auth.admin.updateUserById(userId, {
+      phone: nextPhone,
+    });
     if (phoneErr) {
       return NextResponse.json({ error: phoneErr.message }, { status: 400 });
     }

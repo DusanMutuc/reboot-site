@@ -22,10 +22,14 @@ type CoachProfile = {
   call15_url: string;
   coaching_dashboard_url: string;
   ghl_calendar_embed_url: string;
-  ghl_user_id: string;
   coaching_notes_url: string;
   m2_form_url: string;
   impl_booking_url: string;
+};
+
+type CoachProfileResponse = {
+  profile: Partial<CoachProfile> | null;
+  ghl_user_id?: string | null;
 };
 
 type SnackbarState = {
@@ -46,7 +50,6 @@ const emptyProfile: CoachProfile = {
   call15_url: '',
   coaching_dashboard_url: '',
   ghl_calendar_embed_url: '',
-  ghl_user_id: '',
   coaching_notes_url: '',
   m2_form_url: '',
   impl_booking_url: '',
@@ -56,6 +59,7 @@ export default function CoachProfilesAdmin() {
   const [coaches, setCoaches] = useState<Person[]>([]);
   const [selectedCoach, setSelectedCoach] = useState<Person | null>(null);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
+  const [ghlUserId, setGhlUserId] = useState<string>(''); // lives in profiles now
   const [loadingCoaches, setLoadingCoaches] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,7 +76,7 @@ export default function CoachProfilesAdmin() {
       try {
         setLoadingCoaches(true);
         const { items } = await getJSON<{ items: Person[] }>(
-          '/api/admin/list-coaches'
+          '/api/admin/list-coaches',
         );
         if (!mounted) return;
         setCoaches(items || []);
@@ -99,21 +103,19 @@ export default function CoachProfilesAdmin() {
         ...c,
         label: `${c.name} — ${c.email}`,
       })),
-    [coaches]
+    [coaches],
   );
 
   const loadProfile = useCallback(async (coachId: string) => {
     setLoadingProfile(true);
     try {
       const res = await fetch(
-        `/api/admin/coach-profiles?user_id=${encodeURIComponent(coachId)}`
+        `/api/admin/coach-profiles?user_id=${encodeURIComponent(coachId)}`,
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || res.statusText);
+      const data = (await res.json()) as CoachProfileResponse;
+      if (!res.ok) throw new Error((data as any)?.error || res.statusText);
 
-      const p = data?.profile as
-        | (Partial<CoachProfile> & { user_id?: string })
-        | null;
+      const p = data?.profile ?? null;
 
       const merged: CoachProfile = {
         ...emptyProfile,
@@ -124,16 +126,17 @@ export default function CoachProfilesAdmin() {
         call15_url: p?.call15_url ?? '',
         coaching_dashboard_url: p?.coaching_dashboard_url ?? '',
         ghl_calendar_embed_url: p?.ghl_calendar_embed_url ?? '',
-        ghl_user_id: p?.ghl_user_id ?? '',
         coaching_notes_url: p?.coaching_notes_url ?? '',
         m2_form_url: p?.m2_form_url ?? '',
         impl_booking_url: p?.impl_booking_url ?? '',
       };
 
       setProfile(merged);
+      setGhlUserId(data?.ghl_user_id ?? '');
     } catch (e) {
       console.error('CoachProfilesAdmin: error loading profile', e);
       setProfile(null);
+      setGhlUserId('');
       setSnack({
         open: true,
         message: 'Failed to load coach profile',
@@ -147,15 +150,13 @@ export default function CoachProfilesAdmin() {
   useEffect(() => {
     if (!selectedCoach?.id) {
       setProfile(null);
+      setGhlUserId('');
       return;
     }
     loadProfile(selectedCoach.id).catch(() => {});
   }, [selectedCoach?.id, loadProfile]);
 
-  function handleFieldChange<K extends keyof CoachProfile>(
-    key: K,
-    value: CoachProfile[K]
-  ) {
+  function handleFieldChange<K extends keyof CoachProfile>(key: K, value: CoachProfile[K]) {
     setProfile((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
@@ -166,7 +167,10 @@ export default function CoachProfilesAdmin() {
       const res = await fetch('/api/admin/coach-profiles', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(profile),
+        body: JSON.stringify({
+          profile,
+          ghl_user_id: ghlUserId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || res.statusText);
@@ -289,11 +293,10 @@ export default function CoachProfilesAdmin() {
             />
 
             <TextField
-              label="GHL user ID"
-              value={profile?.ghl_user_id ?? ''}
-              onChange={(e) =>
-                handleFieldChange('ghl_user_id', e.target.value)
-              }
+              label="GHL user ID (from profiles)"
+              value={ghlUserId}
+              onChange={(e) => setGhlUserId(e.target.value)}
+              helperText="This is now stored on the main user profile."
             />
 
             <TextField
@@ -307,9 +310,7 @@ export default function CoachProfilesAdmin() {
             <TextField
               label="M2 form URL"
               value={profile?.m2_form_url ?? ''}
-              onChange={(e) =>
-                handleFieldChange('m2_form_url', e.target.value)
-              }
+              onChange={(e) => handleFieldChange('m2_form_url', e.target.value)}
             />
           </Box>
 
