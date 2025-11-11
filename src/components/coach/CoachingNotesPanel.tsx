@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogContentText,
   DialogActions,
+  Checkbox,
 } from '@mui/material';
 import {
   CheckCircleOutline as CheckCircleIcon,
@@ -29,6 +30,7 @@ import {
   Add as AddIcon,
   EditOutlined as EditIcon,
   DeleteOutline as DeleteIcon,
+  EventAvailable as EventAvailableIcon,
 } from '@mui/icons-material';
 import type {
   CoachingNote,
@@ -39,6 +41,11 @@ import type {
 import LibraryItemPickerDialog, {
   LibraryItemLite,
 } from './LibraryItemPickerDialog';
+import {
+  createMeetingWithAttendees,
+  upsertMeetingAttendance,
+  getUserMeetings,
+} from '@/lib/meetings';
 
 type Props = {
   userId: string | null;
@@ -74,6 +81,35 @@ function formatDistanceFromNow(iso: string) {
     parts.push(`${remDays} day${remDays === 1 ? '' : 's'}`);
   }
   return `${parts.join(', ')} ago`;
+}
+
+type MeetingSlotKey = 'm2' | 'impl1' | 'impl2' | 'impl3';
+
+type MeetingSlotConfig = {
+  key: MeetingSlotKey;
+  label: string;
+};
+
+const MEETING_SLOTS: MeetingSlotConfig[] = [
+  { key: 'm2', label: 'M2' },
+  { key: 'impl1', label: 'Implementation 1' },
+  { key: 'impl2', label: 'Implementation 2' },
+  { key: 'impl3', label: 'Implementation 3' },
+];
+
+type MeetingSlotState = {
+  meetingId: number;
+  date: string; // YYYY-MM-DD
+  attended: boolean;
+};
+
+function makeEmptyMeetingSlots(): Record<MeetingSlotKey, MeetingSlotState | null> {
+  return {
+    m2: null,
+    impl1: null,
+    impl2: null,
+    impl3: null,
+  };
 }
 
 export default function CoachingNotesPanel({ userId }: Props) {
@@ -114,8 +150,35 @@ export default function CoachingNotesPanel({ userId }: Props) {
   // Confirm dialogs
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
   const [confirmDeleteNoteOpen, setConfirmDeleteNoteOpen] = useState(false);
-  const [pendingDeleteStepId, setPendingDeleteStepId] = useState<number | null>(null);
-  const [pendingDeleteCommentId, setPendingDeleteCommentId] = useState<number | null>(null);
+  const [pendingDeleteStepId, setPendingDeleteStepId] = useState<number | null>(
+    null
+  );
+  const [pendingDeleteCommentId, setPendingDeleteCommentId] = useState<number | null>(
+    null
+  );
+
+  // Meeting slots (M2 + Implementation 1–3)
+  const [meetingSlots, setMeetingSlots] = useState<
+    Record<MeetingSlotKey, MeetingSlotState | null>
+  >(makeEmptyMeetingSlots);
+
+  const [newMeetingDates, setNewMeetingDates] = useState<
+    Record<MeetingSlotKey, string>
+  >({
+    m2: '',
+    impl1: '',
+    impl2: '',
+    impl3: '',
+  });
+
+  const [meetingSlotsLoading, setMeetingSlotsLoading] = useState(false);
+  const [slotSavingKey, setSlotSavingKey] = useState<MeetingSlotKey | null>(null);
+  const [attendanceSavingKey, setAttendanceSavingKey] =
+    useState<MeetingSlotKey | null>(null);
+  const [meetingSlotsVersion, setMeetingSlotsVersion] = useState(0);
+
+  // User display name for meeting labels
+  const [userDisplayName, setUserDisplayName] = useState<string>('');
 
   // Reset when user changes
   useEffect(() => {
@@ -134,21 +197,48 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setPendingDeleteStepId(null);
     setPendingDeleteCommentId(null);
 
+    setMeetingSlots(makeEmptyMeetingSlots());
+    setNewMeetingDates({ m2: '', impl1: '', impl2: '', impl3: '' });
+    setMeetingSlotsVersion(0);
+    setUserDisplayName('');
+
     if (!userId) return;
+
+    const loadUserName = async () => {
+      const { data, error: nameErr } = await supabase
+        .from('profiles')
+        .select('first_name, last_name')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (nameErr) {
+        console.error('Failed to load user name', nameErr);
+        return;
+      }
+
+      if (data) {
+        const first = (data.first_name as string | null) ?? '';
+        const last = (data.last_name as string | null) ?? '';
+        const full = `${first} ${last}`.trim();
+        setUserDisplayName(full || '');
+      }
+    };
+
+    void loadUserName();
 
     let cancelled = false;
 
     const loadNotes = async () => {
       setNotesLoading(true);
-      const { data, error } = await supabase
+      const { data, error: err } = await supabase
         .from('coaching_notes')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (!cancelled) {
-        if (error) {
-          setError(error.message);
+        if (err) {
+          setError(err.message);
         } else if (data) {
           const rows = data as CoachingNote[];
           setNotes(rows);
@@ -167,7 +257,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     };
   }, [userId]);
 
-  // Load steps + notes (comments table) when note changes
+  // Load steps + comments when note changes
   useEffect(() => {
     setSteps([]);
     setComments([]);
@@ -180,13 +270,16 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setPendingDeleteStepId(null);
     setPendingDeleteCommentId(null);
 
+    setMeetingSlots(makeEmptyMeetingSlots());
+    setNewMeetingDates({ m2: '', impl1: '', impl2: '', impl3: '' });
+
     if (!selectedNoteId) return;
 
     let cancelled = false;
 
     const loadStepsAndTitles = async () => {
       setStepsLoading(true);
-      const { data, error } = await supabase
+      const { data, error: err } = await supabase
         .from('coaching_note_action_steps')
         .select('*')
         .eq('coaching_note_id', selectedNoteId)
@@ -194,8 +287,8 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
       if (cancelled) return;
 
-      if (error) {
-        setError(error.message);
+      if (err) {
+        setError(err.message);
         setStepsLoading(false);
         return;
       }
@@ -204,7 +297,6 @@ export default function CoachingNotesPanel({ userId }: Props) {
       setSteps(rows);
       setStepsLoading(false);
 
-      // Fetch titles for any linked library items
       const ids = Array.from(
         new Set(
           rows
@@ -227,7 +319,8 @@ export default function CoachingNotesPanel({ userId }: Props) {
         return;
       }
 
-      const map: Record<number, { title: string | null; slug: string | null }> = {};
+      const map: Record<number, { title: string | null; slug: string | null }> =
+        {};
       (nodes ?? []).forEach((n) => {
         map[n.id as number] = {
           title: (n.title as string | null) ?? null,
@@ -239,15 +332,15 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
     const loadComments = async () => {
       setCommentsLoading(true);
-      const { data, error } = await supabase
+      const { data, error: err } = await supabase
         .from('coaching_note_comments')
         .select('*')
         .eq('coaching_note_id', selectedNoteId)
         .order('created_at', { ascending: false });
 
       if (!cancelled) {
-        if (error) {
-          setError((prev) => prev ?? error.message);
+        if (err) {
+          setError((prev) => prev ?? err.message);
         } else if (data) {
           setComments(data as CoachingNoteComment[]);
         }
@@ -263,17 +356,115 @@ export default function CoachingNotesPanel({ userId }: Props) {
     };
   }, [selectedNoteId]);
 
+  // Load meetings for this coaching note
+  // M2 from coaching_notes.m2_meeting_id
+  // Implementation 1–3: first 3 IMPLEMENTATION_MEETINGs between this M2 and next M2
+  useEffect(() => {
+    const note = notes.find((n) => n.id === selectedNoteId) ?? null;
+    if (!note || !userId) {
+      setMeetingSlots(makeEmptyMeetingSlots());
+      setNewMeetingDates({ m2: '', impl1: '', impl2: '', impl3: '' });
+      return;
+    }
+
+    const m2MeetingId = (note as any).m2_meeting_id as number | null;
+    if (!m2MeetingId) {
+      setMeetingSlots(makeEmptyMeetingSlots());
+      setNewMeetingDates({ m2: '', impl1: '', impl2: '', impl3: '' });
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSlots = async () => {
+      setMeetingSlotsLoading(true);
+      try {
+        const userMeetings = await getUserMeetings({ userId });
+        if (cancelled) return;
+
+        const all = (userMeetings ?? []) as any[];
+
+        const m2Record = all.find((m) => m.meeting_id === m2MeetingId);
+        if (!m2Record) {
+          setMeetingSlots(makeEmptyMeetingSlots());
+          return;
+        }
+
+        const m2Date = m2Record.meeting_date as string;
+
+        const otherM2s = all
+          .filter(
+            (m) =>
+              m.meeting_type_code === 'M2_MEETING' && m.meeting_date > m2Date
+          )
+          .sort((a, b) =>
+            a.meeting_date === b.meeting_date
+              ? a.meeting_id - b.meeting_id
+              : a.meeting_date.localeCompare(b.meeting_date)
+          );
+        const nextM2 = otherM2s[0] as any | undefined;
+        const nextM2Date = nextM2?.meeting_date as string | undefined;
+
+        const implCandidates = all
+          .filter((m) => {
+            if (m.meeting_type_code !== 'IMPLEMENTATION_MEETING') return false;
+            if (m.meeting_date < m2Date) return false;
+            if (nextM2Date && m.meeting_date >= nextM2Date) return false;
+            return true;
+          })
+          .sort((a, b) =>
+            a.meeting_date === b.meeting_date
+              ? a.meeting_id - b.meeting_id
+              : a.meeting_date.localeCompare(b.meeting_date)
+          );
+
+        const nextSlots = makeEmptyMeetingSlots();
+
+        nextSlots.m2 = {
+          meetingId: m2MeetingId,
+          date: m2Date,
+          attended: Boolean(m2Record.attended),
+        };
+
+        const implKeys: MeetingSlotKey[] = ['impl1', 'impl2', 'impl3'];
+        implKeys.forEach((key, idx) => {
+          const rec = implCandidates[idx];
+          if (rec) {
+            nextSlots[key] = {
+              meetingId: rec.meeting_id,
+              date: rec.meeting_date,
+              attended: Boolean(rec.attended),
+            };
+          }
+        });
+
+        setMeetingSlots(nextSlots);
+      } catch (err: any) {
+        console.error(err);
+        setError((prev) => prev ?? err.message ?? 'Failed to load meetings');
+      } finally {
+        if (!cancelled) setMeetingSlotsLoading(false);
+      }
+    };
+
+    void loadSlots();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [notes, selectedNoteId, userId, meetingSlotsVersion]);
+
   const handleCreateNote = async () => {
     if (!userId) return;
     setError(null);
     setNotesLoading(true);
 
-    const { data, error } = await supabase.rpc('create_coaching_note', {
+    const { data, error: err } = await supabase.rpc('create_coaching_note', {
       _user_id: userId,
     });
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setNotesLoading(false);
       return;
     }
@@ -292,13 +483,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setNotesLoading(true);
 
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('coaching_notes')
       .delete()
       .eq('id', selectedNoteId);
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setNotesLoading(false);
       return;
     }
@@ -327,14 +518,17 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingStep(true);
 
-    const { data, error } = await supabase.rpc('add_coaching_note_action_step', {
-      _coaching_note_id: selectedNoteId,
-      _label: newStepLabel.trim(),
-      _library_item_id: null,
-    });
+    const { data, error: err } = await supabase.rpc(
+      'add_coaching_note_action_step',
+      {
+        _coaching_note_id: selectedNoteId,
+        _label: newStepLabel.trim(),
+        _library_item_id: null,
+      }
+    );
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setSavingStep(false);
       return;
     }
@@ -353,14 +547,17 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingStep(true);
 
-    const { data, error } = await supabase.rpc('add_coaching_note_action_step', {
-      _coaching_note_id: selectedNoteId,
-      _label: (item.title ?? '').trim() || 'Untitled step',
-      _library_item_id: item.id,
-    });
+    const { data, error: err } = await supabase.rpc(
+      'add_coaching_note_action_step',
+      {
+        _coaching_note_id: selectedNoteId,
+        _label: (item.title ?? '').trim() || 'Untitled step',
+        _library_item_id: item.id,
+      }
+    );
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setSavingStep(false);
       return;
     }
@@ -378,13 +575,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
   const handleChangeStepStatus = async (stepId: number, status: ActionStepStatus) => {
     setError(null);
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('coaching_note_action_steps')
       .update({ status })
       .eq('id', stepId);
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       return;
     }
 
@@ -407,13 +604,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingStep(true);
 
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('coaching_note_action_steps')
       .update({ label: editingStepLabel.trim() })
       .eq('id', editingStepId);
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setSavingStep(false);
       return;
     }
@@ -435,13 +632,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     if (!pendingDeleteStepId) return;
 
     setError(null);
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('coaching_note_action_steps')
       .delete()
       .eq('id', pendingDeleteStepId);
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       return;
     }
 
@@ -462,13 +659,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingComment(true);
 
-    const { data, error } = await supabase.rpc('add_coaching_note_comment', {
+    const { data, error: err } = await supabase.rpc('add_coaching_note_comment', {
       _coaching_note_id: selectedNoteId,
       _body: newCommentBody.trim(),
     });
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setSavingComment(false);
       return;
     }
@@ -497,13 +694,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingComment(true);
 
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('coaching_note_comments')
       .update({ body: editingCommentBody.trim() })
       .eq('id', editingCommentId);
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       setSavingComment(false);
       return;
     }
@@ -525,13 +722,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     if (!pendingDeleteCommentId) return;
 
     setError(null);
-    const { error } = await supabase
+    const { error: err } = await supabase
       .from('coaching_note_comments')
       .delete()
       .eq('id', pendingDeleteCommentId);
 
-    if (error) {
-      setError(error.message);
+    if (err) {
+      setError(err.message);
       return;
     }
 
@@ -546,15 +743,172 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setPendingDeleteCommentId(null);
   };
 
+  // Create the M2 meeting and attach m2_meeting_id to coaching_notes
+  const handleCreateM2Meeting = async () => {
+    const note = notes.find((n) => n.id === selectedNoteId) ?? null;
+    if (!note || !userId) return;
+
+    const date = newMeetingDates.m2;
+    if (!date) {
+      setError('Please pick a date for M2.');
+      return;
+    }
+
+    setSlotSavingKey('m2');
+    setError(null);
+
+    try {
+      const created = await createMeetingWithAttendees({
+        meetingTypeCode: 'M2_MEETING',
+        date,
+        attendeeIds: [userId],
+        title: userDisplayName
+          ? `${userDisplayName} M2 meeting`
+          : 'M2 meeting',
+      });
+
+      const meetingId = (created as any).id as number;
+
+      const { error: updateErr } = await supabase
+        .from('coaching_notes')
+        .update({ m2_meeting_id: meetingId })
+        .eq('id', note.id);
+
+      if (updateErr) throw updateErr;
+
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === note.id
+            ? ({ ...n, m2_meeting_id: meetingId } as CoachingNote)
+            : n
+        )
+      );
+
+      setNewMeetingDates((prev) => ({ ...prev, m2: '' }));
+      setMeetingSlotsVersion((v) => v + 1);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to create M2 meeting');
+    } finally {
+      setSlotSavingKey(null);
+    }
+  };
+
+  // Create an Implementation meeting (1/2/3) for this M2 cycle
+  const handleCreateImplementationMeeting = async (slotKey: MeetingSlotKey) => {
+    if (slotKey === 'm2') return;
+    const note = notes.find((n) => n.id === selectedNoteId) ?? null;
+    if (!note || !userId) return;
+
+    const m2MeetingId = (note as any).m2_meeting_id as number | null;
+    if (!m2MeetingId) {
+      setError('Create the M2 meeting first.');
+      return;
+    }
+
+    const date = newMeetingDates[slotKey];
+    if (!date) {
+      setError('Please pick a date for this implementation meeting.');
+      return;
+    }
+
+    setSlotSavingKey(slotKey);
+    setError(null);
+
+    try {
+      await createMeetingWithAttendees({
+        meetingTypeCode: 'IMPLEMENTATION_MEETING',
+        date,
+        attendeeIds: [userId],
+        title: userDisplayName
+          ? `${userDisplayName} implementation meeting`
+          : 'implementation meeting',
+      });
+
+      setNewMeetingDates((prev) => ({ ...prev, [slotKey]: '' }));
+      setMeetingSlotsVersion((v) => v + 1);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to create implementation meeting');
+    } finally {
+      setSlotSavingKey(null);
+    }
+  };
+
+  // Change date of an existing meeting (M2 or Impl)
+  const handleChangeSlotDate = async (slotKey: MeetingSlotKey, newDate: string) => {
+    const slot = meetingSlots[slotKey];
+    if (!slot) return;
+
+    const prevDate = slot.date;
+    setSlotSavingKey(slotKey);
+    setError(null);
+
+    setMeetingSlots((prev) => ({
+      ...prev,
+      [slotKey]: slot ? { ...slot, date: newDate } : slot,
+    }));
+
+    try {
+      const { error: updateErr } = await supabase
+        .from('meetings')
+        .update({ date: newDate })
+        .eq('id', slot.meetingId);
+
+      if (updateErr) throw updateErr;
+
+      setMeetingSlotsVersion((v) => v + 1);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to update meeting date');
+      setMeetingSlots((prev) => ({
+        ...prev,
+        [slotKey]: slot ? { ...slot, date: prevDate } : slot,
+      }));
+    } finally {
+      setSlotSavingKey(null);
+    }
+  };
+
+  // Toggle attended for a slot
+  const handleToggleSlotAttendance = async (slotKey: MeetingSlotKey) => {
+    const slot = meetingSlots[slotKey];
+    if (!slot || !userId) return;
+
+    const newValue = !slot.attended;
+    setAttendanceSavingKey(slotKey);
+    setError(null);
+
+    setMeetingSlots((prev) => ({
+      ...prev,
+      [slotKey]: slot ? { ...slot, attended: newValue } : slot,
+    }));
+
+    try {
+      await upsertMeetingAttendance({
+        meetingId: slot.meetingId,
+        userId,
+        attended: newValue,
+      });
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Failed to update attendance');
+
+      setMeetingSlots((prev) => ({
+        ...prev,
+        [slotKey]: slot ? { ...slot, attended: !newValue } : slot,
+      }));
+    } finally {
+      setAttendanceSavingKey(null);
+    }
+  };
+
   const selectedNote = useMemo(
     () => notes.find((n) => n.id === selectedNoteId) ?? null,
     [notes, selectedNoteId]
   );
 
-  const lastNote = useMemo(
-    () => (notes.length > 0 ? notes[0] : null),
-    [notes]
-  );
+  const lastNote = useMemo(() => (notes.length > 0 ? notes[0] : null), [notes]);
 
   const stepToDelete = useMemo(
     () =>
@@ -641,11 +995,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelCreateNote}>Cancel</Button>
-          <Button
-            onClick={handleConfirmCreateNote}
-            variant="contained"
-            autoFocus
-          >
+          <Button onClick={handleConfirmCreateNote} variant="contained" autoFocus>
             Create
           </Button>
         </DialogActions>
@@ -667,11 +1017,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDeleteNoteOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleDeleteNote}
-            variant="contained"
-            color="error"
-          >
+          <Button onClick={handleDeleteNote} variant="contained" color="error">
             Delete
           </Button>
         </DialogActions>
@@ -699,11 +1045,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelDeleteStep}>Cancel</Button>
-          <Button
-            onClick={handleDeleteStep}
-            variant="contained"
-            color="error"
-          >
+          <Button onClick={handleDeleteStep} variant="contained" color="error">
             Delete
           </Button>
         </DialogActions>
@@ -740,11 +1082,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelDeleteComment}>Cancel</Button>
-          <Button
-            onClick={handleDeleteComment}
-            variant="contained"
-            color="error"
-          >
+          <Button onClick={handleDeleteComment} variant="contained" color="error">
             Delete
           </Button>
         </DialogActions>
@@ -783,7 +1121,9 @@ export default function CoachingNotesPanel({ userId }: Props) {
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {notes.map((note, idx) => {
               const isSelected = note.id === selectedNoteId;
-              const label = `Note ${idx + 1} • ${formatShortDate(note.created_at)}`;
+              const label = `Note ${idx + 1} • ${formatShortDate(
+                note.created_at
+              )}`;
               return (
                 <Button
                   key={note.id}
@@ -1390,10 +1730,180 @@ export default function CoachingNotesPanel({ userId }: Props) {
               </Box>
             </Stack>
           </Paper>
+
+          {/* Meetings (M2 / Implementation) */}
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              border: '1px solid',
+              borderColor: 'grey.200',
+              borderRadius: 2,
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+              <Box
+                sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 1.5,
+                  background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                }}
+              >
+                <EventAvailableIcon sx={{ fontSize: 20 }} />
+              </Box>
+              <Typography variant="h6" sx={{ fontWeight: 700, fontSize: 18 }}>
+                Meetings
+              </Typography>
+            </Stack>
+
+            {meetingSlotsLoading ? (
+              <Box sx={{ py: 3, display: 'flex', justifyContent: 'center' }}>
+                <CircularProgress size={20} />
+              </Box>
+            ) : (
+              <Stack spacing={2}>
+                {MEETING_SLOTS.map((cfg) => {
+                  const slotKey = cfg.key;
+                  const slot = meetingSlots[slotKey];
+                  const hasMeeting = Boolean(slot);
+                  const isM2 = slotKey === 'm2';
+
+                  const busy =
+                    meetingSlotsLoading ||
+                    slotSavingKey === slotKey ||
+                    attendanceSavingKey === slotKey;
+
+                  const m2Exists = Boolean((selectedNote as any)?.m2_meeting_id);
+
+                  const dateValue = hasMeeting
+                    ? slot?.date ?? ''
+                    : newMeetingDates[slotKey];
+
+                  const disableInputs =
+                    busy || (!isM2 && !m2Exists && !hasMeeting);
+
+                  return (
+                    <Box
+                      key={slotKey}
+                      sx={{
+                        borderRadius: 1.5,
+                        border: '1px solid',
+                        borderColor: 'grey.200',
+                        p: 2,
+                        bgcolor: 'grey.50',
+                      }}
+                    >
+                      <Stack
+                        direction={{ xs: 'column', sm: 'row' }}
+                        spacing={2}
+                        alignItems={{ xs: 'flex-start', sm: 'center' }}
+                      >
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 600, mb: 0.25 }}
+                          >
+                            {cfg.label}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {hasMeeting
+                              ? 'Meeting created for this student.'
+                              : isM2
+                              ? 'No M2 meeting linked yet.'
+                              : m2Exists
+                              ? 'No implementation meeting in this slot yet.'
+                              : 'Create M2 first before scheduling implementations.'}
+                          </Typography>
+                        </Box>
+
+                        <Stack
+                          direction={{ xs: 'column', sm: 'row' }}
+                          spacing={1.5}
+                          alignItems={{ xs: 'flex-start', sm: 'center' }}
+                          sx={{ minWidth: { sm: 260 } }}
+                        >
+                          <TextField
+                            label="Date"
+                            type="date"
+                            size="small"
+                            value={dateValue}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (hasMeeting) {
+                                void handleChangeSlotDate(slotKey, v);
+                              } else {
+                                setNewMeetingDates((prev) => ({
+                                  ...prev,
+                                  [slotKey]: v,
+                                }));
+                              }
+                            }}
+                            InputLabelProps={{ shrink: true }}
+                            disabled={disableInputs}
+                            sx={{
+                              minWidth: 160,
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 1.5,
+                                bgcolor: 'white',
+                              },
+                            }}
+                          />
+
+                          {hasMeeting ? (
+                            <Stack
+                              direction="row"
+                              spacing={1}
+                              alignItems="center"
+                              sx={{ ml: { sm: 1 } }}
+                            >
+                              <Checkbox
+                                size="small"
+                                checked={slot?.attended ?? false}
+                                onChange={() =>
+                                  void handleToggleSlotAttendance(slotKey)
+                                }
+                                disabled={busy}
+                              />
+                              <Typography variant="body2">Attended</Typography>
+                            </Stack>
+                          ) : (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() =>
+                                isM2
+                                  ? void handleCreateM2Meeting()
+                                  : void handleCreateImplementationMeeting(slotKey)
+                              }
+                              disabled={disableInputs || !newMeetingDates[slotKey]}
+                              sx={{
+                                textTransform: 'none',
+                                borderRadius: 1.5,
+                                px: 2.5,
+                                fontWeight: 600,
+                              }}
+                            >
+                              Create
+                            </Button>
+                          )}
+                        </Stack>
+                      </Stack>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            )}
+          </Paper>
         </Stack>
       ) : (
         <Typography variant="body2" color="text.secondary">
-          Create a coaching note to add action steps and notes.
+          Create a coaching note to add action steps, notes, and meetings.
         </Typography>
       )}
     </Box>

@@ -8,6 +8,7 @@ export interface CoachingNote {
   coach_id: string;
   created_at: string;
   updated_at: string;
+  m2_meeting_id: number | null; 
 }
 
 export interface CoachingNoteActionStep {

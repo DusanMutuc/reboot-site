@@ -15,7 +15,8 @@ import CourseEditor from '@/components/admin/courseEditor';
 import StudentProgressView from '@/components/coach/StudentProgressView';
 import LibraryEditor from '@/components/admin/libraryEditor';
 import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin';
-import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin'; // 👈 NEW
+import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin';
+import AdminMeetingsPanel from '@/components/admin/meetings/AdminMeetingsPanel'; // 👈 NEW
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -183,7 +184,7 @@ export default function AdminPage() {
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
             <Tab label="Add User" />                {/* 0 */}
-            <Tab label="User Profiles" />            {/* 1 NEW */}
+            <Tab label="User Profiles" />            {/* 1 */}
             <Tab label="Assign / Change Coach" />   {/* 2 */}
             <Tab label="Coach Profiles" />          {/* 3 */}
             <Tab label="Coach Rosters" />           {/* 4 */}
@@ -192,6 +193,7 @@ export default function AdminPage() {
             <Tab label="Library" />                 {/* 7 */}
             <Tab label="Action Required" />         {/* 8 */}
             <Tab label="Student Progress" />        {/* 9 */}
+            <Tab label="Meetings" />                {/* 10 NEW */}
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -199,7 +201,7 @@ export default function AdminPage() {
               <AddUserForm />
             </TabPanel>
             <TabPanel value={tab} index={1}>
-              <UserProfilesAdmin />   {/* NEW */}
+              <UserProfilesAdmin />
             </TabPanel>
             <TabPanel value={tab} index={2}>
               <AssignCoachPanel />
@@ -224,6 +226,9 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value={tab} index={9}>
               <StudentProgressView mode="admin" />
+            </TabPanel>
+            <TabPanel value={tab} index={10}>
+              <AdminMeetingsPanel /> {/* NEW */}
             </TabPanel>
           </Box>
         </Paper>
