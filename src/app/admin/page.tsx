@@ -17,6 +17,7 @@ import LibraryEditor from '@/components/admin/libraryEditor';
 import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin';
 import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin';
 import AdminMeetingsPanel from '@/components/admin/meetings/AdminMeetingsPanel'; // 👈 NEW
+import AchievementsAdminPanel from '@/components/admin/achievements/AchievementsAdminPanel'; // 👈 NEW
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -194,6 +195,7 @@ export default function AdminPage() {
             <Tab label="Action Required" />         {/* 8 */}
             <Tab label="Student Progress" />        {/* 9 */}
             <Tab label="Meetings" />                {/* 10 NEW */}
+            <Tab label="Achievements" />            {/* 11 NEW */}
           </Tabs>
 
           <Box sx={{ p: 3 }}>
@@ -229,6 +231,11 @@ export default function AdminPage() {
             </TabPanel>
             <TabPanel value={tab} index={10}>
               <AdminMeetingsPanel /> {/* NEW */}
+            </TabPanel>
+
+            {/* Achievements tab: simple create form (edit/list lives elsewhere if you want) */}
+            <TabPanel value={tab} index={11}>
+              <AchievementsAdminPanel />
             </TabPanel>
           </Box>
         </Paper>
