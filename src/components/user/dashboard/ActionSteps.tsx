@@ -1,6 +1,31 @@
 // src/components/user/dashboard/ActionSteps.tsx
-import { Paper, Typography, Box, Stack, Button } from '@mui/material';
+import { Paper, Typography, Box, Stack, Button, Chip } from '@mui/material';
 import type { DashboardActionStep } from '@/types/dashboard';
+
+// Status configuration
+const statusConfig = {
+  not_started: {
+    label: 'Not Started',
+    color: '#64748b',
+    bgColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    buttonColor: '#64748b',
+  },
+  in_progress: {
+    label: 'In Progress',
+    color: '#2563eb',
+    bgColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+    buttonColor: '#2563eb',
+  },
+  complete: {
+    label: 'Completed',
+    color: '#16a34a',
+    bgColor: '#f0fdf4',
+    borderColor: '#bbf7d0',
+    buttonColor: '#16a34a',
+  },
+};
 
 export default function ActionSteps({ steps }: { steps: DashboardActionStep[] }) {
   return (
@@ -36,71 +61,94 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
       ) : (
         <Box sx={{ overflow: 'auto', maxHeight: 520, pr: 0.5 }}>
           <Stack spacing={2}>
-            {steps.map((step) => (
-              <Box
-                key={step.id}
-                sx={{
-                  p: 2,
-                  borderRadius: 2.5,
-                  bgcolor: 'grey.50',
-                  border: '1px solid',
-                  borderColor: 'grey.200',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 2,
-                  transition: 'all 0.2s ease',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    bgcolor: 'primary.50',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
-                  }
-                }}
-              >
-                <Typography
-                  variant="h6"
-                  fontWeight={700}
+            {steps.map((step) => {
+              const status = statusConfig[step.status];
+              const isCompleted = step.status === 'complete';
+              
+              return (
+                <Box
+                  key={step.id}
                   sx={{
-                    lineHeight: 1.4,
-                    color: 'text.primary',
-                    fontSize: '1.25rem',
-                    letterSpacing: '-0.02em',
-                    mb: 0.5
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: status.bgColor,
+                    border: '1px solid',
+                    borderColor: status.borderColor,
+                    borderLeft: `4px solid ${status.color}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1.5,
+                    transition: 'all 0.2s ease-in-out',
+                    opacity: isCompleted ? 0.75 : 1,
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: `0 4px 12px ${status.color}25`,
+                    }
                   }}
                 >
-                  {step.label}
-                </Typography>
+                  {/* Header with title and status */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
+                    <Typography
+                      variant="h6"
+                      fontWeight={600}
+                      sx={{
+                        lineHeight: 1.4,
+                        color: isCompleted ? 'text.secondary' : 'text.primary',
+                        fontSize: '13px',
+                        flex: 1,
+                      }}
+                    >
+                      {step.label}
+                    </Typography>
+                    
+                    <Chip
+                      label={status.label}
+                      size="small"
+                      sx={{
+                        height: 22,
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        bgcolor: 'white',
+                        color: status.color,
+                        border: `1.5px solid ${status.color}`,
+                        flexShrink: 0,
+                        '& .MuiChip-label': {
+                          px: 1,
+                        }
+                      }}
+                    />
+                  </Box>
 
-                {step.library_item_id && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    href={`/library/${step.library_item_id}`}
-                    sx={{
-                      alignSelf: 'flex-start',
-                      height: 32,
-                      px: 1.75,
-                      borderRadius: 1.5,
-                      textTransform: 'none',
-                      fontWeight: 500,
-                      fontSize: '0.8125rem',
-                      borderColor: 'primary.main',
-                      color: 'primary.main',
-                      borderWidth: 1.5,
-                      '&:hover': {
-                        bgcolor: 'primary.main',
+                  {/* Action button */}
+                  {step.library_item_id && (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      href={`/library/${step.library_item_id}`}
+                      sx={{
+                        alignSelf: 'flex-start',
+                        height: 36,
+                        px: 2,
+                        borderRadius: 1.5,
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        bgcolor: status.buttonColor,
                         color: 'white',
-                        borderWidth: 1.5,
-                        transform: 'translateX(2px)'
-                      }
-                    }}
-                  >
-                    Open resource →
-                  </Button>
-                )}
-              </Box>
-            ))}
+                        boxShadow: 'none',
+                        '&:hover': {
+                          bgcolor: status.buttonColor,
+                          opacity: 0.85,
+                          boxShadow: `0 2px 8px ${status.buttonColor}40`,
+                        }
+                      }}
+                    >
+                      View Guide →
+                    </Button>
+                  )}
+                </Box>
+              );
+            })}
           </Stack>
         </Box>
       )}
