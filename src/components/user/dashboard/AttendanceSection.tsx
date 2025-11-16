@@ -54,18 +54,15 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
           </Typography>
         </Box>
 
-        <Chip
-          size="small"
-          label={onTrackLabel}
-          variant="outlined"
-        />
+        {/* you can show onTrackLabel somewhere here later if you want */}
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 260 }}>
+      {/* slightly shorter than before (was minHeight: 260) */}
+      <Box sx={{ flex: 1, minHeight: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={series}
-            margin={{ top: 16, right: 16, left: 0, bottom: 0 }}
+            margin={{ top: 16, right: 16, left: -40, bottom: 0 }}
           >
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="label" />

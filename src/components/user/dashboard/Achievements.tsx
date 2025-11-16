@@ -4,8 +4,14 @@ import type { AchievementsProps } from '@/types/dashboard';
 
 export default function Achievements({ achievements }: AchievementsProps) {
   return (
-    <Paper sx={{ p: 3, borderRadius: 3, height: '100%' }}>
-      <Typography variant="h6" fontWeight={600} mb={2}>
+    <Paper
+      sx={{
+        p: 2.5,          // was 3 – a bit tighter
+        borderRadius: 3,
+        height: '100%',
+      }}
+    >
+      <Typography variant="h6" fontWeight={600} mb={1.5}>
         Achievements
       </Typography>
 
@@ -14,10 +20,7 @@ export default function Achievements({ achievements }: AchievementsProps) {
           You haven&apos;t unlocked any achievements yet.
         </Typography>
       ) : (
-        <Grid
-          container
-          spacing={2}
-        >
+        <Grid container spacing={2}>
           {achievements.map((ach) => (
             <Grid
               key={ach.id}

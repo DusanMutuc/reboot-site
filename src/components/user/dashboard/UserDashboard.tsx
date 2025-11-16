@@ -1,31 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Box, Typography, CircularProgress } from '@mui/material';
+import { Box, Typography, CircularProgress, Stack } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchDashboardData } from '@/lib/dashboard';
 import type { UserDashboardData } from '@/types/dashboard';
 
-// Row 1
-import KpiSummaryRow from './KpiSummaryRow';
-
-// Row 2 (left/right)
-import ActionCenter from './ActionCenter';
-import AttendanceSection from './AttendanceSection';
-
-// Row 3
-import RevenueProfitChart from './RevenueProfitChart';
-
-// Row 4
+import KpiCharts from './KpiCharts';
+import BigMoneyCards from './BigMoneyCards';
+import KpiSection from './KpiSection';
+import KpiMiniCards from './KpiMiniCards';
+import ActionSteps from './ActionSteps';
 import Wins from './Wins';
 import Achievements from './Achievements';
+import AttendanceSection from './AttendanceSection';
 
-interface UserDashboardProps {
-  userId: string;
-}
+type Props = { userId: string };
 
-export default function UserDashboard({ userId }: UserDashboardProps) {
+export default function UserDashboard({ userId }: Props) {
   const [data, setData] = useState<UserDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,37 +68,67 @@ export default function UserDashboard({ userId }: UserDashboardProps) {
 
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1200, mx: 'auto' }}>
-      <Grid container spacing={3}>
-        {/* ROW 1: Thin KPI summary bar (6 compact tiles) */}
-        <Grid size={12}>
-          <KpiSummaryRow
-            revenueValue={revenueProfit.currentRevenue}
-            profitValue={revenueProfit.currentProfit}
-            kpis={kpi.kpis}
-          />
-        </Grid>
+      <Box sx={{ display: 'block', gap: 3 }}>
+        {/* ===== TOP SECTION ===== */}
+        <Box sx={{ mb: 3 }}>
+          <Grid container spacing={3}>
+            {/* Column 1: 50% */}
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Stack spacing={1.5} sx={{ height: '100%' }}>
+                <BigMoneyCards
+                  currentRevenue={revenueProfit.currentRevenue}
+                  currentProfit={revenueProfit.currentProfit}
+                  revenueDeltaPct={revenueProfit.revenueDeltaPct}
+                  profitDeltaPct={revenueProfit.profitDeltaPct}
+                  periodLabel={revenueProfit.periodLabel}
+                />
 
-        {/* ROW 2: Action-first + Attendance */}
-        <Grid size={{ xs: 12, md: 7 }}>
-          <ActionCenter steps={coachingNotes.actionSteps} notes={coachingNotes.notes} />
-        </Grid>
-        <Grid size={{ xs: 12, md: 5 }}>
-          <AttendanceSection {...attendance} />
-        </Grid>
+                <Box sx={{ mt: 1 }}>
+                  <KpiCharts
+                    series={data.kpiChart.series}
+                    periodLabel={data.kpiChart.periodLabel}
+                  />
+                </Box>
 
-        {/* ROW 3: Revenue & Profit trend (full width) */}
-        <Grid size={12}>
-          <RevenueProfitChart history={revenueProfit.history} periodLabel={revenueProfit.periodLabel} />
-        </Grid>
+                <KpiMiniCards
+                  kpis={kpi.kpis}
+                  mapping={{
+                    totalClosed: 'total_closed',
+                    fifteenThirty: 'fifteen_thirty',
+                    repeatReferral: 'repeat_referral',
+                    daysOff: 'days_off',
+                  }}
+                />
+              </Stack>
+            </Grid>
 
-        {/* ROW 4: Wins + Achievements (achievements can be compact when empty) */}
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Wins {...wins} />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Achievements {...achievements} />
-        </Grid>
-      </Grid>
+            {/* Column 2: 25% */}
+            <Grid size={{ xs: 12, md: 3 }}>
+              <ActionSteps steps={coachingNotes.actionSteps} />
+            </Grid>
+
+            {/* Column 3: 25% */}
+            <Grid size={{ xs: 12, md: 3 }}>
+              <Wins {...wins} />
+            </Grid>
+          </Grid>
+        </Box>
+
+        {/* ===== BOTTOM SECTION ===== */}
+        <Box>
+          <Grid container spacing={3}>
+            {/* 2/3 width on desktop */}
+            <Grid size={{ xs: 12, md: 7.5 }}>
+              <AttendanceSection {...attendance} />
+            </Grid>
+
+            {/* 1/3 width on desktop */}
+            <Grid size={{ xs: 12, md: 4.5 }}>
+              <Achievements {...achievements} />
+            </Grid>
+          </Grid>
+        </Box>
+      </Box>
     </Box>
   );
 }

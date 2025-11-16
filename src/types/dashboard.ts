@@ -44,6 +44,33 @@ import type {
     periodLabel: string;
   }
   
+
+  // Add after KPI section types
+
+export interface KpiChartPoint {
+    date: string;          // 'YYYY-MM-01'
+    total_closed: number;
+    repeat_referral: number;
+    days_off: number;
+    fifteen_thirty: number;
+  }
+  
+  export interface KpiChartsProps {
+    series: KpiChartPoint[];
+    periodLabel: string;   // e.g. 'Last 12 months'
+  }
+  
+  // Extend the combined dashboard data:
+  export interface UserDashboardData {
+    revenueProfit: RevenueProfitSectionProps;
+    kpi: KpiSectionProps;
+    kpiChart: KpiChartsProps;       // <— add this line
+    attendance: AttendanceSectionProps;
+    coachingNotes: CoachingNotesSectionProps;
+    wins: WinsProps;
+    achievements: AchievementsProps;
+  }
+  
   // ------------- Attendance -------------
   
   export interface AttendancePoint {

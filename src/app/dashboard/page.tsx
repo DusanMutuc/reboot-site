@@ -98,6 +98,10 @@ export default function DashboardPage() {
         <Search />
       </section>
 
+      {/* OLD dashboard embed (still here if you want it) */}
+      <section id="dashboard" style={sectionOffsetStyle}>
+        <DashboardEmbed src={lookerLink!} />
+      </section>
 
       {/* NEW: Reboot User Dashboard test section */}
       <section id="reboot-dashboard" style={sectionOffsetStyle}>

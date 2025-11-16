@@ -186,6 +186,48 @@ async function fetchKpiSection(
   };
 }
 
+
+// ---------- 2b) KPI charts (last 12 months, 4 lines) ----------
+
+async function fetchKpiCharts(
+    client: SupabaseClient,
+    userId: string,
+  ): Promise<import('@/types/dashboard').KpiChartsProps> {
+    const { data, error } = await client.rpc('get_monthly_kpi_history_with_values', {
+      _user_id: userId,
+      _limit: 12,
+    });
+  
+    if (error) {
+      console.error('get_monthly_kpi_history_with_values (kpi charts) error', error);
+      return { series: [], periodLabel: 'Last 12 months' };
+    }
+  
+    const rows = (data ?? []) as any[];
+  
+    // Ensure oldest → newest
+    const sorted = rows.sort(
+      (a, b) =>
+        new Date(a.period_start_date).getTime() - new Date(b.period_start_date).getTime()
+    );
+  
+    const series = sorted.map((row) => {
+      const v = row.kpi_values ?? {};
+      return {
+        date: row.period_start_date,
+        total_closed: Number(v.closed_deals ?? 0),
+        repeat_referral: Number(v.repeat_referral ?? 0),
+        days_off: Number(v.days_off ?? 0),
+        fifteen_thirty: Number(v.pipeline_15_30 ?? 0),
+      };
+    });
+  
+    return {
+      series,
+      periodLabel: 'Last 12 months',
+    };
+  }
+  
 // ---------- 3) Attendance (driftline) ----------
 
 const ATTENDANCE_WEEKS = 12;
@@ -407,31 +449,35 @@ async function fetchAchievements(
 // ---------- 7) Orchestrator ----------
 
 export async function fetchDashboardData(
-  client: SupabaseClient,
-  userId: string,
-): Promise<UserDashboardData> {
-  const [
-    revenueProfit,
-    kpi,
-    attendance,
-    coachingNotes,
-    wins,
-    achievements,
-  ] = await Promise.all([
-    fetchRevenueProfitSection(client, userId),
-    fetchKpiSection(client, userId),
-    fetchAttendanceSection(client, userId),
-    fetchCoachingNotesSection(client),
-    fetchWins(client, userId),
-    fetchAchievements(client, userId),
-  ]);
-
-  return {
-    revenueProfit,
-    kpi,
-    attendance,
-    coachingNotes,
-    wins,
-    achievements,
-  };
-}
+    client: SupabaseClient,
+    userId: string,
+  ): Promise<UserDashboardData> {
+    const [
+      revenueProfit,
+      kpi,
+      kpiChart,            // <— add
+      attendance,
+      coachingNotes,
+      wins,
+      achievements,
+    ] = await Promise.all([
+      fetchRevenueProfitSection(client, userId),
+      fetchKpiSection(client, userId),
+      fetchKpiCharts(client, userId),      // <— add
+      fetchAttendanceSection(client, userId),
+      fetchCoachingNotesSection(client),
+      fetchWins(client, userId),
+      fetchAchievements(client, userId),
+    ]);
+  
+    return {
+      revenueProfit,
+      kpi,
+      kpiChart,            // <— add
+      attendance,
+      coachingNotes,
+      wins,
+      achievements,
+    };
+  }
+  

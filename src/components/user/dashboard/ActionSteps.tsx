@@ -1,61 +1,102 @@
-import { Paper, Typography, Box, Stack, Chip, Button } from '@mui/material';
+// src/components/user/dashboard/ActionSteps.tsx
+import { Paper, Typography, Box, Stack, Button } from '@mui/material';
 import type { DashboardActionStep } from '@/types/dashboard';
-
-function statusColor(status: DashboardActionStep['status']) {
-  switch (status) {
-    case 'complete':
-      return 'success';
-    case 'in_progress':
-      return 'warning';
-    default:
-      return 'default';
-  }
-}
 
 export default function ActionSteps({ steps }: { steps: DashboardActionStep[] }) {
   return (
-    <Paper sx={{ p: 2, borderRadius: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="h6" fontWeight={600} mb={1}>
+    <Paper 
+      elevation={0}
+      sx={{ 
+        p: 3, 
+        borderRadius: 3, 
+        height: '100%', 
+        display: 'flex', 
+        flexDirection: 'column',
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.paper'
+      }}
+    >
+      <Typography 
+        variant="h3" 
+        fontWeight={700} 
+        mb={3}
+        sx={{ 
+          letterSpacing: '-0.02em',
+          color: 'text.primary'
+        }}
+      >
         Action Steps
       </Typography>
+
       {steps.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
           No active action steps right now.
         </Typography>
       ) : (
-        <Box sx={{ overflow: 'auto', maxHeight: 300, pr: 0.5 }}>
-          <Stack spacing={1.25}>
+        <Box sx={{ overflow: 'auto', maxHeight: 520, pr: 0.5 }}>
+          <Stack spacing={2}>
             {steps.map((step) => (
               <Box
                 key={step.id}
                 sx={{
-                  p: 1.25,
-                  borderRadius: 2,
-                  bgcolor: 'action.hover',
+                  p: 2,
+                  borderRadius: 2.5,
+                  bgcolor: 'grey.50',
+                  border: '1px solid',
+                  borderColor: 'grey.200',
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 0.5,
+                  gap: 2,
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    bgcolor: 'primary.50',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.12)'
+                  }
                 }}
               >
-                <Box display="flex" justifyContent="space-between" alignItems="center">
-                  <Typography variant="body2" fontWeight={600}>
-                    {step.label}
-                  </Typography>
-                  <Chip
-                    label={step.status.replace('_', ' ')}
-                    size="small"
-                    color={statusColor(step.status) as any}
-                    sx={{ textTransform: 'capitalize' }}
-                  />
-                </Box>
+                <Typography
+                  variant="h6"
+                  fontWeight={700}
+                  sx={{
+                    lineHeight: 1.4,
+                    color: 'text.primary',
+                    fontSize: '1.25rem',
+                    letterSpacing: '-0.02em',
+                    mb: 0.5
+                  }}
+                >
+                  {step.label}
+                </Typography>
+
                 {step.library_item_id && (
                   <Button
                     size="small"
-                    variant="text"
-                    sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+                    variant="outlined"
                     href={`/library/${step.library_item_id}`}
+                    sx={{
+                      alignSelf: 'flex-start',
+                      height: 32,
+                      px: 1.75,
+                      borderRadius: 1.5,
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      fontSize: '0.8125rem',
+                      borderColor: 'primary.main',
+                      color: 'primary.main',
+                      borderWidth: 1.5,
+                      '&:hover': {
+                        bgcolor: 'primary.main',
+                        color: 'white',
+                        borderWidth: 1.5,
+                        transform: 'translateX(2px)'
+                      }
+                    }}
                   >
-                    Open related resource
+                    Open resource →
                   </Button>
                 )}
               </Box>

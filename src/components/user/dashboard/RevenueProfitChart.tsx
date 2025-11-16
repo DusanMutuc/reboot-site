@@ -1,5 +1,5 @@
-import { Box, Paper, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid';
+import { Box, Paper, Typography } from '@mui/material';
 import {
   LineChart,
   Line,
@@ -26,9 +26,11 @@ function RPTooltip({ active, payload, label }: TooltipProps) {
   const prof = payload.find((p) => p.dataKey === 'profit');
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
-      n || 0,
-    );
+    new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      maximumFractionDigits: 0,
+    }).format(n || 0);
 
   return (
     <Paper elevation={3} sx={{ p: 1.25, borderRadius: 1.5, fontSize: 12 }}>
@@ -41,15 +43,17 @@ function RPTooltip({ active, payload, label }: TooltipProps) {
   );
 }
 
-export default function RevenueProfitChart({
-  history,
-  periodLabel,
-}: Pick<RevenueProfitSectionProps, 'history' | 'periodLabel'>) {
+type Props = {
+  history: RevenueProfitSectionProps['history'];
+  periodLabel: string;
+};
+
+export default function RevenueProfitChart({ history, periodLabel }: Props) {
   const hasHistory = history && history.length > 0;
 
   return (
     <Paper sx={{ p: 2, borderRadius: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Grid container spacing={1} alignItems="baseline" sx={{ mb: 1 }}>
+      <Grid container spacing={1} alignItems="center" sx={{ mb: 1 }}>
         <Grid size="grow">
           <Typography variant="h6" fontWeight={600}>
             Revenue &amp; Profit
@@ -88,7 +92,10 @@ export default function RevenueProfitChart({
               <XAxis dataKey="date" tickMargin={8} tickFormatter={formatDateLabel} style={{ fontSize: 12 }} />
               <YAxis
                 tickFormatter={(v: number) =>
-                  new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(v)
+                  new Intl.NumberFormat('en-US', {
+                    notation: 'compact',
+                    maximumFractionDigits: 1,
+                  }).format(v)
                 }
                 width={70}
                 style={{ fontSize: 12 }}
