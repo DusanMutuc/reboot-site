@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Box, Typography, CircularProgress, Stack } from '@mui/material';
 import Grid from '@mui/material/Grid';
 import { supabase } from '@/lib/supabaseClient';
@@ -15,6 +15,7 @@ import ActionSteps from './ActionSteps';
 import Wins from './Wins';
 import Achievements from './Achievements';
 import AttendanceSection from './AttendanceSection';
+import CoachingNotesSection from './CoachingNotesSection';
 
 type Props = { userId: string };
 
@@ -22,6 +23,12 @@ export default function UserDashboard({ userId }: Props) {
   const [data, setData] = useState<UserDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Refs to measure heights
+  const topRowRef = useRef<HTMLDivElement>(null);
+  const bottomRowRef = useRef<HTMLDivElement>(null);
+  const [topRowHeight, setTopRowHeight] = useState<number | null>(null);
+  const [bottomRowHeight, setBottomRowHeight] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +49,32 @@ export default function UserDashboard({ userId }: Props) {
       cancelled = true;
     };
   }, [userId]);
+
+  // Measure heights after data loads and on window resize
+  useEffect(() => {
+    if (!data) return;
+
+    const measureHeights = () => {
+      // Wait for next frame to ensure render is complete
+      requestAnimationFrame(() => {
+        if (topRowRef.current) {
+          const topHeight = topRowRef.current.offsetHeight;
+          setTopRowHeight(topHeight);
+        }
+        if (bottomRowRef.current) {
+          const bottomHeight = bottomRowRef.current.offsetHeight;
+          setBottomRowHeight(bottomHeight);
+        }
+      });
+    };
+
+    // Initial measurement
+    measureHeights();
+
+    // Re-measure on window resize
+    window.addEventListener('resize', measureHeights);
+    return () => window.removeEventListener('resize', measureHeights);
+  }, [data]);
 
   if (loading) {
     return (
@@ -68,48 +101,54 @@ export default function UserDashboard({ userId }: Props) {
 
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1200, mx: 'auto' }}>
-      <Box sx={{ display: 'block', gap: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         {/* ===== TOP SECTION ===== */}
-        <Box sx={{ mb: 3 }}>
+        <Box>
           <Grid container spacing={3}>
-            {/* Column 1: 50% */}
+            {/* Column 1: 50% - height reference */}
             <Grid size={{ xs: 12, md: 6 }}>
-              <Stack spacing={1.5} sx={{ height: '100%' }}>
-                <BigMoneyCards
-                  currentRevenue={revenueProfit.currentRevenue}
-                  currentProfit={revenueProfit.currentProfit}
-                  revenueDeltaPct={revenueProfit.revenueDeltaPct}
-                  profitDeltaPct={revenueProfit.profitDeltaPct}
-                  periodLabel={revenueProfit.periodLabel}
-                />
-
-                <Box sx={{ mt: 1 }}>
-                  <KpiCharts
-                    series={data.kpiChart.series}
-                    periodLabel={data.kpiChart.periodLabel}
+              <div ref={topRowRef}>
+                <Stack spacing={1.5}>
+                  <BigMoneyCards
+                    currentRevenue={revenueProfit.currentRevenue}
+                    currentProfit={revenueProfit.currentProfit}
+                    revenueDeltaPct={revenueProfit.revenueDeltaPct}
+                    profitDeltaPct={revenueProfit.profitDeltaPct}
+                    periodLabel={revenueProfit.periodLabel}
                   />
-                </Box>
 
-                <KpiMiniCards
-                  kpis={kpi.kpis}
-                  mapping={{
-                    totalClosed: 'total_closed',
-                    fifteenThirty: 'fifteen_thirty',
-                    repeatReferral: 'repeat_referral',
-                    daysOff: 'days_off',
-                  }}
-                />
-              </Stack>
+                  <Box sx={{ mt: 1 }}>
+                    <KpiCharts
+                      series={data.kpiChart.series}
+                      periodLabel={data.kpiChart.periodLabel}
+                    />
+                  </Box>
+
+                  <KpiMiniCards
+                    kpis={kpi.kpis}
+                    mapping={{
+                      totalClosed: 'total_closed',
+                      fifteenThirty: 'fifteen_thirty',
+                      repeatReferral: 'repeat_referral',
+                      daysOff: 'days_off',
+                    }}
+                  />
+                </Stack>
+              </div>
             </Grid>
 
-            {/* Column 2: 25% */}
+            {/* Column 2: 25% - constrained by topRowHeight */}
             <Grid size={{ xs: 12, md: 3 }}>
-              <ActionSteps steps={coachingNotes.actionSteps} />
+              <Box sx={{ height: topRowHeight ? `${topRowHeight}px` : 'auto' }}>
+                <ActionSteps steps={coachingNotes.actionSteps} />
+              </Box>
             </Grid>
 
-            {/* Column 3: 25% */}
+            {/* Column 3: 25% - constrained by topRowHeight */}
             <Grid size={{ xs: 12, md: 3 }}>
-              <Wins {...wins} />
+              <Box sx={{ height: topRowHeight ? `${topRowHeight}px` : 'auto' }}>
+                <CoachingNotesSection {...coachingNotes} />
+              </Box>
             </Grid>
           </Grid>
         </Box>
@@ -117,14 +156,25 @@ export default function UserDashboard({ userId }: Props) {
         {/* ===== BOTTOM SECTION ===== */}
         <Box>
           <Grid container spacing={3}>
-            {/* 2/3 width on desktop */}
-            <Grid size={{ xs: 12, md: 7.5 }}>
-              <AttendanceSection {...attendance} />
+            {/* Attendance: 50% - height reference */}
+            <Grid size={{ xs: 12, md: 6 }}>
+              <div ref={bottomRowRef}>
+                <AttendanceSection {...attendance} />
+              </div>
             </Grid>
 
-            {/* 1/3 width on desktop */}
-            <Grid size={{ xs: 12, md: 4.5 }}>
-              <Achievements {...achievements} />
+            {/* Wins: 25% - constrained by bottomRowHeight */}
+            <Grid size={{ xs: 12, md: 3 }}>
+              <Box sx={{ height: bottomRowHeight ? `${bottomRowHeight}px` : 'auto' }}>
+                <Wins {...wins} />
+              </Box>
+            </Grid>
+
+            {/* Achievements: 25% - constrained by bottomRowHeight */}
+            <Grid size={{ xs: 12, md: 3 }}>
+              <Box sx={{ height: bottomRowHeight ? `${bottomRowHeight}px` : 'auto' }}>
+                <Achievements {...achievements} />
+              </Box>
             </Grid>
           </Grid>
         </Box>

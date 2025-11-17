@@ -1,7 +1,7 @@
 // src/components/coach/CoachNotesView.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -11,6 +11,7 @@ import {
   TextField,
   useMediaQuery,
 } from '@mui/material';
+import { useSearchParams } from 'next/navigation';
 import CoachNotesUserList from './CoachNotesUserList';
 import CoachingNotesPanel from './CoachingNotesPanel';
 import UserWinsPanel from './UserWinsPanel';
@@ -20,14 +21,23 @@ const COACH_UI_SCALE = 1.0;
 type Mode = 'coach' | 'admin';
 
 export default function CoachNotesView({ mode }: { mode: Mode }) {
+  const searchParams = useSearchParams();
+  const userIdFromQuery = searchParams.get('userId') ?? null;
+
   const [search, setSearch] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(userIdFromQuery);
 
   const isNarrow = useMediaQuery('(max-width:900px)');
-  // a bit taller so less scrolling inside the cards
   const PANEL_HEIGHT = isNarrow ? 'auto' : '70vh';
   const isCoach = mode === 'coach';
   const sz = (px: number) => (isCoach ? Math.round(px * COACH_UI_SCALE) : px);
+
+  // If we DON'T have a selection yet and the URL has a userId, use it once.
+  useEffect(() => {
+    if (!selectedUserId && userIdFromQuery) {
+      setSelectedUserId(userIdFromQuery);
+    }
+  }, [userIdFromQuery, selectedUserId]);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>

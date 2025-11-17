@@ -42,8 +42,8 @@ export default function KpiCharts({ series, periodLabel }: KpiChartsProps) {
     return (
       <Paper sx={{ p: 2, borderRadius: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="baseline" mb={1.5}>
-          <Typography variant="h6" fontWeight={600}>
-            KPI Trends (Last 12 Months)
+          <Typography variant="h4" fontWeight={600}>
+            KPIs Yearly
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {periodLabel}

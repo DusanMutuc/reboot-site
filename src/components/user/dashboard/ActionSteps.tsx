@@ -42,17 +42,9 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
         bgcolor: 'background.paper'
       }}
     >
-      <Typography 
-        variant="h3" 
-        fontWeight={700} 
-        mb={3}
-        sx={{ 
-          letterSpacing: '-0.02em',
-          color: 'text.primary'
-        }}
-      >
-        Action Steps
-      </Typography>
+      <Typography variant="h3" fontWeight={600} mb={2.5}>
+  Action Steps
+</Typography>
 
       {steps.length === 0 ? (
         <Typography variant="body2" color="text.secondary">
@@ -69,7 +61,7 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
                 <Box
                   key={step.id}
                   sx={{
-                    p: 2,
+                    p: 1.75,
                     borderRadius: 2,
                     bgcolor: status.bgColor,
                     border: '1px solid',
@@ -77,7 +69,7 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
                     borderLeft: `4px solid ${status.color}`,
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: 1.5,
+                    gap: 1.25,
                     transition: 'all 0.2s ease-in-out',
                     opacity: isCompleted ? 0.75 : 1,
                     '&:hover': {

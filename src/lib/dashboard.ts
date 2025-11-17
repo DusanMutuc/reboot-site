@@ -328,60 +328,82 @@ async function fetchAttendanceSection(
 
 
 // ---------- 4) Coaching notes & action steps ----------
+function sortActionSteps(steps: DashboardActionStep[]): DashboardActionStep[] {
+    const statusRank: Record<DashboardActionStep['status'], number> = {
+      in_progress: 0,
+      not_started: 1,
+      complete: 2,
+    };
+  
+    return [...steps].sort((a, b) => {
+      const diff = statusRank[a.status] - statusRank[b.status];
+      if (diff !== 0) return diff;
+  
+      // tie-breaker: newer first within the same status
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+  }
+  
+// ---------- 4) Coaching notes & action steps ----------
 
 async function fetchCoachingNotesSection(
-  client: SupabaseClient,
-): Promise<CoachingNotesSectionProps> {
-  // Action steps - rely on RLS to only return current member's steps
-  const { data: steps, error: stepsErr } = await client
-    .from('coaching_note_action_steps')
-    .select('id, label, status, library_item_id, created_at')
-    .order('created_at', { ascending: false })
-    .limit(10);
-
-  if (stepsErr) {
-    console.error('fetch action steps error', stepsErr);
+    client: SupabaseClient,
+  ): Promise<CoachingNotesSectionProps> {
+    // Action steps - rely on RLS to only return current member's steps
+    const { data: steps, error: stepsErr } = await client
+      .from('coaching_note_action_steps')
+      .select('id, coaching_note_id, label, status, library_item_id, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .limit(10);
+  
+    if (stepsErr) {
+      console.error('fetch action steps error', stepsErr);
+    }
+  
+    const rawActionSteps: DashboardActionStep[] =
+      (steps ?? []).map((row: any) => ({
+        id: row.id,
+        coaching_note_id: row.coaching_note_id,
+        label: row.label,
+        library_item_id: row.library_item_id,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at ?? row.created_at,
+      })) ?? [];
+  
+    const actionSteps = sortActionSteps(rawActionSteps);
+  
+    // Comments preview - last few visible comments
+    const { data: comments, error: commentsErr } = await client
+      .from('coaching_note_comments')
+      .select('id, coaching_note_id, author_id, body, created_at')
+      .order('created_at', { ascending: false })
+      .limit(3);
+  
+    if (commentsErr) {
+      console.error('fetch coaching comments error', commentsErr);
+    }
+  
+    const notes: DashboardNotePreview[] =
+      (comments ?? []).map((row: any) => ({
+        id: row.id,
+        coaching_note_id: row.coaching_note_id,
+        author_id: row.author_id,
+        body:
+          row.body && row.body.length > 220
+            ? `${row.body.slice(0, 217)}...`
+            : row.body,
+        created_at: row.created_at,
+      })) ?? [];
+  
+    return {
+      actionSteps,
+      notes,
+    };
   }
-
-  const actionSteps: DashboardActionStep[] =
-    (steps ?? []).map((row: any) => ({
-      id: row.id,
-      coaching_note_id: row.coaching_note_id,
-      label: row.label,
-      library_item_id: row.library_item_id,
-      status: row.status,
-      created_at: row.created_at,
-      updated_at: row.created_at,
-    })) ?? [];
-
-  // Comments preview - last few visible comments
-  const { data: comments, error: commentsErr } = await client
-    .from('coaching_note_comments')
-    .select('id, body, created_at')
-    .order('created_at', { ascending: false })
-    .limit(3);
-
-  if (commentsErr) {
-    console.error('fetch coaching comments error', commentsErr);
-  }
-
-  const notes: DashboardNotePreview[] =
-    (comments ?? []).map((row: any) => ({
-      id: row.id,
-      coaching_note_id: row.coaching_note_id,
-      author_id: row.author_id,
-      body:
-        row.body && row.body.length > 220
-          ? `${row.body.slice(0, 217)}...`
-          : row.body,
-      created_at: row.created_at,
-    })) ?? [];
-
-  return {
-    actionSteps,
-    notes,
-  };
-}
+  
 
 // ---------- 5) Wins ----------
 

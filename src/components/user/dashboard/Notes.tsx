@@ -1,18 +1,35 @@
+// src/components/user/dashboard/Notes.tsx
 import { Paper, Typography, Box, Stack } from '@mui/material';
 import type { DashboardNotePreview } from '@/types/dashboard';
 
 export default function Notes({ notes }: { notes: DashboardNotePreview[] }) {
   return (
-    <Paper sx={{ p: 2, borderRadius: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Paper
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <Typography variant="h6" fontWeight={600} mb={1}>
         Coaching Notes
       </Typography>
-      {notes.length === 0 ? (
-        <Typography variant="body2" color="text.secondary">
-          No recent notes yet.
-        </Typography>
-      ) : (
-        <Box sx={{ overflow: 'auto', maxHeight: 300, pr: 0.5 }}>
+
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          pr: 0.5,
+        }}
+      >
+        {notes.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No recent notes yet.
+          </Typography>
+        ) : (
           <Stack spacing={1.25}>
             {notes.map((note) => (
               <Box
@@ -36,8 +53,8 @@ export default function Notes({ notes }: { notes: DashboardNotePreview[] }) {
               </Box>
             ))}
           </Stack>
-        </Box>
-      )}
+        )}
+      </Box>
     </Paper>
   );
 }

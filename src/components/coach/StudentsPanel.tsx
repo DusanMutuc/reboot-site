@@ -1,233 +1,282 @@
+// src/components/coach/StudentsPanel.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Paper, Typography, Alert, Divider, Stack, Link as MuiLink } from '@mui/material';
-import DashboardEmbed from '@/components/dashboardEmbed';
+import NextLink from 'next/link';
+import {
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  MenuItem,
+  Button,
+  Stack,
+  Link as MuiLink,
+} from '@mui/material';
+import { supabase } from '@/lib/supabaseClient';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
-import { supabase } from '@/lib/supabaseClient';
+import UserDashboard from '@/components/user/dashboard/UserDashboard';
 
-type StudentRow = { user_id: string; full_name: string };
-type ContactInfo = { email: string | null; phone: string | null };
+type StudentRow = {
+  user_id: string;
+  full_name: string;
+};
 
-function StudentChip({
-  label,
-  selected,
-  onClick,
-}: {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'inline-block',
-        padding: '8px 12px',
-        borderRadius: 999,
-        border: '1px solid',
-        borderColor: selected ? '#000' : 'rgba(0,0,0,0.2)',
-        background: selected ? 'rgba(0,0,0,0.06)' : 'transparent',
-        fontWeight: 600,
-        cursor: 'pointer',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {label}
-    </button>
-  );
-}
+type ContactInfo = {
+  email: string | null;
+  phone: string | null;
+};
 
 export default function StudentsPanel({ courseId }: { courseId: number | null }) {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setErr] = useState<string | null>(null);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string>('');
   const [selectedName, setSelectedName] = useState<string | null>(null);
 
-  const [studentDashboard, setStudentDashboard] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [dashErr, setDashErr] = useState<string | null>(null);
-
   const [contact, setContact] = useState<ContactInfo | null>(null);
-  const [contactBusy, setContactBusy] = useState(false);
-  const [contactErr, setContactErr] = useState<string | null>(null);
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
 
-  // Load roster
+  // Load roster for this coach (optionally scoped by course)
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function loadRoster() {
       try {
+        setLoading(true);
+        setErr(null);
+
         const { data, error } = await supabase.rpc('get_my_users', {
           _course_id: courseId ?? null,
         });
+
         if (error) throw error;
-        setRows((data ?? []) as StudentRow[]);
+
+        if (!cancelled) {
+          const rows = (data ?? []) as StudentRow[];
+          setRows(rows);
+
+          // Auto-select first student if any
+          if (rows.length) {
+            setSelectedId(rows[0].user_id);
+            setSelectedName(rows[0].full_name);
+          } else {
+            setSelectedId('');
+            setSelectedName(null);
+          }
+        }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to load students';
-        setErr(msg);
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : 'Failed to load students';
+          setErr(msg);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
-    })();
+    }
+
+    loadRoster();
+
+    return () => {
+      cancelled = true;
+    };
   }, [courseId]);
 
+  // Keep list sorted alphabetically
   const sorted = useMemo(
     () => rows.slice().sort((a, b) => a.full_name.localeCompare(b.full_name)),
     [rows]
   );
 
-  // Reset selection when course changes or roster size changes
+  // Ensure selection stays valid when roster changes
   useEffect(() => {
-    setSelectedId(null);
-    setSelectedName(null);
-    setStudentDashboard(null);
-    setDashErr(null);
-    setContact(null);
-    setContactErr(null);
-  }, [courseId, rows.length]);
+    if (!sorted.length) {
+      setSelectedId('');
+      setSelectedName(null);
+      setContact(null);
+      setContactError(null);
+      return;
+    }
 
-  // Auto-select first student (optional UX)
-  useEffect(() => {
-    if (sorted.length && !selectedId) {
+    const stillExists = sorted.some((r) => r.user_id === selectedId);
+    if (!stillExists) {
       setSelectedId(sorted[0].user_id);
       setSelectedName(sorted[0].full_name);
     }
   }, [sorted, selectedId]);
 
-  // Fetch Looker link on selection
+  // Fetch contact info for selected student
   useEffect(() => {
-    if (!selectedId) return;
-    (async () => {
-      try {
-        setBusy(true);
-        setDashErr(null);
-        setStudentDashboard(null);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('looker_link')
-          .eq('id', selectedId)
-          .maybeSingle();
-        if (error) throw error;
-        const url = (data?.looker_link || '').trim();
-        setStudentDashboard(url || null);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to load student dashboard link';
-        setDashErr(msg);
-      } finally {
-        setBusy(false);
-      }
-    })();
-  }, [selectedId]);
+    if (!selectedId) {
+      setContact(null);
+      setContactError(null);
+      return;
+    }
 
-  // Fetch contact (email/phone) from auth via secure RPC
-  useEffect(() => {
-    if (!selectedId) return;
-    (async () => {
+    let cancelled = false;
+
+    async function loadContact() {
       try {
-        setContactBusy(true);
-        setContactErr(null);
+        setContactLoading(true);
+        setContactError(null);
         setContact(null);
+
         const { data, error } = await supabase.rpc('get_user_contact', {
           _user_id: selectedId,
           _course_id: courseId ?? null,
         });
-        
-        // data is [{ email, phone }] or null
-        const row = Array.isArray(data) ? data[0] : data;
-        const email = (row?.email ?? null) as string | null;
-        const phone = (row?.phone ?? null) as string | null;
-        setContact({ email, phone });
+
+        if (error) throw error;
+
+        if (!cancelled) {
+          const row = Array.isArray(data) ? data[0] : data;
+          const email = (row?.email ?? null) as string | null;
+          const phone = (row?.phone ?? null) as string | null;
+          setContact({ email, phone });
+        }
       } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Failed to load contact info';
-        setContactErr(msg);
+        if (!cancelled) {
+          const msg =
+            e instanceof Error ? e.message : 'Failed to load contact info';
+          setContactError(msg);
+        }
       } finally {
-        setContactBusy(false);
+        if (!cancelled) {
+          setContactLoading(false);
+        }
       }
-    })();
-  }, [selectedId]);
+    }
+
+    loadContact();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, courseId]);
 
   if (loading) return <Loading />;
-  if (error)   return <ErrorMessage message={error} />;
+  if (error) return <ErrorMessage message={error} />;
 
   return (
-    <Box sx={{ width: '100%', mx: 'auto', mt: 2,  borderRadius: 0 }}>
-      {/* Horizontal chooser */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          overflowX: 'auto',
-          pb: 1,
-          mb: 2,
-          px: 2,
-        }}
-      >
-        {sorted.map((s) => (
-          <StudentChip
-            key={s.user_id}
-            label={s.full_name}
-            selected={s.user_id === selectedId}
-            onClick={() => {
-              setSelectedId(s.user_id);
-              setSelectedName(s.full_name);
-            }}
-          />
-        ))}
-        {sorted.length === 0 && (
-          <Alert severity="info" sx={{ flexShrink: 0 }}>
-            No students found on your roster.
-          </Alert>
-        )}
-      </Box>
+    <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', mt: 3 }}>
+      <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            gap: 2,
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            mb: 3,
+          }}
+        >
+          <Box flex={1}>
+            <Typography variant="h6" fontWeight={600} mb={1}>
+              Select a student
+            </Typography>
 
-      {/* Full-width dashboard */}
-      <Paper variant="outlined" sx={{ p: 2, backgroundColor: '#2A2A2A', borderRadius: 0, borderWidth: 0, pb: 8 }}>
-        {!selectedId && <Alert severity="info">Select a student to view their M2 Dashboard.</Alert>}
-        {selectedId && (
+            <TextField
+              select
+              fullWidth
+              size="small"
+              value={selectedId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedId(id);
+                const row = sorted.find((r) => r.user_id === id);
+                setSelectedName(row?.full_name ?? null);
+              }}
+              helperText={
+                sorted.length === 0 ? 'No students found on your roster.' : undefined
+              }
+              disabled={sorted.length === 0}
+            >
+              {sorted.map((s) => (
+                <MenuItem key={s.user_id} value={s.user_id}>
+                  {s.full_name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+
+          {selectedId && (
+            <Box>
+              <Button
+                component={NextLink}
+                href={`/coach/notes?userId=${selectedId}`}
+                variant="outlined"
+                size="small"
+              >
+                Open Coaching Notes
+              </Button>
+            </Box>
+          )}
+        </Box>
+
+        {selectedId ? (
           <>
-            <Typography variant="h6" sx={{ mb: 1.5,ml:5, color: '#fff' }}>
-              {selectedName ? `${selectedName} – M2 Dashboard` : 'Student M2 Dashboard'}
-            </Typography>
-            {busy && <Loading />}
-            {dashErr && <ErrorMessage message={dashErr} />}
-            {!!studentDashboard && <DashboardEmbed src={studentDashboard} />}
-            {!busy && !dashErr && !studentDashboard && (
-              <Alert severity="warning">No Looker Studio link found for this student.</Alert>
-            )}
+            <Box mt={1}>
+              <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                {selectedName ? `${selectedName}'s Dashboard` : 'Student Dashboard'}
+              </Typography>
+              <UserDashboard userId={selectedId} />
+            </Box>
 
+            <Box mt={3}>
+              <Typography variant="subtitle1" fontWeight={600} mb={1}>
+                Contact info
+              </Typography>
 
-            {/* Contact info */}
-            <Typography variant="subtitle1" sx={{ mb: 1,ml:5, fontSize: '3.5rem', color: '#fff' }}>
-              {selectedName ? `${selectedName} – Contact` : 'Contact'}
-            </Typography>
+              {contactLoading && (
+                <Typography variant="body2" color="text.secondary">
+                  Loading contact info...
+                </Typography>
+              )}
 
-            {contactBusy && <Loading />}
-            {contactErr && <ErrorMessage message={contactErr} />}
+              {contactError && <ErrorMessage message={contactError} />}
 
-            {!contactBusy && !contactErr && (
-              <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>
-                <Box sx={{ minWidth: 240, ml:5, }}>
-                  <Typography variant="body2" sx={{ color: '#f6f6f6', fontSize: '1.8rem' }}>Email</Typography>
-                  {contact?.email ? (
-                    <MuiLink sx={{ fontSize: '1.8rem', color: '#f6f6f6' }} href={`mailto:${contact.email}`}>{contact.email}</MuiLink>
-                  ) : (
-                    <Typography variant="body1">—</Typography>
-                  )}
-                </Box>
-                <Box sx={{ minWidth: 200 }}>
-                  <Typography variant="body2" sx={{ color: '#f6f6f6', fontSize: '1.8rem' }}>Phone</Typography>
-                  {contact?.phone ? (
-                    <MuiLink sx={{ fontSize: '1.8rem', color: '#f6f6f6' }} href={`tel:${contact.phone}`}>{contact.phone}</MuiLink>
-                  ) : (
-                    <Typography variant="body1">—</Typography>
-                  )}
-                </Box>
-              </Stack>
-            )}
+              {!contactLoading && !contactError && (
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={3}
+                  mt={0.5}
+                >
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Email
+                    </Typography>
+                    {contact?.email ? (
+                      <MuiLink href={`mailto:${contact.email}`}>
+                        {contact.email}
+                      </MuiLink>
+                    ) : (
+                      <Typography variant="body2">—</Typography>
+                    )}
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Phone
+                    </Typography>
+                    {contact?.phone ? (
+                      <MuiLink href={`tel:${contact.phone}`}>
+                        {contact.phone}
+                      </MuiLink>
+                    ) : (
+                      <Typography variant="body2">—</Typography>
+                    )}
+                  </Box>
+                </Stack>
+              )}
+            </Box>
           </>
+        ) : (
+          <Typography variant="body2" color="text.secondary" mt={2}>
+            Select a student to view their dashboard.
+          </Typography>
         )}
       </Paper>
     </Box>

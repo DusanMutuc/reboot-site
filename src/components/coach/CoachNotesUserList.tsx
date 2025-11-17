@@ -99,18 +99,11 @@ export default function CoachNotesUserList({
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // auto-select first user once
+  // auto-select first user once if nothing is selected
   useEffect(() => {
     if (!didAutoSelectOnce.current && selectedUserId == null && filtered.length > 0) {
       didAutoSelectOnce.current = true;
       onSelectUser(filtered[0].user_id);
-      requestAnimationFrame(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = 0;
-      });
-      return;
-    }
-    if (selectedUserId && !filtered.some((u) => u.user_id === selectedUserId)) {
-      onSelectUser(null);
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
       });
@@ -254,13 +247,21 @@ export default function CoachNotesUserList({
             sx={{
               fontSize: sz(13),
               fontWeight: 600,
-              color: (page + 1) * PAGE_SIZE >= filtered.length ? 'text.disabled' : 'primary.main',
-              cursor: (page + 1) * PAGE_SIZE >= filtered.length ? 'default' : 'pointer',
+              color:
+                (page + 1) * PAGE_SIZE >= filtered.length
+                  ? 'text.disabled'
+                  : 'primary.main',
+              cursor:
+                (page + 1) * PAGE_SIZE >= filtered.length ? 'default' : 'pointer',
               transition: 'color 0.2s',
               '&:hover':
-                (page + 1) * PAGE_SIZE >= filtered.length ? {} : { color: 'primary.dark' },
+                (page + 1) * PAGE_SIZE >= filtered.length
+                  ? {}
+                  : { color: 'primary.dark' },
             }}
-            onClick={() => (page + 1) * PAGE_SIZE < filtered.length && setPage((p) => p + 1)}
+            onClick={() =>
+              (page + 1) * PAGE_SIZE < filtered.length && setPage((p) => p + 1)
+            }
           >
             Next
           </Typography>

@@ -45,10 +45,14 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
           alignItems: 'baseline',
           justifyContent: 'space-between',
           gap: 2,
+          flexShrink: 0, // Prevent header from shrinking
         }}
       >
         <Box>
-          <Typography variant="h6">Attendance vs Driftline</Typography>
+          <Typography variant="h4" fontWeight={600}>
+            Attendance vs Driftline
+          </Typography>
+
           <Typography variant="body2" color="text.secondary">
             {periodLabel}
           </Typography>
@@ -57,8 +61,8 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
         {/* you can show onTrackLabel somewhere here later if you want */}
       </Box>
 
-      {/* slightly shorter than before (was minHeight: 260) */}
-      <Box sx={{ flex: 1, minHeight: 240 }}>
+      {/* Changed from flex: 1 to explicit height */}
+      <Box sx={{ height: 240, minHeight: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={series}
