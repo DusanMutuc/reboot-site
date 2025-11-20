@@ -28,7 +28,13 @@ type ContactInfo = {
   phone: string | null;
 };
 
-export default function StudentsPanel({ courseId }: { courseId: number | null }) {
+interface StudentsPanelProps {
+  courseId: number | null;
+  initialUserId?: string;
+  onStudentChange?: (id: string) => void; // NEW
+}
+
+export default function StudentsPanel({ courseId, initialUserId, onStudentChange, }: StudentsPanelProps) {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setErr] = useState<string | null>(null);
@@ -49,9 +55,7 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
         setLoading(true);
         setErr(null);
 
-        const { data, error } = await supabase.rpc('get_my_users', {
-          _course_id: courseId ?? null,
-        });
+        const { data, error } = await supabase.rpc('get_my_users_with_status');
 
         if (error) throw error;
 
@@ -59,13 +63,21 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
           const rows = (data ?? []) as StudentRow[];
           setRows(rows);
 
-          // Auto-select first student if any
-          if (rows.length) {
-            setSelectedId(rows[0].user_id);
-            setSelectedName(rows[0].full_name);
-          } else {
+          if (rows.length === 0) {
             setSelectedId('');
             setSelectedName(null);
+            return;
+          }
+
+          // Prefer route param if it exists in this roster
+          if (initialUserId && rows.some((r) => r.user_id === initialUserId)) {
+            setSelectedId(initialUserId);
+            const row = rows.find((r) => r.user_id === initialUserId)!;
+            setSelectedName(row.full_name);
+          } else {
+            // Fallback: first student
+            setSelectedId(rows[0].user_id);
+            setSelectedName(rows[0].full_name);
           }
         }
       } catch (e: unknown) {
@@ -85,7 +97,7 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
     return () => {
       cancelled = true;
     };
-  }, [courseId]);
+  }, [courseId, initialUserId]);
 
   // Keep list sorted alphabetically
   const sorted = useMemo(
@@ -105,6 +117,7 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
 
     const stillExists = sorted.some((r) => r.user_id === selectedId);
     if (!stillExists) {
+      // If current selection disappeared, reset to first in sorted
       setSelectedId(sorted[0].user_id);
       setSelectedName(sorted[0].full_name);
     }
@@ -189,9 +202,12 @@ export default function StudentsPanel({ courseId }: { courseId: number | null })
                 setSelectedId(id);
                 const row = sorted.find((r) => r.user_id === id);
                 setSelectedName(row?.full_name ?? null);
+                if (onStudentChange) onStudentChange(id);  // NEW
               }}
               helperText={
-                sorted.length === 0 ? 'No students found on your roster.' : undefined
+                sorted.length === 0
+                  ? 'No students found on your roster.'
+                  : undefined
               }
               disabled={sorted.length === 0}
             >

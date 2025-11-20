@@ -1368,40 +1368,45 @@ function CourseEditorInner() {
           {editorMode === 'edit' ? (
             <Box sx={{ minHeight: 0 }}>
               <Properties
-                subtree={selectedSubtree}
-                nodeDraft={nodeDraft}
-                metadataError={metadataError}
-                onNodeFieldChange={handleNodeFieldChange}
-                onRequestAddChild={(mode, options) =>
-                  setAddChildDialog({ open: true, parentId: selectedSubtree?.node.id ?? null, mode, type: options?.type })
-                }
-                onReorderChild={(childId, direction) =>
-                  selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)
-                }
-                onUpdateChild={(childId, updates) =>
-                  selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)
-                }
-                onRemoveChild={(childId) =>
-                  selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)
-                }
-                selectedBlock={selectedBlock}
-                onClearBlockSelection={() => {
-                  setSelectedBlockId(null);
-                  setEditingBlockId(null);
-                }}
-                onUpdateBlock={(blockId, updates, options) => queueBlockUpdate(blockId, updates, options)}
-                onDeleteBlock={handleDeleteBlock}
-                onOpenResourcePicker={(mode, blockId) => {
-                  if (!selectedSubtree) return;
-                  setResourceDialogMode({ type: mode, blockId });
-                  setResourceDialogOpen(true);
-                }}
-                onFinalizeSmartDocBlock={handleFinalizeSmartDocBlock}
-                resources={resourceCache}
-                savingState={savingState}
-                savingMessage={savingMessage}
-                availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
-              />
+  subtree={selectedSubtree}
+  nodeDraft={nodeDraft}
+  metadataError={metadataError}
+  onNodeFieldChange={handleNodeFieldChange}
+  onRequestAddChild={(mode, options) =>
+    setAddChildDialog({ open: true, parentId: selectedSubtree?.node.id ?? null, mode, type: options?.type })
+  }
+  onReorderChild={(childId, direction) =>
+    selectedSubtree && void handleReorderChild(selectedSubtree.node.id, childId, direction)
+  }
+  onUpdateChild={(childId, updates) =>
+    selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)
+  }
+  onRemoveChild={(childId) =>
+    selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)
+  }
+  selectedBlock={selectedBlock}
+  onClearBlockSelection={() => {
+    setSelectedBlockId(null);
+    setEditingBlockId(null);
+  }}
+  onUpdateBlock={(blockId, updates, options) => queueBlockUpdate(blockId, updates, options)}
+  onDeleteBlock={handleDeleteBlock}
+  onOpenResourcePicker={(mode, blockId) => {
+    if (!selectedSubtree) return;
+    setResourceDialogMode({ type: mode, blockId });
+    setResourceDialogOpen(true);
+  }}
+  onFinalizeSmartDocBlock={handleFinalizeSmartDocBlock}
+  resources={resourceCache}
+  savingState={savingState}
+  savingMessage={savingMessage}
+  availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
+  // 👇 NEW: hook for is_public
+  onCourseVisibilityChange={(nodeId, isPublic) =>
+    queueNodeUpdate(nodeId, { is_public: isPublic }, { debounce: false })
+  }
+/>
+
             </Box>
           ) : null}
         </Box>

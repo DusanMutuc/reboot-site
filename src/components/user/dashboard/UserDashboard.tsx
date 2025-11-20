@@ -1,3 +1,4 @@
+// src/components/user/dashboard/UserDashboard.tsx
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
@@ -17,19 +18,28 @@ import Achievements from './Achievements';
 import AttendanceSection from './AttendanceSection';
 import CoachingNotesSection from './CoachingNotesSection';
 
-type Props = { userId: string };
+type Props = {
+  userId: string;
+  /** Change this value to refresh ONLY the KPI chart (no remount). */
+  refreshSignal?: number | string;
+};
 
-export default function UserDashboard({ userId }: Props) {
+export default function UserDashboard({ userId, refreshSignal }: Props) {
   const [data, setData] = useState<UserDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // chart-only refresh UX
+  const [chartRefreshing, setChartRefreshing] = useState(false);
+  const [chartVersion, setChartVersion] = useState(0);
+
   // Refs to measure heights
   const topRowRef = useRef<HTMLDivElement>(null);
   const bottomRowRef = useRef<HTMLDivElement>(null);
   const [topRowHeight, setTopRowHeight] = useState<number | null>(null);
   const [bottomRowHeight, setBottomRowHeight] = useState<number | null>(null);
 
+  // 1) Full fetch on first load or when userId changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -45,33 +55,45 @@ export default function UserDashboard({ userId }: Props) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [userId]);
+
+  // 2) Chart-only refetch when refreshSignal changes
+  useEffect(() => {
+    if (!refreshSignal || !userId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        setChartRefreshing(true);
+        // We reuse fetchDashboardData for simplicity, but only keep its kpiChart part.
+        const result = await fetchDashboardData(supabase, userId);
+        if (cancelled) return;
+        setData(prev =>
+          prev
+            ? { ...prev, kpiChart: result.kpiChart } // replace only the chart data
+            : result
+        );
+        setChartVersion(v => v + 1); // bump to re-animate chart
+      } catch (err) {
+        console.error('Error refreshing KPI chart', err);
+        // Non-fatal; don't surface as page error
+      } finally {
+        if (!cancelled) setChartRefreshing(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [refreshSignal, userId]);
 
   // Measure heights after data loads and on window resize
   useEffect(() => {
     if (!data) return;
-
     const measureHeights = () => {
-      // Wait for next frame to ensure render is complete
       requestAnimationFrame(() => {
-        if (topRowRef.current) {
-          const topHeight = topRowRef.current.offsetHeight;
-          setTopRowHeight(topHeight);
-        }
-        if (bottomRowRef.current) {
-          const bottomHeight = bottomRowRef.current.offsetHeight;
-          setBottomRowHeight(bottomHeight);
-        }
+        if (topRowRef.current) setTopRowHeight(topRowRef.current.offsetHeight);
+        if (bottomRowRef.current) setBottomRowHeight(bottomRowRef.current.offsetHeight);
       });
     };
-
-    // Initial measurement
     measureHeights();
-
-    // Re-measure on window resize
     window.addEventListener('resize', measureHeights);
     return () => window.removeEventListener('resize', measureHeights);
   }, [data]);
@@ -121,6 +143,8 @@ export default function UserDashboard({ userId }: Props) {
                     <KpiCharts
                       series={data.kpiChart.series}
                       periodLabel={data.kpiChart.periodLabel}
+                      version={chartVersion}          // 👈 re-animate on update
+                      refreshing={chartRefreshing}     // 👈 tiny spinner in header
                     />
                   </Box>
 

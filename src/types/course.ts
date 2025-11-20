@@ -14,6 +14,7 @@ export type ContentNode = {
   objectives: string | null;
   sequential_unlock: boolean;
   metadata: Record<string, unknown> | null;
+  is_public: boolean; // ← add this
   [key: string]: unknown;
 };
 

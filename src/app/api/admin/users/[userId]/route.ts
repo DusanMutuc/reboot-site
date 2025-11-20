@@ -150,3 +150,26 @@ export async function PATCH(request: NextRequest, context: Params) {
 
   return NextResponse.json(result.payload);
 }
+
+export async function DELETE(request: NextRequest, context: Params) {
+  const guard = await requireAdmin(request);
+  if (!guard.ok) return guard.res;
+
+  const userId = await resolveUserId(context);
+  if (!userId || !isUuid(userId)) {
+    return NextResponse.json({ error: 'Invalid user id' }, { status: 400 });
+  }
+
+  const supa = getAdminClient();
+
+  // Delete from auth (sessions etc. are removed); clean up extra tables if needed.
+  const { error: delErr } = await supa.auth.admin.deleteUser(userId);
+  if (delErr) {
+    return NextResponse.json({ error: delErr.message }, { status: 400 });
+  }
+
+  // If profiles isn't set to cascade from auth, you can optionally hard-delete here:
+  // await supa.from('profiles').delete().eq('id', userId);
+
+  return NextResponse.json({ ok: true });
+}

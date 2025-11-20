@@ -27,7 +27,7 @@ import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 import { supabase } from '@/lib/supabaseClient';
-
+import { updateNode } from '@/components/admin/courseEditor/api/requests';
 export type NodeDraft = {
   title: string;
   slug: string;
@@ -36,6 +36,11 @@ export type NodeDraft = {
   icon: string;
   objectives: string;
   metadata: string;
+};
+type AllowedUser = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
 };
 
 // 👇 PATCH: add position here
@@ -165,7 +170,11 @@ export type PropertiesProps = {
   savingState: SavingState;
   savingMessage: string;
   availableChildTypes: NodeType[];
+  // 👇 NEW
+  onCourseVisibilityChange?: (nodeId: number, isPublic: boolean) => void;
+  
 };
+
 
 export default function Properties({
   subtree,
@@ -186,6 +195,8 @@ export default function Properties({
   savingState,
   savingMessage,
   availableChildTypes,
+  onCourseVisibilityChange,
+
 }: PropertiesProps) {
   const [childType, setChildType] = useState<NodeType>('lesson');
   const [settingsDraft, setSettingsDraft] = useState('');
@@ -200,6 +211,173 @@ export default function Properties({
   const nodeScopeKey = subtree?.node.id ?? null;
   const blockScopeKey = selectedBlock?.id ?? null;
   const isPendingBlock = (selectedBlock?.id ?? 0) < 0;
+// ===== Visibility state =====
+const courseId = subtree?.node.id ?? null;
+const isCourse = subtree?.node.node_type === 'course';
+
+const [isPublic, setIsPublic] = useState<boolean>(true);
+const [isPublicLoading, setIsPublicLoading] = useState(false);
+const [isPublicError, setIsPublicError] = useState<string | null>(null);
+
+const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
+const [allowedLoading, setAllowedLoading] = useState(false);
+const [allowedError, setAllowedError] = useState<string | null>(null);
+
+const [searchQuery, setSearchQuery] = useState('');
+const [searchResults, setSearchResults] = useState<AllowedUser[]>([]);
+const [searchLoading, setSearchLoading] = useState(false);
+const [searchError, setSearchError] = useState<string | null>(null);
+
+// Load initial is_public and allowed users when a course is selected
+useEffect(() => {
+  let cancelled = false;
+
+  const load = async () => {
+    if (!courseId || !isCourse) return;
+
+    setIsPublicLoading(true);
+    setAllowedLoading(true);
+    setIsPublicError(null);
+    setAllowedError(null);
+
+    try {
+      // Load is_public (prefer subtree snapshot if present, else fetch)
+      let nextIsPublic: boolean | null = (subtree as any)?.node?.is_public;
+      if (typeof nextIsPublic !== 'boolean') {
+        const { data, error } = await supabase
+          .from('content_nodes')
+          .select('is_public')
+          .eq('id', courseId)
+          .single();
+        if (error) throw error;
+        nextIsPublic = !!data?.is_public;
+      }
+      if (!cancelled) setIsPublic(nextIsPublic ?? true);
+    } catch (err: any) {
+      if (!cancelled) setIsPublicError(err?.message ?? 'Failed to load visibility');
+    } finally {
+      if (!cancelled) setIsPublicLoading(false);
+    }
+
+    try {
+      const { data, error } = await supabase
+  .from('user_course_visibility')
+  .select(`
+    user_id,
+    profile:profiles (
+      id,
+      first_name,
+      last_name
+    )
+  `)
+  .eq('course_node_id', courseId);
+
+if (error) throw error;
+
+const rows = (data ?? []).map((r: any) => {
+  const p = r.profile ?? {};
+  const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null;
+  return {
+    id: p.id ?? r.user_id,
+    full_name: name,  // synthesized display name
+    email: null,      // profiles table doesn't have email
+  };
+});
+setAllowedUsers(rows);
+
+
+      if (!cancelled) setAllowedUsers(rows);
+    } catch (err: any) {
+      if (!cancelled) setAllowedError(err?.message ?? 'Failed to load allowed users');
+    } finally {
+      if (!cancelled) setAllowedLoading(false);
+    }
+  };
+
+  load();
+  return () => { cancelled = true; };
+}, [courseId, isCourse, subtree]);
+
+const handleTogglePublic = async (checked: boolean) => {
+  if (!courseId || !isCourse) return;
+  setIsPublic(checked); // optimistic
+  setIsPublicError(null);
+  setIsPublicLoading(true);
+  try {
+    await updateNode(courseId, { is_public: checked }); // ← key line
+  } catch (err: any) {
+    setIsPublic(!checked); // revert
+    setIsPublicError(err?.message ?? 'Failed to update visibility');
+  } finally {
+    setIsPublicLoading(false);
+  }
+};
+
+// Search profiles to whitelist (name or email)
+const handleSearch = async () => {
+  const q = searchQuery.trim();
+if (!q) { setSearchResults([]); return; }
+
+const { data, error } = await supabase
+  .from('profiles')
+  .select('id, first_name, last_name')
+  .or([
+    `first_name.ilike.%${q}%`,
+    `last_name.ilike.%${q}%`,
+  ].join(','))
+  .order('last_name', { ascending: true })
+  .order('first_name', { ascending: true })
+  .limit(8);
+
+if (error) throw error;
+
+const results = (data ?? []).map((p: any) => ({
+  id: p.id,
+  email: null, // not available here
+  full_name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null,
+}));
+setSearchResults(results);
+
+};
+
+// Grant access
+const grantUserAccess = async (userId: string) => {
+  if (!courseId) return;
+  setAllowedError(null);
+  try {
+    const { error } = await supabase
+      .from('user_course_visibility')
+      .insert({ user_id: userId, course_node_id: courseId });
+    if (error) throw error;
+
+    // update list
+    const added = searchResults.find((u) => u.id === userId);
+    setAllowedUsers((prev) => {
+      if (prev.some((u) => u.id === userId)) return prev;
+      return added ? [...prev, added] : prev;
+    });
+  } catch (err: any) {
+    setAllowedError(err?.message ?? 'Failed to grant access');
+  }
+};
+
+// Revoke access
+const revokeUserAccess = async (userId: string) => {
+  if (!courseId) return;
+  setAllowedError(null);
+  try {
+    const { error } = await supabase
+      .from('user_course_visibility')
+      .delete()
+      .eq('user_id', userId)
+      .eq('course_node_id', courseId);
+    if (error) throw error;
+
+    setAllowedUsers((prev) => prev.filter((u) => u.id !== userId));
+  } catch (err: any) {
+    setAllowedError(err?.message ?? 'Failed to revoke access');
+  }
+};
 
   const titleInput = useUndoRedoInput({
     value: nodeDraft?.title ?? '',
@@ -1103,6 +1281,124 @@ export default function Properties({
       </Stack>
     );
   };
+  const renderVisibility = () => {
+    if (!courseId || !isCourse) return null;
+  
+    return (
+      <Stack spacing={2}>
+        <Typography variant="subtitle2">Visibility</Typography>
+  
+        {isPublicError ? <Alert severity="error">{isPublicError}</Alert> : null}
+  
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={isPublic}
+              onChange={(e) => handleTogglePublic(e.target.checked)}
+              disabled={isPublicLoading}
+            />
+          }
+          label="Public course"
+        />
+  
+        <Typography variant="body2" color="text.secondary">
+          {isPublic
+            ? 'All users can see this course when published.'
+            : 'Only users listed below can see this course.'}
+        </Typography>
+  
+        {!isPublic && (
+          <Stack spacing={2} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+            {allowedError ? <Alert severity="error">{allowedError}</Alert> : null}
+  
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                size="small"
+                placeholder="Search by name or email…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+                sx={{ minWidth: 280 }}
+              />
+              <Button variant="outlined" onClick={handleSearch} disabled={searchLoading}>
+                {searchLoading ? 'Searching…' : 'Search'}
+              </Button>
+            </Stack>
+  
+            {!!searchError && <Alert severity="error">{searchError}</Alert>}
+  
+            {searchResults.length > 0 && (
+              <Stack spacing={1}>
+                <Typography variant="caption" color="text.secondary">Search results</Typography>
+                <Stack spacing={0.5}>
+                  {searchResults.map((u) => {
+                    const already = allowedUsers.some((x) => x.id === u.id);
+                    return (
+                      <Stack
+                        key={u.id}
+                        direction="row"
+                        alignItems="center"
+                        justifyContent="space-between"
+                        sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 1 }}
+                      >
+                        <Typography variant="body2">
+                          {(u.full_name || u.email) ?? u.id}
+                          {u.full_name && u.email ? ` — ${u.email}` : ''}
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          disabled={already}
+                          onClick={() => grantUserAccess(u.id)}
+                        >
+                          {already ? 'Added' : 'Grant access'}
+                        </Button>
+                      </Stack>
+                    );
+                  })}
+                </Stack>
+              </Stack>
+            )}
+  
+            <Divider />
+  
+            <Stack spacing={1}>
+              <Typography variant="caption" color="text.secondary">
+                Allowed users {allowedLoading ? '(loading…) ' : `(${allowedUsers.length})`}
+              </Typography>
+  
+              {allowedLoading ? (
+                <Typography variant="body2" color="text.secondary">Loading…</Typography>
+              ) : allowedUsers.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No users have access yet.</Typography>
+              ) : (
+                <Stack spacing={0.75}>
+                  {allowedUsers.map((u) => (
+                    <Stack
+                      key={u.id}
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}
+                    >
+                      <Typography variant="body2">
+                        {(u.full_name || u.email) ?? u.id}
+                        {u.full_name && u.email ? ` — ${u.email}` : ''}
+                      </Typography>
+                      <IconButton size="small" color="error" onClick={() => revokeUserAccess(u.id)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Stack>
+        )}
+      </Stack>
+    );
+  };
+  
 
   const renderBlockProperties = () => {
     if (!selectedBlock) return null;
@@ -1232,6 +1528,7 @@ export default function Properties({
       ) : (
         <Stack spacing={3}>
           {renderNodeDetails()}
+          {renderVisibility()}
           <Divider />
           {renderChildren()}
         </Stack>

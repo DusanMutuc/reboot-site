@@ -22,7 +22,7 @@ const REFERRAL_PILL_LABEL = 'REFER AN AGENT TO OUR PROGRAM';
 const COACH_NOTES_LABEL   = 'COACHING NOTES';
 
 const baseLinks: LinkItem[] = [
-  { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://agentfromwithin.upcoach.com/' },
+  { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://hub.rebootmembers.com/resources' },
   { label: 'REBOOT CALENDAR', href: 'https://www.addevent.com/calendar/ez616853' },
   { label: BOOKING_LABEL },
   { label: IMPL_LABEL },

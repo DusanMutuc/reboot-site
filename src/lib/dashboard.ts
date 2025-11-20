@@ -16,6 +16,7 @@ import type {
   DashboardNotePreview,
   DashboardWin,
   DashboardAchievement,
+  CoachingNoteListItem,
 } from '@/types/dashboard';
 
 function getCurrentMonthStart(): string {
@@ -328,82 +329,214 @@ async function fetchAttendanceSection(
 
 
 // ---------- 4) Coaching notes & action steps ----------
+
 function sortActionSteps(steps: DashboardActionStep[]): DashboardActionStep[] {
-    const statusRank: Record<DashboardActionStep['status'], number> = {
-      in_progress: 0,
-      not_started: 1,
-      complete: 2,
-    };
-  
-    return [...steps].sort((a, b) => {
-      const diff = statusRank[a.status] - statusRank[b.status];
-      if (diff !== 0) return diff;
-  
-      // tie-breaker: newer first within the same status
-      return (
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    });
-  }
-  
-// ---------- 4) Coaching notes & action steps ----------
+  const statusRank: Record<DashboardActionStep['status'], number> = {
+    in_progress: 0,
+    not_started: 1,
+    complete: 2,
+  };
+
+  return [...steps].sort((a, b) => {
+    const diff = statusRank[a.status] - statusRank[b.status];
+    if (diff !== 0) return diff;
+
+    // tie-breaker: newer first within the same status
+    return (
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  });
+}
 
 async function fetchCoachingNotesSection(
-    client: SupabaseClient,
-  ): Promise<CoachingNotesSectionProps> {
-    // Action steps - rely on RLS to only return current member's steps
-    const { data: steps, error: stepsErr } = await client
-      .from('coaching_note_action_steps')
-      .select('id, coaching_note_id, label, status, library_item_id, created_at, updated_at')
-      .order('created_at', { ascending: false })
-      .limit(10);
-  
-    if (stepsErr) {
-      console.error('fetch action steps error', stepsErr);
-    }
-  
-    const rawActionSteps: DashboardActionStep[] =
-      (steps ?? []).map((row: any) => ({
-        id: row.id,
-        coaching_note_id: row.coaching_note_id,
-        label: row.label,
-        library_item_id: row.library_item_id,
-        status: row.status,
-        created_at: row.created_at,
-        updated_at: row.updated_at ?? row.created_at,
-      })) ?? [];
-  
-    const actionSteps = sortActionSteps(rawActionSteps);
-  
-    // Comments preview - last few visible comments
-    const { data: comments, error: commentsErr } = await client
-      .from('coaching_note_comments')
-      .select('id, coaching_note_id, author_id, body, created_at')
-      .order('created_at', { ascending: false })
-      .limit(3);
-  
-    if (commentsErr) {
-      console.error('fetch coaching comments error', commentsErr);
-    }
-  
-    const notes: DashboardNotePreview[] =
-      (comments ?? []).map((row: any) => ({
-        id: row.id,
-        coaching_note_id: row.coaching_note_id,
-        author_id: row.author_id,
-        body:
-          row.body && row.body.length > 220
-            ? `${row.body.slice(0, 217)}...`
-            : row.body,
-        created_at: row.created_at,
-      })) ?? [];
-  
+  client: SupabaseClient,
+  userId: string,
+): Promise<CoachingNotesSectionProps> {
+  // 1) Get the MOST RECENT coaching_note for this user
+  const {
+    data: latestNote,
+    error: noteErr,
+  } = await client
+    .from('coaching_notes')
+    .select(
+      `
+      id,
+      user_id,
+      created_at
+    `,
+    )
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false }) // <- change to m2_meeting_date if you add that column
+    .limit(1)
+    .maybeSingle();
+
+  if (noteErr) {
+    console.error('fetch latest coaching note error', noteErr);
     return {
-      actionSteps,
-      notes,
+      actionSteps: [],
+      notes: [],
     };
   }
-  
+
+  if (!latestNote) {
+    // user has no coaching notes yet
+    return {
+      actionSteps: [],
+      notes: [],
+    };
+  }
+
+  // 2) Fetch action steps ONLY for this latest note
+  const {
+    data: steps,
+    error: stepsErr,
+  } = await client
+    .from('coaching_note_action_steps')
+    .select(
+      `
+      id,
+      coaching_note_id,
+      label,
+      status,
+      library_item_id,
+      created_at,
+      updated_at
+    `,
+    )
+    .eq('coaching_note_id', latestNote.id)
+    .order('created_at', { ascending: true });
+
+  if (stepsErr) {
+    console.error('fetch action steps for latest note error', stepsErr);
+  }
+
+  const rawActionSteps: DashboardActionStep[] =
+    (steps ?? []).map((row: any) => ({
+      id: row.id,
+      coaching_note_id: row.coaching_note_id,
+      label: row.label,
+      library_item_id: row.library_item_id,
+      status: row.status,
+      created_at: row.created_at,
+      updated_at: row.updated_at ?? row.created_at,
+    })) ?? [];
+
+  const actionSteps = sortActionSteps(rawActionSteps);
+
+  // 3) Fetch COMMENTS for this latest note
+  const {
+    data: comments,
+    error: commentsErr,
+  } = await client
+    .from('coaching_note_comments')
+    .select(
+      `
+      id,
+      body,
+      created_at
+    `,
+    )
+    .eq('coaching_note_id', latestNote.id)
+    .order('created_at', { ascending: false });
+
+  if (commentsErr) {
+    console.error('fetch coaching comments for latest note error', commentsErr);
+  }
+
+  // DashboardNotePreview is typed as Pick<CoachingNoteComment, 'id' | 'created_at' | 'body'>
+  const notes: DashboardNotePreview[] =
+    (comments ?? []).map((row: any) => ({
+      id: row.id,
+      created_at: row.created_at,
+      body:
+        row.body && row.body.length > 220
+          ? `${row.body.slice(0, 217)}...`
+          : row.body,
+    })) ?? [];
+
+  return {
+    actionSteps,
+    notes,
+  };
+}
+
+export async function listUserCoachingNotes(
+  client: SupabaseClient,
+  userId: string
+): Promise<CoachingNoteListItem[]> {
+  const { data, error } = await client
+    .from('coaching_notes')
+    .select('id, created_at')
+    .eq('user_id', userId)          // member sees their own notes; coaches/admins’ RLS should also pass
+    .order('created_at', { ascending: false });
+
+  if (error || !data) {
+    console.error('listUserCoachingNotes error', error);
+    return [];
+  }
+
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return data.map((row) => ({
+    id: row.id,
+    created_at: row.created_at,
+    meeting_date: null,             // not in this schema; keep field for type compatibility
+    label: fmt(row.created_at),     // e.g., "Nov 19, 2025"
+  }));
+}
+// Fetch action steps + comments for a specific note
+export async function fetchCoachingNotesByNoteId(
+  client: SupabaseClient,
+  noteId: number
+): Promise<CoachingNotesSectionProps> {
+  // Steps
+  const { data: steps, error: stepsErr } = await client
+    .from('coaching_note_action_steps')
+    .select(`id, coaching_note_id, label, status, library_item_id, created_at, updated_at`)
+    .eq('coaching_note_id', noteId)
+    .order('created_at', { ascending: true });
+
+  if (stepsErr) console.error('stepsErr', stepsErr);
+
+  const rawSteps: DashboardActionStep[] = (steps ?? []).map((r: any) => ({
+    id: r.id,
+    coaching_note_id: r.coaching_note_id,
+    label: r.label,
+    status: r.status,
+    library_item_id: r.library_item_id,
+    created_at: r.created_at,
+    updated_at: r.updated_at ?? r.created_at,
+  }));
+
+  // Same sort as your dashboard (in_progress → not_started → complete; newer first within ties)
+  const statusRank: Record<DashboardActionStep['status'], number> = {
+    in_progress: 0,
+    not_started: 1,
+    complete: 2,
+  };
+  const actionSteps = [...rawSteps].sort((a, b) => {
+    const d = statusRank[a.status] - statusRank[b.status];
+    return d !== 0 ? d : new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  // Comments
+  const { data: comments, error: commentsErr } = await client
+    .from('coaching_note_comments')
+    .select(`id, body, created_at`)
+    .eq('coaching_note_id', noteId)
+    .order('created_at', { ascending: false });
+
+  if (commentsErr) console.error('commentsErr', commentsErr);
+
+  const notes: DashboardNotePreview[] = (comments ?? []).map((r: any) => ({
+    id: r.id,
+    created_at: r.created_at,
+    body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
+  }));
+
+  return { actionSteps, notes };
+}
 
 // ---------- 5) Wins ----------
 
@@ -468,8 +601,6 @@ async function fetchAchievements(
   return { achievements };
 }
 
-// ---------- 7) Orchestrator ----------
-
 export async function fetchDashboardData(
     client: SupabaseClient,
     userId: string,
@@ -477,7 +608,7 @@ export async function fetchDashboardData(
     const [
       revenueProfit,
       kpi,
-      kpiChart,            // <— add
+      kpiChart,
       attendance,
       coachingNotes,
       wins,
@@ -485,9 +616,9 @@ export async function fetchDashboardData(
     ] = await Promise.all([
       fetchRevenueProfitSection(client, userId),
       fetchKpiSection(client, userId),
-      fetchKpiCharts(client, userId),      // <— add
+      fetchKpiCharts(client, userId),
       fetchAttendanceSection(client, userId),
-      fetchCoachingNotesSection(client),
+      fetchCoachingNotesSection(client, userId), // <-- pass userId here
       fetchWins(client, userId),
       fetchAchievements(client, userId),
     ]);
@@ -495,7 +626,7 @@ export async function fetchDashboardData(
     return {
       revenueProfit,
       kpi,
-      kpiChart,            // <— add
+      kpiChart,
       attendance,
       coachingNotes,
       wins,

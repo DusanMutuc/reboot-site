@@ -1,24 +1,64 @@
-import { Container, Typography, Box } from '@mui/material';
-import TopNav from '@/components/topNav';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Box, Container, Stack, Typography } from '@mui/material';
+import BackButton from '@/components/BackButton';
 import KpiTracker from '@/components/KpiTracker';
+import UserDashboardExpanded from '@/components/user/dashboard/UserDashboardExpanded';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function TrackerPage() {
-  return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 6 }}>
+  const [userId, setUserId] = useState<string | null>(null);
+  const [dashKey, setDashKey] = useState(0); // used as refreshSignal
 
-      {/* Page header */}
-      <Box sx={{ mt: 3, mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Tracker
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Log your key monthly KPIs here. Choose your period start date and
-          update your numbers as you go through the month.
-        </Typography>
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      if (!alive) return;
+      setUserId(data.user?.id ?? null);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const handleKpiSaved = () => setDashKey((k) => k + 1);
+
+  return (
+    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)' }}>
+      {/* Sticky header for parity with Courses/Library */}
+      <Box
+        sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 10,
+          backdropFilter: 'saturate(180%) blur(8px)',
+          backgroundColor: 'rgba(255,255,255,0.75)',
+          borderBottom: '1px solid',
+          borderColor: 'grey.100',
+        }}
+      >
+        <Container maxWidth="lg" sx={{ py: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <BackButton variant="icon" label="Back" fallbackHref="/dashboard" />
+            <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              Tracker
+            </Typography>
+          </Stack>
+        </Container>
       </Box>
 
-      {/* KPI Tracker block */}
-      <KpiTracker />
-    </Container>
+      <Container maxWidth="lg" sx={{ py: 8 }}>
+
+        {/* KPI tracker: tell us when it saves */}
+        <KpiTracker onSaved={handleKpiSaved} />
+
+        {/* Dashboard below; refetch when refreshSignal changes */}
+        {userId && (
+          <Box sx={{ mt: 6 }}>
+            <UserDashboardExpanded userId={userId} refreshSignal={dashKey} />
+          </Box>
+        )}
+      </Container>
+    </Box>
   );
 }

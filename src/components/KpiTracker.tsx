@@ -41,6 +41,11 @@ type HistoryRow = {
   kpi_values: Record<string, number | null> | null;
 };
 
+export type KpiTrackerProps = {
+  /** Called after a successful explicit save (Save Changes button). */
+  onSaved?: () => void;
+};
+
 const isMoneyMetric = (key: string) =>
   key === 'gross_revenue' || key === 'profit';
 
@@ -49,7 +54,7 @@ const moneyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
-export default function KpiTracker() {
+export default function KpiTracker({ onSaved }: KpiTrackerProps) {
   const [userId, setUserId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<KpiMetricType[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -232,6 +237,8 @@ export default function KpiTracker() {
     if (!opts?.silent) {
       setSuccess('KPI values saved.');
       setSaving(false);
+      // Notify parent only after explicit save
+      onSaved?.();
     }
 
     // Refresh current period's data & last_updated_at
@@ -338,9 +345,9 @@ export default function KpiTracker() {
   const hasPeriods = history.length > 0;
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, sm: 3 }, py: 4 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, sm: 3 }, py: 0 }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
           <TrendingUpIcon sx={{ fontSize: 32, color: 'primary.main' }} />
           <Typography variant="h4" fontWeight="bold" color="text.primary">
@@ -348,7 +355,7 @@ export default function KpiTracker() {
           </Typography>
         </Box>
         <Typography variant="body2" color="text.secondary">
-          Monitor your key performance indicators
+          Log your key performance indicators for the selected month.
         </Typography>
       </Box>
 

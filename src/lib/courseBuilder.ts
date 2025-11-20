@@ -18,6 +18,7 @@ export const adminClient = getAdminClient();
 export type ContentNodeRow = {
   id: number;
   node_type: string;
+  is_public?: boolean;
   [key: string]: unknown;
 };
 
@@ -59,7 +60,7 @@ export type NodeSubtree = {
 export async function fetchNodeById(nodeId: number) {
   const { data, error } = await adminClient
     .from('content_nodes')
-    .select('id, node_type, title, slug, description, state, sequential_unlock')
+    .select('id, node_type, title, slug, description, state, sequential_unlock, is_public')
     .eq('id', nodeId)
     .maybeSingle();
 

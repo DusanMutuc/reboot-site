@@ -113,31 +113,34 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
 
                   {/* Action button */}
                   {step.library_item_id && (
-                    <Button
-                      size="small"
-                      variant="contained"
-                      href={`/library/${step.library_item_id}`}
-                      sx={{
-                        alignSelf: 'flex-start',
-                        height: 36,
-                        px: 2,
-                        borderRadius: 1.5,
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        fontSize: '13px',
-                        bgcolor: status.buttonColor,
-                        color: 'white',
-                        boxShadow: 'none',
-                        '&:hover': {
-                          bgcolor: status.buttonColor,
-                          opacity: 0.85,
-                          boxShadow: `0 2px 8px ${status.buttonColor}40`,
-                        }
-                      }}
-                    >
-                      View Guide →
-                    </Button>
-                  )}
+  <Button
+    size="small"
+    variant="contained"
+    href={`/library/${step.library_item_id}`}
+    target="_blank"
+    rel="noopener noreferrer"
+    sx={{
+      alignSelf: 'flex-start',
+      height: 36,
+      px: 2,
+      borderRadius: 1.5,
+      textTransform: 'none',
+      fontWeight: 600,
+      fontSize: '13px',
+      bgcolor: status.buttonColor,
+      color: 'white',
+      boxShadow: 'none',
+      '&:hover': {
+        bgcolor: status.buttonColor,
+        opacity: 0.85,
+        boxShadow: `0 2px 8px ${status.buttonColor}40`,
+      }
+    }}
+  >
+    View Guide →
+  </Button>
+)}
+
                 </Box>
               );
             })}

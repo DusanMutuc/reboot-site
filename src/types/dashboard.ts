@@ -107,6 +107,13 @@ export interface KpiChartPoint {
     notes: DashboardNotePreview[];
   }
   
+
+  export type CoachingNoteListItem = {
+    id: number;
+    created_at: string;
+    meeting_date?: string | null; // if you have meetings.meeting_date
+    label: string; // preformatted "Nov 5, 2025 — Week 8" etc.
+  };
   // ------------- Wins -------------
   
   // Dashboard only needs a subset of Win fields for display:

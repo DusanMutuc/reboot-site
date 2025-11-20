@@ -4,20 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import {
-  Avatar,
   Box,
   Button,
   Card,
   CardActionArea,
   CardContent,
   Container,
-  CircularProgress,
-  IconButton,
   Skeleton,
   Stack,
   Typography,
+  IconButton,
 } from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { supabase } from '@/lib/supabaseClient';
 
 type CourseSummary = {
@@ -25,7 +23,7 @@ type CourseSummary = {
   title: string | null;
   slug: string | null;
   description: string | null;
-  hero_image: string | null; // storage path like "42/uuid.webp" OR a full URL (legacy)
+  hero_image: string | null;
   icon: string | null;
   objectives: string | null;
   metadata: Record<string, unknown> | null;
@@ -45,6 +43,7 @@ function clampLines(lines: number) {
     overflow: 'hidden',
   };
 }
+
 function SkeletonCard() {
   return (
     <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', overflow: 'hidden' }}>
@@ -52,7 +51,6 @@ function SkeletonCard() {
         <Skeleton variant="rectangular" width="100%" height="100%" />
       </Box>
       <Box sx={{ p: 2.5 }}>
-        {/* removed circular skeleton */}
         <Skeleton variant="text" sx={{ fontSize: '1.25rem', mt: 1 }} />
         <Skeleton variant="text" />
         <Skeleton variant="rectangular" height={8} sx={{ mt: 1.5, borderRadius: 999 }} />
@@ -62,24 +60,13 @@ function SkeletonCard() {
   );
 }
 
-
-
-/** Convert DB value → usable <Image src>
- *  - If it's already a full URL, return it unchanged.
- *  - If it's a storage path, build a public URL from the "course-heroes" bucket.
- */
 function resolveHeroSrc(value: string | null | undefined): string | null {
   if (!value) return null;
   const v = value.trim();
-
-  // If DB already has a full URL (legacy), use it directly
   if (/^https?:\/\//i.test(v)) return v;
-
-  // Otherwise treat it as a storage path and build a plain /object/ URL
   const { data } = supabase.storage.from('course-heroes').getPublicUrl(v);
   return data?.publicUrl ?? null;
 }
-
 
 type CourseCardProps = {
   course: CourseSummary;
@@ -89,9 +76,7 @@ type CourseCardProps = {
 function CourseCard({ course, progressPct }: CourseCardProps) {
   const slug = course.slug ?? '';
   const heroSrc = resolveHeroSrc(course.hero_image);
-  const progress = typeof progressPct === 'number'
-    ? Math.max(0, Math.min(100, progressPct))
-    : 0;
+  const progress = typeof progressPct === 'number' ? Math.max(0, Math.min(100, progressPct)) : 0;
 
   return (
     <Card
@@ -123,12 +108,23 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
               style={{ objectFit: 'cover' }}
             />
           ) : (
-            <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} />
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              }}
+            />
           )}
-          <Box sx={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,.22), rgba(0,0,0,0))' }} />
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(to top, rgba(0,0,0,.22), rgba(0,0,0,0))',
+            }}
+          />
         </Box>
 
-        {/* reduced gap since avatar is gone */}
         <CardContent sx={{ display: 'grid', gap: 1.75 }}>
           <Typography variant="h6" sx={{ fontWeight: 700, ...clampLines(2) }}>
             {course.title ?? 'Untitled course'}
@@ -161,7 +157,12 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
             </Box>
           </Stack>
 
-          <Button variant="contained" fullWidth disableElevation sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1.25 }}>
+          <Button
+            variant="contained"
+            fullWidth
+            disableElevation
+            sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1.25 }}
+          >
             {progress > 0 ? 'Continue' : 'Start'}
           </Button>
         </CardContent>
@@ -170,11 +171,8 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
   );
 }
 
-
 export default function CoursesLanding() {
   const [state, setState] = useState<FetchState>({ status: 'loading' });
-
-  // NEW: courseId -> integer percent (0–100)
   const [progressByCourse, setProgressByCourse] = useState<Record<number, number>>({});
 
   useEffect(() => {
@@ -195,21 +193,18 @@ export default function CoursesLanding() {
         setState({ status: 'error', message });
       }
     })();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // NEW: once courses are ready, compute progress for the logged-in user
   useEffect(() => {
     if (state.status !== 'ready' || state.courses.length === 0) return;
-
     let cancelled = false;
 
     (async () => {
       const { data: userRes, error: userErr } = await supabase.auth.getUser();
-      if (userErr || !userRes?.user) {
-        // not logged in or error — leave progress empty
-        return;
-      }
+      if (userErr || !userRes?.user) return;
       const userId = userRes.user.id;
 
       const entries = await Promise.all(
@@ -219,8 +214,6 @@ export default function CoursesLanding() {
             _course_id: c.id,
           });
           if (error) return [c.id, 0] as const;
-
-          // function returns a single row table: [{ total_leaves, completed_leaves, progress }]
           const row = Array.isArray(data) ? data[0] : data;
           const pct = row?.progress ? Math.round(row.progress * 100) : 0;
           return [c.id, pct] as const;
@@ -232,7 +225,9 @@ export default function CoursesLanding() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [state]);
 
   const content = useMemo(() => {
@@ -242,7 +237,11 @@ export default function CoursesLanding() {
           sx={{
             display: 'grid',
             gap: 3,
-            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' },
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              lg: 'repeat(3, minmax(0, 1fr))',
+            },
             alignItems: 'stretch',
           }}
         >
@@ -278,7 +277,11 @@ export default function CoursesLanding() {
         sx={{
           display: 'grid',
           gap: 3,
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            lg: 'repeat(3, minmax(0, 1fr))',
+          },
           alignItems: 'stretch',
         }}
       >
@@ -293,8 +296,13 @@ export default function CoursesLanding() {
   }, [state, progressByCourse]);
 
   return (
-    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)' }}>
-      {/* Header */}
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)',
+      }}
+    >
+      {/* Sticky header with fixed /resources back link */}
       <Box
         sx={{
           position: 'sticky',
@@ -308,8 +316,13 @@ export default function CoursesLanding() {
       >
         <Container maxWidth="lg" sx={{ py: 1 }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
-            <IconButton LinkComponent={Link} href="/dashboard" aria-label="Back to Home" size="medium">
-              <ArrowBackIcon />
+            <IconButton
+              LinkComponent={Link}
+              href="/resources"
+              aria-label="Back to Resources"
+              size="medium"
+            >
+              <ArrowBackIosNewIcon />
             </IconButton>
             <Typography variant="h6" sx={{ fontWeight: 800 }}>
               Courses
@@ -324,4 +337,3 @@ export default function CoursesLanding() {
     </Box>
   );
 }
-

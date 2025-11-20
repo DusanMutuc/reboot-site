@@ -12,11 +12,11 @@ import {
   CardActionArea,
   CardContent,
   Alert,
-  IconButton,
   Skeleton,
+  IconButton,
 } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import { supabase } from '@/lib/supabaseClient';
 
 type NodeRow = {
@@ -198,8 +198,7 @@ export default function LibraryPage() {
 
         if (!cancelled) setItems(stitched);
       } catch (e: unknown) {
-        const message =
-          e instanceof Error ? e.message : 'Failed to load Library items';
+        const message = e instanceof Error ? e.message : 'Failed to load Library items';
         if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setLoading(false);
@@ -245,7 +244,6 @@ export default function LibraryPage() {
       <Grid container spacing={3}>
         {items.map(({ child }) => {
           const heroSrc = resolveHeroSrc(child.hero_image ?? null);
-          // prefer slug if present
           const href = child.slug ? `/library/${child.slug}` : `/library/${child.id}`;
           return (
             <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>
@@ -268,7 +266,6 @@ export default function LibraryPage() {
                   sx={{ alignItems: 'stretch' }}
                   aria-label={`Open ${child.title ?? 'item'}`}
                 >
-                  {/* Hero image (fixed 16:9) */}
                   <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9' }}>
                     {heroSrc ? (
                       <Image
@@ -287,7 +284,6 @@ export default function LibraryPage() {
                         }}
                       />
                     )}
-                    {/* top fade overlay */}
                     <Box
                       sx={{
                         position: 'absolute',
@@ -318,7 +314,12 @@ export default function LibraryPage() {
   }, [loading, error, items]);
 
   return (
-    <Box sx={{ minHeight: '100vh', background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        background: 'linear-gradient(to bottom right, #f8f9fa 0%, #e9f5f2 100%)',
+      }}
+    >
       {/* Sticky translucent header — matches CoursesLanding */}
       <Box
         sx={{
@@ -333,8 +334,13 @@ export default function LibraryPage() {
       >
         <Container maxWidth="lg" sx={{ py: 1 }}>
           <Stack direction="row" alignItems="center" spacing={1.5}>
-            <IconButton LinkComponent={Link} href="/dashboard" aria-label="Back to Home" size="medium">
-              <ArrowBackIcon />
+            <IconButton
+              LinkComponent={Link}
+              href="/resources"
+              aria-label="Back to Resources"
+              size="medium"
+            >
+              <ArrowBackIosNewIcon />
             </IconButton>
             <Typography variant="h6" sx={{ fontWeight: 800 }}>
               Library

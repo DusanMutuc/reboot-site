@@ -66,6 +66,7 @@ export async function PATCH(
       'objectives',
       'metadata',
       'owner_id',
+      'is_public', // ← add this
     ];
 
     const updatePayload: Record<string, unknown> = {};

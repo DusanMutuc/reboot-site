@@ -1,7 +1,7 @@
 // src/components/coach/CoachNotesView.tsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Container,
@@ -11,16 +11,17 @@ import {
   TextField,
   useMediaQuery,
 } from '@mui/material';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import CoachNotesUserList from './CoachNotesUserList';
 import CoachingNotesPanel from './CoachingNotesPanel';
 import UserWinsPanel from './UserWinsPanel';
 
 const COACH_UI_SCALE = 1.0;
-
 type Mode = 'coach' | 'admin';
 
 export default function CoachNotesView({ mode }: { mode: Mode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const userIdFromQuery = searchParams.get('userId') ?? null;
 
@@ -32,12 +33,31 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
   const isCoach = mode === 'coach';
   const sz = (px: number) => (isCoach ? Math.round(px * COACH_UI_SCALE) : px);
 
+  const setQuery = useCallback(
+    (patch: Record<string, string | number | null | undefined>) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      Object.entries(patch).forEach(([k, v]) => {
+        if (v === null || v === undefined || v === '') sp.delete(k);
+        else sp.set(k, String(v));
+      });
+      router.replace(`${pathname}?${sp.toString()}`);
+    },
+    [pathname, router, searchParams]
+  );
+
   // If we DON'T have a selection yet and the URL has a userId, use it once.
   useEffect(() => {
     if (!selectedUserId && userIdFromQuery) {
       setSelectedUserId(userIdFromQuery);
     }
   }, [userIdFromQuery, selectedUserId]);
+
+  // When user changes selection here, push to URL so other tabs can pick it up.
+  useEffect(() => {
+    if (selectedUserId && selectedUserId !== userIdFromQuery) {
+      setQuery({ userId: selectedUserId });
+    }
+  }, [selectedUserId, userIdFromQuery, setQuery]);
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -46,7 +66,6 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
           Coaching Notes
         </Typography>
 
-        {/* Search row */}
         <Paper
           elevation={0}
           sx={{
@@ -79,14 +98,12 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
           </Stack>
         </Paper>
 
-        {/* Top: students list + coaching notes */}
         <Stack
           direction={{ xs: 'column', md: 'row' }}
           spacing={3}
           alignItems="flex-start"
           sx={{ minHeight: 0 }}
         >
-          {/* LEFT RAIL – students list */}
           <Paper
             elevation={0}
             sx={{
@@ -117,7 +134,6 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
             />
           </Paper>
 
-          {/* RIGHT PANEL – coaching notes (action steps + notes) for the selected user */}
           <Paper
             elevation={0}
             sx={{
@@ -143,7 +159,6 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
           </Paper>
         </Stack>
 
-        {/* Bottom row: Wins for this student (not tied to a specific note) */}
         <Box sx={{ mt: 3 }}>
           <UserWinsPanel userId={selectedUserId} />
         </Box>

@@ -46,18 +46,30 @@ export default function UserListWithProgress({
 
   const scrollRef = useRef<HTMLUListElement | null>(null);
   const didAutoSelectOnce = useRef(false);
+  const prevCourseId = useRef<number | null | undefined>(undefined);
 
-  // reset when course changes
+  // keep stable callback
+  const onSelectRef = useRef(onSelectUser);
+  useEffect(() => { onSelectRef.current = onSelectUser; }, [onSelectUser]);
+
+  // reset when course changes — but DON'T clear selection on initial boot
   useEffect(() => {
-    setUsers([]);
-    setProgressMap({});
-    setPage(0);
-    onSelectUser(null);
-    requestAnimationFrame(() => {
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    });
-    didAutoSelectOnce.current = false;
-    // we intentionally don't include onSelectUser in deps to avoid resetting on every render
+    const isInitialBoot = prevCourseId.current == null && courseId != null;
+    const changed = prevCourseId.current !== courseId;
+
+    if (changed) {
+      setUsers([]);
+      setProgressMap({});
+      setPage(0);
+      if (!isInitialBoot) {
+        onSelectRef.current(null); // clear only on human course change
+      }
+      requestAnimationFrame(() => {
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      });
+      didAutoSelectOnce.current = false;
+      prevCourseId.current = courseId;
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
@@ -68,7 +80,7 @@ export default function UserListWithProgress({
       if (!courseId) return;
       setLoading(true);
 
-      // note: your RPC ignores course for now (_course_id: null)
+      // Note: replace with course-scoped RPC when ready
       const { data, error } = await supabase.rpc('get_all_users', { _course_id: null });
       if (!active) return;
 
@@ -119,23 +131,16 @@ export default function UserListWithProgress({
     return filtered.slice(start, start + PAGE_SIZE);
   }, [filtered, page]);
 
-  // auto-select first user once
+  // Auto-select first user once — ONLY if nothing is selected
   useEffect(() => {
     if (!didAutoSelectOnce.current && selectedUserId == null && filtered.length > 0) {
       didAutoSelectOnce.current = true;
-      onSelectUser(filtered[0].user_id);
-      requestAnimationFrame(() => {
-        if (scrollRef.current) scrollRef.current.scrollTop = 0;
-      });
-      return;
-    }
-    if (selectedUserId && !filtered.some((u) => u.user_id === selectedUserId)) {
-      onSelectUser(null);
+      onSelectRef.current(filtered[0].user_id);
       requestAnimationFrame(() => {
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
       });
     }
-  }, [filtered, selectedUserId, onSelectUser]);
+  }, [filtered, selectedUserId]);
 
   // fetch per-user progress for the currently visible page
   useEffect(() => {
@@ -151,15 +156,9 @@ export default function UserListWithProgress({
           });
           if (error) return [u.user_id, 0] as const;
 
-          // data can be array or single row; normalize:
           let row: ProgressRow | undefined;
-          if (Array.isArray(data)) {
-            row = data[0] as ProgressRow | undefined;
-          } else if (data && typeof data === 'object') {
-            row = data as ProgressRow;
-          } else {
-            row = undefined;
-          }
+          if (Array.isArray(data)) row = data[0] as ProgressRow | undefined;
+          else if (data && typeof data === 'object') row = data as ProgressRow;
 
           const pct = row?.progress ? Math.round(row.progress * 100) : 0;
           return [u.user_id, pct] as const;
@@ -169,9 +168,7 @@ export default function UserListWithProgress({
         setProgressMap((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [courseId, paged]);
 
   return (
@@ -229,86 +226,84 @@ export default function UserListWithProgress({
           const pct = Math.max(0, Math.min(100, raw));
           const isSelected = user_id === selectedUserId;
 
-          return (
-            <ListItemButton
-              key={user_id}
-              selected={isSelected}
-              onClick={() => onSelectUser(user_id)}
-              sx={{
-                py: 2,
-                px: 2.5,
-                mx: 0.5,
-                mb: 0.5,
-                borderRadius: 1.5,
-                transition: 'all 0.2s',
-                bgcolor: isSelected ? 'primary.50' : 'transparent',
-                '&:hover': {
-                  bgcolor: isSelected ? 'primary.100' : 'grey.50',
-                  transform: 'translateX(2px)',
-                },
-                '&.Mui-selected': {
-                  bgcolor: 'primary.50',
-                  borderLeft: '3px solid',
-                  borderColor: 'primary.main',
-                  '&:hover': {
-                    bgcolor: 'primary.100',
-                  },
-                },
-              }}
-            >
-              <ListItemText
-                disableTypography
-                primary={
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                    <Typography
-                      sx={{
-                        fontWeight: isSelected ? 700 : 600,
-                        fontSize: sz(15),
-                        color: isSelected ? 'primary.main' : 'text.primary',
-                      }}
-                    >
-                      {full_name}
-                    </Typography>
-                    <Box
-                      sx={{
-                        minWidth: 44,
-                        height: 28,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: 1,
-                        bgcolor:
-                          pct === 100 ? 'success.main' : pct > 0 ? 'warning.main' : 'grey.300',
-                        color: 'white',
-                        fontWeight: 700,
-                        fontSize: sz(13),
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      {pct}%
-                    </Box>
-                  </Stack>
-                }
-                secondary={
-                  <LinearProgress
-                    variant="determinate"
-                    value={pct}
+        return (
+          <ListItemButton
+            key={user_id}
+            selected={isSelected}
+            onClick={() => onSelectRef.current(user_id)}
+            sx={{
+              py: 2,
+              px: 2.5,
+              mx: 0.5,
+              mb: 0.5,
+              borderRadius: 1.5,
+              transition: 'all 0.2s',
+              bgcolor: isSelected ? 'primary.50' : 'transparent',
+              '&:hover': {
+                bgcolor: isSelected ? 'primary.100' : 'grey.50',
+                transform: 'translateX(2px)',
+              },
+              '&.Mui-selected': {
+                bgcolor: 'primary.50',
+                borderLeft: '3px solid',
+                borderColor: 'primary.main',
+                '&:hover': { bgcolor: 'primary.100' },
+              },
+            }}
+          >
+            <ListItemText
+              disableTypography
+              primary={
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                  <Typography
                     sx={{
-                      mt: 1.25,
-                      height: sz(8),
-                      borderRadius: 999,
-                      bgcolor: 'grey.200',
-                      '& .MuiLinearProgress-bar': {
-                        borderRadius: 999,
-                        bgcolor: pct === 100 ? 'success.main' : pct > 0 ? 'warning.main' : 'grey.400',
-                        transition: 'transform 0.4s ease',
-                      },
+                      fontWeight: isSelected ? 700 : 600,
+                      fontSize: sz(15),
+                      color: isSelected ? 'primary.main' : 'text.primary',
                     }}
-                  />
-                }
-              />
-            </ListItemButton>
-          );
+                  >
+                    {full_name}
+                  </Typography>
+                  <Box
+                    sx={{
+                      minWidth: 44,
+                      height: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: 1,
+                      bgcolor:
+                        pct === 100 ? 'success.main' : pct > 0 ? 'warning.main' : 'grey.300',
+                      color: 'white',
+                      fontWeight: 700,
+                      fontSize: sz(13),
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {pct}%
+                  </Box>
+                </Stack>
+              }
+              secondary={
+                <LinearProgress
+                  variant="determinate"
+                  value={pct}
+                  sx={{
+                    mt: 1.25,
+                    height: sz(8),
+                    borderRadius: 999,
+                    bgcolor: 'grey.200',
+                    '& .MuiLinearProgress-bar': {
+                      borderRadius: 999,
+                      bgcolor: pct === 100 ? 'success.main' : pct > 0 ? 'warning.main' : 'grey.400',
+                      transition: 'transform 0.4s ease',
+                    },
+                  }}
+                />
+              }
+            />
+          </ListItemButton>
+        );
         })}
       </List>
 

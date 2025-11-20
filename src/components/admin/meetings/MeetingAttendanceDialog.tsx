@@ -24,6 +24,8 @@ import {
   Select,
   MenuItem,
   IconButton,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 
@@ -46,26 +48,36 @@ type SimpleUser = {
   email: string;
 };
 
+type Source = 'members' | 'coaches';
+
 export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
   const [rows, setRows] = useState<MeetingAttendanceWithProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Members (users) list
   const [allUsers, setAllUsers] = useState<SimpleUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+
+  // Coaches list
+  const [allCoaches, setAllCoaches] = useState<SimpleUser[]>([]);
+  const [loadingCoaches, setLoadingCoaches] = useState(false);
+
+  // Which list we are adding from right now
+  const [source, setSource] = useState<Source>('members');
+
+  // Selected id from the active (source) list
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [adding, setAdding] = useState(false);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
-  const [userToRemove, setUserToRemove] = useState<MeetingAttendanceWithProfile | null>(
-    null
-  );
+  const [userToRemove, setUserToRemove] =
+    useState<MeetingAttendanceWithProfile | null>(null);
 
   useEffect(() => {
     if (!open || !meetingId) return;
-
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -79,20 +91,17 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
         setLoading(false);
       }
     };
-
     void load();
   }, [open, meetingId]);
 
+  // Load Members (users)
   useEffect(() => {
     if (!open) return;
-
     const loadUsers = async () => {
       setLoadingUsers(true);
       try {
         const res = await fetch('/api/admin/list-users');
-        if (!res.ok) {
-          throw new Error('Failed to load users for attendance');
-        }
+        if (!res.ok) throw new Error('Failed to load users for attendance');
         const json: any = await res.json();
         const items: any[] = Array.isArray(json.items) ? json.items : [];
         const mapped: SimpleUser[] = items.map((u) => ({
@@ -108,41 +117,70 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
         setLoadingUsers(false);
       }
     };
-
     void loadUsers();
   }, [open]);
 
-  const availableUsers = useMemo(() => {
-    const existingIds = new Set(rows.map((r) => r.user_id));
-    return allUsers.filter((u) => !existingIds.has(u.id));
-  }, [allUsers, rows]);
+  // Load Coaches
+  useEffect(() => {
+    if (!open) return;
+    const loadCoaches = async () => {
+      setLoadingCoaches(true);
+      try {
+        const res = await fetch('/api/admin/list-coaches');
+        if (!res.ok) throw new Error('Failed to load coaches for attendance');
+        const json: any = await res.json();
+        const items: any[] = Array.isArray(json.items) ? json.items : [];
+        const mapped: SimpleUser[] = items.map((u) => ({
+          id: String(u.id),
+          name: String(u.name ?? ''),
+          email: String(u.email ?? ''),
+        }));
+        setAllCoaches(mapped);
+      } catch (err: any) {
+        console.error(err);
+        setError((prev) => prev ?? err.message ?? 'Failed to load coaches');
+      } finally {
+        setLoadingCoaches(false);
+      }
+    };
+    void loadCoaches();
+  }, [open]);
+
+  // Fast lookup across both lists
+  const lookup = useMemo(() => {
+    const map = new Map<string, SimpleUser>();
+    for (const u of allUsers) map.set(u.id, u);
+    for (const c of allCoaches) map.set(c.id, c);
+    return map;
+  }, [allUsers, allCoaches]);
+
+  // Which pool are we currently choosing from?
+  const activePool: SimpleUser[] = source === 'members' ? allUsers : allCoaches;
+
+  // Don't suggest anyone already on the attendance list
+  const availableOptions = useMemo(() => {
+    const existing = new Set(rows.map((r) => r.user_id));
+    return activePool.filter((p) => !existing.has(p.id));
+  }, [activePool, rows]);
 
   const handleToggle = async (userId: string, currentValue: boolean) => {
     if (!meetingId) return;
-
     const newValue = !currentValue;
     setSavingId(userId);
 
+    // optimistic
     setRows((prev) =>
-      prev.map((r) =>
-        r.user_id === userId ? { ...r, attended: newValue } : r
-      )
+      prev.map((r) => (r.user_id === userId ? { ...r, attended: newValue } : r)),
     );
 
     try {
-      await upsertMeetingAttendance({
-        meetingId,
-        userId,
-        attended: newValue,
-      });
+      await upsertMeetingAttendance({ meetingId, userId, attended: newValue });
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Failed to update attendance');
-
+      // revert
       setRows((prev) =>
-        prev.map((r) =>
-          r.user_id === userId ? { ...r, attended: currentValue } : r
-        )
+        prev.map((r) => (r.user_id === userId ? { ...r, attended: currentValue } : r)),
       );
     } finally {
       setSavingId(null);
@@ -151,10 +189,8 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
 
   const handleAddAttendee = async () => {
     if (!meetingId || !selectedUserId) return;
-
     setAdding(true);
     setError(null);
-
     try {
       await upsertMeetingAttendance({
         meetingId,
@@ -162,8 +198,8 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
         attended: false,
       });
 
-      const user = allUsers.find((u) => u.id === selectedUserId);
-      const nameParts = (user?.name ?? '').split(' ');
+      const user = lookup.get(selectedUserId);
+      const nameParts = (user?.name ?? '').trim().split(/\s+/).filter(Boolean);
       const firstName = nameParts[0] ?? '';
       const lastName = nameParts.slice(1).join(' ') || '';
 
@@ -173,10 +209,7 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
           meeting_id: meetingId,
           user_id: selectedUserId,
           attended: false,
-          profiles: {
-            first_name: firstName || null,
-            last_name: lastName || null,
-          },
+          profiles: { first_name: firstName || null, last_name: lastName || null },
         } as MeetingAttendanceWithProfile,
       ]);
 
@@ -202,11 +235,9 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
 
   const handleConfirmRemove = async () => {
     if (!meetingId || !userToRemove) return;
-
     const userId = userToRemove.user_id;
     setRemovingId(userId);
     setError(null);
-
     try {
       await removeMeetingAttendance(meetingId, userId);
       setRows((prev) => prev.filter((r) => r.user_id !== userId));
@@ -228,18 +259,15 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
 
   const getDisplayName = (row: MeetingAttendanceWithProfile) => {
     const profile = row.profiles || {};
-    const profileName = `${profile.first_name ?? ''} ${
-      profile.last_name ?? ''
-    }`.trim();
-
+    const profileName = `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim();
     if (profileName) return profileName;
-
-    const user = allUsers.find((u) => u.id === row.user_id);
-    if (user?.name) return user.name;
-    if (user?.email) return user.email;
-
+    const u = lookup.get(row.user_id);
+    if (u?.name) return u.name;
+    if (u?.email) return u.email;
     return row.user_id;
   };
+
+  const anyLoading = loadingUsers || loadingCoaches;
 
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
@@ -255,23 +283,40 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
           <Typography variant="subtitle1" gutterBottom>
             Add attendee
           </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-            <FormControl sx={{ minWidth: 220 }} size="small">
-              <InputLabel id="add-attendee-label">User</InputLabel>
+
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+          >
+            <ToggleButtonGroup
+              exclusive
+              value={source}
+              onChange={(_, v: Source | null) => v && setSource(v)}
+              size="small"
+            >
+              <ToggleButton value="members">Members</ToggleButton>
+              <ToggleButton value="coaches">Coaches</ToggleButton>
+            </ToggleButtonGroup>
+
+            <FormControl sx={{ minWidth: 260 }} size="small">
+              <InputLabel id="add-attendee-label">
+                {source === 'members' ? 'Member' : 'Coach'}
+              </InputLabel>
               <Select
                 labelId="add-attendee-label"
-                label="User"
+                label={source === 'members' ? 'Member' : 'Coach'}
                 value={selectedUserId}
                 onChange={(e) => setSelectedUserId(String(e.target.value))}
-                disabled={loadingUsers}
+                disabled={anyLoading}
               >
-                {availableUsers.map((u) => (
+                {availableOptions.map((u) => (
                   <MenuItem key={u.id} value={u.id}>
                     {u.name || u.email || u.id}
                   </MenuItem>
                 ))}
-                {availableUsers.length === 0 && (
-                  <MenuItem disabled>No more users to add</MenuItem>
+                {availableOptions.length === 0 && (
+                  <MenuItem disabled>No more {source} to add</MenuItem>
                 )}
               </Select>
             </FormControl>
@@ -291,14 +336,12 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
             <CircularProgress />
           </Box>
         ) : rows.length === 0 ? (
-          <Typography color="text.secondary">
-            No attendees for this meeting yet.
-          </Typography>
+          <Typography color="text.secondary">No attendees for this meeting yet.</Typography>
         ) : (
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>User</TableCell>
+                <TableCell>Attendee</TableCell>
                 <TableCell align="center">Attended</TableCell>
                 <TableCell align="center">Remove</TableCell>
               </TableRow>
@@ -331,10 +374,7 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
         )}
       </DialogContent>
       <DialogActions>
-        <Button
-          onClick={handleClose}
-          disabled={Boolean(savingId || adding || removingId)}
-        >
+        <Button onClick={handleClose} disabled={Boolean(savingId || adding || removingId)}>
           Close
         </Button>
       </DialogActions>
@@ -342,14 +382,10 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
       <Dialog open={removeDialogOpen} onClose={closeRemoveDialog}>
         <DialogTitle>Remove attendee</DialogTitle>
         <DialogContent dividers>
-          <Typography>
-            Remove this user from the meeting&apos;s expected attendees?
-          </Typography>
+          <Typography>Remove this user from the meeting&apos;s expected attendees?</Typography>
           {userToRemove && (
             <Box mt={2}>
-              <Typography variant="subtitle2">
-                {getDisplayName(userToRemove)}
-              </Typography>
+              <Typography variant="subtitle2">{getDisplayName(userToRemove)}</Typography>
             </Box>
           )}
         </DialogContent>

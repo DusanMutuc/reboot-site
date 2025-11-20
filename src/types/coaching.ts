@@ -36,3 +36,18 @@ export interface Win {
   body: string;
   created_at: string;
 }
+
+
+// Status values coming from DB enum user_attention_status
+export type UserStatus = 'green' | 'yellow' | 'red';
+
+export type UserStatusSource = 'manual' | 'auto';
+
+export interface UserStatusInfo {
+  userId: string;
+  status: UserStatus;               // effective status (manual or auto)
+  source: UserStatusSource;         // 'manual' | 'auto'
+  manualReason?: string | null;
+  manualUpdatedBy?: string | null;
+  manualUpdatedAt?: string | null;
+}
