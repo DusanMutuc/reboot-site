@@ -68,7 +68,7 @@ export function UserStatusDialog({
         mode === 'auto' ? null : (mode as UserStatus);
 
       const { error: rpcError } = await supabase.rpc(
-        'set_user_attention_manual_status', // DB function name stays as is
+        'set_user_attention_manual_status',
         {
           p_user_id: userId,
           p_status: statusForRpc,
@@ -86,12 +86,14 @@ export function UserStatusDialog({
       setSaving(false);
       if (onSaved) onSaved();
       onClose();
-    } catch (e: any) {
-      console.error(e);
-      setError(e?.message ?? 'Failed to update status');
+    } catch (err: unknown) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to update status';
+      setError(message);
       setSaving(false);
     }
   };
+
 
   return (
     <Dialog

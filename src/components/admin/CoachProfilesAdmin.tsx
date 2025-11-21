@@ -31,6 +31,7 @@ type CoachProfileResponse = {
   profile: Partial<CoachProfile> | null;
   ghl_user_id?: string | null;
 };
+type CoachProfileAPI = CoachProfileResponse & { error?: string };
 
 type SnackbarState = {
   open: boolean;
@@ -110,12 +111,12 @@ export default function CoachProfilesAdmin() {
     setLoadingProfile(true);
     try {
       const res = await fetch(
-        `/api/admin/coach-profiles?user_id=${encodeURIComponent(coachId)}`,
+        `/api/admin/coach-profiles?user_id=${encodeURIComponent(coachId)}`
       );
-      const data = (await res.json()) as CoachProfileResponse;
-      if (!res.ok) throw new Error((data as any)?.error || res.statusText);
+      const data = (await res.json()) as CoachProfileAPI;
+      if (!res.ok) throw new Error(data.error || res.statusText);
 
-      const p = data?.profile ?? null;
+      const p = data.profile ?? null;
 
       const merged: CoachProfile = {
         ...emptyProfile,
@@ -132,9 +133,9 @@ export default function CoachProfilesAdmin() {
       };
 
       setProfile(merged);
-      setGhlUserId(data?.ghl_user_id ?? '');
-    } catch (e) {
-      console.error('CoachProfilesAdmin: error loading profile', e);
+      setGhlUserId(data.ghl_user_id ?? '');
+    } catch (err: unknown) {
+      console.error('CoachProfilesAdmin: error loading profile', err);
       setProfile(null);
       setGhlUserId('');
       setSnack({

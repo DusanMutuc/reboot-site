@@ -30,8 +30,24 @@ type Props = {
   onCreated?: () => void;
 };
 
+type ApiListResponse<T> = { items: T[] };
+type UnknownUser = Record<string, unknown>;
+
+function isApiListResponse<T>(v: unknown): v is ApiListResponse<T> {
+  return typeof v === 'object' && v !== null && Array.isArray((v as ApiListResponse<T>).items);
+}
+
+function toIdString(u: unknown): string | null {
+  if (typeof u !== 'object' || u === null) return null;
+  const id = (u as UnknownUser).id;
+  if (typeof id === 'string') return id;
+  if (typeof id === 'number') return String(id);
+  return null;
+}
+
 export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: Props) {
-  const [meetingTypeId, setMeetingTypeId] = useState<number | ''>('');
+  // Store the selection as string | null to avoid number vs string comparisons
+  const [meetingTypeId, setMeetingTypeId] = useState<string | null>(null);
   const [date, setDate] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [autoPopulate, setAutoPopulate] = useState<boolean>(false);
@@ -45,12 +61,13 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
   };
 
   const handleSubmit = async () => {
-    if (!meetingTypeId || !date) {
+    if (meetingTypeId == null || !date) {
       setError('Meeting type and date are required');
       return;
     }
 
-    const type = meetingTypes.find((t) => t.id === meetingTypeId);
+    // Find the meeting type by string match
+    const type = meetingTypes.find((t) => String(t.id) === meetingTypeId);
     if (!type) {
       setError('Selected meeting type not found');
       return;
@@ -68,36 +85,39 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
           throw new Error('Failed to fetch users for auto-populate');
         }
 
-        const json: any = await res.json();
-        const items: any[] = Array.isArray(json.items) ? json.items : [];
+        const json: unknown = await res.json();
+        const items = isApiListResponse<unknown>(json) ? json.items : [];
 
-        attendeeIds = items
-          .map((u) => u.id as string | undefined)
-          .filter((v): v is string => Boolean(v));
+        const ids = items
+          .map(toIdString)
+          .filter((v): v is string => typeof v === 'string' && v.length > 0);
 
-        if (!attendeeIds.length) {
+        if (ids.length === 0) {
           throw new Error('No user IDs found from /api/admin/list-users');
         }
+
+        attendeeIds = ids;
       }
 
       await createMeetingWithAttendees({
         meetingTypeCode: type.code,
-        date, // YYYY-MM-DD, matches _date date in the RPC
+        date, // YYYY-MM-DD
         attendeeIds,
         title: title || null,
       });
 
-      if (onCreated) onCreated();
+      onCreated?.();
 
       // reset form
-      setMeetingTypeId('');
+      setMeetingTypeId(null);
       setDate('');
       setTitle('');
       setAutoPopulate(false);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to create meeting');
+      const message = err instanceof Error ? err.message : 'Failed to create meeting';
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -115,12 +135,16 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
             <Select
               labelId="create-meeting-type-label"
               label="Meeting type"
-              value={meetingTypeId}
-              onChange={(e) => setMeetingTypeId(Number(e.target.value))}
+              value={meetingTypeId ?? ''}
+              onChange={(e) => {
+                const val = e.target.value;
+                setMeetingTypeId(val === '' || val == null ? null : String(val));
+              }}
               size="small"
             >
+              <MenuItem value="">Select a type…</MenuItem>
               {meetingTypes.map((t) => (
-                <MenuItem key={t.id} value={t.id}>
+                <MenuItem key={String(t.id)} value={String(t.id)}>
                   {t.name} ({t.code})
                 </MenuItem>
               ))}
@@ -160,11 +184,7 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
         <Button onClick={handleClose} disabled={submitting}>
           Cancel
         </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={submitting}
-        >
+        <Button onClick={handleSubmit} variant="contained" disabled={submitting}>
           {submitting ? <CircularProgress size={20} /> : 'Create'}
         </Button>
       </DialogActions>

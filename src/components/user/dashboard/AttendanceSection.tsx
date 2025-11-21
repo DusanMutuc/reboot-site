@@ -1,7 +1,6 @@
-// src/components/dashboard/AttendanceSection.tsx
 'use client';
 
-import { Paper, Box, Typography, Chip } from '@mui/material';
+import { Paper, Box, Typography } from '@mui/material';
 import {
   ResponsiveContainer,
   LineChart,
@@ -26,7 +25,7 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
     ? Math.round((lastPoint.actualCumulative / lastPoint.driftCumulative) * 100)
     : null;
 
-  const onTrackLabel = onTrackPct !== null ? `${onTrackPct}% of target` : 'No target yet';
+  // const onTrackLabel = onTrackPct !== null ? `${onTrackPct}% of target` : 'No target yet';
 
   return (
     <Paper
@@ -45,7 +44,7 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
           alignItems: 'baseline',
           justifyContent: 'space-between',
           gap: 2,
-          flexShrink: 0, // Prevent header from shrinking
+          flexShrink: 0,
         }}
       >
         <Box>
@@ -57,11 +56,8 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
             {periodLabel}
           </Typography>
         </Box>
-
-        {/* you can show onTrackLabel somewhere here later if you want */}
       </Box>
 
-      {/* Changed from flex: 1 to explicit height */}
       <Box sx={{ height: 240, minHeight: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -72,7 +68,7 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
             <XAxis dataKey="label" />
             <YAxis allowDecimals={false} />
             <Tooltip
-              formatter={(value: any, name: string) => {
+              formatter={(value: number | string, name: string) => {
                 if (name === 'actualCumulative') return [value, 'Actual'];
                 if (name === 'driftCumulative') return [value, 'Driftline'];
                 return [value, name];

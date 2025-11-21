@@ -1,4 +1,3 @@
-// src/components/user/dashboard/KpiCharts.tsx
 'use client';
 
 import { Paper, Typography, Box, CircularProgress, Stack } from '@mui/material';
@@ -20,16 +19,28 @@ function fmtMonth(dateStr: string) {
   return d.toLocaleDateString('en-US', { month: 'short' });
 }
 
-function TooltipContent({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
+type RechartsPayload = {
+  dataKey?: string;
+  name?: string;
+  value?: number | string;
+};
+
+type TooltipContentProps = {
+  active?: boolean;
+  payload?: RechartsPayload[];
+  label?: string | number;
+};
+
+function TooltipContent({ active, payload, label }: TooltipContentProps) {
+  if (!active || !payload || payload.length === 0) return null;
   return (
     <Paper sx={{ p: 1.25, borderRadius: 2 }}>
       <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-        {new Date(label).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        {new Date(String(label)).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
       </Typography>
-      {payload.map((p: any) => (
-        <Typography key={p.dataKey} variant="body2">
-          {p.name}: {p.value}
+      {payload.map((p) => (
+        <Typography key={p.dataKey ?? String(p.name)} variant="body2">
+          {(p.name ?? p.dataKey) ?? 'Value'}: {p.value as string | number}
         </Typography>
       ))}
     </Paper>

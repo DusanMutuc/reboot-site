@@ -1,3 +1,5 @@
+'use client';
+
 import Grid from '@mui/material/Grid';
 import { Box, Paper, Typography } from '@mui/material';
 import {
@@ -18,9 +20,18 @@ function formatDateLabel(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
-type TooltipProps = { active?: boolean; payload?: any[]; label?: string };
+type RPRechartsPayload = {
+  dataKey?: string;
+  value?: number | string;
+};
 
-function RPTooltip({ active, payload, label }: TooltipProps) {
+type RPTooltipProps = {
+  active?: boolean;
+  payload?: RPRechartsPayload[];
+  label?: string | number;
+};
+
+function RPTooltip({ active, payload, label }: RPTooltipProps) {
   if (!active || !payload || payload.length === 0) return null;
   const rev = payload.find((p) => p.dataKey === 'revenue');
   const prof = payload.find((p) => p.dataKey === 'profit');
@@ -35,10 +46,14 @@ function RPTooltip({ active, payload, label }: TooltipProps) {
   return (
     <Paper elevation={3} sx={{ p: 1.25, borderRadius: 1.5, fontSize: 12 }}>
       <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-        {formatDateLabel(label || '')}
+        {formatDateLabel(String(label ?? ''))}
       </Typography>
-      {rev && <Typography variant="body2">Revenue: {fmt(rev.value as number)}</Typography>}
-      {prof && <Typography variant="body2">Profit: {fmt(prof.value as number)}</Typography>}
+      {typeof rev?.value === 'number' && (
+        <Typography variant="body2">Revenue: {fmt(rev.value)}</Typography>
+      )}
+      {typeof prof?.value === 'number' && (
+        <Typography variant="body2">Profit: {fmt(prof.value)}</Typography>
+      )}
     </Paper>
   );
 }
@@ -54,17 +69,18 @@ export default function RevenueProfitChart({ history, periodLabel }: Props) {
   return (
     <Paper sx={{ p: 2, borderRadius: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Grid container spacing={1} alignItems="center" sx={{ mb: 1 }}>
-        <Grid size="grow">
-          <Typography variant="h6" fontWeight={600}>
-            Revenue &amp; Profit
-          </Typography>
-        </Grid>
-        <Grid size="auto">
-          <Typography variant="body2" color="text.secondary">
-            {periodLabel}
-          </Typography>
-        </Grid>
-      </Grid>
+  <Grid size="grow">
+    <Typography variant="h6" fontWeight={600}>
+      Revenue &amp; Profit
+    </Typography>
+  </Grid>
+  <Grid>
+    <Typography variant="body2" color="text.secondary">
+      {periodLabel}
+    </Typography>
+  </Grid>
+</Grid>
+
 
       <Box sx={{ flex: 1, minHeight: 300 }}>
         {!hasHistory ? (

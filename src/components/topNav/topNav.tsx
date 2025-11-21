@@ -1,3 +1,4 @@
+// src/components/topNav/topNav.tsx
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
@@ -8,6 +9,8 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { supabase } from '@/lib/supabaseClient';
+import type { Theme } from '@mui/material/styles';
+import type { SystemStyleObject } from '@mui/system';
 
 type Section = { id: string; label: string };
 type Role = 'user' | 'coach' | 'admin' | 'unknown';
@@ -43,7 +46,6 @@ export default function TopNav({
       const uid = auth.user?.id;
       if (!uid) { if (mounted) setRole('user'); return; }
 
-      // 1) fetch role_ids from user_roles
       const { data: ur, error: urErr } = await supabase
         .from('user_roles')
         .select('role_id')
@@ -54,7 +56,6 @@ export default function TopNav({
 
       const roleIds = ur.map(r => r.role_id);
 
-      // 2) fetch role codes from roles
       const { data: roles, error: rErr } = await supabase
         .from('roles')
         .select('code')
@@ -74,7 +75,6 @@ export default function TopNav({
 
   const coachLike = role === 'coach' || role === 'admin';
 
-  // Right-side “arrow” buttons
   const rightLinks = useMemo(() => {
     if (coachLike) {
       return [
@@ -90,7 +90,7 @@ export default function TopNav({
 
   useEffect(() => {
     const observer = new IntersectionObserver(
-      entries => entries.forEach(e => e.isIntersecting && setActive(e.target.id)),
+      (entries) => entries.forEach((e) => e.isIntersecting && setActive(e.target.id)),
       { threshold: 0.25, rootMargin: '-40% 0px 0px 0px' }
     );
 
@@ -116,7 +116,13 @@ export default function TopNav({
     history.replaceState(null, '', `#${id}`);
   };
 
-  const arrowBtnSx = (theme: any) => ({
+  // Safe access to optional theme palette extension (no `any`)
+  type MaybeTurquoise = { palette?: { turquoise?: { main?: string } } };
+  const getTurquoise = (theme: Theme) =>
+    (theme as unknown as MaybeTurquoise).palette?.turquoise?.main ?? '#5cbca8';
+
+  // Return type MUST be SystemStyleObject for sx callback
+  const arrowBtnSx = (theme: Theme): SystemStyleObject<Theme> => ({
     px: { md: 3, lg: 3.25 },
     py: { md: 1.4, lg: 1.5 },
     fontSize: { md: '1.2rem', lg: '1.3rem' },
@@ -126,19 +132,19 @@ export default function TopNav({
     whiteSpace: 'nowrap',
     borderWidth: 2,
     borderStyle: 'solid',
-    borderColor: theme.palette.turquoise?.main || '#5cbca8',
-    color: theme.palette.turquoise?.main || '#5cbca8',
+    borderColor: getTurquoise(theme),
+    color: getTurquoise(theme),
     bgcolor: 'transparent',
     borderRadius: 2.5,
     transition: 'transform .15s, background-color .15s, border-color .15s',
     '&:hover': {
       transform: 'translateY(-2px)',
       bgcolor: 'rgba(92,188,168,0.08)',
-      borderColor: theme.palette.turquoise?.main || '#5cbca8',
+      borderColor: getTurquoise(theme),
     },
   });
 
-  const pillBtnSx = (isActive: boolean) => ({
+  const pillBtnSx = (isActive: boolean): SystemStyleObject<Theme> => ({
     px: { md: 3.5, lg: 4 },
     py: { md: 1.6, lg: 1.8 },
     fontSize: { md: '1.4rem', lg: '1.6rem' },
@@ -206,7 +212,7 @@ export default function TopNav({
                   letterSpacing: 1,
                   textTransform: 'uppercase',
                   whiteSpace: 'nowrap',
-                  color: theme.palette.turquoise?.main || '#5cbca8',
+                  color: getTurquoise(theme),
                   fontSize: { xs: '1.1rem', sm: '1.5rem', md: '3rem' },
                   order: { xs: 1, md: 0 },
                 })}
@@ -259,7 +265,7 @@ export default function TopNav({
                     component={Link}
                     href={href}
                     prefetch={false}
-                    sx={arrowBtnSx as any}
+                    sx={(theme) => arrowBtnSx(theme)}
                   >
                     {label}
                   </Button>

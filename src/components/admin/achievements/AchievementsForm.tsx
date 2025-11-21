@@ -27,7 +27,7 @@ type AchievementFormValues = {
   description: string;
   icon_url: string | null;
   is_active: boolean;
-  library_node_ids: number[]; // NEW
+  library_node_ids: number[];
 };
 
 // Must match backend logic
@@ -70,17 +70,16 @@ export default function AchievementForm({ initial, onSaved }: Props) {
     [form.title]
   );
 
-  const handleChange =
-    (k: keyof AchievementFormValues) =>
+  // Typed change handlers (no `any`)
+  const handleTextChange =
+    (k: 'title' | 'description') =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (k === 'is_active') {
-        const checked = (e.target as HTMLInputElement).checked;
-        setForm((f) => ({ ...f, is_active: checked }));
-        return;
-      }
-      const val = e.target.value;
-      setForm((f) => ({ ...f, [k]: val as any }));
+      setForm((f) => ({ ...f, [k]: e.target.value }));
     };
+
+  const handleActiveToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm((f) => ({ ...f, is_active: e.target.checked }));
+  };
 
   async function handleIconSelect(ev: React.ChangeEvent<HTMLInputElement>) {
     const file = ev.target.files?.[0];
@@ -107,7 +106,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
 
       const { data: pub } = supabase.storage.from('achievements').getPublicUrl(data.path);
       setForm((f) => ({ ...f, icon_url: pub.publicUrl || null }));
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Unexpected upload error:', err);
       setErrorMsg('Unexpected error while uploading icon.');
     } finally {
@@ -116,7 +115,6 @@ export default function AchievementForm({ initial, onSaved }: Props) {
   }
 
   // --- Load Library lessons (similar to LibraryPage) ---
-
   useEffect(() => {
     let cancelled = false;
 
@@ -188,7 +186,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
 
         if (nodeErr) throw nodeErr;
 
-        // Filter to lessons only, since you want to connect to lessons
+        // Filter to lessons only
         const options: LibraryOption[] =
           nodes
             ?.filter((n) => n.node_type === 'lesson')
@@ -199,7 +197,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
             })) ?? [];
 
         if (!cancelled) setLibraryOptions(options);
-      } catch (err) {
+      } catch (err: unknown) {
         const message =
           err instanceof Error ? err.message : 'Failed to load Library lessons.';
         console.error('loadLibraryLessons error:', err);
@@ -216,8 +214,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
   }, []);
 
   const selectedLibraryOptions = useMemo(
-    () =>
-      libraryOptions.filter((opt) => form.library_node_ids.includes(opt.id)),
+    () => libraryOptions.filter((opt) => form.library_node_ids.includes(opt.id)),
     [libraryOptions, form.library_node_ids]
   );
 
@@ -243,13 +240,13 @@ export default function AchievementForm({ initial, onSaved }: Props) {
       if (!res.ok) {
         const body = await res.json().catch(() => null);
         console.error('Save achievement error:', body || res.statusText);
-        setErrorMsg(body?.error || 'Failed to save achievement.');
+        setErrorMsg((body as { error?: string } | null)?.error || 'Failed to save achievement.');
         return;
       }
 
       const saved: AchievementRow = await res.json();
       onSaved?.(saved);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Unexpected save error:', err);
       setErrorMsg('Unexpected error while saving achievement.');
     } finally {
@@ -265,7 +262,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
         <TextField
           label="Title"
           value={form.title}
-          onChange={handleChange('title')}
+          onChange={handleTextChange('title')}
           required
           fullWidth
         />
@@ -291,7 +288,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
       <TextField
         label="Description"
         value={form.description}
-        onChange={handleChange('description')}
+        onChange={handleTextChange('description')}
         multiline
         minRows={2}
         fullWidth
@@ -326,9 +323,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
           options={libraryOptions}
           value={selectedLibraryOptions}
           loading={libraryLoading}
-          getOptionLabel={(option) =>
-            option.title || `Lesson #${option.id}`
-          }
+          getOptionLabel={(option) => option.title || `Lesson #${option.id}`}
           onChange={(_, newValue) => {
             setForm((f) => ({
               ...f,
@@ -343,9 +338,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
                 ...params.InputProps,
                 endAdornment: (
                   <>
-                    {libraryLoading ? (
-                      <CircularProgress color="inherit" size={16} />
-                    ) : null}
+                    {libraryLoading ? <CircularProgress color="inherit" size={16} /> : null}
                     {params.InputProps.endAdornment}
                   </>
                 ),
@@ -356,16 +349,12 @@ export default function AchievementForm({ initial, onSaved }: Props) {
       </Box>
 
       <FormControlLabel
-        control={<Switch checked={form.is_active} onChange={handleChange('is_active')} />}
+        control={<Switch checked={form.is_active} onChange={handleActiveToggle} />}
         label="Active"
       />
 
       <Box>
-        <Button
-          variant="contained"
-          onClick={save}
-          disabled={saving || !form.title.trim()}
-        >
+        <Button variant="contained" onClick={save} disabled={saving || !form.title.trim()}>
           {form.id ? 'Save Changes' : 'Create Achievement'}
         </Button>
       </Box>

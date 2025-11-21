@@ -50,9 +50,7 @@ export default function AdminMeetingsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [attendanceMeetingId, setAttendanceMeetingId] = useState<number | null>(
-    null
-  );
+  const [attendanceMeetingId, setAttendanceMeetingId] = useState<number | null>(null);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -68,9 +66,10 @@ export default function AdminMeetingsPanel() {
     try {
       const types = await getMeetingTypes();
       setMeetingTypes(types);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to load meeting types');
+      const message = err instanceof Error ? err.message : 'Failed to load meeting types';
+      setError(message);
     }
   }, []);
 
@@ -85,9 +84,10 @@ export default function AdminMeetingsPanel() {
         meetingTypeId: selectedTypeId === 'all' ? undefined : selectedTypeId,
       });
       setMeetings(data);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to load meetings');
+      const message = err instanceof Error ? err.message : 'Failed to load meetings';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -141,9 +141,10 @@ export default function AdminMeetingsPanel() {
       await loadMeetings();
       setDeleteDialogOpen(false);
       setMeetingToDelete(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to delete meeting');
+      const message = err instanceof Error ? err.message : 'Failed to delete meeting';
+      setError(message);
     } finally {
       setDeletingId(null);
     }
@@ -185,9 +186,10 @@ export default function AdminMeetingsPanel() {
       setMeetingToEdit(null);
       setEditTitle('');
       setEditDate('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to update meeting');
+      const message = err instanceof Error ? err.message : 'Failed to update meeting';
+      setError(message);
     } finally {
       setUpdatingId(null);
     }
@@ -301,15 +303,10 @@ export default function AdminMeetingsPanel() {
                       <EventAvailableIcon fontSize="small" />
                       <Box>
                         <Typography variant="body2">
-                          {m.meeting_type_name ||
-                            m.meeting_type_code ||
-                            'Meeting'}
+                          {m.meeting_type_name || m.meeting_type_code || 'Meeting'}
                         </Typography>
                         {m.meeting_type_code && (
-                          <Typography
-                            variant="caption"
-                            color="text.secondary"
-                          >
+                          <Typography variant="caption" color="text.secondary">
                             {m.meeting_type_code}
                           </Typography>
                         )}
@@ -330,11 +327,7 @@ export default function AdminMeetingsPanel() {
 
                   {/* Actions */}
                   <TableCell align="right">
-                    <Stack
-                      direction="row"
-                      spacing={1}
-                      justifyContent="flex-end"
-                    >
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
                       <Button
                         size="small"
                         variant="outlined"
@@ -448,11 +441,7 @@ export default function AdminMeetingsPanel() {
           <Button onClick={closeEditDialog} disabled={updatingId != null}>
             Cancel
           </Button>
-          <Button
-            onClick={handleConfirmEdit}
-            variant="contained"
-            disabled={updatingId != null}
-          >
+          <Button onClick={handleConfirmEdit} variant="contained" disabled={updatingId != null}>
             Save
           </Button>
         </DialogActions>
