@@ -1,11 +1,11 @@
-// app/api/my-schedule/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import { DateTime } from "luxon";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
-import { GHL } from "@/lib/config";
+// src/app/api/my-schedule/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { DateTime } from 'luxon';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { GHL } from '@/lib/config';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 type ProfileRow = {
   id: string;
@@ -13,9 +13,51 @@ type ProfileRow = {
   role_codes: string[];
 };
 
-type RawGhlEvent = Record<string, any>;
+type CoachOrMemberEvent = {
+  id: string;
+  calendarId: string;
+  groupId: string | null;
+  title: string | null;
+  status: string | null;
+  start: string; // ISO UTC
+  end: string;   // ISO UTC
+  contact: {
+    id: string | null;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+  };
+  location: string | null;
+};
 
-const COACH_ROLE_CODES = ["coach", "implementation_coach"];
+// GHL raw payloads are not stable; model only the fields we use.
+type RawGhlEvent = {
+  id?: string | number;
+  _id?: string | number;
+  calendarId?: string | number;
+  groupId?: string | null;
+  title?: string | null;
+  name?: string | null;
+  appointmentStatus?: string | null;
+  status?: string | null;
+  startTime?: number | string;
+  start?: number | string;
+  from?: number | string;
+  endTime?: number | string;
+  end?: number | string;
+  to?: number | string;
+  contactId?: string | null;
+  contact?: {
+    id?: string;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+  };
+  address?: string | null;
+  meetingLocation?: string | null;
+};
+
+const COACH_ROLE_CODES = ['coach', 'implementation_coach'] as const;
 
 function clampDays(n: number) {
   return n === 1 || n === 7 || n === 14 ? n : 14;
@@ -26,14 +68,14 @@ function isValidIana(tz: string) {
 }
 
 function rangeToEpochMillis(days: number, tz: string) {
-  const startLocal = DateTime.now().setZone(tz).startOf("day");
+  const startLocal = DateTime.now().setZone(tz).startOf('day');
   const endLocal = startLocal.plus({ days });
   return { startMs: startLocal.toUTC().toMillis(), endMs: endLocal.toUTC().toMillis() };
 }
 
 function toIsoUtc(v: unknown): string | null {
-  if (typeof v === "number") return DateTime.fromMillis(v).toUTC().toISO();
-  if (typeof v === "string") {
+  if (typeof v === 'number') return DateTime.fromMillis(v).toUTC().toISO();
+  if (typeof v === 'string') {
     const d = DateTime.fromISO(v, { setZone: true });
     return d.isValid ? d.toUTC().toISO() : null;
   }
@@ -71,49 +113,57 @@ async function getLoggedInUserId(): Promise<string | null> {
 async function getProfileWithGhlAndRoles(userId: string): Promise<ProfileRow | null> {
   const supabase = await getSupabaseServerClient();
 
-  // Profiles
   const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, ghl_user_id")
-    .eq("id", userId)
+    .from('profiles')
+    .select('id, ghl_user_id')
+    .eq('id', userId)
     .maybeSingle();
 
   if (profileError) {
-    throw new Error("DB error loading profile");
+    throw new Error('DB error loading profile');
   }
   if (!profile) return null;
 
-  // Roles: user_roles → roles.code
-  const { data: rolesRows, error: rolesError } = await supabase
-    .from("user_roles")
-    .select("roles ( code )")
-    .eq("user_id", userId);
+    // Roles: user_roles → roles.code
+    const { data: rolesRows, error: rolesError } = await supabase
+    .from('user_roles')
+    .select('roles ( code )')
+    .eq('user_id', userId);
 
   if (rolesError) {
-    throw new Error("DB error loading roles");
+    throw new Error('DB error loading roles');
   }
 
-  const role_codes =
-    rolesRows?.map((row: any) => row.roles?.code).filter((c: string | null | undefined) => !!c) ??
-    [];
+  // roles can be an object or an array depending on the join shape
+  const role_codes: string[] = (rolesRows ?? [])
+    .flatMap((row: {
+      roles: { code: string | null } | { code: string | null }[] | null;
+    }) => {
+      const r = row.roles;
+      if (!r) return [];
+      return Array.isArray(r) ? r.map(x => x.code) : [r.code];
+    })
+    .filter((c): c is string => Boolean(c));
+
 
   return {
-    id: profile.id,
-    ghl_user_id: profile.ghl_user_id,
+    id: profile.id as string,
+    ghl_user_id: (profile.ghl_user_id as string | null) ?? null,
     role_codes,
   };
 }
 
-function normalizeEvents(events: RawGhlEvent[], excludeCalendarIds: Set<string>) {
+function normalizeEvents(events: RawGhlEvent[], excludeCalendarIds: Set<string>): CoachOrMemberEvent[] {
   return events
-    .filter((e) => !excludeCalendarIds.has(String(e.calendarId ?? "")))
-    .map((e) => {
+    .filter((e) => !excludeCalendarIds.has(String(e.calendarId ?? '')))
+    .map<CoachOrMemberEvent | null>((e) => {
       const start = toIsoUtc(e.startTime ?? e.start ?? e.from);
       const end = toIsoUtc(e.endTime ?? e.end ?? e.to);
+      if (!start || !end) return null;
 
       return {
-        id: String(e.id ?? e._id ?? `${e.calendarId ?? "cal"}-${start ?? Date.now()}`),
-        calendarId: String(e.calendarId ?? ""),
+        id: String(e.id ?? e._id ?? `${e.calendarId ?? 'cal'}-${start}`),
+        calendarId: String(e.calendarId ?? ''),
         groupId: e.groupId ?? null,
         title: e.title ?? e.name ?? null,
         status: e.appointmentStatus ?? e.status ?? null,
@@ -128,38 +178,38 @@ function normalizeEvents(events: RawGhlEvent[], excludeCalendarIds: Set<string>)
         location: e.address ?? e.meetingLocation ?? null,
       };
     })
-    .filter((it) => it.start && it.end)
-    .sort((a, b) => (a.start! < b.start! ? -1 : 1));
+    .filter((it): it is CoachOrMemberEvent => it !== null)
+    .sort((a, b) => (a.start < b.start ? -1 : 1));
 }
 
 export async function GET(req: NextRequest) {
   try {
     const url = new URL(req.url);
-    const days = clampDays(Number(url.searchParams.get("days") ?? "14"));
-    const tzParam = url.searchParams.get("tz") || "UTC";
-    const tz = isValidIana(tzParam) ? tzParam : "UTC";
+    const days = clampDays(Number(url.searchParams.get('days') ?? '14'));
+    const tzParam = url.searchParams.get('tz') || 'UTC';
+    const tz = isValidIana(tzParam) ? tzParam : 'UTC';
 
     // 1) Auth → user id
     const userId = await getLoggedInUserId();
     if (!userId) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
     // 2) Profile + roles → interpret ghl_user_id
     const profile = await getProfileWithGhlAndRoles(userId);
     if (!profile) {
-      return NextResponse.json({ message: "Profile not found" }, { status: 404 });
+      return NextResponse.json({ message: 'Profile not found' }, { status: 404 });
     }
 
     const { ghl_user_id, role_codes } = profile;
-    const isCoach = role_codes.some((code) => COACH_ROLE_CODES.includes(code));
+    const isCoach = role_codes.some((code) => COACH_ROLE_CODES.includes(code as typeof COACH_ROLE_CODES[number]));
 
     if (!ghl_user_id) {
       return NextResponse.json(
         {
           message: isCoach
-            ? "No GHL user id stored for this coach."
-            : "No GHL contact id stored for this user.",
+            ? 'No GHL user id stored for this coach.'
+            : 'No GHL contact id stored for this user.',
         },
         { status: 400 }
       );
@@ -175,14 +225,12 @@ export async function GET(req: NextRequest) {
     let apiUrl: string;
 
     if (isCoach) {
-      // Coach/staff: use calendars/events with userId
       apiUrl =
         `${GHL.BASE}/calendars/events` +
         `?locationId=${encodeURIComponent(locationId)}` +
         `&userId=${encodeURIComponent(trimmedGhlId)}` +
         `&startTime=${startMs}&endTime=${endMs}`;
     } else {
-      // Member: use contact appointments (then filter by range)
       apiUrl = `${GHL.BASE}/contacts/${encodeURIComponent(trimmedGhlId)}/appointments`;
     }
 
@@ -190,54 +238,49 @@ export async function GET(req: NextRequest) {
       headers: {
         Authorization: `Bearer ${GHL.TOKEN}`,
         Version: GHL.VERSION,
-        Accept: "application/json",
+        Accept: 'application/json',
       },
-      cache: "no-store",
+      cache: 'no-store',
     });
 
     if (!res.ok) {
-      const detail = await res.text().catch(() => "");
+      const detail = await res.text().catch(() => '');
       return NextResponse.json(
-        {
-          message: `GHL error ${res.status}`,
-          detail: detail.slice(0, 2000),
-        },
+        { message: `GHL error ${res.status}`, detail: detail.slice(0, 2000) },
         { status: 502 }
       );
     }
 
-    const payload = (await res.json()) as any;
+    const payload: unknown = await res.json();
 
-    // calendars/events usually → { events: [...] }
-    // contact appointments usually → { appointments: [...] } or bare array
+    // calendars/events → { events: [...] }
+    // contact appointments → { appointments: [...] } or bare array
     const events: RawGhlEvent[] = Array.isArray(payload)
       ? payload
-      : payload?.events ??
-        payload?.appointments ??
-        [];
+      : (Array.isArray((payload as { events?: unknown }).events)
+          ? (payload as { events: RawGhlEvent[] }).events
+          : Array.isArray((payload as { appointments?: unknown }).appointments)
+          ? (payload as { appointments: RawGhlEvent[] }).appointments
+          : []) as RawGhlEvent[];
 
     const EXCLUDE = new Set<string>([
-      // "Yt09j3xdpLgpyFl9y5Yx",
+      // place calendar IDs to exclude here
     ]);
 
     let items = normalizeEvents(events, EXCLUDE);
 
-    // For contact appointments, if endpoint ignores date range, filter it manually
+    // For contact appointments, if endpoint ignores date range, filter manually
     if (!isCoach) {
       items = items.filter((it) => {
-        const ms = DateTime.fromISO(it.start!).toMillis();
+        const ms = DateTime.fromISO(it.start).toMillis();
         return ms >= startMs && ms < endMs;
       });
     }
 
-    // 5) Return viewer tz for consistent rendering client-side
     return NextResponse.json({ timezone: tz, items });
   } catch (err: unknown) {
     return NextResponse.json(
-      {
-        message: "Unexpected error",
-        detail: String((err as Error)?.message ?? err),
-      },
+      { message: 'Unexpected error', detail: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }

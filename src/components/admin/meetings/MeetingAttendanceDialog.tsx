@@ -1,7 +1,7 @@
 // src/components/admin/meetings/MeetingAttendanceDialog.tsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -50,6 +50,27 @@ type SimpleUser = {
 
 type Source = 'members' | 'coaches';
 
+/** API helpers */
+type ApiListResponse<T> = { items: T[] };
+
+function isApiListResponse<T>(v: unknown): v is ApiListResponse<T> {
+  return typeof v === 'object' && v !== null && Array.isArray((v as ApiListResponse<T>).items);
+}
+
+function toSimpleUser(u: unknown): SimpleUser | null {
+  if (typeof u !== 'object' || u === null) return null;
+  const obj = u as Record<string, unknown>;
+  const id = obj.id;
+  const name = obj.name;
+  const email = obj.email;
+  if (typeof id !== 'string' && typeof id !== 'number') return null;
+  return {
+    id: String(id),
+    name: typeof name === 'string' ? name : '',
+    email: typeof email === 'string' ? email : '',
+  };
+}
+
 export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
   const [rows, setRows] = useState<MeetingAttendanceWithProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -84,9 +105,9 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
       try {
         const data = await getMeetingAttendance(meetingId);
         setRows(data);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        setError(err.message || 'Failed to load attendance');
+        setError(err instanceof Error ? err.message : 'Failed to load attendance');
       } finally {
         setLoading(false);
       }
@@ -102,17 +123,15 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
       try {
         const res = await fetch('/api/admin/list-users');
         if (!res.ok) throw new Error('Failed to load users for attendance');
-        const json: any = await res.json();
-        const items: any[] = Array.isArray(json.items) ? json.items : [];
-        const mapped: SimpleUser[] = items.map((u) => ({
-          id: String(u.id),
-          name: String(u.name ?? ''),
-          email: String(u.email ?? ''),
-        }));
+        const json: unknown = await res.json();
+        const items = isApiListResponse<unknown>(json) ? json.items : [];
+        const mapped: SimpleUser[] = items
+          .map(toSimpleUser)
+          .filter((v): v is SimpleUser => v !== null);
         setAllUsers(mapped);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        setError((prev) => prev ?? err.message ?? 'Failed to load users');
+        setError((prev) => prev ?? (err instanceof Error ? err.message : 'Failed to load users'));
       } finally {
         setLoadingUsers(false);
       }
@@ -128,17 +147,15 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
       try {
         const res = await fetch('/api/admin/list-coaches');
         if (!res.ok) throw new Error('Failed to load coaches for attendance');
-        const json: any = await res.json();
-        const items: any[] = Array.isArray(json.items) ? json.items : [];
-        const mapped: SimpleUser[] = items.map((u) => ({
-          id: String(u.id),
-          name: String(u.name ?? ''),
-          email: String(u.email ?? ''),
-        }));
+        const json: unknown = await res.json();
+        const items = isApiListResponse<unknown>(json) ? json.items : [];
+        const mapped: SimpleUser[] = items
+          .map(toSimpleUser)
+          .filter((v): v is SimpleUser => v !== null);
         setAllCoaches(mapped);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        setError((prev) => prev ?? err.message ?? 'Failed to load coaches');
+        setError((prev) => prev ?? (err instanceof Error ? err.message : 'Failed to load coaches'));
       } finally {
         setLoadingCoaches(false);
       }
@@ -175,9 +192,9 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
 
     try {
       await upsertMeetingAttendance({ meetingId, userId, attended: newValue });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to update attendance');
+      setError(err instanceof Error ? err.message : 'Failed to update attendance');
       // revert
       setRows((prev) =>
         prev.map((r) => (r.user_id === userId ? { ...r, attended: currentValue } : r)),
@@ -214,9 +231,9 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
       ]);
 
       setSelectedUserId('');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to add attendee');
+      setError(err instanceof Error ? err.message : 'Failed to add attendee');
     } finally {
       setAdding(false);
     }
@@ -243,9 +260,9 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
       setRows((prev) => prev.filter((r) => r.user_id !== userId));
       setRemoveDialogOpen(false);
       setUserToRemove(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to remove attendee');
+      setError(err instanceof Error ? err.message : 'Failed to remove attendee');
     } finally {
       setRemovingId(null);
     }
@@ -292,7 +309,12 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
             <ToggleButtonGroup
               exclusive
               value={source}
-              onChange={(_, v: Source | null) => v && setSource(v)}
+              onChange={(_e, v: Source | null) => {
+                if (v) {
+                  setSource(v);
+                  setSelectedUserId(''); // reset selection when switching source
+                }
+              }}
               size="small"
             >
               <ToggleButton value="members">Members</ToggleButton>
@@ -352,8 +374,8 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
                   <TableCell>{getDisplayName(row)}</TableCell>
                   <TableCell align="center">
                     <Checkbox
-                      checked={row.attended}
-                      onChange={() => handleToggle(row.user_id, row.attended)}
+                      checked={!!row.attended}
+                      onChange={() => handleToggle(row.user_id, !!row.attended)}
                       disabled={savingId === row.user_id}
                     />
                   </TableCell>

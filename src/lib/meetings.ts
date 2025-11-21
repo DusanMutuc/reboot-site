@@ -9,7 +9,57 @@ import type {
   UserEngagementSummary,
 } from '@/types/meetings';
 
-// Meeting types
+// ---------- Helpers (row types / guards) ----------
+
+type MeetingTypeRow = {
+  id: number;
+  name: string;
+  code: string;
+  counts_toward_engagement: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type MeetingTypesJoin = {
+  code: string | null;
+  name: string | null;
+  counts_toward_engagement: boolean | null;
+} | null;
+
+type MeetingRow = {
+  id: number;
+  meeting_type_id: number;
+  date: string; // YYYY-MM-DD
+  created_by: string | null;
+  title: string | null;
+  created_at: string;
+  updated_at: string;
+  meeting_types: MeetingTypesJoin;
+};
+
+function isMeetingRow(v: unknown): v is MeetingRow {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.id === 'number' &&
+    typeof o.meeting_type_id === 'number' &&
+    typeof o.date === 'string' &&
+    ('created_by' in o) &&
+    ('title' in o) &&
+    typeof o.created_at === 'string' &&
+    typeof o.updated_at === 'string'
+  );
+}
+
+type RpcCreateMeetingResult = { id: number };
+
+type RpcEngagement = {
+  expected_count: number | null;
+  attended_count: number | null;
+} | null;
+
+// ---------- Meeting types ----------
 
 export async function getMeetingTypes(): Promise<MeetingType[]> {
   const { data, error } = await supabase
@@ -33,14 +83,15 @@ export async function getMeetingTypes(): Promise<MeetingType[]> {
     throw error;
   }
 
+  // Shapes line up with your MeetingType; no `any` needed.
   return (data ?? []) as unknown as MeetingType[];
 }
 
-// Meetings list for admin
+// ---------- Meetings list for admin ----------
 
 type GetMeetingsParams = {
   from?: string; // YYYY-MM-DD
-  to?: string; // YYYY-MM-DD
+  to?: string;   // YYYY-MM-DD
   meetingTypeId?: number;
 };
 
@@ -64,17 +115,9 @@ export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeti
     .order('date', { ascending: false })
     .order('id', { ascending: false });
 
-  if (from) {
-    query = query.gte('date', from);
-  }
-
-  if (to) {
-    query = query.lte('date', to);
-  }
-
-  if (typeof meetingTypeId === 'number') {
-    query = query.eq('meeting_type_id', meetingTypeId);
-  }
+  if (from) query = query.gte('date', from);
+  if (to) query = query.lte('date', to);
+  if (typeof meetingTypeId === 'number') query = query.eq('meeting_type_id', meetingTypeId);
 
   const { data, error } = await query;
 
@@ -83,8 +126,11 @@ export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeti
     throw error;
   }
 
-  const mapped: Meeting[] =
-    ((data ?? []) as unknown as any[]).map((row) => ({
+  const rows = (data ?? []) as unknown[];
+
+  const mapped: Meeting[] = rows
+    .filter(isMeetingRow)
+    .map((row) => ({
       id: row.id,
       meeting_type_id: row.meeting_type_id,
       date: row.date,
@@ -96,12 +142,12 @@ export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeti
       meeting_type_name: row.meeting_types?.name ?? null,
       meeting_type_counts_toward_engagement:
         row.meeting_types?.counts_toward_engagement ?? null,
-    })) ?? [];
+    }));
 
   return mapped;
 }
 
-// Create meeting (+ optional attendees)
+// ---------- Create meeting (+ optional attendees) ----------
 
 export async function createMeetingWithAttendees(input: {
   meetingTypeCode: string;
@@ -109,7 +155,7 @@ export async function createMeetingWithAttendees(input: {
   attendeeIds: string[] | null;
   title?: string | null;
   createdBy?: string | null;
-}) {
+}): Promise<RpcCreateMeetingResult> {
   const { meetingTypeCode, date, attendeeIds, title, createdBy } = input;
 
   const { data, error } = await supabase.rpc('create_meeting_with_attendees', {
@@ -125,10 +171,15 @@ export async function createMeetingWithAttendees(input: {
     throw error;
   }
 
-  return data;
+  // Ensure shape has an id
+  const result = data as unknown as RpcCreateMeetingResult | null;
+  if (!result || typeof result.id !== 'number') {
+    throw new Error('Unexpected RPC response for create_meeting_with_attendees');
+    }
+  return result;
 }
 
-// Attendance for one meeting
+// ---------- Attendance for one meeting ----------
 
 export async function getMeetingAttendance(
   meetingId: number
@@ -160,7 +211,7 @@ export async function upsertMeetingAttendance(input: {
   meetingId: number;
   userId: string;
   attended: boolean;
-}) {
+}): Promise<unknown> {
   const { meetingId, userId, attended } = input;
 
   const { data, error } = await supabase.rpc('upsert_meeting_attendance', {
@@ -174,10 +225,10 @@ export async function upsertMeetingAttendance(input: {
     throw error;
   }
 
-  return data;
+  return data as unknown;
 }
 
-// "My meetings" for a user (or auth.uid if userId is null/omitted)
+// ---------- "My meetings" for a user ----------
 
 export async function getUserMeetings(input?: {
   userId?: string | null;
@@ -200,7 +251,7 @@ export async function getUserMeetings(input?: {
   return (data ?? []) as unknown as UserMeeting[];
 }
 
-// Engagement summary
+// ---------- Engagement summary ----------
 
 export async function getUserEngagementSummary(input: {
   userId?: string | null;
@@ -220,8 +271,9 @@ export async function getUserEngagementSummary(input: {
     throw error;
   }
 
-  const expected = (data as any)?.expected_count ?? 0;
-  const attended = (data as any)?.attended_count ?? 0;
+  const d = (data as unknown) as RpcEngagement;
+  const expected = d?.expected_count ?? 0;
+  const attended = d?.attended_count ?? 0;
   const ratio = expected > 0 ? attended / expected : 0;
 
   return {
@@ -231,21 +283,15 @@ export async function getUserEngagementSummary(input: {
   };
 }
 
-// Delete a meeting (attendance is cascaded via FK)
+// ---------- Delete / Remove / Update ----------
 
 export async function deleteMeeting(meetingId: number): Promise<void> {
-  const { error } = await supabase
-    .from('meetings')
-    .delete()
-    .eq('id', meetingId);
-
+  const { error } = await supabase.from('meetings').delete().eq('id', meetingId);
   if (error) {
     console.error('deleteMeeting error', error);
     throw error;
   }
 }
-
-// Remove a single attendee from a meeting
 
 export async function removeMeetingAttendance(
   meetingId: number,
@@ -264,16 +310,12 @@ export async function removeMeetingAttendance(
 }
 
 export async function updateMeeting(
-    meetingId: number,
-    updates: { date?: string; title?: string | null }
-  ): Promise<void> {
-    const { error } = await supabase
-      .from('meetings')
-      .update(updates)
-      .eq('id', meetingId);
-  
-    if (error) {
-      console.error('updateMeeting error', error);
-      throw new Error(error.message || 'Failed to update meeting');
-    }
+  meetingId: number,
+  updates: { date?: string; title?: string | null }
+): Promise<void> {
+  const { error } = await supabase.from('meetings').update(updates).eq('id', meetingId);
+  if (error) {
+    console.error('updateMeeting error', error);
+    throw new Error(error.message || 'Failed to update meeting');
   }
+}

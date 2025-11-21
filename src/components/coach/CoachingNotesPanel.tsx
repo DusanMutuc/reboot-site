@@ -38,18 +38,28 @@ import type {
   CoachingNoteComment,
   ActionStepStatus,
 } from '@/types/coaching';
-import LibraryItemPickerDialog, {
-  LibraryItemLite,
-} from './LibraryItemPickerDialog';
-import {
-  createMeetingWithAttendees,
-  upsertMeetingAttendance,
-  getUserMeetings,
-} from '@/lib/meetings';
+import LibraryItemPickerDialog, { LibraryItemLite } from './LibraryItemPickerDialog';
+import { createMeetingWithAttendees, upsertMeetingAttendance, getUserMeetings } from '@/lib/meetings';
 
 type Props = {
   userId: string | null;
 };
+
+/** ---- Local helper types to avoid `any` ---- */
+type ProfileNameRow = { first_name: string | null; last_name: string | null };
+
+type ContentNodeLite = { id: number; title: string | null; slug: string | null };
+
+type UserMeetingRow = {
+  meeting_id: number;
+  meeting_date: string; // ISO YYYY-MM-DD
+  meeting_type_code: string; // 'M2_MEETING' | 'IMPLEMENTATION_MEETING' | others
+  attended: boolean | null;
+};
+
+type CreatedMeeting = { id: number };
+
+type CoachingNoteWithM2 = CoachingNote & { m2_meeting_id?: number | null };
 
 function formatShortDate(iso: string) {
   const d = new Date(iso);
@@ -150,21 +160,14 @@ export default function CoachingNotesPanel({ userId }: Props) {
   // Confirm dialogs
   const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
   const [confirmDeleteNoteOpen, setConfirmDeleteNoteOpen] = useState(false);
-  const [pendingDeleteStepId, setPendingDeleteStepId] = useState<number | null>(
-    null
-  );
-  const [pendingDeleteCommentId, setPendingDeleteCommentId] = useState<number | null>(
-    null
-  );
+  const [pendingDeleteStepId, setPendingDeleteStepId] = useState<number | null>(null);
+  const [pendingDeleteCommentId, setPendingDeleteCommentId] = useState<number | null>(null);
 
   // Meeting slots (M2 + Implementation 1–3)
-  const [meetingSlots, setMeetingSlots] = useState<
-    Record<MeetingSlotKey, MeetingSlotState | null>
-  >(makeEmptyMeetingSlots);
+  const [meetingSlots, setMeetingSlots] =
+    useState<Record<MeetingSlotKey, MeetingSlotState | null>>(makeEmptyMeetingSlots);
 
-  const [newMeetingDates, setNewMeetingDates] = useState<
-    Record<MeetingSlotKey, string>
-  >({
+  const [newMeetingDates, setNewMeetingDates] = useState<Record<MeetingSlotKey, string>>({
     m2: '',
     impl1: '',
     impl2: '',
@@ -173,8 +176,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
   const [meetingSlotsLoading, setMeetingSlotsLoading] = useState(false);
   const [slotSavingKey, setSlotSavingKey] = useState<MeetingSlotKey | null>(null);
-  const [attendanceSavingKey, setAttendanceSavingKey] =
-    useState<MeetingSlotKey | null>(null);
+  const [attendanceSavingKey, setAttendanceSavingKey] = useState<MeetingSlotKey | null>(null);
   const [meetingSlotsVersion, setMeetingSlotsVersion] = useState(0);
 
   // User display name for meeting labels
@@ -217,8 +219,9 @@ export default function CoachingNotesPanel({ userId }: Props) {
       }
 
       if (data) {
-        const first = (data.first_name as string | null) ?? '';
-        const last = (data.last_name as string | null) ?? '';
+        const row = data as ProfileNameRow;
+        const first = row.first_name ?? '';
+        const last = row.last_name ?? '';
         const full = `${first} ${last}`.trim();
         setUserDisplayName(full || '');
       }
@@ -299,10 +302,8 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
       const ids = Array.from(
         new Set(
-          rows
-            .map((s) => s.library_item_id)
-            .filter((id): id is number => typeof id === 'number')
-        )
+          rows.map((s) => s.library_item_id).filter((id): id is number => typeof id === 'number'),
+        ),
       );
 
       if (ids.length === 0) return;
@@ -319,12 +320,12 @@ export default function CoachingNotesPanel({ userId }: Props) {
         return;
       }
 
-      const map: Record<number, { title: string | null; slug: string | null }> =
-        {};
+      const map: Record<number, { title: string | null; slug: string | null }> = {};
       (nodes ?? []).forEach((n) => {
-        map[n.id as number] = {
-          title: (n.title as string | null) ?? null,
-          slug: (n.slug as string | null) ?? null,
+        const node = n as ContentNodeLite;
+        map[node.id] = {
+          title: node.title ?? null,
+          slug: node.slug ?? null,
         };
       });
       setLibraryItems(map);
@@ -360,14 +361,14 @@ export default function CoachingNotesPanel({ userId }: Props) {
   // M2 from coaching_notes.m2_meeting_id
   // Implementation 1–3: first 3 IMPLEMENTATION_MEETINGs between this M2 and next M2
   useEffect(() => {
-    const note = notes.find((n) => n.id === selectedNoteId) ?? null;
+    const note = notes.find((n) => n.id === selectedNoteId) as CoachingNoteWithM2 | undefined;
     if (!note || !userId) {
       setMeetingSlots(makeEmptyMeetingSlots());
       setNewMeetingDates({ m2: '', impl1: '', impl2: '', impl3: '' });
       return;
     }
 
-    const m2MeetingId = (note as any).m2_meeting_id as number | null;
+    const m2MeetingId = note.m2_meeting_id ?? null;
     if (!m2MeetingId) {
       setMeetingSlots(makeEmptyMeetingSlots());
       setNewMeetingDates({ m2: '', impl1: '', impl2: '', impl3: '' });
@@ -382,7 +383,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         const userMeetings = await getUserMeetings({ userId });
         if (cancelled) return;
 
-        const all = (userMeetings ?? []) as any[];
+        const all = (userMeetings ?? []) as UserMeetingRow[];
 
         const m2Record = all.find((m) => m.meeting_id === m2MeetingId);
         if (!m2Record) {
@@ -390,20 +391,17 @@ export default function CoachingNotesPanel({ userId }: Props) {
           return;
         }
 
-        const m2Date = m2Record.meeting_date as string;
+        const m2Date = m2Record.meeting_date;
 
         const otherM2s = all
-          .filter(
-            (m) =>
-              m.meeting_type_code === 'M2_MEETING' && m.meeting_date > m2Date
-          )
+          .filter((m) => m.meeting_type_code === 'M2_MEETING' && m.meeting_date > m2Date)
           .sort((a, b) =>
             a.meeting_date === b.meeting_date
               ? a.meeting_id - b.meeting_id
-              : a.meeting_date.localeCompare(b.meeting_date)
+              : a.meeting_date.localeCompare(b.meeting_date),
           );
-        const nextM2 = otherM2s[0] as any | undefined;
-        const nextM2Date = nextM2?.meeting_date as string | undefined;
+        const nextM2 = otherM2s[0];
+        const nextM2Date = nextM2?.meeting_date;
 
         const implCandidates = all
           .filter((m) => {
@@ -415,7 +413,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
           .sort((a, b) =>
             a.meeting_date === b.meeting_date
               ? a.meeting_id - b.meeting_id
-              : a.meeting_date.localeCompare(b.meeting_date)
+              : a.meeting_date.localeCompare(b.meeting_date),
           );
 
         const nextSlots = makeEmptyMeetingSlots();
@@ -423,7 +421,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         nextSlots.m2 = {
           meetingId: m2MeetingId,
           date: m2Date,
-          attended: Boolean(m2Record.attended),
+          attended: Boolean(m2Record.attended ?? false),
         };
 
         const implKeys: MeetingSlotKey[] = ['impl1', 'impl2', 'impl3'];
@@ -433,15 +431,16 @@ export default function CoachingNotesPanel({ userId }: Props) {
             nextSlots[key] = {
               meetingId: rec.meeting_id,
               date: rec.meeting_date,
-              attended: Boolean(rec.attended),
+              attended: Boolean(rec.attended ?? false),
             };
           }
         });
 
         setMeetingSlots(nextSlots);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
-        setError((prev) => prev ?? err.message ?? 'Failed to load meetings');
+        const msg = err instanceof Error ? err.message : 'Failed to load meetings';
+        setError((prev) => prev ?? msg);
       } finally {
         if (!cancelled) setMeetingSlotsLoading(false);
       }
@@ -483,10 +482,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setNotesLoading(true);
 
-    const { error: err } = await supabase
-      .from('coaching_notes')
-      .delete()
-      .eq('id', selectedNoteId);
+    const { error: err } = await supabase.from('coaching_notes').delete().eq('id', selectedNoteId);
 
     if (err) {
       setError(err.message);
@@ -518,14 +514,11 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingStep(true);
 
-    const { data, error: err } = await supabase.rpc(
-      'add_coaching_note_action_step',
-      {
-        _coaching_note_id: selectedNoteId,
-        _label: newStepLabel.trim(),
-        _library_item_id: null,
-      }
-    );
+    const { data, error: err } = await supabase.rpc('add_coaching_note_action_step', {
+      _coaching_note_id: selectedNoteId,
+      _label: newStepLabel.trim(),
+      _library_item_id: null,
+    });
 
     if (err) {
       setError(err.message);
@@ -547,14 +540,11 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
     setSavingStep(true);
 
-    const { data, error: err } = await supabase.rpc(
-      'add_coaching_note_action_step',
-      {
-        _coaching_note_id: selectedNoteId,
-        _label: (item.title ?? '').trim() || 'Untitled step',
-        _library_item_id: item.id,
-      }
-    );
+    const { data, error: err } = await supabase.rpc('add_coaching_note_action_step', {
+      _coaching_note_id: selectedNoteId,
+      _label: (item.title ?? '').trim() || 'Untitled step',
+      _library_item_id: item.id,
+    });
 
     if (err) {
       setError(err.message);
@@ -616,9 +606,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     }
 
     setSteps((prev) =>
-      prev.map((s) =>
-        s.id === editingStepId ? { ...s, label: editingStepLabel.trim() } : s
-      )
+      prev.map((s) => (s.id === editingStepId ? { ...s, label: editingStepLabel.trim() } : s)),
     );
     setSavingStep(false);
     cancelEditStep();
@@ -706,9 +694,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     }
 
     setComments((prev) =>
-      prev.map((c) =>
-        c.id === editingCommentId ? { ...c, body: editingCommentBody.trim() } : c
-      )
+      prev.map((c) => (c.id === editingCommentId ? { ...c, body: editingCommentBody.trim() } : c)),
     );
     setSavingComment(false);
     cancelEditComment();
@@ -745,7 +731,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
   // Create the M2 meeting and attach m2_meeting_id to coaching_notes
   const handleCreateM2Meeting = async () => {
-    const note = notes.find((n) => n.id === selectedNoteId) ?? null;
+    const note = notes.find((n) => n.id === selectedNoteId) as CoachingNoteWithM2 | undefined;
     if (!note || !userId) return;
 
     const date = newMeetingDates.m2;
@@ -758,16 +744,14 @@ export default function CoachingNotesPanel({ userId }: Props) {
     setError(null);
 
     try {
-      const created = await createMeetingWithAttendees({
+      const created = (await createMeetingWithAttendees({
         meetingTypeCode: 'M2_MEETING',
         date,
         attendeeIds: [userId],
-        title: userDisplayName
-          ? `${userDisplayName} M2 meeting`
-          : 'M2 meeting',
-      });
+        title: userDisplayName ? `${userDisplayName} M2 meeting` : 'M2 meeting',
+      })) as CreatedMeeting;
 
-      const meetingId = (created as any).id as number;
+      const meetingId = created.id;
 
       const { error: updateErr } = await supabase
         .from('coaching_notes')
@@ -777,18 +761,15 @@ export default function CoachingNotesPanel({ userId }: Props) {
       if (updateErr) throw updateErr;
 
       setNotes((prev) =>
-        prev.map((n) =>
-          n.id === note.id
-            ? ({ ...n, m2_meeting_id: meetingId } as CoachingNote)
-            : n
-        )
+        prev.map((n) => (n.id === note.id ? ({ ...n, m2_meeting_id: meetingId } as CoachingNoteWithM2) : n)),
       );
 
       setNewMeetingDates((prev) => ({ ...prev, m2: '' }));
       setMeetingSlotsVersion((v) => v + 1);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to create M2 meeting');
+      const msg = err instanceof Error ? err.message : 'Failed to create M2 meeting';
+      setError(msg);
     } finally {
       setSlotSavingKey(null);
     }
@@ -797,10 +778,10 @@ export default function CoachingNotesPanel({ userId }: Props) {
   // Create an Implementation meeting (1/2/3) for this M2 cycle
   const handleCreateImplementationMeeting = async (slotKey: MeetingSlotKey) => {
     if (slotKey === 'm2') return;
-    const note = notes.find((n) => n.id === selectedNoteId) ?? null;
+    const note = notes.find((n) => n.id === selectedNoteId) as CoachingNoteWithM2 | undefined;
     if (!note || !userId) return;
 
-    const m2MeetingId = (note as any).m2_meeting_id as number | null;
+    const m2MeetingId = note.m2_meeting_id ?? null;
     if (!m2MeetingId) {
       setError('Create the M2 meeting first.');
       return;
@@ -820,16 +801,15 @@ export default function CoachingNotesPanel({ userId }: Props) {
         meetingTypeCode: 'IMPLEMENTATION_MEETING',
         date,
         attendeeIds: [userId],
-        title: userDisplayName
-          ? `${userDisplayName} implementation meeting`
-          : 'implementation meeting',
+        title: userDisplayName ? `${userDisplayName} implementation meeting` : 'implementation meeting',
       });
 
       setNewMeetingDates((prev) => ({ ...prev, [slotKey]: '' }));
       setMeetingSlotsVersion((v) => v + 1);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to create implementation meeting');
+      const msg = err instanceof Error ? err.message : 'Failed to create implementation meeting';
+      setError(msg);
     } finally {
       setSlotSavingKey(null);
     }
@@ -850,17 +830,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
     }));
 
     try {
-      const { error: updateErr } = await supabase
-        .from('meetings')
-        .update({ date: newDate })
-        .eq('id', slot.meetingId);
-
+      const { error: updateErr } = await supabase.from('meetings').update({ date: newDate }).eq('id', slot.meetingId);
       if (updateErr) throw updateErr;
-
       setMeetingSlotsVersion((v) => v + 1);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to update meeting date');
+      const msg = err instanceof Error ? err.message : 'Failed to update meeting date';
+      setError(msg);
       setMeetingSlots((prev) => ({
         ...prev,
         [slotKey]: slot ? { ...slot, date: prevDate } : slot,
@@ -890,9 +866,10 @@ export default function CoachingNotesPanel({ userId }: Props) {
         userId,
         attended: newValue,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || 'Failed to update attendance');
+      const msg = err instanceof Error ? err.message : 'Failed to update attendance';
+      setError(msg);
 
       setMeetingSlots((prev) => ({
         ...prev,
@@ -905,17 +882,14 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
   const selectedNote = useMemo(
     () => notes.find((n) => n.id === selectedNoteId) ?? null,
-    [notes, selectedNoteId]
+    [notes, selectedNoteId],
   );
 
   const lastNote = useMemo(() => (notes.length > 0 ? notes[0] : null), [notes]);
 
   const stepToDelete = useMemo(
-    () =>
-      pendingDeleteStepId != null
-        ? steps.find((s) => s.id === pendingDeleteStepId) ?? null
-        : null,
-    [steps, pendingDeleteStepId]
+    () => (pendingDeleteStepId != null ? steps.find((s) => s.id === pendingDeleteStepId) ?? null : null),
+    [steps, pendingDeleteStepId],
   );
 
   const commentToDelete = useMemo(
@@ -923,7 +897,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
       pendingDeleteCommentId != null
         ? comments.find((c) => c.id === pendingDeleteCommentId) ?? null
         : null,
-    [comments, pendingDeleteCommentId]
+    [comments, pendingDeleteCommentId],
   );
 
   const handleRequestCreateNote = () => {
@@ -971,19 +945,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
       )}
 
       {/* Confirm create new coaching note */}
-      <Dialog
-        open={confirmCreateOpen}
-        onClose={handleCancelCreateNote}
-        maxWidth="xs"
-        fullWidth
-      >
+      <Dialog open={confirmCreateOpen} onClose={handleCancelCreateNote} maxWidth="xs" fullWidth>
         <DialogTitle>Start new coaching notes?</DialogTitle>
         <DialogContent>
           <DialogContentText>
             {lastNote ? (
               <>
-                Previous coaching notes were created on{' '}
-                <strong>{formatShortDate(lastNote.created_at)}</strong>{' '}
+                Previous coaching notes were created on <strong>{formatShortDate(lastNote.created_at)}</strong>{' '}
                 ({formatDistanceFromNow(lastNote.created_at)}).<br />
                 <br />
                 Create a new coaching note for this student?
@@ -1011,8 +979,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         <DialogTitle>Delete coaching note?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This will delete this coaching note and all its action steps and notes.
-            This cannot be undone.
+            This will delete this coaching note and all its action steps and notes. This cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -1024,19 +991,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
       </Dialog>
 
       {/* Confirm delete action step */}
-      <Dialog
-        open={pendingDeleteStepId != null}
-        onClose={handleCancelDeleteStep}
-        maxWidth="xs"
-        fullWidth
-      >
+      <Dialog open={pendingDeleteStepId != null} onClose={handleCancelDeleteStep} maxWidth="xs" fullWidth>
         <DialogTitle>Delete action step?</DialogTitle>
         <DialogContent>
           <DialogContentText>
             {stepToDelete ? (
               <>
-                This will remove the action step &quot;
-                <strong>{stepToDelete.label}</strong>&quot;. This cannot be undone.
+                This will remove the action step &quot;<strong>{stepToDelete.label}</strong>&quot;. This cannot be undone.
               </>
             ) : (
               'This will remove this action step. This cannot be undone.'
@@ -1052,12 +1013,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
       </Dialog>
 
       {/* Confirm delete note comment */}
-      <Dialog
-        open={pendingDeleteCommentId != null}
-        onClose={handleCancelDeleteComment}
-        maxWidth="xs"
-        fullWidth
-      >
+      <Dialog open={pendingDeleteCommentId != null} onClose={handleCancelDeleteComment} maxWidth="xs" fullWidth>
         <DialogTitle>Delete note?</DialogTitle>
         <DialogContent>
           <DialogContentText>
@@ -1121,9 +1077,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
             {notes.map((note, idx) => {
               const isSelected = note.id === selectedNoteId;
-              const label = `Note ${idx + 1} • ${formatShortDate(
-                note.created_at
-              )}`;
+              const label = `Note ${idx + 1} • ${formatShortDate(note.created_at)}`;
               return (
                 <Button
                   key={note.id}
@@ -1256,9 +1210,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
               <Stack spacing={1.5} sx={{ mb: 3 }}>
                 {steps.map((step) => {
                   const linked =
-                    step.library_item_id != null
-                      ? libraryItems[step.library_item_id]
-                      : undefined;
+                    step.library_item_id != null ? libraryItems[step.library_item_id] : undefined;
 
                   const href =
                     step.library_item_id != null
@@ -1302,11 +1254,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                                 onChange={(e) => setEditingStepLabel(e.target.value)}
                                 autoFocus
                               />
-                              <Stack
-                                direction="row"
-                                spacing={1}
-                                justifyContent="flex-end"
-                              >
+                              <Stack direction="row" spacing={1} justifyContent="flex-end">
                                 <Button
                                   size="small"
                                   variant="contained"
@@ -1335,10 +1283,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                             </Stack>
                           ) : (
                             <>
-                              <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 500, mb: 0.5 }}
-                              >
+                              <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
                                 {step.label}
                               </Typography>
 
@@ -1349,13 +1294,8 @@ export default function CoachingNotesPanel({ userId }: Props) {
                                   alignItems="center"
                                   sx={{ mt: 0.5, flexWrap: 'wrap' }}
                                 >
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    Linked:{' '}
-                                    {linked.title ||
-                                      `Library item #${step.library_item_id}`}
+                                  <Typography variant="caption" color="text.secondary">
+                                    Linked: {linked.title || `Library item #${step.library_item_id}`}
                                   </Typography>
 
                                   {href && (
@@ -1387,10 +1327,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                               fullWidth
                               value={step.status}
                               onChange={(e) =>
-                                handleChangeStepStatus(
-                                  step.id,
-                                  e.target.value as ActionStepStatus
-                                )
+                                handleChangeStepStatus(step.id, e.target.value as ActionStepStatus)
                               }
                               sx={{
                                 borderRadius: 1.5,
@@ -1477,11 +1414,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                 + Add action step from Library
               </Button>
 
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1.5}
-                alignItems={{ xs: 'stretch', sm: 'center' }}
-              >
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>
                 <TextField
                   size="small"
                   fullWidth
@@ -1563,14 +1496,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                 No notes yet. Use this area to capture key context from your sessions.
               </Typography>
             ) : (
-              <Box
-                sx={{
-                  maxHeight: 260,
-                  overflowY: 'auto',
-                  mb: 2,
-                  pr: 1,
-                }}
-              >
+              <Box sx={{ maxHeight: 260, overflowY: 'auto', mb: 2, pr: 1 }}>
                 <Stack spacing={1.5}>
                   {comments.map((c) => {
                     const isEditing = editingCommentId === c.id;
@@ -1603,18 +1529,12 @@ export default function CoachingNotesPanel({ userId }: Props) {
                               onChange={(e) => setEditingCommentBody(e.target.value)}
                               autoFocus
                             />
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              justifyContent="flex-end"
-                            >
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
                               <Button
                                 size="small"
                                 variant="contained"
                                 onClick={saveEditComment}
-                                disabled={
-                                  savingComment || !editingCommentBody.trim()
-                                }
+                                disabled={savingComment || !editingCommentBody.trim()}
                                 sx={{
                                   textTransform: 'none',
                                   borderRadius: 1.5,
@@ -1638,27 +1558,15 @@ export default function CoachingNotesPanel({ userId }: Props) {
                           </Stack>
                         ) : (
                           <Stack spacing={0.75}>
-                            <Stack
-                              direction="row"
-                              justifyContent="space-between"
-                              alignItems="flex-start"
-                              spacing={1}
-                            >
+                            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                               <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography
-                                  variant="body2"
-                                  sx={{ mb: 0.25, lineHeight: 1.6 }}
-                                >
+                                <Typography variant="body2" sx={{ mb: 0.25, lineHeight: 1.6 }}>
                                   {c.body}
                                 </Typography>
                               </Box>
 
                               <Stack direction="row" spacing={0.5}>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => startEditComment(c)}
-                                  sx={{ p: 0.5 }}
-                                >
+                                <IconButton size="small" onClick={() => startEditComment(c)} sx={{ p: 0.5 }}>
                                   <EditIcon sx={{ fontSize: 18 }} />
                                 </IconButton>
                                 <IconButton
@@ -1672,11 +1580,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                               </Stack>
                             </Stack>
 
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                              sx={{ fontWeight: 500 }}
-                            >
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
                               {formatDateTime(c.created_at)}
                             </Typography>
                           </Stack>
@@ -1775,18 +1679,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
                   const isM2 = slotKey === 'm2';
 
                   const busy =
-                    meetingSlotsLoading ||
-                    slotSavingKey === slotKey ||
-                    attendanceSavingKey === slotKey;
+                    meetingSlotsLoading || slotSavingKey === slotKey || attendanceSavingKey === slotKey;
 
-                  const m2Exists = Boolean((selectedNote as any)?.m2_meeting_id);
+                  const m2Exists = Boolean((selectedNote as CoachingNoteWithM2 | null)?.m2_meeting_id);
 
-                  const dateValue = hasMeeting
-                    ? slot?.date ?? ''
-                    : newMeetingDates[slotKey];
+                  const dateValue = hasMeeting ? slot?.date ?? '' : newMeetingDates[slotKey];
 
-                  const disableInputs =
-                    busy || (!isM2 && !m2Exists && !hasMeeting);
+                  const disableInputs = busy || (!isM2 && !m2Exists && !hasMeeting);
 
                   return (
                     <Box
@@ -1805,10 +1704,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                         alignItems={{ xs: 'flex-start', sm: 'center' }}
                       >
                         <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 600, mb: 0.25 }}
-                          >
+                          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.25 }}>
                             {cfg.label}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
@@ -1856,18 +1752,11 @@ export default function CoachingNotesPanel({ userId }: Props) {
                           />
 
                           {hasMeeting ? (
-                            <Stack
-                              direction="row"
-                              spacing={1}
-                              alignItems="center"
-                              sx={{ ml: { sm: 1 } }}
-                            >
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ ml: { sm: 1 } }}>
                               <Checkbox
                                 size="small"
                                 checked={slot?.attended ?? false}
-                                onChange={() =>
-                                  void handleToggleSlotAttendance(slotKey)
-                                }
+                                onChange={() => void handleToggleSlotAttendance(slotKey)}
                                 disabled={busy}
                               />
                               <Typography variant="body2">Attended</Typography>
@@ -1877,9 +1766,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                               variant="outlined"
                               size="small"
                               onClick={() =>
-                                isM2
-                                  ? void handleCreateM2Meeting()
-                                  : void handleCreateImplementationMeeting(slotKey)
+                                isM2 ? void handleCreateM2Meeting() : void handleCreateImplementationMeeting(slotKey)
                               }
                               disabled={disableInputs || !newMeetingDates[slotKey]}
                               sx={{

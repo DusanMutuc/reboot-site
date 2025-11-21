@@ -20,6 +20,7 @@ import {
   Fade,
   Grow,
 } from '@mui/material';
+import type { SelectChangeEvent } from '@mui/material/Select';
 import {
   TrendingUp as TrendingUpIcon,
   Save as SaveIcon,
@@ -134,10 +135,10 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
 
       setMetrics(metricRows ?? []);
 
-      // 3) Compute current month start (YYYY-MM-01) in local time without timezone shenanigans
+      // 3) Compute current month start (YYYY-MM-01)
       const now = new Date();
       const year = now.getFullYear();
-      const month = now.getMonth() + 1; // 0-based in JS, so +1
+      const month = now.getMonth() + 1;
       const currentMonthIso = `${year}-${String(month).padStart(2, '0')}-01`;
 
       // 4) Ensure a monthly record exists for the current month
@@ -308,7 +309,7 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
     void saveValues({ silent: true });
   };
 
-  const handleChangePeriod = (e: any) => {
+  const handleChangePeriod = (e: SelectChangeEvent<string>) => {
     setSelectedPeriod(e.target.value as string);
     setSuccess(null);
     setError(null);
@@ -484,7 +485,7 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
             No KPI Months Available
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Once your first month is created, you'll be able to select it and
+            Once your first month is created, you&rsquo;ll be able to select it and
             update your KPI values.
           </Typography>
         </Paper>

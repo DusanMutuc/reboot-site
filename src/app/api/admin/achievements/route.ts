@@ -1,6 +1,23 @@
+// src/app/api/admin/achievements/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+
+type AchievementRow = {
+  id: number;
+  code: string;
+  title: string;
+  description: string | null;
+  icon_url: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  achievement_node_map?: { node_id: number }[] | null;
+};
+
+type ShapedAchievement = Omit<AchievementRow, 'achievement_node_map'> & {
+  library_node_ids: number[];
+};
 
 function toAchievementCode(title: string): string {
   return title
@@ -12,7 +29,7 @@ function toAchievementCode(title: string): string {
 }
 
 // Helper: load a single achievement with its node ids
-async function fetchAchievementWithNodeIds(id: number) {
+async function fetchAchievementWithNodeIds(id: number): Promise<ShapedAchievement> {
   const supa = getAdminClient();
 
   const { data, error } = await supa
@@ -37,11 +54,9 @@ async function fetchAchievementWithNodeIds(id: number) {
     throw error ?? new Error('Achievement not found');
   }
 
-  const library_node_ids = (data.achievement_node_map ?? []).map(
-    (row: { node_id: number }) => row.node_id
-  );
-
-  const { achievement_node_map, ...rest } = data as any;
+  const row = data as AchievementRow;
+  const library_node_ids = (row.achievement_node_map ?? []).map((r) => r.node_id);
+  const { achievement_node_map, ...rest } = row;
   return { ...rest, library_node_ids };
 }
 
@@ -82,11 +97,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch achievements' }, { status: 500 });
   }
 
-  const shaped =
-    (data ?? []).map((row: any) => {
-      const library_node_ids = (row.achievement_node_map ?? []).map(
-        (r: { node_id: number }) => r.node_id
-      );
+  const shaped: ShapedAchievement[] =
+    (data as AchievementRow[] | null)?.map((row) => {
+      const library_node_ids = (row.achievement_node_map ?? []).map((r) => r.node_id);
       const { achievement_node_map, ...rest } = row;
       return { ...rest, library_node_ids };
     }) ?? [];
@@ -131,7 +144,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to create achievement' }, { status: 500 });
   }
 
-  const achievementId = inserted.id as number;
+  const achievementId = (inserted as { id: number }).id;
 
   // Insert mappings into achievement_node_map
   if (Array.isArray(body.library_node_ids) && body.library_node_ids.length > 0) {
@@ -153,7 +166,7 @@ export async function POST(request: NextRequest) {
     console.error('POST /api/admin/achievements fetch error:', err);
     return NextResponse.json(
       { error: 'Created, but failed to reload record' },
-      { status: 201 },
+      { status: 201 }
     );
   }
 }
@@ -191,10 +204,7 @@ export async function PATCH(request: NextRequest) {
     update.code = toAchievementCode(body.title);
   }
 
-  const { error: updErr } = await supa
-    .from('achievements')
-    .update(update)
-    .eq('id', body.id);
+  const { error: updErr } = await supa.from('achievements').update(update).eq('id', body.id);
 
   if (updErr) {
     console.error('PATCH /api/admin/achievements update error:', updErr);
@@ -234,7 +244,7 @@ export async function PATCH(request: NextRequest) {
     console.error('PATCH /api/admin/achievements fetch error:', err);
     return NextResponse.json(
       { error: 'Updated, but failed to reload record' },
-      { status: 200 },
+      { status: 200 }
     );
   }
 }

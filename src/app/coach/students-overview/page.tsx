@@ -91,7 +91,7 @@ export default function StudentsOverviewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleTabChange = (_: any, next: TabValue) => {
+  const handleTabChange = (_evt: React.SyntheticEvent, next: TabValue) => {
     setQuery({ tab: next });
   };
 

@@ -14,11 +14,77 @@ import type {
   AttendancePoint,
   DashboardActionStep,
   DashboardNotePreview,
-  DashboardWin,
-  DashboardAchievement,
   CoachingNoteListItem,
 } from '@/types/dashboard';
 
+/** ---------- Shared RPC/Row Types (no `any`) ---------- */
+type IsoDate = string;
+
+type KpiValues = {
+  gross_revenue?: number | null;
+  profit?: number | null;
+  closed_deals?: number | null;
+  repeat_referral?: number | null;
+  days_off?: number | null;
+  pipeline_15_30?: number | null;
+  // allow unknown keys without using `any`
+  [k: string]: unknown;
+};
+
+type KpiHistoryRow = {
+  period_start_date: IsoDate;
+  kpi_values: KpiValues | null;
+};
+
+type KpiRecordRow = {
+  kpi_values: KpiValues | null;
+};
+
+type AttendanceRow = {
+  counts_toward_engagement: boolean;
+  meeting_date: IsoDate;
+  attended: boolean;
+};
+
+type CoachingNoteRow = {
+  id: number;
+  user_id: string;
+  created_at: IsoDate;
+};
+
+type ActionStepRow = {
+  id: number;
+  coaching_note_id: number;
+  label: string;
+  status: DashboardActionStep['status'];
+  library_item_id: number | null;
+  created_at: IsoDate;
+  updated_at: IsoDate | null;
+};
+
+type NoteCommentRow = {
+  id: number;
+  body: string;
+  created_at: IsoDate;
+};
+
+type WinRow = {
+  id: number;
+  body: string;
+  created_at: IsoDate;
+};
+
+type AchievementJoinedRow = {
+  id: number;
+  achieved_at: IsoDate;
+  achievement:
+    | { title: string | null; icon_url: string | null }
+    | { title: string | null; icon_url: string | null }[]
+    | null;
+};
+
+
+/** ---------- Small date helpers (may be used elsewhere) ---------- */
 function getCurrentMonthStart(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
@@ -30,19 +96,11 @@ function getPreviousMonthStart(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-function getDateNDaysAgo(n: number): string {
-  const now = new Date();
-  now.setDate(now.getDate() - n);
-  return now.toISOString().slice(0, 10);
+function formatISODate(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
-function getTodayDate(): string {
-  const now = new Date();
-  return now.toISOString().slice(0, 10);
-}
-
-// ---------- 1) Revenue / Profit ----------
-
+/** ---------- 1) Revenue / Profit ---------- */
 async function fetchRevenueProfitSection(
   client: SupabaseClient,
   userId: string,
@@ -64,7 +122,7 @@ async function fetchRevenueProfitSection(
     };
   }
 
-  const rows = (data ?? []) as any[];
+  const rows = (data ?? []) as KpiHistoryRow[];
 
   // docs: history returns newest first; we want oldest → newest for graph
   const sorted = [...rows].sort(
@@ -79,20 +137,20 @@ async function fetchRevenueProfitSection(
     profit: Number(row.kpi_values?.profit ?? 0),
   }));
 
-  const latest = history[history.length - 1] ?? { revenue: 0, profit: 0 };
-  const prev = history[history.length - 2] ?? null;
+  const latestPt = history[history.length - 1] ?? { revenue: 0, profit: 0 };
+  const prevPt = history[history.length - 2] ?? null;
 
-  const currentRevenue = latest.revenue;
-  const currentProfit = latest.profit;
+  const currentRevenue = latestPt.revenue;
+  const currentProfit = latestPt.profit;
 
   const revenueDeltaPct =
-    prev && prev.revenue !== 0
-      ? ((latest.revenue - prev.revenue) / prev.revenue) * 100
+    prevPt && prevPt.revenue !== 0
+      ? ((latestPt.revenue - prevPt.revenue) / prevPt.revenue) * 100
       : null;
 
   const profitDeltaPct =
-    prev && prev.profit !== 0
-      ? ((latest.profit - prev.profit) / prev.profit) * 100
+    prevPt && prevPt.profit !== 0
+      ? ((latestPt.profit - prevPt.profit) / prevPt.profit) * 100
       : null;
 
   return {
@@ -105,8 +163,7 @@ async function fetchRevenueProfitSection(
   };
 }
 
-// ---------- 2) KPI tiles ----------
-
+/** ---------- 2) KPI tiles ---------- */
 function mapMetricKeyToKpiKey(metricKey: string): KpiKey {
   switch (metricKey) {
     case 'closed_deals':
@@ -141,18 +198,13 @@ async function fetchKpiSection(
       }),
     ]);
 
-  if (errCurrent) {
-    console.error('get_monthly_kpi_record_with_values error', errCurrent);
-  }
-  if (errHistory) {
-    console.error('get_monthly_kpi_history_with_values error', errHistory);
-  }
+  if (errCurrent) console.error('get_monthly_kpi_record_with_values error', errCurrent);
+  if (errHistory) console.error('get_monthly_kpi_history_with_values error', errHistory);
 
-  const currentValues = (current as any)?.kpi_values ?? {};
-  const historyArr = (history as any[]) ?? [];
-  const latest = historyArr.find(
-    (row) => row.period_start_date === currentMonthStart,
-  );
+  const currentValues = (current as KpiRecordRow | null)?.kpi_values ?? {};
+  const historyArr = (history as KpiHistoryRow[] | null) ?? [];
+
+  const latest = historyArr.find((row) => row.period_start_date === currentMonthStart);
   const previous =
     historyArr.find((row) => row.period_start_date === prevMonthStart) ??
     historyArr[1];
@@ -163,8 +215,8 @@ async function fetchKpiSection(
     metricKey: 'closed_deals' | 'repeat_referral' | 'days_off' | 'pipeline_15_30',
     label: string,
   ): KpiMetric {
-    const value = Number(currentValues?.[metricKey] ?? 0);
-    const prev = Number(prevValues?.[metricKey] ?? 0);
+    const value = Number((currentValues as KpiValues)?.[metricKey] ?? 0);
+    const prev = Number((prevValues as KpiValues)?.[metricKey] ?? 0);
     const deltaPct = prev !== 0 ? ((value - prev) / prev) * 100 : null;
     return {
       key: mapMetricKeyToKpiKey(metricKey),
@@ -187,52 +239,49 @@ async function fetchKpiSection(
   };
 }
 
-
-// ---------- 2b) KPI charts (last 12 months, 4 lines) ----------
-
+/** ---------- 2b) KPI charts (last 12 months, 4 lines) ---------- */
 async function fetchKpiCharts(
-    client: SupabaseClient,
-    userId: string,
-  ): Promise<import('@/types/dashboard').KpiChartsProps> {
-    const { data, error } = await client.rpc('get_monthly_kpi_history_with_values', {
-      _user_id: userId,
-      _limit: 12,
-    });
-  
-    if (error) {
-      console.error('get_monthly_kpi_history_with_values (kpi charts) error', error);
-      return { series: [], periodLabel: 'Last 12 months' };
-    }
-  
-    const rows = (data ?? []) as any[];
-  
-    // Ensure oldest → newest
-    const sorted = rows.sort(
-      (a, b) =>
-        new Date(a.period_start_date).getTime() - new Date(b.period_start_date).getTime()
-    );
-  
-    const series = sorted.map((row) => {
-      const v = row.kpi_values ?? {};
-      return {
-        date: row.period_start_date,
-        total_closed: Number(v.closed_deals ?? 0),
-        repeat_referral: Number(v.repeat_referral ?? 0),
-        days_off: Number(v.days_off ?? 0),
-        fifteen_thirty: Number(v.pipeline_15_30 ?? 0),
-      };
-    });
-  
-    return {
-      series,
-      periodLabel: 'Last 12 months',
-    };
-  }
-  
-// ---------- 3) Attendance (driftline) ----------
+  client: SupabaseClient,
+  userId: string,
+): Promise<import('@/types/dashboard').KpiChartsProps> {
+  const { data, error } = await client.rpc('get_monthly_kpi_history_with_values', {
+    _user_id: userId,
+    _limit: 12,
+  });
 
+  if (error) {
+    console.error('get_monthly_kpi_history_with_values (kpi charts) error', error);
+    return { series: [], periodLabel: 'Last 12 months' };
+  }
+
+  const rows = (data ?? []) as KpiHistoryRow[];
+
+  // Ensure oldest → newest
+  const sorted = rows.sort(
+    (a, b) =>
+      new Date(a.period_start_date).getTime() - new Date(b.period_start_date).getTime(),
+  );
+
+  const series = sorted.map((row) => {
+    const v = row.kpi_values ?? {};
+    return {
+      date: row.period_start_date,
+      total_closed: Number(v.closed_deals ?? 0),
+      repeat_referral: Number(v.repeat_referral ?? 0),
+      days_off: Number(v.days_off ?? 0),
+      fifteen_thirty: Number(v.pipeline_15_30 ?? 0),
+    };
+  });
+
+  return {
+    series,
+    periodLabel: 'Last 12 months',
+  };
+}
+
+/** ---------- 3) Attendance (driftline) ---------- */
 const ATTENDANCE_WEEKS = 12;
-const DRIFT_DIVISOR: number = 3; // driftline = cumulativeExpected / 3
+const DRIFT_DIVISOR = 3; // driftline = cumulativeExpected / 3
 
 function startOfWeekMonday(d: Date): Date {
   const date = new Date(d);
@@ -247,10 +296,6 @@ function addWeeks(d: Date, n: number): Date {
   const date = new Date(d);
   date.setDate(date.getDate() + n * 7);
   return date;
-}
-
-function formatISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
 }
 
 async function fetchAttendanceSection(
@@ -275,10 +320,11 @@ async function fetchAttendanceSection(
     };
   }
 
+  const rows = (data ?? []) as AttendanceRow[];
   const expectedPerWeek = new Array<number>(ATTENDANCE_WEEKS).fill(0);
   const attendedPerWeek = new Array<number>(ATTENDANCE_WEEKS).fill(0);
 
-  (data ?? []).forEach((row: any) => {
+  rows.forEach((row) => {
     if (!row.counts_toward_engagement) return;
 
     const meetingDate = new Date(row.meeting_date);
@@ -292,10 +338,7 @@ async function fetchAttendanceSection(
     if (index < 0 || index >= ATTENDANCE_WEEKS) return;
 
     expectedPerWeek[index] += 1;
-
-    if (row.attended) {
-      attendedPerWeek[index] += 1;
-    }
+    if (row.attended) attendedPerWeek[index] += 1;
   });
 
   const series: AttendancePoint[] = [];
@@ -327,9 +370,7 @@ async function fetchAttendanceSection(
   };
 }
 
-
-// ---------- 4) Coaching notes & action steps ----------
-
+/** ---------- 4) Coaching notes & action steps ---------- */
 function sortActionSteps(steps: DashboardActionStep[]): DashboardActionStep[] {
   const statusRank: Record<DashboardActionStep['status'], number> = {
     in_progress: 0,
@@ -340,11 +381,8 @@ function sortActionSteps(steps: DashboardActionStep[]): DashboardActionStep[] {
   return [...steps].sort((a, b) => {
     const diff = statusRank[a.status] - statusRank[b.status];
     if (diff !== 0) return diff;
-
     // tie-breaker: newer first within the same status
-    return (
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 }
 
@@ -358,13 +396,7 @@ async function fetchCoachingNotesSection(
     error: noteErr,
   } = await client
     .from('coaching_notes')
-    .select(
-      `
-      id,
-      user_id,
-      created_at
-    `,
-    )
+    .select('id, user_id, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false }) // <- change to m2_meeting_date if you add that column
     .limit(1)
@@ -372,46 +404,22 @@ async function fetchCoachingNotesSection(
 
   if (noteErr) {
     console.error('fetch latest coaching note error', noteErr);
-    return {
-      actionSteps: [],
-      notes: [],
-    };
+    return { actionSteps: [], notes: [] };
   }
 
-  if (!latestNote) {
-    // user has no coaching notes yet
-    return {
-      actionSteps: [],
-      notes: [],
-    };
-  }
+  if (!latestNote) return { actionSteps: [], notes: [] };
 
   // 2) Fetch action steps ONLY for this latest note
-  const {
-    data: steps,
-    error: stepsErr,
-  } = await client
+  const { data: steps, error: stepsErr } = await client
     .from('coaching_note_action_steps')
-    .select(
-      `
-      id,
-      coaching_note_id,
-      label,
-      status,
-      library_item_id,
-      created_at,
-      updated_at
-    `,
-    )
-    .eq('coaching_note_id', latestNote.id)
+    .select('id, coaching_note_id, label, status, library_item_id, created_at, updated_at')
+    .eq('coaching_note_id', (latestNote as CoachingNoteRow).id)
     .order('created_at', { ascending: true });
 
-  if (stepsErr) {
-    console.error('fetch action steps for latest note error', stepsErr);
-  }
+  if (stepsErr) console.error('fetch action steps for latest note error', stepsErr);
 
   const rawActionSteps: DashboardActionStep[] =
-    (steps ?? []).map((row: any) => ({
+    ((steps ?? []) as ActionStepRow[]).map((row) => ({
       id: row.id,
       coaching_note_id: row.coaching_note_id,
       label: row.label,
@@ -419,55 +427,38 @@ async function fetchCoachingNotesSection(
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at ?? row.created_at,
-    })) ?? [];
+    }));
 
   const actionSteps = sortActionSteps(rawActionSteps);
 
   // 3) Fetch COMMENTS for this latest note
-  const {
-    data: comments,
-    error: commentsErr,
-  } = await client
+  const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
-    .select(
-      `
-      id,
-      body,
-      created_at
-    `,
-    )
-    .eq('coaching_note_id', latestNote.id)
+    .select('id, body, created_at')
+    .eq('coaching_note_id', (latestNote as CoachingNoteRow).id)
     .order('created_at', { ascending: false });
 
-  if (commentsErr) {
-    console.error('fetch coaching comments for latest note error', commentsErr);
-  }
+  if (commentsErr) console.error('fetch coaching comments for latest note error', commentsErr);
 
-  // DashboardNotePreview is typed as Pick<CoachingNoteComment, 'id' | 'created_at' | 'body'>
+  // DashboardNotePreview is Pick<CoachingNoteComment, 'id'|'created_at'|'body'>
   const notes: DashboardNotePreview[] =
-    (comments ?? []).map((row: any) => ({
+    ((comments ?? []) as NoteCommentRow[]).map((row) => ({
       id: row.id,
       created_at: row.created_at,
-      body:
-        row.body && row.body.length > 220
-          ? `${row.body.slice(0, 217)}...`
-          : row.body,
-    })) ?? [];
+      body: row.body && row.body.length > 220 ? `${row.body.slice(0, 217)}...` : row.body,
+    }));
 
-  return {
-    actionSteps,
-    notes,
-  };
+  return { actionSteps, notes };
 }
 
 export async function listUserCoachingNotes(
   client: SupabaseClient,
-  userId: string
+  userId: string,
 ): Promise<CoachingNoteListItem[]> {
   const { data, error } = await client
     .from('coaching_notes')
     .select('id, created_at')
-    .eq('user_id', userId)          // member sees their own notes; coaches/admins’ RLS should also pass
+    .eq('user_id', userId) // member sees their own notes; coaches/admins’ RLS should also pass
     .order('created_at', { ascending: false });
 
   if (error || !data) {
@@ -475,31 +466,32 @@ export async function listUserCoachingNotes(
     return [];
   }
 
-  const fmt = (iso: string) =>
+  const fmt = (iso: IsoDate) =>
     new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  return data.map((row) => ({
+  return (data as CoachingNoteRow[]).map((row) => ({
     id: row.id,
     created_at: row.created_at,
-    meeting_date: null,             // not in this schema; keep field for type compatibility
-    label: fmt(row.created_at),     // e.g., "Nov 19, 2025"
+    meeting_date: null, // not in this schema; keep field for type compatibility
+    label: fmt(row.created_at), // e.g., "Nov 19, 2025"
   }));
 }
-// Fetch action steps + comments for a specific note
+
+/** Fetch action steps + comments for a specific note */
 export async function fetchCoachingNotesByNoteId(
   client: SupabaseClient,
-  noteId: number
+  noteId: number,
 ): Promise<CoachingNotesSectionProps> {
   // Steps
   const { data: steps, error: stepsErr } = await client
     .from('coaching_note_action_steps')
-    .select(`id, coaching_note_id, label, status, library_item_id, created_at, updated_at`)
+    .select('id, coaching_note_id, label, status, library_item_id, created_at, updated_at')
     .eq('coaching_note_id', noteId)
     .order('created_at', { ascending: true });
 
   if (stepsErr) console.error('stepsErr', stepsErr);
 
-  const rawSteps: DashboardActionStep[] = (steps ?? []).map((r: any) => ({
+  const rawSteps: DashboardActionStep[] = ((steps ?? []) as ActionStepRow[]).map((r) => ({
     id: r.id,
     coaching_note_id: r.coaching_note_id,
     label: r.label,
@@ -523,13 +515,13 @@ export async function fetchCoachingNotesByNoteId(
   // Comments
   const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
-    .select(`id, body, created_at`)
+    .select('id, body, created_at')
     .eq('coaching_note_id', noteId)
     .order('created_at', { ascending: false });
 
   if (commentsErr) console.error('commentsErr', commentsErr);
 
-  const notes: DashboardNotePreview[] = (comments ?? []).map((r: any) => ({
+  const notes: DashboardNotePreview[] = ((comments ?? []) as NoteCommentRow[]).map((r) => ({
     id: r.id,
     created_at: r.created_at,
     body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
@@ -538,12 +530,8 @@ export async function fetchCoachingNotesByNoteId(
   return { actionSteps, notes };
 }
 
-// ---------- 5) Wins ----------
-
-async function fetchWins(
-  client: SupabaseClient,
-  userId: string,
-): Promise<WinsProps> {
+/** ---------- 5) Wins ---------- */
+async function fetchWins(client: SupabaseClient, userId: string): Promise<WinsProps> {
   const { data, error } = await client
     .from('wins')
     .select('id, body, created_at')
@@ -556,7 +544,7 @@ async function fetchWins(
     return { wins: [] };
   }
 
-  const wins: DashboardWin[] = (data ?? []).map((row: any) => ({
+  const wins: WinsProps['wins'] = ((data ?? []) as WinRow[]).map((row) => ({
     id: row.id,
     body: row.body,
     created_at: row.created_at,
@@ -565,8 +553,7 @@ async function fetchWins(
   return { wins };
 }
 
-// ---------- 6) Achievements ----------
-
+/** ---------- 6) Achievements ---------- */
 async function fetchAchievements(
   client: SupabaseClient,
   userId: string,
@@ -591,46 +578,46 @@ async function fetchAchievements(
     return { achievements: [] };
   }
 
-  const achievements: DashboardAchievement[] = (data ?? []).map((row: any) => ({
-    id: row.id,
-    title: row.achievement?.title ?? 'Achievement',
-    imageUrl: row.achievement?.icon_url ?? '',
-    earnedAt: row.achieved_at,
-  }));
+  const achievements: AchievementsProps['achievements'] =
+  ((data ?? []) as AchievementJoinedRow[]).map((row) => {
+    const ach = Array.isArray(row.achievement) ? row.achievement[0] ?? null : row.achievement;
+    const title = ach?.title ?? 'Achievement';
+    const imageUrl = ach?.icon_url ?? '';
+    return {
+      id: row.id,
+      title,
+      imageUrl,
+      earnedAt: row.achieved_at,
+    };
+  });
+
 
   return { achievements };
 }
 
+/** ---------- Aggregated fetch ---------- */
 export async function fetchDashboardData(
-    client: SupabaseClient,
-    userId: string,
-  ): Promise<UserDashboardData> {
-    const [
-      revenueProfit,
-      kpi,
-      kpiChart,
-      attendance,
-      coachingNotes,
-      wins,
-      achievements,
-    ] = await Promise.all([
+  client: SupabaseClient,
+  userId: string,
+): Promise<UserDashboardData> {
+  const [revenueProfit, kpi, kpiChart, attendance, coachingNotes, wins, achievements] =
+    await Promise.all([
       fetchRevenueProfitSection(client, userId),
       fetchKpiSection(client, userId),
       fetchKpiCharts(client, userId),
       fetchAttendanceSection(client, userId),
-      fetchCoachingNotesSection(client, userId), // <-- pass userId here
+      fetchCoachingNotesSection(client, userId),
       fetchWins(client, userId),
       fetchAchievements(client, userId),
     ]);
-  
-    return {
-      revenueProfit,
-      kpi,
-      kpiChart,
-      attendance,
-      coachingNotes,
-      wins,
-      achievements,
-    };
-  }
-  
+
+  return {
+    revenueProfit,
+    kpi,
+    kpiChart,
+    attendance,
+    coachingNotes,
+    wins,
+    achievements,
+  };
+}
