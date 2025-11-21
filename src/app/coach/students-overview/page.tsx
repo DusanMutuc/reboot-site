@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -49,7 +49,8 @@ function useQuerySync() {
   return { searchParams, setQuery };
 }
 
-export default function StudentsOverviewPage() {
+// Inner component that *reads* useSearchParams()
+function StudentsOverviewInner() {
   const { searchParams, setQuery } = useQuerySync();
 
   // URL state (single source of truth)
@@ -99,7 +100,6 @@ export default function StudentsOverviewPage() {
     setQuery({ userId: nextUserId });
   };
 
-  // Validate tab value
   const tabValue: TabValue = useMemo(
     () => (TAB_VALUES.includes(tabFromUrl) ? tabFromUrl : 'dashboard'),
     [tabFromUrl]
@@ -211,12 +211,10 @@ export default function StudentsOverviewPage() {
               )}
 
               {tabValue === 'notes' && (
-                // Full component; reads ?userId= internally
                 <CoachNotesView mode={mode} />
               )}
 
               {tabValue === 'progress' && (
-                // Full component; manages ?userId=&courseId=
                 <StudentProgressView mode={mode} />
               )}
             </Box>
@@ -224,5 +222,16 @@ export default function StudentsOverviewPage() {
         </Stack>
       </Container>
     </Box>
+  );
+}
+
+// Outer wrapper adds the required Suspense boundary
+export const dynamic = 'force-dynamic'; // avoids static prerender for query-driven page
+
+export default function StudentsOverviewPage() {
+  return (
+    <Suspense fallback={null}>
+      <StudentsOverviewInner />
+    </Suspense>
   );
 }
