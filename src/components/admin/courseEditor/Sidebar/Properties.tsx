@@ -228,6 +228,11 @@ const [searchResults, setSearchResults] = useState<AllowedUser[]>([]);
 const [searchLoading, setSearchLoading] = useState(false);
 const [searchError, setSearchError] = useState<string | null>(null);
 
+// Typed helper rows
+type ContentNodesRow = { is_public: boolean | null };
+type ProfilesRow = { id: string; first_name: string | null; last_name: string | null };
+type UCVRowMaybeArray = { user_id: string; profile: ProfilesRow | ProfilesRow[] | null };
+
 // Load initial is_public and allowed users when a course is selected
 useEffect(() => {
   let cancelled = false;
@@ -241,62 +246,64 @@ useEffect(() => {
     setAllowedError(null);
 
     try {
-      // Load is_public (prefer subtree snapshot if present, else fetch)
-      let nextIsPublic: boolean | null = (subtree as any)?.node?.is_public;
-      if (typeof nextIsPublic !== 'boolean') {
-        const { data, error } = await supabase
-          .from('content_nodes')
-          .select('is_public')
-          .eq('id', courseId)
-          .single();
-        if (error) throw error;
-        nextIsPublic = !!data?.is_public;
-      }
-      if (!cancelled) setIsPublic(nextIsPublic ?? true);
-    } catch (err: any) {
-      if (!cancelled) setIsPublicError(err?.message ?? 'Failed to load visibility');
+      // Always fetch from DB to avoid untyped snapshot
+      const { data, error } = await supabase
+        .from('content_nodes')
+        .select('is_public')
+        .eq('id', courseId)
+        .single<ContentNodesRow>();
+
+      if (error) throw error;
+      if (!cancelled) setIsPublic(Boolean(data?.is_public));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load visibility';
+      if (!cancelled) setIsPublicError(message);
     } finally {
       if (!cancelled) setIsPublicLoading(false);
     }
 
     try {
       const { data, error } = await supabase
-  .from('user_course_visibility')
-  .select(`
-    user_id,
-    profile:profiles (
-      id,
-      first_name,
-      last_name
-    )
-  `)
-  .eq('course_node_id', courseId);
+        .from('user_course_visibility')
+        .select(`
+          user_id,
+          profile:profiles (
+            id,
+            first_name,
+            last_name
+          )
+        `)
+        .eq('course_node_id', courseId);
 
-if (error) throw error;
+      if (error) throw error;
 
-const rows = (data ?? []).map((r: any) => {
-  const p = r.profile ?? {};
-  const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null;
-  return {
-    id: p.id ?? r.user_id,
-    full_name: name,  // synthesized display name
-    email: null,      // profiles table doesn't have email
-  };
-});
-setAllowedUsers(rows);
+      // Normalize: profile can be a single object or an array
+      const raw = ((data ?? []) as unknown) as UCVRowMaybeArray[];
 
+      const rows: AllowedUser[] = raw.map((r) => {
+        const prof = Array.isArray(r.profile) ? (r.profile[0] ?? null) : r.profile;
+        const name =
+          [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim() || null;
+        return {
+          id: prof?.id ?? r.user_id,
+          full_name: name,
+          email: null, // not included in this select
+        };
+      });
 
       if (!cancelled) setAllowedUsers(rows);
-    } catch (err: any) {
-      if (!cancelled) setAllowedError(err?.message ?? 'Failed to load allowed users');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to load allowed users';
+      if (!cancelled) setAllowedError(message);
     } finally {
       if (!cancelled) setAllowedLoading(false);
     }
   };
 
-  load();
+  void load();
   return () => { cancelled = true; };
 }, [courseId, isCourse, subtree]);
+
 
 const handleTogglePublic = async (checked: boolean) => {
   if (!courseId || !isCourse) return;
@@ -304,41 +311,52 @@ const handleTogglePublic = async (checked: boolean) => {
   setIsPublicError(null);
   setIsPublicLoading(true);
   try {
-    await updateNode(courseId, { is_public: checked }); // ← key line
-  } catch (err: any) {
+    await updateNode(courseId, { is_public: checked });
+    onCourseVisibilityChange?.(courseId, checked); // notify parent (prevents "declared not used")
+  } catch (err: unknown) {
     setIsPublic(!checked); // revert
-    setIsPublicError(err?.message ?? 'Failed to update visibility');
+    const message = err instanceof Error ? err.message : 'Failed to update visibility';
+    setIsPublicError(message);
   } finally {
     setIsPublicLoading(false);
   }
 };
 
+
+// Search profiles to whitelist (name or email)
 // Search profiles to whitelist (name or email)
 const handleSearch = async () => {
   const q = searchQuery.trim();
-if (!q) { setSearchResults([]); return; }
+  if (!q) { setSearchResults([]); return; }
 
-const { data, error } = await supabase
-  .from('profiles')
-  .select('id, first_name, last_name')
-  .or([
-    `first_name.ilike.%${q}%`,
-    `last_name.ilike.%${q}%`,
-  ].join(','))
-  .order('last_name', { ascending: true })
-  .order('first_name', { ascending: true })
-  .limit(8);
+  setSearchLoading(true);
+  setSearchError(null);
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, first_name, last_name')
+      .or([`first_name.ilike.%${q}%`, `last_name.ilike.%${q}%`].join(','))
+      .order('last_name', { ascending: true })
+      .order('first_name', { ascending: true })
+      .limit(8);
 
-if (error) throw error;
+    if (error) throw error;
 
-const results = (data ?? []).map((p: any) => ({
-  id: p.id,
-  email: null, // not available here
-  full_name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null,
-}));
-setSearchResults(results);
-
+    const rows = (data as ProfilesRow[] | null | undefined) ?? [];
+    const results: AllowedUser[] = rows.map((p) => ({
+      id: p.id,
+      email: null,
+      full_name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null,
+    }));
+    setSearchResults(results);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Search failed';
+    setSearchError(message);
+  } finally {
+    setSearchLoading(false);
+  }
 };
+
 
 // Grant access
 const grantUserAccess = async (userId: string) => {
@@ -350,14 +368,14 @@ const grantUserAccess = async (userId: string) => {
       .insert({ user_id: userId, course_node_id: courseId });
     if (error) throw error;
 
-    // update list
     const added = searchResults.find((u) => u.id === userId);
     setAllowedUsers((prev) => {
       if (prev.some((u) => u.id === userId)) return prev;
       return added ? [...prev, added] : prev;
     });
-  } catch (err: any) {
-    setAllowedError(err?.message ?? 'Failed to grant access');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to grant access';
+    setAllowedError(message);
   }
 };
 
@@ -374,10 +392,12 @@ const revokeUserAccess = async (userId: string) => {
     if (error) throw error;
 
     setAllowedUsers((prev) => prev.filter((u) => u.id !== userId));
-  } catch (err: any) {
-    setAllowedError(err?.message ?? 'Failed to revoke access');
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to revoke access';
+    setAllowedError(message);
   }
 };
+
 
   const titleInput = useUndoRedoInput({
     value: nodeDraft?.title ?? '',

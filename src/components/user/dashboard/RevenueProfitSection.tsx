@@ -43,10 +43,17 @@ function formatDateLabel(dateStr: string): string {
   });
 }
 
+// add this just above TooltipProps (or reuse if you already have it elsewhere)
+type RPRechartsPayload = {
+  dataKey?: string;
+  value?: number | string;
+};
+
+// update this
 type TooltipProps = {
   active?: boolean;
-  payload?: any[];
-  label?: string;
+  payload?: RPRechartsPayload[];
+  label?: string | number;
 };
 
 function RevenueProfitTooltip({ active, payload, label }: TooltipProps) {
@@ -56,30 +63,24 @@ function RevenueProfitTooltip({ active, payload, label }: TooltipProps) {
   const profitPoint = payload.find((p) => p.dataKey === 'profit');
 
   return (
-    <Paper
-      elevation={3}
-      sx={{
-        p: 1.5,
-        borderRadius: 2,
-        fontSize: 12,
-      }}
-    >
+    <Paper elevation={3} sx={{ p: 1.5, borderRadius: 2, fontSize: 12 }}>
       <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
-        {formatDateLabel(label || '')}
+        {formatDateLabel(String(label ?? ''))}
       </Typography>
       {revenuePoint && (
         <Typography variant="body2">
-          Revenue: {formatCurrency(revenuePoint.value as number)}
+          Revenue: {formatCurrency(Number(revenuePoint.value))}
         </Typography>
       )}
       {profitPoint && (
         <Typography variant="body2">
-          Profit: {formatCurrency(profitPoint.value as number)}
+          Profit: {formatCurrency(Number(profitPoint.value))}
         </Typography>
       )}
     </Paper>
   );
 }
+
 
 export default function RevenueProfitSection(props: RevenueProfitSectionProps) {
   const {

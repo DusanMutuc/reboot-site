@@ -33,27 +33,37 @@ export default function CoachingNotesPicker({
 
   useEffect(() => {
     let alive = true;
+  
     (async () => {
       setLoadingList(true);
       const list = await listUserCoachingNotes(supabase, userId);
       if (!alive) return;
+  
       setOptions(list);
+  
       const defaultId = initialNoteId ?? list[0]?.id ?? '';
       setSelectedId(defaultId);
+  
       if (typeof defaultId === 'number') {
         const s = await fetchCoachingNotesByNoteId(supabase, defaultId);
         if (!alive) return;
         setSection(s);
         cbRef.current?.(s, defaultId);
       } else {
-        const empty = { actionSteps: [], notes: [] };
+        const empty: CoachingNotesSectionProps = { actionSteps: [], notes: [] };
         setSection(empty);
         cbRef.current?.(empty, -1);
       }
+  
       setLoadingList(false);
     })();
-    // ❌ don't depend on onSectionChange (it changes every render)
+  
+    return () => {
+      alive = false;
+    };
+    // keep deps minimal on purpose
   }, [userId, initialNoteId]);
+  
 
   const onChange = async (id: number) => {
     setSelectedId(id);
