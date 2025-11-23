@@ -10,6 +10,12 @@ type ResourceRow = {
   storage_path: string | null;
 };
 
+type ContentNodeRef = { id: number; is_public: boolean };
+type BindingRowRaw = {
+  node_id: number;
+  content_nodes: ContentNodeRef | ContentNodeRef[] | null;
+};
+
 type BindingRow = {
   node_id: number;
   content_nodes: { id: number; is_public: boolean } | null;
@@ -32,8 +38,8 @@ async function isStaff(userId: string | null): Promise<boolean> {
     .select('code, user_roles!inner(user_id)')
     .eq('user_roles.user_id', userId);
 
-  const codes = (((data ?? []) as RoleRow[])).map((r: RoleRow) => r.code);
-  return codes.some((c: string) => ['admin', 'superadmin', 'coach'].includes(c));
+  const codes = ((data ?? []) as RoleRow[]).map((r) => r.code);
+  return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
 async function authorizeViewer(r: ResourceRow): Promise<boolean> {
@@ -48,20 +54,17 @@ async function authorizeViewer(r: ResourceRow): Promise<boolean> {
     .select('node_id, content_nodes!inner(id, is_public)')
     .eq('resource_id', r.id);
 
-  // Normalize result: Supabase returns an object, but TS can’t guarantee it’s not an array.
-  const rowsRaw = (bindings ?? []) as any[];
+  const rowsRaw = (bindings ?? []) as BindingRowRaw[];
 
-  const rows: BindingRow[] = rowsRaw.map((b: any) => {
+  const rows: BindingRow[] = rowsRaw.map((b) => {
     let cn: { id: number; is_public: boolean } | null = null;
+    const ref = b.content_nodes;
 
-    if (b?.content_nodes) {
-      if (Array.isArray(b.content_nodes)) {
-        // If it somehow comes back as an array, pick the first (1:many shouldn’t, but be safe)
-        const first = b.content_nodes[0];
-        if (first) cn = { id: Number(first.id), is_public: Boolean(first.is_public) };
-      } else {
-        cn = { id: Number(b.content_nodes.id), is_public: Boolean(b.content_nodes.is_public) };
-      }
+    if (Array.isArray(ref)) {
+      const first = ref[0];
+      if (first) cn = { id: Number(first.id), is_public: Boolean(first.is_public) };
+    } else if (ref) {
+      cn = { id: Number(ref.id), is_public: Boolean(ref.is_public) };
     }
 
     return {
@@ -85,9 +88,8 @@ async function authorizeViewer(r: ResourceRow): Promise<boolean> {
     .in('course_node_id', nodeIds)
     .eq('user_id', userId);
 
-  const visRows: VisibilityRow[] = ((vis ?? []) as VisibilityRow[]);
+  const visRows: VisibilityRow[] = (vis ?? []) as VisibilityRow[];
   return visRows.length > 0;
-
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {

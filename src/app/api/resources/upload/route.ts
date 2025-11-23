@@ -8,6 +8,12 @@ import { getAdminClient } from '@/lib/supabaseAdmin';
 
 const admin = getAdminClient();
 
+type RoleRow = { code: string };
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Unexpected error';
+}
+
 export async function POST(req: NextRequest) {
   try {
     const userSupabase = getSupabaseServer();
@@ -16,6 +22,7 @@ export async function POST(req: NextRequest) {
     const file = form.get('file') as File | null;
     const title = String(form.get('title') || '').trim();
     const description = String(form.get('description') || '').trim();
+    // Parsed but not required for insert yet; keep for future use.
     const tags = JSON.parse(String(form.get('tags') || '[]')) as string[];
 
     if (!file || !title) {
@@ -32,11 +39,13 @@ export async function POST(req: NextRequest) {
       .from('roles')
       .select('code, user_roles!inner(user_id)')
       .eq('user_roles.user_id', auth.user.id);
-    if (rolesErr) return NextResponse.json({ error: rolesErr.message }, { status: 500 });
 
-    const isStaff = (roleRows ?? []).some((r: any) =>
-      ['admin','superadmin','coach'].includes(r.code)
-    );
+    if (rolesErr) {
+      return NextResponse.json({ error: rolesErr.message }, { status: 500 });
+    }
+
+    const roles = (roleRows ?? []) as RoleRow[];
+    const isStaff = roles.some((r) => ['admin', 'superadmin', 'coach'].includes(r.code));
     if (!isStaff) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const storageBucket = 'resources';
@@ -62,21 +71,24 @@ export async function POST(req: NextRequest) {
       })
       .select('id, title')
       .single();
+
     if (insErr || !inserted) {
       await admin.storage.from(storageBucket).remove([storagePath]);
       return NextResponse.json({ error: insErr?.message || 'Insert failed' }, { status: 500 });
     }
 
-    const filename = `${(title || 'file').toLowerCase().replace(/[^a-z0-9]+/g,'-')}.pdf`;
+    const filename = `${(title || 'file').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`;
     return NextResponse.json({
       id: inserted.id,
       openUrl: `/r/${inserted.id}`,
       downloadUrl: `/r/${inserted.id}?download=${encodeURIComponent(filename)}`,
+      // Keep tags around if you later want to persist them; currently unused.
+      tags,
     });
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('Upload route error:', e);
     return NextResponse.json(
-      { error: e?.message || 'Unexpected error' },
+      { error: getErrorMessage(e) },
       { status: 500 },
     );
   }

@@ -87,6 +87,10 @@ type EditForm = {
   memberUserIds: string[];
 };
 
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Unexpected error';
+}
+
 async function fetchPartnerships(): Promise<Partnership[]> {
   const res = await fetch('/api/admin/partnerships');
   if (!res.ok) {
@@ -144,7 +148,7 @@ async function savePartnership(form: EditForm): Promise<Partnership> {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data?.error || res.statusText);
+    throw new Error((data as { error?: string })?.error || res.statusText);
   }
   return data as Partnership;
 }
@@ -219,7 +223,7 @@ export default function PartnershipsAdmin() {
           });
           return next;
         });
-      } catch (err) {
+      } catch (err: unknown) {
         console.error(err);
         setSnack({
           open: true,
@@ -258,7 +262,7 @@ export default function PartnershipsAdmin() {
           });
         });
         setUserLookup(map);
-      } catch (err) {
+      } catch (err: unknown) {
         console.error(err);
         setSnack({
           open: true,
@@ -418,11 +422,11 @@ export default function PartnershipsAdmin() {
       });
       setEditOpen(false);
       setForm(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setSnack({
         open: true,
-        message: err?.message || 'Failed to save partnership.',
+        message: getErrorMessage(err) || 'Failed to save partnership.',
         severity: 'error',
       });
     } finally {
@@ -443,11 +447,11 @@ export default function PartnershipsAdmin() {
         message: 'Partnership deleted.',
         severity: 'success',
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       setSnack({
         open: true,
-        message: err?.message || 'Failed to delete partnership.',
+        message: getErrorMessage(err) || 'Failed to delete partnership.',
         severity: 'error',
       });
     } finally {

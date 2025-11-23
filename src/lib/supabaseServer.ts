@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 
 /**
  * Primary server-side client (cookie auth, read/write).
- * Use this everywhere in API routes/Server Components that need the user session.
+ * Works with Next 15 where cookies() is async; we await it inside each method.
  */
 export const getSupabaseServer = () => {
   return createServerClient(
@@ -12,16 +12,15 @@ export const getSupabaseServer = () => {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // Next 15: cookies() is async → call it inside each method
         async get(name: string) {
           const store = await cookies();
           return store.get(name)?.value ?? null;
         },
-        async set(name: string, value: string, options?: Record<string, any>) {
+        async set(name: string, value: string, options?: Record<string, unknown>) {
           const store = await cookies();
           store.set({ name, value, ...(options ?? {}) });
         },
-        async remove(name: string, options?: Record<string, any>) {
+        async remove(name: string, options?: Record<string, unknown>) {
           const store = await cookies();
           store.set({ name, value: '', ...(options ?? {}), maxAge: 0 });
         },
@@ -31,8 +30,7 @@ export const getSupabaseServer = () => {
 };
 
 /**
- * Lightweight anon client that still participates in cookie auth if present.
- * Keep for legacy callers; behavior matches getSupabaseServer.
+ * Lightweight anon client mirroring getSupabaseServer behavior.
  */
 export const getServerAnonClient = () => {
   return createServerClient(
@@ -44,11 +42,11 @@ export const getServerAnonClient = () => {
           const store = await cookies();
           return store.get(name)?.value ?? null;
         },
-        async set(name: string, value: string, options?: Record<string, any>) {
+        async set(name: string, value: string, options?: Record<string, unknown>) {
           const store = await cookies();
           store.set({ name, value, ...(options ?? {}) });
         },
-        async remove(name: string, options?: Record<string, any>) {
+        async remove(name: string, options?: Record<string, unknown>) {
           const store = await cookies();
           store.set({ name, value: '', ...(options ?? {}), maxAge: 0 });
         },
@@ -57,5 +55,5 @@ export const getServerAnonClient = () => {
   );
 };
 
-// Export default too so either `import { getSupabaseServer }` or `import getSupabaseServer` works.
+// Default export convenience.
 export default getSupabaseServer;

@@ -40,9 +40,15 @@ type Partnership = PartnershipRow & {
   members: PartnershipMember[];
 };
 
-async function buildPartnershipsWithMembers(
-  rows: PartnershipRow[],
-): Promise<Partnership[]> {
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Unexpected error';
+}
+
+async function buildPartnershipsWithMembers(rows: PartnershipRow[]): Promise<Partnership[]> {
   if (rows.length === 0) return [];
 
   const partnershipIds = rows.map((p) => p.id);
@@ -91,7 +97,7 @@ async function buildPartnershipsWithMembers(
   const profiles = (profileRows ?? []) as ProfileRow[];
   const profileMap = new Map<string, ProfileRow>(profiles.map((p) => [p.id, p]));
   const emails = (authRows ?? []) as AuthUserRow[];
-  const emailMap = new Map<string, string>(emails.map((u) => [u.id, u.email?.toLowerCase() ?? '']));
+  const emailMap = new Map<string, string>(emails.map((u) => [u.id, (u.email ?? '').toLowerCase()]));
 
   const membersByPartnership = new Map<string, PartnershipMember[]>();
   membership.forEach((m) => {
@@ -137,10 +143,10 @@ export async function GET(_req: NextRequest) {
     const items = await buildPartnershipsWithMembers(baseRows);
 
     return NextResponse.json({ items });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('partnerships GET unexpected error', err);
     return NextResponse.json(
-      { error: err?.message || 'Unexpected error' },
+      { error: getErrorMessage(err) },
       { status: 500 },
     );
   }
@@ -150,22 +156,21 @@ export async function POST(req: NextRequest) {
   try {
     await requireAdmin();
 
-    const body = await req.json().catch(() => ({} as any));
+    const raw = (await req.json().catch(() => ({} as unknown))) ?? {};
+    const body = raw as Record<string, unknown>;
 
     const name =
       typeof body.name === 'string' && body.name.trim().length > 0
         ? body.name.trim()
         : null;
 
-    const shared_kpis = !!body.shared_kpis;
-    const shared_attendance = !!body.shared_attendance;
-    const shared_notes = !!body.shared_notes;
+    const shared_kpis = Boolean(body['shared_kpis']);
+    const shared_attendance = Boolean(body['shared_attendance']);
+    const shared_notes = Boolean(body['shared_notes']);
     const is_active =
-      typeof body.is_active === 'boolean' ? body.is_active : true;
+      typeof body['is_active'] === 'boolean' ? (body['is_active'] as boolean) : true;
 
-    const user_ids: string[] = Array.isArray(body.user_ids)
-      ? body.user_ids.filter((id: unknown) => typeof id === 'string')
-      : [];
+    const user_ids = toStringArray(body['user_ids']);
 
     // Insert partnership
     const { data: inserted, error: insertError } = await supabaseAdmin
@@ -217,10 +222,10 @@ export async function POST(req: NextRequest) {
 
     const [withMembers] = await buildPartnershipsWithMembers([base]);
     return NextResponse.json(withMembers, { status: 201 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('partnerships POST unexpected error', err);
     return NextResponse.json(
-      { error: err?.message || 'Unexpected error' },
+      { error: getErrorMessage(err) },
       { status: 500 },
     );
   }

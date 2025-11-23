@@ -40,9 +40,15 @@ type Partnership = PartnershipRow & {
   members: PartnershipMember[];
 };
 
-async function buildPartnershipWithMembers(
-  row: PartnershipRow,
-): Promise<Partnership> {
+function toStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Unexpected error';
+}
+
+async function buildPartnershipWithMembers(row: PartnershipRow): Promise<Partnership> {
   const { data: membershipRows, error: membershipError } = await supabaseAdmin
     .from('partnership_users')
     .select('partnership_id, user_id')
@@ -85,7 +91,7 @@ async function buildPartnershipWithMembers(
   const profiles = (profileRows ?? []) as ProfileRow[];
   const profileMap = new Map<string, ProfileRow>(profiles.map((p) => [p.id, p]));
   const emails = (authRows ?? []) as AuthUserRow[];
-  const emailMap = new Map<string, string>(emails.map((u) => [u.id, u.email?.toLowerCase() ?? '']));
+  const emailMap = new Map<string, string>(emails.map((u) => [u.id, (u.email ?? '').toLowerCase()]));
 
   const members: PartnershipMember[] = membership.map((m) => {
     const profile = profileMap.get(m.user_id);
@@ -109,7 +115,8 @@ export async function PATCH(
     await requireAdmin();
     const id = params.partnershipId;
 
-    const body = await req.json().catch(() => ({} as any));
+    const raw = (await req.json().catch(() => ({} as unknown))) ?? {};
+    const body = raw as Record<string, unknown>;
 
     const name =
       typeof body.name === 'string' && body.name.trim().length > 0
@@ -127,9 +134,7 @@ export async function PATCH(
     const is_active =
       typeof body.is_active === 'boolean' ? body.is_active : undefined;
 
-    const user_ids: string[] = Array.isArray(body.user_ids)
-      ? body.user_ids.filter((uid: unknown) => typeof uid === 'string')
-      : [];
+    const user_ids = toStringArray(body['user_ids']);
 
     const updatePayload: Partial<PartnershipRow> = {};
     if (Object.prototype.hasOwnProperty.call(body, 'name')) {
@@ -262,10 +267,10 @@ export async function PATCH(
 
     const full = await buildPartnershipWithMembers(row as PartnershipRow);
     return NextResponse.json(full);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('partnerships PATCH unexpected error', err);
     return NextResponse.json(
-      { error: err?.message || 'Unexpected error' },
+      { error: getErrorMessage(err) },
       { status: 500 },
     );
   }
@@ -302,10 +307,10 @@ export async function DELETE(
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('partnerships DELETE unexpected error', err);
     return NextResponse.json(
-      { error: err?.message || 'Unexpected error' },
+      { error: getErrorMessage(err) },
       { status: 500 },
     );
   }
