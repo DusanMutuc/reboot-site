@@ -106,212 +106,209 @@ async function buildPartnershipWithMembers(row: PartnershipRow): Promise<Partner
 
   return { ...row, members };
 }
-
 export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { partnershipId: string } },
-) {
-  try {
-    await requireAdmin();
-    const id = params.partnershipId;
-
-    const raw = (await req.json().catch(() => ({} as unknown))) ?? {};
-    const body = raw as Record<string, unknown>;
-
-    const name =
-      typeof body.name === 'string' && body.name.trim().length > 0
-        ? body.name.trim()
-        : null;
-
-    const shared_kpis =
-      typeof body.shared_kpis === 'boolean' ? body.shared_kpis : undefined;
-    const shared_attendance =
-      typeof body.shared_attendance === 'boolean'
-        ? body.shared_attendance
-        : undefined;
-    const shared_notes =
-      typeof body.shared_notes === 'boolean' ? body.shared_notes : undefined;
-    const is_active =
-      typeof body.is_active === 'boolean' ? body.is_active : undefined;
-
-    const user_ids = toStringArray(body['user_ids']);
-
-    const updatePayload: Partial<PartnershipRow> = {};
-    if (Object.prototype.hasOwnProperty.call(body, 'name')) {
-      updatePayload.name = name;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(body, 'shared_kpis') &&
-      shared_kpis !== undefined
-    ) {
-      updatePayload.shared_kpis = shared_kpis;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(body, 'shared_attendance') &&
-      shared_attendance !== undefined
-    ) {
-      updatePayload.shared_attendance = shared_attendance;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(body, 'shared_notes') &&
-      shared_notes !== undefined
-    ) {
-      updatePayload.shared_notes = shared_notes;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(body, 'is_active') &&
-      is_active !== undefined
-    ) {
-      updatePayload.is_active = is_active;
-    }
-
-    if (Object.keys(updatePayload).length > 0) {
-      const { error: updateError } = await supabaseAdmin
-        .from('partnerships')
-        .update(updatePayload)
-        .eq('id', id);
-
-      if (updateError) {
-        console.error('partnerships PATCH update error', updateError);
-        return NextResponse.json(
-          { error: 'Failed to update partnership' },
-          { status: 500 },
-        );
+    request: Request,
+    { params }: { params: { partnershipId: string } },
+  ) {
+    try {
+      await requireAdmin();
+      const id = params.partnershipId;
+  
+      const raw = (await request.json().catch(() => ({} as unknown))) ?? {};
+      const body = raw as Record<string, unknown>;
+  
+      const name =
+        typeof body.name === 'string' && body.name.trim().length > 0
+          ? body.name.trim()
+          : null;
+  
+      const shared_kpis =
+        typeof body.shared_kpis === 'boolean' ? body.shared_kpis : undefined;
+      const shared_attendance =
+        typeof body.shared_attendance === 'boolean'
+          ? body.shared_attendance
+          : undefined;
+      const shared_notes =
+        typeof body.shared_notes === 'boolean' ? body.shared_notes : undefined;
+      const is_active =
+        typeof body.is_active === 'boolean' ? body.is_active : undefined;
+  
+      const user_ids: string[] = Array.isArray(body.user_ids)
+        ? (body.user_ids as unknown[]).filter((uid): uid is string => typeof uid === 'string')
+        : [];
+  
+      const updatePayload: Partial<PartnershipRow> = {};
+      if (Object.prototype.hasOwnProperty.call(body, 'name')) {
+        updatePayload.name = name;
       }
-    }
-
-    if (Object.prototype.hasOwnProperty.call(body, 'user_ids')) {
-      const { data: currentRows, error: currentError } = await supabaseAdmin
-        .from('partnership_users')
-        .select('user_id')
-        .eq('partnership_id', id);
-
-      if (currentError) {
-        console.error('partnership_users fetch error', currentError);
-        return NextResponse.json(
-          { error: 'Failed to load current members' },
-          { status: 500 },
-        );
+      if (
+        Object.prototype.hasOwnProperty.call(body, 'shared_kpis') &&
+        shared_kpis !== undefined
+      ) {
+        updatePayload.shared_kpis = shared_kpis;
       }
-
-      const existingIds = new Set(
-        ((currentRows ?? []) as PartnershipUserRow[]).map((r) => r.user_id),
-      );
-      const desiredIds = new Set(user_ids);
-
-      const toAdd: string[] = [];
-      const toRemove: string[] = [];
-
-      for (const uid of desiredIds) {
-        if (!existingIds.has(uid)) toAdd.push(uid);
+      if (
+        Object.prototype.hasOwnProperty.call(body, 'shared_attendance') &&
+        shared_attendance !== undefined
+      ) {
+        updatePayload.shared_attendance = shared_attendance;
       }
-      for (const uid of existingIds) {
-        if (!desiredIds.has(uid)) toRemove.push(uid);
+      if (
+        Object.prototype.hasOwnProperty.call(body, 'shared_notes') &&
+        shared_notes !== undefined
+      ) {
+        updatePayload.shared_notes = shared_notes;
       }
-
-      if (toRemove.length > 0) {
-        const { error: deleteError } = await supabaseAdmin
-          .from('partnership_users')
-          .delete()
-          .eq('partnership_id', id)
-          .in('user_id', toRemove);
-
-        if (deleteError) {
-          console.error('partnership_users delete error', deleteError);
+      if (
+        Object.prototype.hasOwnProperty.call(body, 'is_active') &&
+        is_active !== undefined
+      ) {
+        updatePayload.is_active = is_active;
+      }
+  
+      if (Object.keys(updatePayload).length > 0) {
+        const { error: updateError } = await supabaseAdmin
+          .from('partnerships')
+          .update(updatePayload)
+          .eq('id', id);
+  
+        if (updateError) {
+          console.error('partnerships PATCH update error', updateError);
           return NextResponse.json(
-            { error: 'Failed to remove members from partnership' },
+            { error: 'Failed to update partnership' },
             { status: 500 },
           );
         }
       }
-
-      if (toAdd.length > 0) {
-        const memberRows = toAdd.map((uid) => ({
-          partnership_id: id,
-          user_id: uid,
-        }));
-
-        const { error: addError } = await supabaseAdmin
+  
+      if (Object.prototype.hasOwnProperty.call(body, 'user_ids')) {
+        const { data: currentRows, error: currentError } = await supabaseAdmin
           .from('partnership_users')
-          .insert(memberRows);
-
-        if (addError) {
-          console.error('partnership_users add error', addError);
+          .select('user_id')
+          .eq('partnership_id', id);
+  
+        if (currentError) {
+          console.error('partnership_users fetch error', currentError);
           return NextResponse.json(
-            {
-              error:
-                addError.message ||
-                'Failed to add members to partnership. Check for overlapping active partnerships.',
-            },
-            { status: 400 },
+            { error: 'Failed to load current members' },
+            { status: 500 },
           );
         }
+  
+        const existingIds = new Set(
+          ((currentRows ?? []) as PartnershipUserRow[]).map((r) => r.user_id),
+        );
+        const desiredIds = new Set(user_ids);
+  
+        const toAdd: string[] = [];
+        const toRemove: string[] = [];
+  
+        for (const uid of desiredIds) if (!existingIds.has(uid)) toAdd.push(uid);
+        for (const uid of existingIds) if (!desiredIds.has(uid)) toRemove.push(uid);
+  
+        if (toRemove.length > 0) {
+          const { error: deleteError } = await supabaseAdmin
+            .from('partnership_users')
+            .delete()
+            .eq('partnership_id', id)
+            .in('user_id', toRemove);
+  
+          if (deleteError) {
+            console.error('partnership_users delete error', deleteError);
+            return NextResponse.json(
+              { error: 'Failed to remove members from partnership' },
+              { status: 500 },
+            );
+          }
+        }
+  
+        if (toAdd.length > 0) {
+          const memberRows = toAdd.map((uid) => ({
+            partnership_id: id,
+            user_id: uid,
+          }));
+  
+          const { error: addError } = await supabaseAdmin
+            .from('partnership_users')
+            .insert(memberRows);
+  
+          if (addError) {
+            console.error('partnership_users add error', addError);
+            return NextResponse.json(
+              {
+                error:
+                  addError.message ||
+                  'Failed to add members to partnership. Check for overlapping active partnerships.',
+              },
+              { status: 400 },
+            );
+          }
+        }
       }
-    }
-
-    const { data: row, error: fetchError } = await supabaseAdmin
-      .from('partnerships')
-      .select(
-        'id, name, shared_kpis, shared_attendance, shared_notes, is_active, created_at',
-      )
-      .eq('id', id)
-      .single();
-
-    if (fetchError || !row) {
-      console.error('partnerships PATCH fetch error', fetchError);
+  
+      const { data: row, error: fetchError } = await supabaseAdmin
+        .from('partnerships')
+        .select(
+          'id, name, shared_kpis, shared_attendance, shared_notes, is_active, created_at',
+        )
+        .eq('id', id)
+        .single();
+  
+      if (fetchError || !row) {
+        console.error('partnerships PATCH fetch error', fetchError);
+        return NextResponse.json(
+          { error: 'Partnership not found after update' },
+          { status: 404 },
+        );
+      }
+  
+      const full = await buildPartnershipWithMembers(row as PartnershipRow);
+      return NextResponse.json(full);
+    } catch (err: unknown) {
+      console.error('partnerships PATCH unexpected error', err);
       return NextResponse.json(
-        { error: 'Partnership not found after update' },
-        { status: 404 },
-      );
-    }
-
-    const full = await buildPartnershipWithMembers(row as PartnershipRow);
-    return NextResponse.json(full);
-  } catch (err: unknown) {
-    console.error('partnerships PATCH unexpected error', err);
-    return NextResponse.json(
-      { error: getErrorMessage(err) },
-      { status: 500 },
-    );
-  }
-}
-
-export async function DELETE(
-  _req: NextRequest,
-  { params }: { params: { partnershipId: string } },
-) {
-  try {
-    await requireAdmin();
-    const id = params.partnershipId;
-
-    const { data, error } = await supabaseAdmin
-      .from('partnerships')
-      .delete()
-      .eq('id', id)
-      .select('id')
-      .maybeSingle();
-
-    if (error) {
-      console.error('partnerships DELETE error', error);
-      return NextResponse.json(
-        { error: 'Failed to delete partnership' },
+        { error: getErrorMessage(err) },
         { status: 500 },
       );
     }
-
-    if (!data) {
+  }
+  
+  export async function DELETE(
+    _request: Request,
+    { params }: { params: { partnershipId: string } },
+  ) {
+    try {
+      await requireAdmin();
+      const id = params.partnershipId;
+  
+      const { data, error } = await supabaseAdmin
+        .from('partnerships')
+        .delete()
+        .eq('id', id)
+        .select('id')
+        .maybeSingle();
+  
+      if (error) {
+        console.error('partnerships DELETE error', error);
+        return NextResponse.json(
+          { error: 'Failed to delete partnership' },
+          { status: 500 },
+        );
+      }
+  
+      if (!data) {
+        return NextResponse.json(
+          { error: 'Partnership not found' },
+          { status: 404 },
+        );
+      }
+  
+      return NextResponse.json({ success: true });
+    } catch (err: unknown) {
+      console.error('partnerships DELETE unexpected error', err);
       return NextResponse.json(
-        { error: 'Partnership not found' },
-        { status: 404 },
+        { error: getErrorMessage(err) },
+        { status: 500 },
       );
     }
-
-    return NextResponse.json({ success: true });
-  } catch (err: unknown) {
-    console.error('partnerships DELETE unexpected error', err);
-    return NextResponse.json(
-      { error: getErrorMessage(err) },
-      { status: 500 },
-    );
   }
-}
