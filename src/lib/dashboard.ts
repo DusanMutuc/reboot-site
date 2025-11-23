@@ -178,7 +178,6 @@ function mapMetricKeyToKpiKey(metricKey: string): KpiKey {
       return metricKey as KpiKey;
   }
 }
-
 async function fetchKpiSection(
   client: SupabaseClient,
   userId: string,
@@ -194,30 +193,62 @@ async function fetchKpiSection(
       }),
       client.rpc('get_monthly_kpi_history_with_values', {
         _user_id: userId,
-        _limit: 2,
+        _limit: 120, // enough months to approximate "lifetime"
       }),
     ]);
 
   if (errCurrent) console.error('get_monthly_kpi_record_with_values error', errCurrent);
   if (errHistory) console.error('get_monthly_kpi_history_with_values error', errHistory);
 
-  const currentValues = (current as KpiRecordRow | null)?.kpi_values ?? {};
+  // current is an array of rows
+  const currentRows = (current as KpiRecordRow[] | null) ?? [];
+  const currentRow = currentRows[0] ?? null;
+  const currentValues = (currentRow?.kpi_values as KpiValues | null) ?? {};
+
   const historyArr = (history as KpiHistoryRow[] | null) ?? [];
 
+  // find explicit current + previous month rows (by date)
   const latest = historyArr.find((row) => row.period_start_date === currentMonthStart);
   const previous =
-    historyArr.find((row) => row.period_start_date === prevMonthStart) ??
-    historyArr[1];
+    historyArr.find((row) => row.period_start_date === prevMonthStart) ?? historyArr[1];
 
-  const prevValues = previous?.kpi_values ?? {};
+  const prevValues = (previous?.kpi_values as KpiValues | null) ?? {};
+
+  // lifetime totals across all returned months
+  const lifetimeTotals = historyArr.reduce(
+    (acc, row) => {
+      const kv = (row.kpi_values as KpiValues | null) ?? {};
+      acc.closed_deals += Number(kv.closed_deals ?? 0);
+      acc.repeat_referral += Number(kv.repeat_referral ?? 0);
+      acc.days_off += Number(kv.days_off ?? 0);
+      acc.pipeline_15_30 += Number(kv.pipeline_15_30 ?? 0);
+      return acc;
+    },
+    {
+      closed_deals: 0,
+      repeat_referral: 0,
+      days_off: 0,
+      pipeline_15_30: 0,
+    },
+  );
 
   function buildKpi(
     metricKey: 'closed_deals' | 'repeat_referral' | 'days_off' | 'pipeline_15_30',
     label: string,
+    mode: 'lifetime' | 'current',
   ): KpiMetric {
-    const value = Number((currentValues as KpiValues)?.[metricKey] ?? 0);
-    const prev = Number((prevValues as KpiValues)?.[metricKey] ?? 0);
-    const deltaPct = prev !== 0 ? ((value - prev) / prev) * 100 : null;
+    const currentMonthVal = Number(currentValues?.[metricKey] ?? 0);
+    const prevMonthVal = Number(prevValues?.[metricKey] ?? 0);
+
+    // delta is still "this month vs last month"
+    const deltaPct =
+      prevMonthVal !== 0 ? ((currentMonthVal - prevMonthVal) / prevMonthVal) * 100 : null;
+
+    const value =
+      mode === 'current'
+        ? currentMonthVal
+        : lifetimeTotals[metricKey];
+
     return {
       key: mapMetricKeyToKpiKey(metricKey),
       label,
@@ -227,10 +258,12 @@ async function fetchKpiSection(
   }
 
   const kpis: KpiMetric[] = [
-    buildKpi('closed_deals', 'Total Closed'),
-    buildKpi('repeat_referral', 'Repeat / Referral'),
-    buildKpi('days_off', 'Days Off'),
-    buildKpi('pipeline_15_30', '15/30'),
+    // lifetime totals
+    buildKpi('closed_deals', 'Total Closed', 'lifetime'),
+    buildKpi('repeat_referral', 'Repeat / Referral', 'lifetime'),
+    buildKpi('days_off', 'Days Off', 'lifetime'),
+    // current month only
+    buildKpi('pipeline_15_30', '15/30', 'current'),
   ];
 
   return {
@@ -238,6 +271,7 @@ async function fetchKpiSection(
     periodLabel: 'This Month',
   };
 }
+
 
 /** ---------- 2b) KPI charts (last 12 months, 4 lines) ---------- */
 async function fetchKpiCharts(

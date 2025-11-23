@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
 import {
   Box, Stack, Typography, TextField, Select, MenuItem, FormControl, InputLabel,
   Button, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
-  Paper, Tooltip, Snackbar, Alert, CircularProgress
+  Paper, Tooltip, Snackbar, Alert, CircularProgress, RadioGroup, FormControlLabel, Radio
 } from '@mui/material';
 import Grid from '@mui/material/Grid'; // Grid v2 (stable in MUI v6)
 import AddIcon from '@mui/icons-material/Add';
@@ -471,6 +471,7 @@ function ResourceDialog({
   onSaved: (r: ResourceRow) => void;
 }) {
   const isEdit = !!editing;
+
   const [title, setTitle] = useState(editing?.title ?? '');
   const [type, setType] = useState<ResourceType>(editing?.type ?? 'video');
   const [url, setUrl] = useState(editing?.url ?? '');
@@ -482,21 +483,114 @@ function ResourceDialog({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string|null>(null);
 
+  // Upload controls (only relevant when type === 'pdf')
+  const [uploadMode, setUploadMode] = useState<'link' | 'upload'>(
+    editing?.type === 'pdf' ? 'link' : 'link'
+  );
+  const [file, setFile] = useState<File | null>(null);
+
   useEffect(() => {
-    setTitle(editing?.title ?? ''); setType(editing?.type ?? 'video'); setUrl(editing?.url ?? '');
-    setThumbnail(editing?.thumbnail ?? ''); setDescription(editing?.description ?? '');
-    setDuration(editing?.duration?.toString() ?? ''); setStateValue(editing?.state ?? 'published');
+    setTitle(editing?.title ?? '');
+    setType(editing?.type ?? 'video');
+    setUrl(editing?.url ?? '');
+    setThumbnail(editing?.thumbnail ?? '');
+    setDescription(editing?.description ?? '');
+    setDuration(editing?.duration?.toString() ?? '');
+    setStateValue(editing?.state ?? 'published');
     setSelectedTags(editing?.tags ?? []);
+    setUploadMode(editing?.type === 'pdf' ? 'link' : 'link');
+    setFile(null);
+    setErr(null);
   }, [editing]);
+
+  // Helper to refetch a resource row (with tags) and map to UI shape
+  async function refetchAndMap(resourceId: number): Promise<ResourceRow> {
+    type ResourceSelectRow = {
+      id: number;
+      title: string;
+      description: string | null;
+      type: ResourceType;
+      url: string;
+      thumbnail: string | null;
+      duration: number | null;
+      created_at: string;
+      state: ResourceState;
+      resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
+    };
+    const { data: r2, error: e2 } = await supabase
+      .from('resources')
+      .select(`
+        id, title, description, type, url, thumbnail, duration, created_at, state,
+        resource_tags ( tag:tags ( id, name, category ) )
+      `)
+      .eq('id', resourceId)
+      .single<ResourceSelectRow>();
+    if (e2 || !r2) throw e2 || new Error('Not found');
+
+    const tags: ResourceTag[] = (r2.resource_tags ?? []).flatMap((x) => {
+      const t = (x as { tag: ResourceTag | ResourceTag[] }).tag;
+      return Array.isArray(t) ? t : [t];
+    });
+
+    return {
+      id: r2.id,
+      title: r2.title,
+      description: r2.description,
+      type: r2.type,
+      url: r2.url,
+      thumbnail: r2.thumbnail,
+      duration: r2.duration,
+      created_at: r2.created_at,
+      state: r2.state,
+      tags,
+    };
+  }
 
   const handleSave = async () => {
     try {
-      setSaving(true); setErr(null);
+      setSaving(true);
+      setErr(null);
 
       // Ensure tags exist (admin-only op; uses unique constraints)
       const tagIds = await ensureTags(selectedTags.map(t => t.name));
 
-      let resourceId = editing?.id;
+      // Branch: PDF file upload via API
+      if (!isEdit && type === 'pdf' && uploadMode === 'upload') {
+        if (!file) throw new Error('Please choose a PDF file.');
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('title', title);
+        if (description) fd.append('description', description);
+        fd.append('tags', JSON.stringify(selectedTags.map(t => t.name)));
+
+        const res = await fetch('/api/resources/upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || 'Upload failed');
+
+        // Server already inserted the resource and set url=/r/<id>
+        const mapped = await refetchAndMap(json.id);
+        // State override if dialog selected non-default
+        if (stateValue && stateValue !== mapped.state) {
+          const { data: sUpd, error: sErr } = await supabase
+            .from('resources')
+            .update({ state: stateValue })
+            .eq('id', json.id)
+            .select('id')
+            .maybeSingle();
+          if (sErr) throw sErr;
+          if (sUpd?.id) {
+            const remapped = await refetchAndMap(json.id);
+            onSaved(remapped);
+            return;
+          }
+        }
+        onSaved(mapped);
+        return;
+      }
+
+      // Normal create/update (links, videos, or pdf-as-link, or editing existing row)
+      const desiredDuration = duration ? Math.max(0, parseInt(duration, 10) || 0) : null;
+
       type ResourcePayload = {
         title: string;
         description: string | null;
@@ -506,80 +600,41 @@ function ResourceDialog({
         duration: number | null;
         state: ResourceState;
       };
+
       const payload: ResourcePayload = {
         title,
         description: description || null,
         type,
         url,
         thumbnail: thumbnail || null,
-        duration: duration ? Math.max(0, parseInt(duration,10) || 0) : null,
+        duration: desiredDuration,
         state: stateValue,
       };
 
+      let resourceId = editing?.id;
+
       if (!resourceId) {
-        // Create
-        const { data, error } = await supabase.from('resources').insert(payload).select('id').single();
+        const { data, error } = await supabase
+          .from('resources')
+          .insert(payload)
+          .select('id')
+          .single<{ id: number }>();
         if (error) throw error;
-        resourceId = (data as { id: number }).id;
+        resourceId = data.id;
       } else {
-        // Update
-        const { error } = await supabase.from('resources').update(payload).eq('id', resourceId);
+        const { error } = await supabase
+          .from('resources')
+          .update(payload)
+          .eq('id', resourceId);
         if (error) throw error;
       }
 
-      // Sync resource_tags (diff)
+      // Sync tags to desired set
       await syncResourceTags(resourceId!, tagIds);
 
-      // Fetch fresh row for UI
-      const { data: r2, error: e2 } = await supabase
-        .from('resources')
-        .select(`
-          id, title, description, type, url, thumbnail, duration, created_at, state,
-          resource_tags ( tag:tags ( id, name, category ) )
-        `)
-        .eq('id', resourceId!)
-        .single();
-      // (after the refetch)
-if (e2) throw e2;
-
-// ✅ Type the refetch row instead of using `any`
-type ResourceSelectRow = {
-  id: number;
-  title: string;
-  description: string | null;
-  type: ResourceType;
-  url: string;
-  thumbnail: string | null;
-  duration: number | null;
-  created_at: string;
-  state: ResourceState;
-  // Supabase join can yield tag as single or array depending on driver
-  resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
-};
-
-const r = r2 as ResourceSelectRow;
-
-// Normalize tags -> ResourceTag[]
-const tags: ResourceTag[] = (r.resource_tags ?? []).flatMap((x) => {
-  const t = (x as { tag: ResourceTag | ResourceTag[] }).tag;
-  return Array.isArray(t) ? t : [t];
-});
-
-const mapped: ResourceRow = {
-  id: r.id,
-  title: r.title,
-  description: r.description,
-  type: r.type,
-  url: r.url,
-  thumbnail: r.thumbnail,
-  duration: r.duration,
-  created_at: r.created_at,
-  state: r.state,
-  tags,
-};
-
-onSaved(mapped);
-
+      // Refetch and return mapped row
+      const mapped = await refetchAndMap(resourceId!);
+      onSaved(mapped);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -587,7 +642,13 @@ onSaved(mapped);
     }
   };
 
-  const canSave = title.trim() && url.trim();
+  // Validations
+  const canSave = (() => {
+    if (type === 'pdf' && uploadMode === 'upload') {
+      return Boolean(title.trim() && file && stateValue);
+    }
+    return Boolean(title.trim() && url.trim() && stateValue);
+  })();
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -595,19 +656,103 @@ onSaved(mapped);
       <DialogContent dividers>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {err && <Alert severity="error">{err}</Alert>}
+
           <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)} fullWidth />
+
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
             <FormControl fullWidth>
               <InputLabel>Type</InputLabel>
-              <Select label="Type" value={type} onChange={(e)=>setType(e.target.value as ResourceType)}>
+              <Select
+                label="Type"
+                value={type}
+                onChange={(e)=> {
+                  const t = e.target.value as ResourceType;
+                  setType(t);
+                  // reset upload controls when switching type
+                  if (t !== 'pdf') {
+                    setUploadMode('link');
+                    setFile(null);
+                  }
+                }}
+              >
                 {ALL_TYPES.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
               </Select>
             </FormControl>
-            <TextField label="Duration (seconds)" value={duration} onChange={e => setDuration(e.target.value)} fullWidth />
+
+            <TextField
+              label="Duration (seconds)"
+              value={duration}
+              onChange={e => setDuration(e.target.value)}
+              fullWidth
+            />
           </Stack>
-          <TextField label="URL" value={url} onChange={e => setUrl(e.target.value)} fullWidth />
-          <TextField label="Thumbnail URL" value={thumbnail} onChange={e => setThumbnail(e.target.value)} fullWidth />
-          <TextField label="Description" value={description} onChange={e => setDescription(e.target.value)} fullWidth multiline minRows={3} />
+
+          {/* PDF-only: choose between link vs upload */}
+          {type === 'pdf' && (
+            <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>PDF Source</Typography>
+              <RadioGroup
+                row
+                value={uploadMode}
+                onChange={(e) => setUploadMode(e.target.value as 'link' | 'upload')}
+              >
+                <FormControlLabel value="link" control={<Radio />} label="Use external link" />
+                <FormControlLabel value="upload" control={<Radio />} label="Upload PDF file" />
+              </RadioGroup>
+
+              {uploadMode === 'upload' ? (
+                <Stack spacing={1} sx={{ mt: 1 }}>
+                  <Button component="label" variant="outlined">
+                    {file ? `Selected: ${file.name}` : 'Choose PDF'}
+                    <input
+                      hidden
+                      type="file"
+                      accept="application/pdf"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    />
+                  </Button>
+                  {description !== undefined && (
+                    <TextField
+                      label="Description"
+                      value={description}
+                      onChange={e => setDescription(e.target.value)}
+                      fullWidth
+                      multiline
+                      minRows={3}
+                    />
+                  )}
+                </Stack>
+              ) : (
+                <TextField
+                  label="URL"
+                  value={url}
+                  onChange={e => setUrl(e.target.value)}
+                  fullWidth
+                />
+              )}
+            </Box>
+          )}
+
+          {/* Non-PDF (or PDF as link) standard fields */}
+          {(type !== 'pdf' || uploadMode === 'link') && (
+            <>
+              <TextField
+                label="Thumbnail URL"
+                value={thumbnail}
+                onChange={e => setThumbnail(e.target.value)}
+                fullWidth
+              />
+              <TextField
+                label="Description"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                fullWidth
+                multiline
+                minRows={3}
+              />
+            </>
+          )}
+
           <FormControl>
             <InputLabel shrink>Tags</InputLabel>
             <TagSelector
@@ -617,6 +762,7 @@ onSaved(mapped);
               placeholder="Select or create tags…"
             />
           </FormControl>
+
           <FormControl fullWidth>
             <InputLabel>State</InputLabel>
             <Select
@@ -634,12 +780,13 @@ onSaved(mapped);
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSave || saving} onClick={handleSave}>
-          {saving ? 'Saving…' : 'Save'}
+          {saving ? 'Saving…' : isEdit ? 'Save' : (type === 'pdf' && uploadMode === 'upload') ? 'Upload' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>
   );
 }
+
 
 /** TagSelector: chips with ability to add new tag names */
 function TagSelector({

@@ -19,6 +19,7 @@ import AdminMeetingsPanel from '@/components/admin/meetings/AdminMeetingsPanel';
 import AchievementsAdminPanel from '@/components/admin/achievements/AchievementsAdminPanel';
 import StudentStatusOverview from '@/components/StudentStatusOverview';
 import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
+import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -50,6 +51,7 @@ import {
   ExpandLess,
   ExpandMore,
   Campaign as CampaignIcon,
+  GroupAdd,
 } from '@mui/icons-material';
 
 // Navigation structure
@@ -61,6 +63,7 @@ const navigationStructure = [
     children: [
       { id: 'add-user', label: 'Add User', icon: PersonAddIcon, component: 'AddUserForm' },
       { id: 'user-profiles', label: 'User Profiles', icon: PeopleIcon, component: 'UserProfilesAdmin' },
+      { id: 'user-partnerships', label: 'User Partnerships', icon: GroupAdd, component: 'PartnershipsAdmin' },
     ]
   },
   {
@@ -195,6 +198,8 @@ export default function AdminPage() {
         return <AddUserForm />;
       case 'user-profiles':
         return <UserProfilesAdmin />;
+      case 'user-partnerships':
+          return <PartnershipsAdmin />;
       case 'assign-coach':
         return <AssignCoachPanel />;
       case 'coach-profiles':
