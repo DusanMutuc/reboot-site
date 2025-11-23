@@ -181,11 +181,13 @@ export async function createMeetingWithAttendees(input: {
 
 // ---------- Attendance for one meeting ----------
 
+// lib/meetings.ts
+
 export async function getMeetingAttendance(
   meetingId: number
 ): Promise<MeetingAttendanceWithProfile[]> {
   const { data, error } = await supabase
-    .from('meeting_attendance')
+    .from('meeting_attendance_base') // ⬅️ base table, not the view
     .select(
       [
         'meeting_id',
@@ -193,7 +195,7 @@ export async function getMeetingAttendance(
         'attended',
         'created_at',
         'updated_at',
-        'profiles ( first_name, last_name )',
+        'profiles ( first_name, last_name )', // FK works on the base table
       ].join(', ')
     )
     .eq('meeting_id', meetingId)
@@ -206,6 +208,7 @@ export async function getMeetingAttendance(
 
   return (data ?? []) as unknown as MeetingAttendanceWithProfile[];
 }
+
 
 export async function upsertMeetingAttendance(input: {
   meetingId: number;
