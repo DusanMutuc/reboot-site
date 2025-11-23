@@ -40,6 +40,9 @@ type Partnership = PartnershipRow & {
   members: PartnershipMember[];
 };
 
+// Next 15: params are now a Promise in route handlers
+type RouteParams = Promise<{ partnershipId: string }>;
+
 function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unexpected error';
 }
@@ -88,7 +91,7 @@ async function buildPartnershipWithMembers(row: PartnershipRow): Promise<Partner
   const profileMap = new Map<string, ProfileRow>(profiles.map((p) => [p.id, p]));
   const emails = (authRows ?? []) as AuthUserRow[];
   const emailMap = new Map<string, string>(
-    emails.map((u) => [u.id, (u.email ?? '').toLowerCase()])
+    emails.map((u) => [u.id, (u.email ?? '').toLowerCase()]),
   );
 
   const members: PartnershipMember[] = membership.map((m) => {
@@ -107,11 +110,13 @@ async function buildPartnershipWithMembers(row: PartnershipRow): Promise<Partner
 
 export async function PATCH(
   request: Request,
-  context: { params: Record<string, string> },
+  segmentData: { params: RouteParams },
 ) {
   try {
     await requireAdmin();
-    const id = context.params.partnershipId;
+
+    const params = await segmentData.params;
+    const id = params.partnershipId;
 
     const raw = (await request.json().catch(() => ({} as unknown))) ?? {};
     const body = raw as Record<string, unknown>;
@@ -274,11 +279,13 @@ export async function PATCH(
 
 export async function DELETE(
   _request: Request,
-  context: { params: Record<string, string> },
+  segmentData: { params: RouteParams },
 ) {
   try {
     await requireAdmin();
-    const id = context.params.partnershipId;
+
+    const params = await segmentData.params;
+    const id = params.partnershipId;
 
     const { data, error } = await supabaseAdmin
       .from('partnerships')
