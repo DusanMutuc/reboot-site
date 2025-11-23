@@ -24,6 +24,9 @@ type BindingRow = {
 type RoleRow = { code: string };
 type VisibilityRow = { course_node_id: number };
 
+// Next 15: params are now a Promise in route handlers
+type RouteParams = Promise<{ id: string }>;
+
 async function getUserId(): Promise<string | null> {
   const supa = getSupabaseServer();
   const { data } = await supa.auth.getUser();
@@ -92,26 +95,40 @@ async function authorizeViewer(r: ResourceRow): Promise<boolean> {
   return visRows.length > 0;
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(
+  req: NextRequest,
+  context: { params: RouteParams },
+) {
+  const { id } = await context.params;
+  const numericId = Number(id);
+
   const supa = getSupabaseServer();
-  const id = Number(params.id);
-  if (!Number.isFinite(id)) return NextResponse.redirect(new URL('/', req.url));
+
+  if (!Number.isFinite(numericId)) {
+    return NextResponse.redirect(new URL('/', req.url));
+  }
 
   const { data: r, error } = await supa
     .from('resources')
     .select('id, title, url, state, storage_bucket, storage_path')
-    .eq('id', id)
+    .eq('id', numericId)
     .single<ResourceRow>();
 
-  if (error || !r) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (error || !r) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
 
   const allowed = await authorizeViewer(r);
-  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!allowed) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   // External → redirect as-is
   if (!r.storage_bucket || !r.storage_path) {
     const target = r.url ?? '/';
-    const resolved = target.startsWith('http') ? target : new URL(target, req.url).toString();
+    const resolved = target.startsWith('http')
+      ? target
+      : new URL(target, req.url).toString();
     return NextResponse.redirect(resolved, { status: 302 });
   }
 
