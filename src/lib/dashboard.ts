@@ -314,7 +314,7 @@ async function fetchKpiCharts(
 }
 
 /** ---------- 3) Attendance (driftline) ---------- */
-const ATTENDANCE_WEEKS = 12;
+const ATTENDANCE_WEEKS = 8;
 const DRIFT_DIVISOR = 3; // driftline = cumulativeExpected / 3
 
 function startOfWeekMonday(d: Date): Date {
@@ -350,7 +350,7 @@ async function fetchAttendanceSection(
     console.error('get_user_meetings error (attendance)', error);
     return {
       series: [],
-      periodLabel: 'Last 12 weeks',
+      periodLabel: 'Last 8 weeks',
     };
   }
 
@@ -400,7 +400,7 @@ async function fetchAttendanceSection(
 
   return {
     series,
-    periodLabel: 'Last 12 weeks',
+    periodLabel: 'Last 8 weeks',
   };
 }
 
