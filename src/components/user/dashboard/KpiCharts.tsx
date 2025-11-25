@@ -79,16 +79,16 @@ export default function KpiCharts({ series, periodLabel, version = 0, refreshing
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             {/* key={version} ensures only the chart remounts -> nice re-animate */}
-            <LineChart data={series as KpiChartPoint[]} key={version} margin={{ top: 8, right: 20, left: -40, bottom: 6 }}>
+            <LineChart data={series as KpiChartPoint[]} key={version} margin={{ top: 8, right: 20, left: -30, bottom: 6 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" tickFormatter={fmtMonth} tickMargin={8} style={{ fontSize: 12 }} />
               <YAxis allowDecimals={false} style={{ fontSize: 12 }} />
               <Tooltip content={<TooltipContent />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="total_closed" name="Total Closed" stroke="#1976d2" strokeWidth={2} dot={false} isAnimationActive animationDuration={500} />
-              <Line type="monotone" dataKey="fifteen_thirty" name="15/30" stroke="#9c27b0" strokeWidth={2} dot={false} isAnimationActive animationDuration={500} />
-              <Line type="monotone" dataKey="repeat_referral" name="Repeat/Referral" stroke="#2e7d32" strokeWidth={2} dot={false} isAnimationActive animationDuration={500} />
-              <Line type="monotone" dataKey="days_off" name="Days Off" stroke="#ff9800" strokeWidth={2} dot={false} isAnimationActive animationDuration={500} />
+              <Line type="monotone" dataKey="total_closed" name="Total Closed" stroke="#388e3c" strokeWidth={3} dot={false} isAnimationActive animationDuration={500} />
+              <Line type="monotone" dataKey="fifteen_thirty" name="15/30" stroke="#00acc1" strokeWidth={3} dot={false} isAnimationActive animationDuration={500} />
+              <Line type="monotone" dataKey="repeat_referral" name="Repeat/Referral" stroke="#e64a19" strokeWidth={3} dot={false} isAnimationActive animationDuration={500} />
+              <Line type="monotone" dataKey="days_off" name="Days Off" stroke="#8e24aa" strokeWidth={3} dot={false} isAnimationActive animationDuration={500} />
             </LineChart>
           </ResponsiveContainer>
         )}

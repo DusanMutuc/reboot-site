@@ -232,10 +232,22 @@ async function fetchKpiSection(
     },
   );
 
+  // latest entry's 15/30 (historyArr is newest → oldest)
+  const latestPipelineVal = (() => {
+    for (const row of historyArr) {
+      const kv = (row.kpi_values as KpiValues | null) ?? {};
+      if (kv.pipeline_15_30 != null) {
+        return Number(kv.pipeline_15_30);
+      }
+    }
+    return 0;
+  })();
+
   function buildKpi(
     metricKey: 'closed_deals' | 'repeat_referral' | 'days_off' | 'pipeline_15_30',
     label: string,
     mode: 'lifetime' | 'current',
+    overrideValue?: number | null,
   ): KpiMetric {
     const currentMonthVal = Number(currentValues?.[metricKey] ?? 0);
     const prevMonthVal = Number(prevValues?.[metricKey] ?? 0);
@@ -245,9 +257,11 @@ async function fetchKpiSection(
       prevMonthVal !== 0 ? ((currentMonthVal - prevMonthVal) / prevMonthVal) * 100 : null;
 
     const value =
-      mode === 'current'
-        ? currentMonthVal
-        : lifetimeTotals[metricKey];
+      overrideValue != null
+        ? overrideValue
+        : mode === 'current'
+          ? currentMonthVal
+          : lifetimeTotals[metricKey];
 
     return {
       key: mapMetricKeyToKpiKey(metricKey),
@@ -262,8 +276,8 @@ async function fetchKpiSection(
     buildKpi('closed_deals', 'Total Closed', 'lifetime'),
     buildKpi('repeat_referral', 'Repeat / Referral', 'lifetime'),
     buildKpi('days_off', 'Days Off', 'lifetime'),
-    // current month only
-    buildKpi('pipeline_15_30', '15/30', 'current'),
+    // 15/30 card: latest entry's 15/30, not lifetime
+    buildKpi('pipeline_15_30', '15/30', 'current', latestPipelineVal),
   ];
 
   return {
@@ -273,45 +287,67 @@ async function fetchKpiSection(
 }
 
 
-/** ---------- 2b) KPI charts (last 12 months, 4 lines) ---------- */
+/** ---------- 2b) KPI charts (this calendar year, cumulative) ---------- */
 async function fetchKpiCharts(
   client: SupabaseClient,
   userId: string,
 ): Promise<import('@/types/dashboard').KpiChartsProps> {
-  const { data, error } = await client.rpc('get_monthly_kpi_history_with_values', {
+  const year = new Date().getFullYear();
+
+  const { data, error } = await client.rpc('get_monthly_kpi_history_for_year', {
     _user_id: userId,
-    _limit: 12,
+    _year: year,
   });
 
   if (error) {
-    console.error('get_monthly_kpi_history_with_values (kpi charts) error', error);
-    return { series: [], periodLabel: 'Last 12 months' };
+    console.error('get_monthly_kpi_history_for_year (kpi charts) error', error);
+    return { series: [], periodLabel: String(year) };
   }
 
   const rows = (data ?? []) as KpiHistoryRow[];
 
-  // Ensure oldest → newest
-  const sorted = rows.sort(
+  // Safety: ensure oldest → newest just in case
+  const sorted = [...rows].sort(
     (a, b) =>
-      new Date(a.period_start_date).getTime() - new Date(b.period_start_date).getTime(),
+      new Date(a.period_start_date).getTime() -
+      new Date(b.period_start_date).getTime(),
   );
+
+  // Running totals per metric
+  let closedCum = 0;
+  let repeatCum = 0;
+  let daysOffCum = 0;
+  let fifteenThirtyCum = 0;
 
   const series = sorted.map((row) => {
     const v = row.kpi_values ?? {};
+
+    const closedMonthly = Number(v.closed_deals ?? 0);
+    const repeatMonthly = Number(v.repeat_referral ?? 0);
+    const daysOffMonthly = Number(v.days_off ?? 0);
+    const fifteenThirtyMonthly = Number(v.pipeline_15_30 ?? 0);
+
+    closedCum += closedMonthly;
+    repeatCum += repeatMonthly;
+    daysOffCum += daysOffMonthly;
+    fifteenThirtyCum = fifteenThirtyMonthly;
+
     return {
       date: row.period_start_date,
-      total_closed: Number(v.closed_deals ?? 0),
-      repeat_referral: Number(v.repeat_referral ?? 0),
-      days_off: Number(v.days_off ?? 0),
-      fifteen_thirty: Number(v.pipeline_15_30 ?? 0),
+      total_closed: closedCum,
+      repeat_referral: repeatCum,
+      days_off: daysOffCum,
+      fifteen_thirty: fifteenThirtyCum,
     };
   });
 
   return {
     series,
-    periodLabel: 'Last 12 months',
+    periodLabel: String(year),
   };
 }
+
+
 
 /** ---------- 3) Attendance (driftline) ---------- */
 const ATTENDANCE_WEEKS = 8;

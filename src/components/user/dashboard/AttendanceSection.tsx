@@ -86,7 +86,7 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
               type="monotone"
               dataKey="actualCumulative"
               dot={false}
-              strokeWidth={2}
+              strokeWidth={3}
               name="Actual"
             />
             <Line
@@ -94,8 +94,9 @@ export function AttendanceSection({ series, periodLabel }: AttendanceSectionProp
               dataKey="driftCumulative"
               strokeDasharray="4 4"
               dot={false}
-              strokeWidth={2}
+              strokeWidth={3}
               name="Driftline"
+              stroke='#c2185b'
             />
           </LineChart>
         </ResponsiveContainer>
