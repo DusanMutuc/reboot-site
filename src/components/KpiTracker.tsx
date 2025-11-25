@@ -45,6 +45,12 @@ type HistoryRow = {
 export type KpiTrackerProps = {
   /** Called after a successful explicit save (Save Changes button). */
   onSaved?: () => void;
+  /**
+   * Optional override of the target user.
+   * - If provided, KPIs are loaded and saved for this user.
+   * - If omitted, the tracker uses the currently logged-in user.
+   */
+  userIdOverride?: string | null;
 };
 
 const isMoneyMetric = (key: string) =>
@@ -55,7 +61,8 @@ const moneyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
-export default function KpiTracker({ onSaved }: KpiTrackerProps) {
+export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps) {
+  // This is always the *target* user (student) whose KPIs we're editing.
   const [userId, setUserId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<KpiMetricType[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -104,22 +111,46 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
     []
   );
 
-  // Initial load: user, metrics, ensure current month record, then history
+  // Initial load + re-load when the target user changes
   useEffect(() => {
+    let cancelled = false;
+
     const init = async () => {
       setInitialLoading(true);
       setError(null);
+      setSuccess(null);
+      setHistory([]);
+      setSelectedPeriod('');
+      setValues({});
+      setLastUpdatedAt(null);
 
-      // 1) Get user
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData?.user) {
-        setError('You must be logged in to use the KPI tracker.');
-        setInitialLoading(false);
+      // 1) Decide which user we're targeting
+      let targetUserId = userIdOverride ?? null;
+
+      if (!targetUserId) {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (cancelled) return;
+
+        if (authError || !authData?.user) {
+          setUserId(null);
+          setError('You must be logged in to use the KPI tracker.');
+          setInitialLoading(false);
+          return;
+        }
+
+        targetUserId = authData.user.id;
+      }
+
+      if (!targetUserId) {
+        if (!cancelled) {
+          setUserId(null);
+          setError('No user selected for KPI tracking.');
+          setInitialLoading(false);
+        }
         return;
       }
 
-      const uid = authData.user.id;
-      setUserId(uid);
+      setUserId(targetUserId);
 
       // 2) Get metric definitions
       const { data: metricRows, error: metricsError } = await supabase
@@ -127,8 +158,11 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
         .select('id, key, name, description')
         .order('id', { ascending: true });
 
+      if (cancelled) return;
+
       if (metricsError) {
         setError(metricsError.message);
+        setMetrics([]);
         setInitialLoading(false);
         return;
       }
@@ -145,24 +179,30 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
       const { error: ensureError } = await supabase.rpc(
         'ensure_monthly_kpi_record_for_month',
         {
-          _user_id: uid,
+          _user_id: targetUserId,
           _period_start_date: currentMonthIso,
         }
       );
 
-      if (ensureError) {
+      if (ensureError && !cancelled) {
         // Not fatal; tracker still works with existing months
         console.error('ensure_monthly_kpi_record_for_month error:', ensureError);
       }
 
       // 5) Load history, preferring current month as the default selection
-      await refreshHistory(uid, currentMonthIso);
+      await refreshHistory(targetUserId, currentMonthIso);
 
-      setInitialLoading(false);
+      if (!cancelled) {
+        setInitialLoading(false);
+      }
     };
 
     void init();
-  }, [refreshHistory]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshHistory, userIdOverride]);
 
   // When selectedPeriod / metrics / history change -> hydrate form values
   useEffect(() => {
@@ -327,7 +367,7 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
       >
         <CircularProgress size={48} thickness={4} />
         <Typography variant="body2" color="text.secondary">
-          Loading your KPIs...
+          Loading KPIs...
         </Typography>
       </Box>
     );
@@ -356,7 +396,7 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
           </Typography>
         </Box>
         <Typography variant="body2" color="text.secondary">
-          Log your key performance indicators for the selected month.
+          Log key performance indicators for the selected month.
         </Typography>
       </Box>
 
@@ -458,7 +498,7 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
               color="text.secondary"
               sx={{ ml: 'auto', fontStyle: 'italic' }}
             >
-              Last updated:{' '}
+              Last updated{' '}
               {new Date(lastUpdatedAt).toLocaleString(undefined, {
                 dateStyle: 'medium',
                 timeStyle: 'short',
@@ -485,8 +525,8 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
             No KPI Months Available
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Once your first month is created, you&rsquo;ll be able to select it and
-            update your KPI values.
+            Once the first month is created, you’ll be able to select it and
+            update KPI values.
           </Typography>
         </Paper>
       ) : metrics.length === 0 ? (
@@ -583,11 +623,19 @@ export default function KpiTracker({ onSaved }: KpiTrackerProps) {
                           handleChangeValue(metric.key, e.target.value)
                         }
                         onBlur={() => handleFieldBlur(metric.key)}
-                        inputProps={{
-                          step: money ? '0.01' : '1',
-                          min: 0,
-                          inputMode: money ? 'decimal' : 'numeric',
-                        }}
+                        inputProps={
+                          money
+                            ? {
+                                step: '0.01',
+                                min: 0,
+                                inputMode: 'decimal',
+                              }
+                            : {
+                                step: '1',
+                                min: 0,
+                                inputMode: 'numeric',
+                              }
+                        }
                         placeholder="0"
                         sx={{
                           '& .MuiOutlinedInput-root': {

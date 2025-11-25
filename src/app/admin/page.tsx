@@ -20,6 +20,7 @@ import AchievementsAdminPanel from '@/components/admin/achievements/Achievements
 import StudentStatusOverview from '@/components/StudentStatusOverview';
 import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
+import AdminStudentTracker from '@/components/admin/AdminStudentTracker'; // 👈 NEW
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -93,7 +94,8 @@ const navigationStructure = [
     icon: AssessmentIcon,
     children: [
       { id: 'student-progress', label: 'Student Progress', icon: AssessmentIcon, component: 'StudentProgressView' },
-      { id: 'status-overview', label: 'Status Overview', icon: AssessmentIcon, component: 'StudentStatusOverview' }
+      { id: 'status-overview', label: 'Status Overview', icon: AssessmentIcon, component: 'StudentStatusOverview' },
+      { id: 'student-tracker', label: 'Student Tracker', icon: AssessmentIcon, component: 'AdminStudentTracker' }, // 👈 NEW
     ]
   },
   {
@@ -199,7 +201,7 @@ export default function AdminPage() {
       case 'user-profiles':
         return <UserProfilesAdmin />;
       case 'user-partnerships':
-          return <PartnershipsAdmin />;
+        return <PartnershipsAdmin />;
       case 'assign-coach':
         return <AssignCoachPanel />;
       case 'coach-profiles':
@@ -218,6 +220,8 @@ export default function AdminPage() {
         return <StudentProgressView mode="admin" />;
       case 'status-overview':
         return <StudentStatusOverview courseId={2} />;
+      case 'student-tracker':
+        return <AdminStudentTracker />; // 👈 NEW
       case 'meetings':
         return <AdminMeetingsPanel />;
       case 'achievements-admin':
