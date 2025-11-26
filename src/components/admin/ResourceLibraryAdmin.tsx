@@ -488,6 +488,16 @@ function ResourceDialog({
     editing?.type === 'pdf' ? 'link' : 'link'
   );
   const [file, setFile] = useState<File | null>(null);
+// Put near top of ResourceDialog file scope
+function isLikelyUrl(s: string): boolean {
+  if (!s) return false;
+  try {
+    const u = new URL(s.trim());
+    return !!u.protocol && !!u.host;
+  } catch {
+    return false;
+  }
+}
 
   useEffect(() => {
     setTitle(editing?.title ?? '');
@@ -644,11 +654,17 @@ function ResourceDialog({
 
   // Validations
   const canSave = (() => {
+    // Require a URL unless we are doing a real PDF file upload
+    const requiresUrl = !(type === 'pdf' && uploadMode === 'upload');
+    const urlOk = requiresUrl ? isLikelyUrl(url) : true;
+  
     if (type === 'pdf' && uploadMode === 'upload') {
       return Boolean(title.trim() && file && stateValue);
     }
-    return Boolean(title.trim() && url.trim() && stateValue);
+    return Boolean(title.trim() && stateValue && urlOk);
   })();
+  
+  
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
@@ -733,25 +749,41 @@ function ResourceDialog({
             </Box>
           )}
 
-          {/* Non-PDF (or PDF as link) standard fields */}
-          {(type !== 'pdf' || uploadMode === 'link') && (
-            <>
-              <TextField
-                label="Thumbnail URL"
-                value={thumbnail}
-                onChange={e => setThumbnail(e.target.value)}
-                fullWidth
-              />
-              <TextField
-                label="Description"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                fullWidth
-                multiline
-                minRows={3}
-              />
-            </>
-          )}
+          {/* For all types we accept a URL, except when uploading a PDF file */}
+{(type !== 'pdf' || uploadMode === 'link') && (
+  <>
+    <TextField
+      label="URL"
+      value={url}
+      onChange={(e) => setUrl(e.target.value)}
+      placeholder="https://example.com/resource"
+      fullWidth
+      error={url.trim().length > 0 && !isLikelyUrl(url)}
+      helperText={
+        url.trim().length > 0 && !isLikelyUrl(url)
+          ? 'Please enter a valid URL (including https://)'
+          : ' '
+      }
+    />
+
+    <TextField
+      label="Thumbnail URL"
+      value={thumbnail}
+      onChange={e => setThumbnail(e.target.value)}
+      fullWidth
+    />
+
+    <TextField
+      label="Description"
+      value={description}
+      onChange={e => setDescription(e.target.value)}
+      fullWidth
+      multiline
+      minRows={3}
+    />
+  </>
+)}
+
 
           <FormControl>
             <InputLabel shrink>Tags</InputLabel>
