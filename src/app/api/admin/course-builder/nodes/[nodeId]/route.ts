@@ -42,16 +42,14 @@ export async function PATCH(
   context: { params: Promise<{ nodeId: string }> },
 ) {
   const guard = await requireAdmin(request);
-  if (!guard.ok) {
-    return guard.res;
-  }
+  if (!guard.ok) return guard.res;
 
   try {
     const { nodeId: nodeIdParam } = await context.params;
     const nodeId = parseNodeId(nodeIdParam);
+
     const body = await request.json();
     const updates = body?.updates ?? body;
-
     if (!updates || typeof updates !== 'object') {
       throw new CourseBuilderError('Missing update payload', 400);
     }
@@ -66,18 +64,28 @@ export async function PATCH(
       'objectives',
       'metadata',
       'owner_id',
-      'is_public', // ← add this
-    ];
+      'visibility', // <—
+    ] as const;
 
     const updatePayload: Record<string, unknown> = {};
     for (const key of allowedFields) {
-      if (key in updates) {
-        updatePayload[key] = updates[key];
+      if (key in updates && (updates as any)[key] !== undefined) {
+        updatePayload[key] = (updates as any)[key];
       }
     }
 
+    // 👇 no-op instead of error
     if (Object.keys(updatePayload).length === 0) {
-      throw new CourseBuilderError('No valid fields provided for update', 400);
+      const subtree = await fetchNodeSubtree(nodeId);
+      return NextResponse.json({ subtree });
+    }
+
+    if (
+      'visibility' in updatePayload &&
+      updatePayload.visibility !== 'public' &&
+      updatePayload.visibility !== 'limited'
+    ) {
+      throw new CourseBuilderError('Invalid visibility', 400, { value: updatePayload.visibility });
     }
 
     updatePayload.updated_at = new Date().toISOString();
@@ -98,6 +106,7 @@ export async function PATCH(
     return handleCourseBuilderError(error);
   }
 }
+
 
 export async function DELETE(
   request: NextRequest,

@@ -215,9 +215,13 @@ export default function Properties({
 const courseId = subtree?.node.id ?? null;
 const isCourse = subtree?.node.node_type === 'course';
 
-const [isPublic, setIsPublic] = useState<boolean>(true);
-const [isPublicLoading, setIsPublicLoading] = useState(false);
-const [isPublicError, setIsPublicError] = useState<string | null>(null);
+type ContentNodesRow = { visibility: 'public' | 'limited' | null };
+type ProfilesRow = { id: string; first_name: string | null; last_name: string | null };
+type UCVRowMaybeArray = { user_id: string; profile: ProfilesRow | ProfilesRow[] | null };
+
+const [visibility, setVisibility] = useState<'public' | 'limited'>('public');
+const [visibilityLoading, setVisibilityLoading] = useState(false);
+const [visibilityError, setVisibilityError] = useState<string | null>(null);
 
 const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
 const [allowedLoading, setAllowedLoading] = useState(false);
@@ -228,38 +232,35 @@ const [searchResults, setSearchResults] = useState<AllowedUser[]>([]);
 const [searchLoading, setSearchLoading] = useState(false);
 const [searchError, setSearchError] = useState<string | null>(null);
 
-// Typed helper rows
-type ContentNodesRow = { is_public: boolean | null };
-type ProfilesRow = { id: string; first_name: string | null; last_name: string | null };
-type UCVRowMaybeArray = { user_id: string; profile: ProfilesRow | ProfilesRow[] | null };
-
-// Load initial is_public and allowed users when a course is selected
+// Load current visibility + whitelist when a course is selected
 useEffect(() => {
   let cancelled = false;
 
   const load = async () => {
     if (!courseId || !isCourse) return;
 
-    setIsPublicLoading(true);
+    setVisibilityLoading(true);
     setAllowedLoading(true);
-    setIsPublicError(null);
+    setVisibilityError(null);
     setAllowedError(null);
 
     try {
-      // Always fetch from DB to avoid untyped snapshot
       const { data, error } = await supabase
         .from('content_nodes')
-        .select('is_public')
+        .select('visibility')
         .eq('id', courseId)
         .single<ContentNodesRow>();
 
       if (error) throw error;
-      if (!cancelled) setIsPublic(Boolean(data?.is_public));
+      if (!cancelled) {
+        const v = (data?.visibility ?? 'public') as 'public' | 'limited';
+        setVisibility(v);
+      }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load visibility';
-      if (!cancelled) setIsPublicError(message);
+      if (!cancelled) setVisibilityError(message);
     } finally {
-      if (!cancelled) setIsPublicLoading(false);
+      if (!cancelled) setVisibilityLoading(false);
     }
 
     try {
@@ -277,17 +278,15 @@ useEffect(() => {
 
       if (error) throw error;
 
-      // Normalize: profile can be a single object or an array
       const raw = ((data ?? []) as unknown) as UCVRowMaybeArray[];
 
       const rows: AllowedUser[] = raw.map((r) => {
         const prof = Array.isArray(r.profile) ? (r.profile[0] ?? null) : r.profile;
-        const name =
-          [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim() || null;
+        const name = [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim() || null;
         return {
           id: prof?.id ?? r.user_id,
           full_name: name,
-          email: null, // not included in this select
+          email: null,
         };
       });
 
@@ -301,29 +300,31 @@ useEffect(() => {
   };
 
   void load();
-  return () => { cancelled = true; };
+  return () => {
+    cancelled = true;
+  };
 }, [courseId, isCourse, subtree]);
 
-
-const handleTogglePublic = async (checked: boolean) => {
+// Toggle visibility: 'public' <-> 'limited'
+const handleChangeVisibility = async (makePublic: boolean) => {
   if (!courseId || !isCourse) return;
-  setIsPublic(checked); // optimistic
-  setIsPublicError(null);
-  setIsPublicLoading(true);
+  const next = makePublic ? 'public' : 'limited' as const;
+
+  setVisibility(next); // optimistic
+  setVisibilityError(null);
+  setVisibilityLoading(true);
   try {
-    await updateNode(courseId, { is_public: checked });
-    onCourseVisibilityChange?.(courseId, checked); // notify parent (prevents "declared not used")
+    await updateNode(courseId, { visibility: next });
+    onCourseVisibilityChange?.(courseId, makePublic); // keep existing callback signature
   } catch (err: unknown) {
-    setIsPublic(!checked); // revert
+    setVisibility(makePublic ? 'limited' : 'public'); // revert
     const message = err instanceof Error ? err.message : 'Failed to update visibility';
-    setIsPublicError(message);
+    setVisibilityError(message);
   } finally {
-    setIsPublicLoading(false);
+    setVisibilityLoading(false);
   }
 };
 
-
-// Search profiles to whitelist (name or email)
 // Search profiles to whitelist (name or email)
 const handleSearch = async () => {
   const q = searchQuery.trim();
@@ -356,7 +357,6 @@ const handleSearch = async () => {
     setSearchLoading(false);
   }
 };
-
 
 // Grant access
 const grantUserAccess = async (userId: string) => {
@@ -397,6 +397,125 @@ const revokeUserAccess = async (userId: string) => {
     setAllowedError(message);
   }
 };
+
+const renderVisibility = () => {
+  if (!courseId || !isCourse) return null;
+
+  return (
+    <Stack spacing={2}>
+      <Typography variant="subtitle2">Visibility</Typography>
+
+      {visibilityError ? <Alert severity="error">{visibilityError}</Alert> : null}
+
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={visibility === 'public'}
+            onChange={(e) => handleChangeVisibility(e.target.checked)}
+            disabled={visibilityLoading}
+          />
+        }
+        label="Public course"
+      />
+
+      <Typography variant="body2" color="text.secondary">
+        {visibility === 'public'
+          ? 'All users can see this course when state is “published”.'
+          : 'Only users listed below can see this course.'}
+      </Typography>
+
+      {visibility === 'limited' && (
+        <Stack spacing={2} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+          {allowedError ? <Alert severity="error">{allowedError}</Alert> : null}
+
+          <Stack direction="row" spacing={1} alignItems="center">
+            <TextField
+              size="small"
+              placeholder="Search by name…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
+              sx={{ minWidth: 280 }}
+            />
+            <Button variant="outlined" onClick={handleSearch} disabled={searchLoading}>
+              {searchLoading ? 'Searching…' : 'Search'}
+            </Button>
+          </Stack>
+
+          {!!searchError && <Alert severity="error">{searchError}</Alert>}
+
+          {searchResults.length > 0 && (
+            <Stack spacing={1}>
+              <Typography variant="caption" color="text.secondary">Search results</Typography>
+              <Stack spacing={0.5}>
+                {searchResults.map((u) => {
+                  const already = allowedUsers.some((x) => x.id === u.id);
+                  return (
+                    <Stack
+                      key={u.id}
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 1 }}
+                    >
+                      <Typography variant="body2">
+                        {(u.full_name || u.email) ?? u.id}
+                        {u.full_name && u.email ? ` — ${u.email}` : ''}
+                      </Typography>
+                      <Button
+                        size="small"
+                        variant="contained"
+                        disabled={already}
+                        onClick={() => grantUserAccess(u.id)}
+                      >
+                        {already ? 'Added' : 'Grant access'}
+                      </Button>
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Stack>
+          )}
+
+          <Divider />
+
+          <Stack spacing={1}>
+            <Typography variant="caption" color="text.secondary">
+              Allowed users {allowedLoading ? '(loading…) ' : `(${allowedUsers.length})`}
+            </Typography>
+
+            {allowedLoading ? (
+              <Typography variant="body2" color="text.secondary">Loading…</Typography>
+            ) : allowedUsers.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No users have access yet.</Typography>
+            ) : (
+              <Stack spacing={0.75}>
+                {allowedUsers.map((u) => (
+                  <Stack
+                    key={u.id}
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}
+                  >
+                    <Typography variant="body2">
+                      {(u.full_name || u.email) ?? u.id}
+                      {u.full_name && u.email ? ` — ${u.email}` : ''}
+                    </Typography>
+                    <IconButton size="small" color="error" onClick={() => revokeUserAccess(u.id)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+          </Stack>
+        </Stack>
+      )}
+    </Stack>
+  );
+};
+
 
 
   const titleInput = useUndoRedoInput({
@@ -1298,123 +1417,6 @@ const revokeUserAccess = async (userId: string) => {
               </Stack>
             ))}
         </Stack>
-      </Stack>
-    );
-  };
-  const renderVisibility = () => {
-    if (!courseId || !isCourse) return null;
-  
-    return (
-      <Stack spacing={2}>
-        <Typography variant="subtitle2">Visibility</Typography>
-  
-        {isPublicError ? <Alert severity="error">{isPublicError}</Alert> : null}
-  
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={isPublic}
-              onChange={(e) => handleTogglePublic(e.target.checked)}
-              disabled={isPublicLoading}
-            />
-          }
-          label="Public course"
-        />
-  
-        <Typography variant="body2" color="text.secondary">
-          {isPublic
-            ? 'All users can see this course when published.'
-            : 'Only users listed below can see this course.'}
-        </Typography>
-  
-        {!isPublic && (
-          <Stack spacing={2} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
-            {allowedError ? <Alert severity="error">{allowedError}</Alert> : null}
-  
-            <Stack direction="row" spacing={1} alignItems="center">
-              <TextField
-                size="small"
-                placeholder="Search by name or email…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSearch(); }}
-                sx={{ minWidth: 280 }}
-              />
-              <Button variant="outlined" onClick={handleSearch} disabled={searchLoading}>
-                {searchLoading ? 'Searching…' : 'Search'}
-              </Button>
-            </Stack>
-  
-            {!!searchError && <Alert severity="error">{searchError}</Alert>}
-  
-            {searchResults.length > 0 && (
-              <Stack spacing={1}>
-                <Typography variant="caption" color="text.secondary">Search results</Typography>
-                <Stack spacing={0.5}>
-                  {searchResults.map((u) => {
-                    const already = allowedUsers.some((x) => x.id === u.id);
-                    return (
-                      <Stack
-                        key={u.id}
-                        direction="row"
-                        alignItems="center"
-                        justifyContent="space-between"
-                        sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 1 }}
-                      >
-                        <Typography variant="body2">
-                          {(u.full_name || u.email) ?? u.id}
-                          {u.full_name && u.email ? ` — ${u.email}` : ''}
-                        </Typography>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          disabled={already}
-                          onClick={() => grantUserAccess(u.id)}
-                        >
-                          {already ? 'Added' : 'Grant access'}
-                        </Button>
-                      </Stack>
-                    );
-                  })}
-                </Stack>
-              </Stack>
-            )}
-  
-            <Divider />
-  
-            <Stack spacing={1}>
-              <Typography variant="caption" color="text.secondary">
-                Allowed users {allowedLoading ? '(loading…) ' : `(${allowedUsers.length})`}
-              </Typography>
-  
-              {allowedLoading ? (
-                <Typography variant="body2" color="text.secondary">Loading…</Typography>
-              ) : allowedUsers.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">No users have access yet.</Typography>
-              ) : (
-                <Stack spacing={0.75}>
-                  {allowedUsers.map((u) => (
-                    <Stack
-                      key={u.id}
-                      direction="row"
-                      alignItems="center"
-                      justifyContent="space-between"
-                      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}
-                    >
-                      <Typography variant="body2">
-                        {(u.full_name || u.email) ?? u.id}
-                        {u.full_name && u.email ? ` — ${u.email}` : ''}
-                      </Typography>
-                      <IconButton size="small" color="error" onClick={() => revokeUserAccess(u.id)}>
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Stack>
-                  ))}
-                </Stack>
-              )}
-            </Stack>
-          </Stack>
-        )}
       </Stack>
     );
   };
