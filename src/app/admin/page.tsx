@@ -17,6 +17,7 @@ import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin';
 import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin';
 import AdminMeetingsPanel from '@/components/admin/meetings/AdminMeetingsPanel';
 import AchievementsAdminPanel from '@/components/admin/achievements/AchievementsAdminPanel';
+import ManualAwardPanel from '@/components/admin/achievements/ManualAwardPanel'; // 👈 NEW
 import StudentStatusOverview from '@/components/StudentStatusOverview';
 import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
@@ -111,7 +112,8 @@ const navigationStructure = [
     label: 'Achievements',
     icon: EmojiEventsIcon,
     children: [
-      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' }
+      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' },
+      { id: 'achievements-manual', label: 'Manual Awards', icon: EmojiEventsIcon, component: 'ManualAwardPanel' }, // 👈 NEW
     ]
   }
 ];
@@ -226,6 +228,8 @@ export default function AdminPage() {
         return <AdminMeetingsPanel />;
       case 'achievements-admin':
         return <AchievementsAdminPanel />;
+      case 'achievements-manual':
+        return <ManualAwardPanel />; // 👈 NEW
       default:
         return <AddUserForm />;
     }
