@@ -44,6 +44,51 @@ export async function PATCH(
   const guard = await requireAdmin(request);
   if (!guard.ok) return guard.res;
 
+  type State = 'draft' | 'published' | 'archived';
+  type Visibility = 'public' | 'limited';
+
+  type UpdatePayload = Partial<{
+    title: string | null;
+    slug: string | null;
+    state: State;
+    description: string | null;
+    hero_image: string | null;
+    icon: string | null;
+    objectives: string | null;
+    metadata: unknown;
+    owner_id: string | null;
+    visibility: Visibility;
+  }>;
+
+  const pickUpdatePayload = (input: unknown): UpdatePayload => {
+    if (!input || typeof input !== 'object') return {};
+    const src = input as Record<string, unknown>;
+    const out: UpdatePayload = {};
+
+    if ('title' in src) out.title = typeof src.title === 'string' ? src.title : null;
+    if ('slug' in src) out.slug = typeof src.slug === 'string' ? src.slug : null;
+    if ('description' in src) out.description = typeof src.description === 'string' ? src.description : null;
+    if ('hero_image' in src) out.hero_image = typeof src.hero_image === 'string' ? src.hero_image : null;
+    if ('icon' in src) out.icon = typeof src.icon === 'string' ? src.icon : null;
+    if ('objectives' in src) out.objectives = typeof src.objectives === 'string' ? src.objectives : null;
+    if ('metadata' in src) out.metadata = src.metadata ?? null;
+    if ('owner_id' in src) out.owner_id = typeof src.owner_id === 'string' ? src.owner_id : null;
+
+    if ('state' in src) {
+      const v = src.state;
+      if (v === 'draft' || v === 'published' || v === 'archived') out.state = v;
+      else throw new CourseBuilderError('Invalid state', 400, { value: v });
+    }
+
+    if ('visibility' in src) {
+      const v = src.visibility;
+      if (v === 'public' || v === 'limited') out.visibility = v;
+      else throw new CourseBuilderError('Invalid visibility', 400, { value: v });
+    }
+
+    return out;
+  };
+
   try {
     const { nodeId: nodeIdParam } = await context.params;
     const nodeId = parseNodeId(nodeIdParam);
@@ -54,46 +99,24 @@ export async function PATCH(
       throw new CourseBuilderError('Missing update payload', 400);
     }
 
-    const allowedFields = [
-      'title',
-      'slug',
-      'state',
-      'description',
-      'hero_image',
-      'icon',
-      'objectives',
-      'metadata',
-      'owner_id',
-      'visibility', // <—
-    ] as const;
+    const updatePayload = pickUpdatePayload(updates);
 
-    const updatePayload: Record<string, unknown> = {};
-    for (const key of allowedFields) {
-      if (key in updates && (updates as any)[key] !== undefined) {
-        updatePayload[key] = (updates as any)[key];
-      }
-    }
-
-    // 👇 no-op instead of error
+    // No-op instead of error when diff is empty
     if (Object.keys(updatePayload).length === 0) {
       const subtree = await fetchNodeSubtree(nodeId);
       return NextResponse.json({ subtree });
     }
 
-    if (
-      'visibility' in updatePayload &&
-      updatePayload.visibility !== 'public' &&
-      updatePayload.visibility !== 'limited'
-    ) {
-      throw new CourseBuilderError('Invalid visibility', 400, { value: updatePayload.visibility });
-    }
-
-    updatePayload.updated_at = new Date().toISOString();
-    updatePayload.updated_by = guard.user.id;
+    // Perform the update with server-managed audit fields
+    const finalUpdate = {
+      ...updatePayload,
+      updated_at: new Date().toISOString(),
+      updated_by: guard.user.id,
+    };
 
     const { error } = await adminClient
       .from('content_nodes')
-      .update(updatePayload)
+      .update(finalUpdate)
       .eq('id', nodeId);
 
     if (error) {
