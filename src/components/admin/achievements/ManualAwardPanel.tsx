@@ -43,6 +43,8 @@ type UA = {
   achievements?: { id: number; code: string; title: string; icon_url: string | null } | null;
 };
 
+type ApiError = { error?: string };
+
 function fmt(ts?: string) {
   return ts ? new Date(ts).toLocaleString() : '';
 }
@@ -77,20 +79,20 @@ export default function ManualAwardPanel() {
       setUsersLoading(true);
       try {
         const res = await fetch('/api/admin/list-users');
-        const body = await res.json();
-        const items = Array.isArray(body?.items) ? (body.items as UserOption[]) : [];
+        const body = (await res.json()) as { items?: UserOption[] } | ApiError;
+        const items = Array.isArray((body as { items?: UserOption[] }).items)
+          ? ((body as { items?: UserOption[] }).items as UserOption[])
+          : [];
         if (!dead) {
           const opts: MinimalUser[] = items.map((u) => ({
             id: u.id,
             full_name: u.name || u.email || '(no name)',
           }));
-          // Sort alphabetically
           opts.sort((a, b) => a.full_name.localeCompare(b.full_name));
           setUserOptions(opts);
         }
       } catch (e) {
         if (!dead) setErr('Failed to load users.');
-        // eslint-disable-next-line no-console
         console.error('list-users error:', e);
       } finally {
         if (!dead) setUsersLoading(false);
@@ -108,7 +110,7 @@ export default function ManualAwardPanel() {
       setAchLoading(true);
       try {
         const res = await fetch('/api/admin/achievements');
-        const data = (await res.json()) as Achievement[] | { error?: string };
+        const data = (await res.json()) as Achievement[] | ApiError;
         if (!dead && Array.isArray(data)) {
           const sorted = [...data].sort(
             (a, b) => Number(b.is_active) - Number(a.is_active) || a.title.localeCompare(b.title),
@@ -117,7 +119,6 @@ export default function ManualAwardPanel() {
         }
       } catch (e) {
         if (!dead) setErr('Failed to load achievements.');
-        // eslint-disable-next-line no-console
         console.error('achievements error:', e);
       } finally {
         if (!dead) setAchLoading(false);
@@ -137,11 +138,10 @@ export default function ManualAwardPanel() {
     setRowsLoading(true);
     try {
       const res = await fetch(`/api/admin/user-achievements?user_id=${selectedUser.id}`);
-      const data = await res.json();
-      setRows(Array.isArray(data) ? (data as UA[]) : []);
+      const data = (await res.json()) as UA[] | ApiError;
+      setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       setErr('Failed to load user awards.');
-      // eslint-disable-next-line no-console
       console.error('user-achievements GET error:', e);
     } finally {
       setRowsLoading(false);
@@ -182,9 +182,10 @@ export default function ManualAwardPanel() {
         body: JSON.stringify(payload),
       });
 
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({} as ApiError))) as UA | ApiError;
+
       if (!res.ok) {
-        setErr((body as any)?.error || 'Failed to grant achievement.');
+        setErr((body as ApiError).error ?? 'Failed to grant achievement.');
         return;
       }
 
@@ -194,7 +195,6 @@ export default function ManualAwardPanel() {
       await refreshAwards();
     } catch (e) {
       setErr('Unexpected error while granting achievement.');
-      // eslint-disable-next-line no-console
       console.error('user-achievements POST error:', e);
     } finally {
       setSaving(false);
@@ -206,16 +206,15 @@ export default function ManualAwardPanel() {
     setOk(null);
     try {
       const res = await fetch(`/api/admin/user-achievements?id=${id}`, { method: 'DELETE' });
-      const body = await res.json().catch(() => ({}));
+      const body = (await res.json().catch(() => ({} as ApiError))) as { success?: boolean } | ApiError;
       if (!res.ok) {
-        setErr((body as any)?.error || 'Failed to revoke achievement.');
+        setErr((body as ApiError).error ?? 'Failed to revoke achievement.');
         return;
       }
       setOk('Manual award revoked.');
       await refreshAwards();
     } catch (e) {
       setErr('Unexpected error while revoking achievement.');
-      // eslint-disable-next-line no-console
       console.error('user-achievements DELETE error:', e);
     }
   }
