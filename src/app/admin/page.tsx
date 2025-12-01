@@ -22,6 +22,9 @@ import StudentStatusOverview from '@/components/StudentStatusOverview';
 import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
 import AdminStudentTracker from '@/components/admin/AdminStudentTracker'; // 👈 NEW
+// app/admin/page.tsx (top of file, with the other admin imports)
+import UserDataTransfer from '@/components/admin/UserDataTransfer';
+import { SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -66,6 +69,7 @@ const navigationStructure = [
       { id: 'add-user', label: 'Add User', icon: PersonAddIcon, component: 'AddUserForm' },
       { id: 'user-profiles', label: 'User Profiles', icon: PeopleIcon, component: 'UserProfilesAdmin' },
       { id: 'user-partnerships', label: 'User Partnerships', icon: GroupAdd, component: 'PartnershipsAdmin' },
+      { id: 'user-data-transfer', label: 'User Data Transfer', icon: SwapHorizIcon, component: 'UserDataTransfer' },
     ]
   },
   {
@@ -204,6 +208,8 @@ export default function AdminPage() {
         return <UserProfilesAdmin />;
       case 'user-partnerships':
         return <PartnershipsAdmin />;
+      case 'user-data-transfer':
+        return <UserDataTransfer />; 
       case 'assign-coach':
         return <AssignCoachPanel />;
       case 'coach-profiles':
