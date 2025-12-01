@@ -26,8 +26,8 @@ type UserItem = { id: string; name: string; email: string };
 type TransferOptions = {
   dry_run: boolean;
   // Backend semantics:
-  // - 'skip'          => KPI tables untouched
-  // - 'prefer_source' => wipe dest KPI, then COPY source KPI to dest (source untouched)
+  //  - 'skip'          => KPI tables untouched
+  //  - 'prefer_source' => overwrite dest KPI with source KPI (source intact)
   kpi_merge: 'skip' | 'prefer_source';
   smart_doc_conflict: 'keep_latest_submitted' | 'keep_dest' | 'keep_source';
   reassign_authorship: boolean;
@@ -37,6 +37,12 @@ type ApiResult = {
   ok: boolean;
   data?: unknown;
   error?: string;
+};
+
+type ApiUserItem = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
 };
 
 export default function UserDataTransfer() {
@@ -63,19 +69,25 @@ export default function UserDataTransfer() {
       try {
         setLoadingUsers(true);
         const res = await fetch('/api/admin/list-users', { cache: 'no-store' });
-        const json = await res.json();
+        const json = (await res.json()) as { items?: ApiUserItem[]; error?: string };
         if (!res.ok) throw new Error(json?.error || 'Failed to load users');
         if (!mounted) return;
-        const items: UserItem[] = (json.items || []).map((u: any) => ({
+
+        const rawItems: ApiUserItem[] = json.items ?? [];
+        const items: UserItem[] = rawItems.map((u) => ({
           id: u.id,
-          name: u.name || '',
-          email: u.email || '',
+          name: (u.name ?? '').trim(),
+          email: (u.email ?? '').toLowerCase(),
         }));
+
         items.sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
         setUsers(items);
         setLoadErr(null);
-      } catch (e: any) {
-        if (mounted) setLoadErr(e.message || String(e));
+      } catch (e: unknown) {
+        if (mounted) {
+          const message = e instanceof Error ? e.message : String(e);
+          setLoadErr(message);
+        }
       } finally {
         if (mounted) setLoadingUsers(false);
       }
@@ -118,11 +130,23 @@ export default function UserDataTransfer() {
           options: opts,
         }),
       });
-      const json = await res.json();
-      if (!res.ok) setResult({ ok: false, error: json?.error || 'Unknown error' });
-      else setResult({ ok: true, data: json });
-    } catch (e: any) {
-      setResult({ ok: false, error: e.message || String(e) });
+
+      const json: unknown = await res.json();
+      if (!res.ok) {
+        const errMsg =
+          typeof json === 'object' &&
+          json !== null &&
+          'error' in json &&
+          typeof (json as { error: unknown }).error === 'string'
+            ? (json as { error: string }).error
+            : 'Unknown error';
+        setResult({ ok: false, error: errMsg });
+      } else {
+        setResult({ ok: true, data: json });
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      setResult({ ok: false, error: message });
     } finally {
       setSubmitting(false);
     }
@@ -219,7 +243,7 @@ export default function UserDataTransfer() {
           <Grid size={{ xs: 12, md: 4 }}>
             <FormControl fullWidth>
               <InputLabel id="smart_doc_conflict-label">Smart Doc Conflict</InputLabel>
-              <Select
+            <Select
                 labelId="smart_doc_conflict-label"
                 label="Smart Doc Conflict"
                 value={opts.smart_doc_conflict}
