@@ -54,13 +54,15 @@ type ResourceRow = {
   title: string;
   description: string | null;
   type: 'video' | 'podcast' | 'pdf' | 'document' | 'audio' | 'image' | 'link';
-  url: string;
+  url: string;                // (still returned)
   thumbnail: string | null;
   duration: number | null;
   created_at: string;
   tags: ResourceTag[] | null;
   score: number | null;
+  page_slug?: string | null;  // 👈 NEW
 };
+
 
 const ALL_TYPES: ResourceRow['type'][] = ['video', 'podcast', 'pdf', 'document', 'audio', 'image', 'link'];
 const TYPE_ICONS: Record<ResourceRow['type'], ReactElement> = {
@@ -629,12 +631,15 @@ function ResultRow({ row, onOpenResource, onSelectTag, selectedTagIds, isMobile 
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(row.url);
+      const href = row.page_slug ? `${location.origin}/library/${row.page_slug}` : row.url;
+      if (!href) return;
+      await navigator.clipboard.writeText(href);
     } catch (err) {
       console.error(err);
     }
     setMenuAnchor(null);
   };
+  
 
   return (
     <Paper
@@ -826,12 +831,15 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(row.url);
+      const href = row.page_slug ? `${location.origin}/library/${row.page_slug}` : row.url;
+      if (!href) return;
+      await navigator.clipboard.writeText(href);
     } catch (err) {
       console.error(err);
     }
     setMenuAnchor(null);
   };
+  
 
 
 
@@ -1118,7 +1126,7 @@ export default function Search() {
         _mode: mode,
       };
 
-      const { data, error } = await supabase.rpc('search_resources', args);
+      const { data, error } = await supabase.rpc('search_resources_with_page', args);
       if (cancelled || runId !== runningRef.current) return;
 
       if (error) {
@@ -1134,7 +1142,7 @@ export default function Search() {
 
       if (debouncedQ.trim().length >= 3 && rows.length < 5 && mode !== 'loose') {
         setBroadening(true);
-        const { data: data2 } = await supabase.rpc('search_resources', { ...args, _mode: 'loose' });
+        const { data: data2 } = await supabase.rpc('search_resources_with_page', { ...args, _mode: 'loose' });
         if (!cancelled && data2) {
           setResults(data2 as ResourceRow[]);
           setMode('loose');
@@ -1199,8 +1207,14 @@ export default function Search() {
     if (userId) {
       supabase.from('resource_access').insert({ resource_id: row.id, user_id: userId }).then(() => undefined);
     }
-    window.open(row.url, '_blank', 'noopener,noreferrer');
+  
+    const href = row.page_slug ? `/library/${row.page_slug}` : row.url;
+    if (!href) return; // guard if somehow missing
+  
+    // Keep your current “Open ↗” behavior (new tab):
+    window.open(href, '_blank', 'noopener,noreferrer');
   };
+  
 
   const clearQuery = () => {
     setQ('');

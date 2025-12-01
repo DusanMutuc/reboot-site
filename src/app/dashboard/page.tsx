@@ -1,61 +1,165 @@
+// src/app/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Box } from '@mui/material';
-import TopNav from '@/components/topNav';
+import TopNav from '@/components/topNav/topNav';
 import ImportantLinks from '@/components/importantLinks';
 import PodcastSection from '@/components/podcastSection';
 import Search from '@/components/search';
-import DashboardEmbed from '@/components/dashboardEmbed';
 import HelpSteps from '@/components/helpSteps';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
-import { useLookerLink } from '@/hooks/useLookerLink';
+import UserDashboard from '@/components/user/dashboard/UserDashboard';
+import UserDashboardBanner from '@/components/user/dashboard/UserDashboardBanner';
+import AnnouncementBanner from '@/components/AnnouncementBanner';
+import { supabase } from '@/lib/supabaseClient';
+
+type AnnouncementData = {
+  message: string;
+  background_color: string | null;
+  text_color: string | null;
+  button_label: string | null;
+  button_url: string | null;
+  button_color: string | null;
+};
 
 export default function DashboardPage() {
-  const { lookerLink, loading, error } = useLookerLink();
   const [navH, setNavH] = useState(0);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userLoading, setUserLoading] = useState(true);
+  const [userError, setUserError] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState<AnnouncementData | null>(null);
 
+  // Measure nav height once when #appbar exists
   useEffect(() => {
     const el = document.getElementById('appbar');
     if (!el) return;
+
     const update = () => setNavH(el.offsetHeight || 0);
     update();
+
     const ro = new ResizeObserver(update);
     ro.observe(el);
     window.addEventListener('resize', update);
-    return () => { ro.disconnect(); window.removeEventListener('resize', update); };
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
   }, []);
 
-  if (loading)     return <Loading />;
-  if (error)       return <ErrorMessage message={error} />;
-  if (!lookerLink) return <ErrorMessage message="No Looker Studio link found for your account." />;
+  // Fetch current user id from Supabase
+  useEffect(() => {
+    let cancelled = false;
 
-  const sectionOffsetStyle = { scrollMarginTop: `${navH}px` } as const;
+    async function loadUser() {
+      try {
+        setUserLoading(true);
+        setUserError(null);
+
+        const { data, error } = await supabase.auth.getUser();
+        if (error) {
+          console.error('Error fetching user', error);
+          if (!cancelled) setUserError('Could not load user information.');
+          return;
+        }
+
+        if (!cancelled) setUserId(data.user?.id ?? null);
+      } catch (err) {
+        console.error('Unexpected error fetching user', err);
+        if (!cancelled) setUserError('Could not load user information.');
+      } finally {
+        if (!cancelled) setUserLoading(false);
+      }
+    }
+
+    loadUser();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Fetch latest active announcement (if any)
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from('site_announcements')
+        .select(
+          'message, background_color, text_color, button_label, button_url, button_color'
+        )
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error('Error fetching announcement', error);
+        setAnnouncement(null);
+        return;
+      }
+
+      setAnnouncement(data ? (data as AnnouncementData) : null);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const sectionOffsetStyle = { scrollMarginTop: `${navH + 8}px` } as const;
 
   return (
     <>
       <TopNav />
 
-      <section id="links" style={sectionOffsetStyle}>
-        <ImportantLinks mode="user" />
-      </section>
+      {/* Push content (announcement + sections) below the fixed TopNav */}
+      <div style={{ marginTop: navH }}>
+        <AnnouncementBanner
+          message={announcement?.message}
+          backgroundColor={announcement?.background_color ?? undefined}
+          textColor={announcement?.text_color ?? undefined}
+          buttonLabel={announcement?.button_label ?? undefined}
+          buttonUrl={announcement?.button_url ?? undefined}
+          buttonColor={announcement?.button_color ?? undefined}
+        />
 
-      <section id="podcast" style={sectionOffsetStyle}>
-        <PodcastSection />
-      </section>
+        <section id="links" style={sectionOffsetStyle}>
+          <ImportantLinks mode="user" />
+        </section>
 
-      <section id="library" style={sectionOffsetStyle}>
-        <Search />
-      </section>
+        <section id="podcast" style={sectionOffsetStyle}>
+          <PodcastSection />
+        </section>
 
-      <section id="dashboard" style={sectionOffsetStyle}>
-        <DashboardEmbed src={lookerLink!} />
-      </section>
+        <section id="library" style={sectionOffsetStyle}>
+          <Search />
+        </section>
 
-      <section id="help" style={sectionOffsetStyle}>
-        <HelpSteps />
-      </section>
+        <section id="dashboard" style={sectionOffsetStyle}>
+          {userLoading && <Loading />}
+
+          {!userLoading && userError && <ErrorMessage message={userError} />}
+
+          {!userLoading && !userError && !userId && (
+            <ErrorMessage message="No authenticated user found." />
+          )}
+
+          {!userLoading && !userError && userId && (
+            <>
+              <UserDashboardBanner />
+              <UserDashboard userId={userId} />
+            </>
+          )}
+        </section>
+
+        <section id="help" style={sectionOffsetStyle}>
+          <HelpSteps />
+        </section>
+      </div>
     </>
   );
 }

@@ -4,14 +4,27 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Paper, Typography, Autocomplete, TextField,
   Alert, Snackbar, Checkbox, FormControlLabel,
-  IconButton, CircularProgress
+  IconButton, CircularProgress, Switch
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import CloseIcon from '@mui/icons-material/Close';
 
 type Person = { id: string; name: string; email: string };
-type CoachResponse = Partial<Person> & { id: string };
-async function getJSON<T>(url: string): Promise<T> { const r = await fetch(url); return r.json(); }
+type RelationshipType = 'primary' | 'implementation';
+
+type CoachResponse = Partial<Person> & {
+  id: string;
+  relationship_type?: RelationshipType;
+};
+
+type AssignedCoach = Person & {
+  relationship_type: RelationshipType;
+};
+
+async function getJSON<T>(url: string): Promise<T> {
+  const r = await fetch(url);
+  return r.json();
+}
 
 export default function AssignCoachPanel() {
   const [users, setUsers] = useState<Person[]>([]);
@@ -20,7 +33,8 @@ export default function AssignCoachPanel() {
   const [coach, setCoach] = useState<Person | null>(null);
   const [busy, setBusy] = useState(false);
   const [replace, setReplace] = useState(false);
-  const [currentCoaches, setCurrentCoaches] = useState<Person[]>([]);
+  const [relationshipType, setRelationshipType] = useState<RelationshipType>('primary');
+  const [currentCoaches, setCurrentCoaches] = useState<AssignedCoach[]>([]);
   const [loadingCoaches, setLoadingCoaches] = useState(false);
   const [removingCoachIds, setRemovingCoachIds] = useState<string[]>([]);
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
@@ -52,7 +66,14 @@ export default function AssignCoachPanel() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || res.statusText);
       const items: CoachResponse[] = Array.isArray(data?.items) ? data.items : [];
-      setCurrentCoaches(items.map((item) => ({ id: item.id, name: item.name ?? '', email: item.email ?? '' })));
+      setCurrentCoaches(
+        items.map((item) => ({
+          id: item.id,
+          name: item.name ?? '',
+          email: item.email ?? '',
+          relationship_type: item.relationship_type === 'implementation' ? 'implementation' : 'primary',
+        }))
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to load current coaches';
       if (!opts?.silent) {
@@ -69,6 +90,8 @@ export default function AssignCoachPanel() {
       setCurrentCoaches([]);
       return;
     }
+    // When changing user, default relationship type back to primary to avoid surprises
+    setRelationshipType('primary');
     loadCurrentCoaches(user.id).catch(() => {});
   }, [user?.id, loadCurrentCoaches]);
 
@@ -79,12 +102,21 @@ export default function AssignCoachPanel() {
       const res = await fetch('/api/admin/assign-coach', {
         method: 'POST',
         headers: { 'content-type':'application/json' },
-        body: JSON.stringify({ user_id: user.id, coach_id: coach.id, replace })
+        body: JSON.stringify({
+          user_id: user.id,
+          coach_id: coach.id,
+          replace,
+          relationship_type: relationshipType, // 👈 send primary/implementation to API
+        })
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.statusText);
       await loadCurrentCoaches(user.id, { silent: true }).catch(() => {});
-      setSnack({ open: true, message: replace ? 'Coach replaced.' : 'Coach assigned.', severity: 'success' });
+      setSnack({
+        open: true,
+        message: replace ? 'Coach replaced.' : 'Coach assigned.',
+        severity: 'success'
+      });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error';
       setSnack({ open: true, message, severity: 'error' });
@@ -97,9 +129,10 @@ export default function AssignCoachPanel() {
     if (!user) return;
     setRemovingCoachIds((prev) => prev.includes(coachId) ? prev : [...prev, coachId]);
     try {
-      const res = await fetch(`/api/admin/assign-coach?user_id=${encodeURIComponent(user.id)}&coach_id=${encodeURIComponent(coachId)}`, {
-        method: 'DELETE'
-      });
+      const res = await fetch(
+        `/api/admin/assign-coach?user_id=${encodeURIComponent(user.id)}&coach_id=${encodeURIComponent(coachId)}`,
+        { method: 'DELETE' }
+      );
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.statusText);
       setCurrentCoaches((prev) => prev.filter((c) => c.id !== coachId));
@@ -132,6 +165,26 @@ export default function AssignCoachPanel() {
             onChange={(_, v) => setCoach(v)}
             renderInput={(params) => <TextField {...params} label="Select coach…" />}
           />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={relationshipType === 'implementation'}
+                onChange={(e) =>
+                  setRelationshipType(e.target.checked ? 'implementation' : 'primary')
+                }
+              />
+            }
+            label={
+              relationshipType === 'implementation'
+                ? 'Relationship: Implementation coach'
+                : 'Relationship: Primary coach'
+            }
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5, mt: -1 }}>
+            Choose whether this coach is the user&apos;s primary coach or implementation coach.
+          </Typography>
+
           <FormControlLabel
             control={
               <Checkbox
@@ -173,6 +226,11 @@ export default function AssignCoachPanel() {
             <Box sx={{ display: 'grid', gap: 1 }}>
               {currentCoaches.map((c) => {
                 const removing = removingCoachIds.includes(c.id);
+                const label =
+                  c.relationship_type === 'implementation'
+                    ? 'Implementation coach'
+                    : 'Primary coach';
+
                 return (
                   <Paper key={c.id} variant="outlined" sx={{ px: 2, py: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
@@ -182,6 +240,9 @@ export default function AssignCoachPanel() {
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
                           {c.email || 'No email available'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {label}
                         </Typography>
                       </Box>
                       <IconButton

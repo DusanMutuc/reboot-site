@@ -14,17 +14,18 @@ type LinkItem = { label: string; href?: string };
 
 // Labels you already use
 const BOOKING_LABEL = 'MOMENTUM COACH \nBOOKING LINK';
-const CALL15_LABEL  = 'MOMENTUM COACH 15 MIN CALL LINK';
+// Renamed: this pill will now be the implementation coach booking link
+const IMPL_LABEL  = 'IMPLEMENTATION COACH \nBOOKING LINK';
 
 // New labels for coach mode additions
 const REFERRAL_PILL_LABEL = 'REFER AN AGENT TO OUR PROGRAM';
 const COACH_NOTES_LABEL   = 'COACHING NOTES';
 
 const baseLinks: LinkItem[] = [
-  { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://agentfromwithin.upcoach.com/' },
+  { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://hub.rebootmembers.com/resources' },
   { label: 'REBOOT CALENDAR', href: 'https://www.addevent.com/calendar/ez616853' },
   { label: BOOKING_LABEL },
-  { label: CALL15_LABEL },
+  { label: IMPL_LABEL },
   { label: 'ASSISTANT WORKROOM \nZOOM LINK', href: 'https://zoom.us/j/99652221215' },
   { label: 'REBOOT COACHING \nZOOM LINK', href: 'https://zoom.us/j/93233351653' },
   { label: 'ASSISTANT ONBOARDING', href: 'https://api.leadconnectorhq.com/widget/bookings/assistant_on' },
@@ -36,7 +37,7 @@ const baseLinks: LinkItem[] = [
 // ICON MAPS
 // User mode (original 10)
 const iconNumbersUser = [5, 6, 7, 9, 8, 8, 10, 11, 12, 13];
-// Coach mode (12 total): the same 10 + 14 for Referral + 11 for Notes (feel free to swap)
+// Coach mode (12 total): the same 10 + 14 for Referral + 15 for Notes
 const iconNumbersCoach = [...iconNumbersUser, 14, 15];
 
 function normalizeUrl(raw?: string | null): string | null {
@@ -49,16 +50,16 @@ function normalizeUrl(raw?: string | null): string | null {
 }
 
 type Props = {
-  /** 'coach' on /coach page to pull the logged-in coach's links; default 'user' uses get_my_coach */
+  /** 'coach' on /coach page to pull the logged-in coach's links; default 'user' uses get_my_coach + get_my_implementation_coach */
   mode?: 'user' | 'coach';
-  /** optional course filter for get_my_coach */
+  /** optional course filter for get_my_coach / get_my_implementation_coach */
   courseId?: number | null;
 };
 
 export default function ImportantLinks({ mode = 'user', courseId = null }: Props) {
   const [m2Url, setM2Url] = useState<string | null>(null);
-  const [call15Url, setCall15Url] = useState<string | null>(null);
-  const [coachNotesUrl, setCoachNotesUrl] = useState<string | null>(null); // NEW
+  const [implUrl, setImplUrl] = useState<string | null>(null);
+  const [coachNotesUrl, setCoachNotesUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -66,59 +67,79 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
       try {
         if (mode === 'coach') {
           // Logged-in coach: read their own coach_profiles row
-          const { data: { user } } = await supabase.auth.getUser();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
           if (!user) throw new Error('Not authenticated');
 
           const { data, error } = await supabase
             .from('coach_profiles')
-            .select('m2_booking_url, call15_url, coaching_notes_url')
+            .select('m2_booking_url, call15_url, coaching_notes_url, impl_booking_url')
             .eq('user_id', user.id)
             .maybeSingle();
           if (error) throw error;
 
           if (!mounted) return;
           setM2Url(normalizeUrl(data?.m2_booking_url ?? null));
-          setCall15Url(normalizeUrl(data?.call15_url ?? null));
-          setCoachNotesUrl(normalizeUrl(data?.coaching_notes_url ?? null)); // NEW
+          // Prefer the new impl_booking_url, but gracefully fall back to call15_url if it exists
+          setImplUrl(
+            normalizeUrl(data?.impl_booking_url ?? data?.call15_url ?? null)
+          );
+          setCoachNotesUrl(normalizeUrl(data?.coaching_notes_url ?? null));
         } else {
-          // Regular user: use your existing get_my_coach(_course_id) function
-          const { data, error } = await supabase.rpc('get_my_coach', {
-            _course_id: courseId ?? null,
-          });
-          if (error) throw error;
+          // Regular user: primary coach via get_my_coach, implementation coach via get_my_implementation_coach
+          // 1) Primary / momentum coach link (unchanged)
+          const { data: primaryData, error: primaryErr } = await supabase.rpc(
+            'get_my_coach',
+            {
+              _course_id: courseId ?? null,
+            }
+          );
+          if (primaryErr) throw primaryErr;
+          const primaryRow = Array.isArray(primaryData) ? primaryData[0] : primaryData;
 
-          const row = Array.isArray(data) ? data[0] : data;
+          // 2) Implementation coach link (new)
+          const { data: implData, error: implErr } = await supabase.rpc(
+            'get_my_implementation_coach',
+            {
+              _course_id: courseId ?? null,
+            }
+          );
+          if (implErr) throw implErr;
+          const implRow = Array.isArray(implData) ? implData[0] : implData;
+
           if (!mounted) return;
-          setM2Url(normalizeUrl(row?.m2_booking_url ?? null));
-          setCall15Url(normalizeUrl(row?.call15_url ?? null));
+          setM2Url(normalizeUrl(primaryRow?.m2_booking_url ?? null));
+          setImplUrl(normalizeUrl(implRow?.impl_booking_url ?? null));
           setCoachNotesUrl(null); // not shown/used in user mode
         }
       } catch (e) {
         if (!mounted) return;
         console.error('ImportantLinks fetch error:', e);
         setM2Url(null);
-        setCall15Url(null);
+        setImplUrl(null);
         setCoachNotesUrl(null);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [mode, courseId]);
 
   const { resolvedLinks, icons } = useMemo(() => {
-    // Start with the original 10
     const items = baseLinks.map((item) => ({ ...item }));
 
-    // Fill in the two dynamic coach links if available
-    const bookingIdx = items.findIndex(l => l.label === BOOKING_LABEL);
-    const call15Idx  = items.findIndex(l => l.label === CALL15_LABEL);
-    if (bookingIdx >= 0) items[bookingIdx].href = m2Url    ?? items[bookingIdx].href;
-    if (call15Idx  >= 0) items[call15Idx].href  = call15Url ?? items[call15Idx].href;
+    // Fill in the dynamic links if available
+    const bookingIdx = items.findIndex((l) => l.label === BOOKING_LABEL);
+    const implIdx = items.findIndex((l) => l.label === IMPL_LABEL);
+    if (bookingIdx >= 0) items[bookingIdx].href = m2Url ?? items[bookingIdx].href;
+    if (implIdx >= 0) items[implIdx].href = implUrl ?? items[implIdx].href;
 
     if (mode === 'coach') {
       // 1) Columnize the "Refer an agent..." pill: add it as a regular button
       items.push({ label: REFERRAL_PILL_LABEL }); // no href provided (same behavior as before)
 
-      // 2) Add the Coaching Notes button (12th total)
+      // 2) Add the Coaching Notes button
       items.push({ label: COACH_NOTES_LABEL, href: coachNotesUrl ?? undefined });
     }
 
@@ -126,10 +147,10 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
       resolvedLinks: items,
       icons: mode === 'coach' ? iconNumbersCoach : iconNumbersUser,
     };
-  }, [mode, m2Url, call15Url, coachNotesUrl]);
+  }, [mode, m2Url, implUrl, coachNotesUrl]);
 
   // Utility to pick the correct icon number per index (guards if arrays drift)
-  const iconForIndex = (i: number) => (icons[i] ?? icons[icons.length - 1]);
+  const iconForIndex = (i: number) => icons[i] ?? icons[icons.length - 1];
 
   return (
     <section
@@ -251,7 +272,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
             bgcolor: '#fff',
             borderRadius: '2.5rem',
             border: '.75rem solid #d7d7d7',
-            boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
+            boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)%',
             position: 'relative',
             p: 1,
             pl: isRight ? 2 : 6,
@@ -285,7 +306,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
                 sx={{
                   whiteSpace: 'pre-line',
                   fontWeight: 'bolder',
-                  px: 5,
+                  px: 4,
                   flex: 1,
                   textAlign: 'center',
                   fontSize: '1.4rem',

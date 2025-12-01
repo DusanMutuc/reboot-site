@@ -1,0 +1,68 @@
+export type NodeType = 'course' | 'lesson' | 'chapter' | 'collection' | 'playlist';
+export type NodeState = 'draft' | 'published' | 'archived';
+export type BlockType = 'text' | 'asset' | 'divider' | 'smart_doc';
+
+export type ContentNode = {
+  id: number;
+  node_type: NodeType;
+  title: string;
+  slug: string | null;
+  state: NodeState;
+  description: string | null;
+  hero_image: string | null;
+  icon: string | null;
+  objectives: string | null;
+  sequential_unlock: boolean;
+  metadata: Record<string, unknown> | null;
+  is_public: boolean; // ← add this
+  [key: string]: unknown;
+};
+
+export type NodeChild = {
+  parent_id: number;
+  child_id: number;
+  position: number;
+  is_required: boolean | null;
+  label: string | null;
+  notes: string | null;
+};
+
+export type ContentBlock = {
+  id: number;
+  node_id: number;
+  block_type: BlockType;
+  position: number;
+  /** Stores sanitized HTML (legacy name kept for API compatibility). */
+  text_md: string | null;
+  resource_id: number | null;
+  smart_doc_id: number | null;
+  start_ms: number | null;
+  end_ms: number | null;
+  label: string | null;
+  notes: string | null;
+  settings: Record<string, unknown> | null;
+  data: Record<string, unknown> | null;
+};
+
+export type NodeSubtree = {
+  node: ContentNode;
+  blocks: ContentBlock[];
+  children: Array<{
+    edge: NodeChild;
+    subtree: NodeSubtree;
+  }>;
+};
+
+export type NodeEdgeRule = {
+  parent_type: string;
+  child_kind: string;
+  child_type: string;
+};
+
+export type ChildUnlockStatus = {
+  child_id: number;
+  child_position: number;
+  is_required: boolean;
+  locked: boolean;
+  reason: string | null;
+};

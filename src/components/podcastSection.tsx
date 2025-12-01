@@ -93,14 +93,7 @@ export default function PodcastSection() {
           />
         </Box>
 
-        {/* Fallback: open player in new tab if an extension/device blocks embeds */}
-        <Typography sx={{ color: '#bbb', mt: 1, fontSize: '.9rem' }}>
-          Having trouble playing?{' '}
-          <MuiLink href={src} target="_blank" rel="noopener noreferrer" sx={{ color: '#fff' }}>
-            Open the player in a new tab
-          </MuiLink>
-          .
-        </Typography>
+        
       </Box>
 
       {/* CTA */}
