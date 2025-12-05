@@ -30,13 +30,14 @@ async function isStaff(userId: string | null): Promise<boolean> {
   return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
-export async function GET(
-  req: Request, // <-- use Web Request
-  { params }: { params: { id: string } } // <-- inline context type
-) {
-  const { id } = params;
+export async function GET(req: Request) {
+  // Extract /r/[id] from the path without using the typed context arg
+  const { pathname } = new URL(req.url);
+  const match = pathname.match(/\/r\/([^/]+)\/?$/);
+  const id = match?.[1];
+
   const numericId = Number(id);
-  if (!Number.isFinite(numericId)) {
+  if (!id || !Number.isFinite(numericId)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
