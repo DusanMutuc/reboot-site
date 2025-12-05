@@ -10,7 +10,6 @@ type ResourceRow = {
   storage_path: string | null;
 };
 
-type RouteParams = { id: string };
 type RoleWithUsers = { code: string; user_roles: { user_id: string }[] };
 
 async function getUserId(): Promise<string | null> {
@@ -31,8 +30,12 @@ async function isStaff(userId: string | null): Promise<boolean> {
   return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
-export async function GET(req: NextRequest, context: { params: RouteParams }) {
-  const { id } = context.params;
+// IMPORTANT: inline type for the context, no alias.
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { id } = params;
   const numericId = Number(id);
   if (!Number.isFinite(numericId)) {
     return NextResponse.redirect(new URL('/', req.url));
@@ -41,20 +44,15 @@ export async function GET(req: NextRequest, context: { params: RouteParams }) {
   const supa = getSupabaseServer();
   const staff = await isStaff(await getUserId());
 
-  // Only allow fetching drafts/archived if staff.
   let query = supa
     .from('resources')
     .select('id, title, url, state, storage_bucket, storage_path')
     .eq('id', numericId);
 
-  if (!staff) {
-    query = query.eq('state', 'published');
-  }
+  if (!staff) query = query.eq('state', 'published');
 
   const { data: r, error } = await query.single<ResourceRow>();
   if (error || !r) {
-    // If a non-staff user asked for a draft/archived resource,
-    // this will naturally be a 404 because the filter hid it.
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
