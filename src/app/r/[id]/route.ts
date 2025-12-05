@@ -10,7 +10,8 @@ type ResourceRow = {
   storage_path: string | null;
 };
 
-type RouteParams = Promise<{ id: string }>;
+type RouteParams = { id: string };
+type RoleWithUsers = { code: string; user_roles: { user_id: string }[] };
 
 async function getUserId(): Promise<string | null> {
   const supa = getSupabaseServer();
@@ -26,12 +27,12 @@ async function isStaff(userId: string | null): Promise<boolean> {
     .select('code, user_roles!inner(user_id)')
     .eq('user_roles.user_id', userId);
 
-  const codes = (data ?? []).map((r: any) => r.code as string);
+  const codes = (data ?? ([] as RoleWithUsers[])).map((r) => r.code);
   return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
 export async function GET(req: NextRequest, context: { params: RouteParams }) {
-  const { id } = await context.params;
+  const { id } = context.params;
   const numericId = Number(id);
   if (!Number.isFinite(numericId)) {
     return NextResponse.redirect(new URL('/', req.url));

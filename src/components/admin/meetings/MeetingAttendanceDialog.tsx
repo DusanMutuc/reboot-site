@@ -171,8 +171,41 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
     return map;
   }, [allUsers, allCoaches]);
 
+
+  const sortedMembers = useMemo(() => {
+    const getFirstName = (u: SimpleUser) => {
+      const name = (u.name || '').trim();
+      if (!name) return '';
+      return name.split(/\s+/)[0]?.toLowerCase() ?? '';
+    };
+
+    return [...allUsers].sort((a, b) => {
+      const fa = getFirstName(a);
+      const fb = getFirstName(b);
+      if (fa && fb && fa !== fb) return fa.localeCompare(fb);
+      // fallback to email if first names are missing/identical
+      return (a.email || '').localeCompare(b.email || '');
+    });
+  }, [allUsers]);
+
+  const sortedCoaches = useMemo(() => {
+    const getFirstName = (u: SimpleUser) => {
+      const name = (u.name || '').trim();
+      if (!name) return '';
+      return name.split(/\s+/)[0]?.toLowerCase() ?? '';
+    };
+
+    return [...allCoaches].sort((a, b) => {
+      const fa = getFirstName(a);
+      const fb = getFirstName(b);
+      if (fa && fb && fa !== fb) return fa.localeCompare(fb);
+      return (a.email || '').localeCompare(b.email || '');
+    });
+  }, [allCoaches]);
+
   // Which pool are we currently choosing from?
-  const activePool: SimpleUser[] = source === 'members' ? allUsers : allCoaches;
+  const activePool: SimpleUser[] = source === 'members' ? sortedMembers : sortedCoaches;
+
 
   // Don't suggest anyone already on the attendance list
   const availableOptions = useMemo(() => {
@@ -284,6 +317,18 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
     return row.user_id;
   };
 
+  const sortedRows = useMemo(() => {
+    const collator = new Intl.Collator('en', { sensitivity: 'base' });
+
+    return [...rows].sort((a, b) => {
+      const nameA = getDisplayName(a);
+      const nameB = getDisplayName(b);
+      return collator.compare(nameA, nameB);
+    });
+  }, [rows, lookup]);
+
+
+
   const anyLoading = loadingUsers || loadingCoaches;
 
   return (
@@ -369,7 +414,8 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {rows.map((row) => (
+              {sortedRows.map((row) => (
+
                 <TableRow key={row.user_id}>
                   <TableCell>{getDisplayName(row)}</TableCell>
                   <TableCell align="center">
