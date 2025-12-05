@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSupabaseServer } from '@/lib/supabaseServer';
 
 type ResourceRow = {
@@ -30,10 +30,9 @@ async function isStaff(userId: string | null): Promise<boolean> {
   return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
-// IMPORTANT: inline type for the context, no alias.
 export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
+  req: Request, // <-- use Web Request
+  { params }: { params: { id: string } } // <-- inline context type
 ) {
   const { id } = params;
   const numericId = Number(id);
