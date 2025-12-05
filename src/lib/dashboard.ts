@@ -460,30 +460,79 @@ async function fetchCoachingNotesSection(
   client: SupabaseClient,
   userId: string,
 ): Promise<CoachingNotesSectionProps> {
-  // 1) Get the MOST RECENT coaching_note for this user
+  type CoachingNoteWithMeetingIdRow = CoachingNoteRow & {
+    m2_meeting_id?: number | null;
+  };
+
+  // 1) Fetch all coaching notes for this user, including m2_meeting_id
   const {
-    data: latestNote,
+    data: notesData,
     error: noteErr,
   } = await client
     .from('coaching_notes')
-    .select('id, user_id, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false }) // <- change to m2_meeting_date if you add that column
-    .limit(1)
-    .maybeSingle();
+    .select('id, user_id, created_at, m2_meeting_id')
+    .eq('user_id', userId);
 
   if (noteErr) {
-    console.error('fetch latest coaching note error', noteErr);
+    console.error('fetch coaching notes for dashboard error', noteErr);
     return { actionSteps: [], notes: [] };
   }
 
-  if (!latestNote) return { actionSteps: [], notes: [] };
+  const notesRows = (notesData ?? []) as CoachingNoteWithMeetingIdRow[];
+  if (!notesRows.length) return { actionSteps: [], notes: [] };
 
-  // 2) Fetch action steps ONLY for this latest note
+  // 2) Fetch all meetings for this user (we'll pick out the M2 ones by id)
+  const {
+    data: meetingsData,
+    error: meetingsErr,
+  } = await client.rpc('get_user_meetings', {
+    _user_id: userId,
+    _from: '2000-01-01',
+    _to: '2100-01-01',
+  });
+
+  if (meetingsErr) {
+    console.error('get_user_meetings error (coaching notes section)', meetingsErr);
+  }
+
+  type UserMeetingRowForDashboard = {
+    meeting_id: number;
+    meeting_date: IsoDate;
+    meeting_type_code: string;
+    attended: boolean | null;
+  };
+
+  const meetings = (meetingsData ?? []) as UserMeetingRowForDashboard[];
+
+  // Build a map: meeting_id -> meeting_date for M2 meetings
+  const m2DateById = new Map<number, IsoDate>();
+  for (const m of meetings) {
+    if (m.meeting_type_code === 'M2_MEETING') {
+      m2DateById.set(m.meeting_id, m.meeting_date);
+    }
+  }
+
+  const getEffectiveDate = (row: CoachingNoteWithMeetingIdRow): IsoDate => {
+    const meetingId = row.m2_meeting_id ?? null;
+    if (meetingId != null && m2DateById.has(meetingId)) {
+      return m2DateById.get(meetingId)!; // YYYY-MM-DD
+    }
+    // fallback: created_at timestamp
+    return row.created_at;
+  };
+
+  // 3) Pick the "latest" coaching note by effective date (M2 date or created_at)
+  const latestNote = notesRows.reduce((latest, current) => {
+    const latestTime = new Date(getEffectiveDate(latest)).getTime();
+    const currentTime = new Date(getEffectiveDate(current)).getTime();
+    return currentTime > latestTime ? current : latest;
+  }, notesRows[0]);
+
+  // 4) Fetch action steps ONLY for this latest note
   const { data: steps, error: stepsErr } = await client
     .from('coaching_note_action_steps')
     .select('id, coaching_note_id, label, status, library_item_id, created_at, updated_at')
-    .eq('coaching_note_id', (latestNote as CoachingNoteRow).id)
+    .eq('coaching_note_id', latestNote.id)
     .order('created_at', { ascending: true });
 
   if (stepsErr) console.error('fetch action steps for latest note error', stepsErr);
@@ -501,16 +550,15 @@ async function fetchCoachingNotesSection(
 
   const actionSteps = sortActionSteps(rawActionSteps);
 
-  // 3) Fetch COMMENTS for this latest note
+  // 5) Fetch COMMENTS for this latest note
   const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
     .select('id, body, created_at')
-    .eq('coaching_note_id', (latestNote as CoachingNoteRow).id)
+    .eq('coaching_note_id', latestNote.id)
     .order('created_at', { ascending: false });
 
   if (commentsErr) console.error('fetch coaching comments for latest note error', commentsErr);
 
-  // DashboardNotePreview is Pick<CoachingNoteComment, 'id'|'created_at'|'body'>
   const notes: DashboardNotePreview[] =
     ((comments ?? []) as NoteCommentRow[]).map((row) => ({
       id: row.id,
@@ -520,6 +568,7 @@ async function fetchCoachingNotesSection(
 
   return { actionSteps, notes };
 }
+
 
 export async function listUserCoachingNotes(
   client: SupabaseClient,

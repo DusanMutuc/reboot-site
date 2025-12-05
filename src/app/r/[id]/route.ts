@@ -10,21 +10,6 @@ type ResourceRow = {
   storage_path: string | null;
 };
 
-type ContentNodeRef = { id: number; is_public: boolean };
-type BindingRowRaw = {
-  node_id: number;
-  content_nodes: ContentNodeRef | ContentNodeRef[] | null;
-};
-
-type BindingRow = {
-  node_id: number;
-  content_nodes: { id: number; is_public: boolean } | null;
-};
-
-type RoleRow = { code: string };
-type VisibilityRow = { course_node_id: number };
-
-// Next 15: params are now a Promise in route handlers
 type RouteParams = Promise<{ id: string }>;
 
 async function getUserId(): Promise<string | null> {
@@ -41,86 +26,35 @@ async function isStaff(userId: string | null): Promise<boolean> {
     .select('code, user_roles!inner(user_id)')
     .eq('user_roles.user_id', userId);
 
-  const codes = ((data ?? []) as RoleRow[]).map((r) => r.code);
+  const codes = (data ?? []).map((r: any) => r.code as string);
   return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
-async function authorizeViewer(r: ResourceRow): Promise<boolean> {
-  const userId = await getUserId();
-  const staff = await isStaff(userId);
-
-  if (r.state !== 'published') return staff;
-
-  const supa = getSupabaseServer();
-  const { data: bindings } = await supa
-    .from('content_blocks')
-    .select('node_id, content_nodes!inner(id, is_public)')
-    .eq('resource_id', r.id);
-
-  const rowsRaw = (bindings ?? []) as BindingRowRaw[];
-
-  const rows: BindingRow[] = rowsRaw.map((b) => {
-    let cn: { id: number; is_public: boolean } | null = null;
-    const ref = b.content_nodes;
-
-    if (Array.isArray(ref)) {
-      const first = ref[0];
-      if (first) cn = { id: Number(first.id), is_public: Boolean(first.is_public) };
-    } else if (ref) {
-      cn = { id: Number(ref.id), is_public: Boolean(ref.is_public) };
-    }
-
-    return {
-      node_id: Number(b.node_id),
-      content_nodes: cn,
-    };
-  });
-
-  if (rows.length === 0) return true;
-
-  const hasNonPublic = rows.some((b) => b.content_nodes?.is_public === false);
-  if (!hasNonPublic) return true;
-
-  if (staff) return true;
-  if (!userId) return false;
-
-  const nodeIds = rows.map((b) => b.node_id);
-  const { data: vis } = await supa
-    .from('user_course_visibility')
-    .select('course_node_id')
-    .in('course_node_id', nodeIds)
-    .eq('user_id', userId);
-
-  const visRows: VisibilityRow[] = (vis ?? []) as VisibilityRow[];
-  return visRows.length > 0;
-}
-
-export async function GET(
-  req: NextRequest,
-  context: { params: RouteParams },
-) {
+export async function GET(req: NextRequest, context: { params: RouteParams }) {
   const { id } = await context.params;
   const numericId = Number(id);
-
-  const supa = getSupabaseServer();
-
   if (!Number.isFinite(numericId)) {
     return NextResponse.redirect(new URL('/', req.url));
   }
 
-  const { data: r, error } = await supa
+  const supa = getSupabaseServer();
+  const staff = await isStaff(await getUserId());
+
+  // Only allow fetching drafts/archived if staff.
+  let query = supa
     .from('resources')
     .select('id, title, url, state, storage_bucket, storage_path')
-    .eq('id', numericId)
-    .single<ResourceRow>();
+    .eq('id', numericId);
 
-  if (error || !r) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  if (!staff) {
+    query = query.eq('state', 'published');
   }
 
-  const allowed = await authorizeViewer(r);
-  if (!allowed) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { data: r, error } = await query.single<ResourceRow>();
+  if (error || !r) {
+    // If a non-staff user asked for a draft/archived resource,
+    // this will naturally be a 404 because the filter hid it.
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
   // External → redirect as-is

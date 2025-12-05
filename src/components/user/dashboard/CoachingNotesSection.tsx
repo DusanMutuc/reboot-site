@@ -57,16 +57,18 @@ import {
                   }}
                 >
                   <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      fontSize: '11px',
-                      lineHeight: 1.5,
-                      color: 'text.primary',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {note.body}
-                  </Typography>
+  variant="body2" 
+  sx={{ 
+    fontSize: '11px',
+    lineHeight: 1.5,
+    color: 'text.primary',
+    fontWeight: 500,
+    whiteSpace: 'pre-line', // <-- preserve \n as line breaks
+  }}
+>
+  {note.body}
+</Typography>
+
                   <Typography
                     variant="caption"
                     sx={{ 

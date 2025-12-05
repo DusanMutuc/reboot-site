@@ -59,7 +59,12 @@ type UserMeetingRow = {
 
 type CreatedMeeting = { id: number };
 
-type CoachingNoteWithM2 = CoachingNote & { m2_meeting_id?: number | null };
+type CoachingNoteWithM2 = CoachingNote & {
+  m2_meeting_id?: number | null;
+  // populated via Supabase join on meetings
+  m2_meeting?: { date: string } | null;
+};
+
 
 function formatShortDate(iso: string) {
   const d = new Date(iso);
@@ -235,23 +240,42 @@ export default function CoachingNotesPanel({ userId }: Props) {
       setNotesLoading(true);
       const { data, error: err } = await supabase
         .from('coaching_notes')
-        .select('*')
+        .select('*, m2_meeting:meetings(date)')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-
+        .order('created_at', { ascending: false }); // keep as a reasonable fallback
+    
       if (!cancelled) {
         if (err) {
           setError(err.message);
         } else if (data) {
-          const rows = data as CoachingNote[];
-          setNotes(rows);
-          if (rows.length > 0) {
-            setSelectedNoteId(rows[0].id);
+          const rows = data as CoachingNoteWithM2[];
+    
+          // Sort by "effective" date: M2 meeting date if present, else note.created_at
+          const sorted = [...rows].sort((a, b) => {
+            const aDateStr = a.m2_meeting?.date || a.created_at;
+            const bDateStr = b.m2_meeting?.date || b.created_at;
+    
+            const aTime = new Date(aDateStr).getTime();
+            const bTime = new Date(bDateStr).getTime();
+    
+            // if parsing fails, treat as 0
+            const aSafe = Number.isNaN(aTime) ? 0 : aTime;
+            const bSafe = Number.isNaN(bTime) ? 0 : bTime;
+    
+            // newest first
+            return bSafe - aSafe;
+          });
+    
+          setNotes(sorted);
+          if (sorted.length > 0) {
+            setSelectedNoteId(sorted[0].id);
           }
         }
         setNotesLoading(false);
       }
     };
+    
+    
 
     void loadNotes();
 
@@ -1075,37 +1099,43 @@ export default function CoachingNotesPanel({ userId }: Props) {
           </Typography>
 
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-            {notes.map((note, idx) => {
-              const isSelected = note.id === selectedNoteId;
-              const label = `Note ${idx + 1} • ${formatShortDate(note.created_at)}`;
-              return (
-                <Button
-                  key={note.id}
-                  size="small"
-                  variant={isSelected ? 'contained' : 'outlined'}
-                  color={isSelected ? 'primary' : 'inherit'}
-                  onClick={() => setSelectedNoteId(note.id)}
-                  sx={{
-                    textTransform: 'none',
-                    borderRadius: 2,
-                    py: 0.75,
-                    px: 2,
-                    fontSize: 13,
-                    fontWeight: isSelected ? 600 : 500,
-                    bgcolor: isSelected ? 'primary.main' : 'transparent',
-                    borderColor: isSelected ? 'primary.main' : 'grey.300',
-                    transition: 'all 0.2s',
-                    '&:hover': {
-                      bgcolor: isSelected ? 'primary.dark' : 'grey.50',
-                      transform: 'translateY(-1px)',
-                      boxShadow: isSelected ? 2 : 1,
-                    },
-                  }}
-                >
-                  {label}
-                </Button>
-              );
-            })}
+          {notes.map((note, idx) => {
+  const isSelected = note.id === selectedNoteId;
+  const withM2 = note as CoachingNoteWithM2;
+
+  // Prefer the M2 meeting date; fall back to note.created_at if no M2 linked yet
+  const labelDate = withM2.m2_meeting?.date || note.created_at;
+  const label = `Note ${idx + 1} • ${formatShortDate(labelDate)}`;
+
+  return (
+    <Button
+      key={note.id}
+      size="small"
+      variant={isSelected ? 'contained' : 'outlined'}
+      color={isSelected ? 'primary' : 'inherit'}
+      onClick={() => setSelectedNoteId(note.id)}
+      sx={{
+        textTransform: 'none',
+        borderRadius: 2,
+        py: 0.75,
+        px: 2,
+        fontSize: 13,
+        fontWeight: isSelected ? 600 : 500,
+        bgcolor: isSelected ? 'primary.main' : 'transparent',
+        borderColor: isSelected ? 'primary.main' : 'grey.300',
+        transition: 'all 0.2s',
+        '&:hover': {
+          bgcolor: isSelected ? 'primary.dark' : 'grey.50',
+          transform: 'translateY(-1px)',
+          boxShadow: isSelected ? 2 : 1,
+        },
+      }}
+    >
+      {label}
+    </Button>
+  );
+})}
+
             {!notesLoading && notes.length === 0 && (
               <Typography variant="body2" color="text.secondary">
                 No coaching notes yet.
@@ -1560,9 +1590,17 @@ export default function CoachingNotesPanel({ userId }: Props) {
                           <Stack spacing={0.75}>
                             <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1}>
                               <Box sx={{ flex: 1, minWidth: 0 }}>
-                                <Typography variant="body2" sx={{ mb: 0.25, lineHeight: 1.6 }}>
-                                  {c.body}
-                                </Typography>
+                              <Typography
+  variant="body2"
+  sx={{
+    mb: 0.25,
+    lineHeight: 1.6,
+    whiteSpace: 'pre-line', // <- this is the key
+  }}
+>
+  {c.body}
+</Typography>
+
                               </Box>
 
                               <Stack direction="row" spacing={0.5}>
