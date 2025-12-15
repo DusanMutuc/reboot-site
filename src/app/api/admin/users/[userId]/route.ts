@@ -165,7 +165,26 @@ export async function DELETE(request: NextRequest, context: Params) {
   // Delete from auth (sessions etc. are removed); clean up extra tables if needed.
   const { error: delErr } = await supa.auth.admin.deleteUser(userId);
   if (delErr) {
-    return NextResponse.json({ error: delErr.message }, { status: 400 });
+    const res = await supa.auth.admin.deleteUser(userId);
+    if (res.error) {
+      const e: any = res.error;
+
+      const parts = [
+        e.message,
+        e.status ? `status=${e.status}` : null,
+        e.code ? `code=${e.code}` : null,
+        e.details ? `details=${e.details}` : null,
+        e.hint ? `hint=${e.hint}` : null,
+      ].filter(Boolean);
+
+      return NextResponse.json(
+        { error: parts.join(' | ') },
+        { status: 400 }
+      );
+}
+
+return NextResponse.json({ ok: true });
+
   }
 
   // If profiles isn't set to cascade from auth, you can optionally hard-delete here:
