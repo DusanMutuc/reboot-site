@@ -186,12 +186,31 @@ export async function DELETE(request: NextRequest, context: Params) {
 
   const supa = getAdminClient();
 
+  // 1) Try GoTrue first
   const res = await supa.auth.admin.deleteUser(userId);
 
   if (res.error) {
-    console.error('deleteUser failed', { userId, error: res.error });
-    return NextResponse.json({ error: formatAdminError(res.error) }, { status: 400 });
+    // 2) If GoTrue gives the generic wrapper, fall back to DB delete that returns real SQL error
+    const { data: dbErr, error: rpcErr } = await supa.rpc('try_delete_user_db', { p_user_id: userId });
+
+    if (rpcErr) {
+      return NextResponse.json(
+        { error: `deleteUser failed: ${res.error.message} | rpc failed: ${rpcErr.message}` },
+        { status: 400 }
+      );
+    }
+
+    if (dbErr) {
+      // this is the REAL postgres error text
+      return NextResponse.json(
+        { error: `deleteUser failed: ${res.error.message} | db: ${dbErr}` },
+        { status: 400 }
+      );
+    }
+
+    // DB fallback succeeded
+    return NextResponse.json({ ok: true, via: 'db_fallback' });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, via: 'gotrue' });
 }
