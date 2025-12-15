@@ -11,7 +11,36 @@ async function resolveUserId(context: Params) {
 }
 
 function isUuid(id: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    id
+  );
+}
+
+type SupabaseAdminErrorLike = {
+  message: string;
+  status?: number;
+  code?: string;
+  details?: string;
+  hint?: string;
+  name?: string;
+  cause?: unknown;
+};
+
+function formatAdminError(err: unknown): string {
+  if (!err || typeof err !== 'object') return 'Unknown error';
+
+  const e = err as SupabaseAdminErrorLike;
+
+  const parts = [
+    e.message ?? 'Unknown error',
+    typeof e.status === 'number' ? `status=${e.status}` : null,
+    typeof e.code === 'string' && e.code ? `code=${e.code}` : null,
+    typeof e.details === 'string' && e.details ? `details=${e.details}` : null,
+    typeof e.hint === 'string' && e.hint ? `hint=${e.hint}` : null,
+    typeof e.name === 'string' && e.name ? `name=${e.name}` : null,
+  ].filter((x): x is string => Boolean(x));
+
+  return parts.join(' | ');
 }
 
 async function fetchUserPayload(userId: string) {
@@ -111,10 +140,8 @@ export async function PATCH(request: NextRequest, context: Params) {
     profileUpdates.looker_link = '';
   }
 
-  // NEW: ghl_user_id handling
   if (typeof ghl_user_id === 'string') {
     const trimmed = ghl_user_id.trim();
-    // store NULL if empty, otherwise the trimmed ID
     profileUpdates.ghl_user_id = trimmed === '' ? null : trimmed;
   } else if (ghl_user_id === null) {
     profileUpdates.ghl_user_id = null;
@@ -123,10 +150,7 @@ export async function PATCH(request: NextRequest, context: Params) {
   const supa = getAdminClient();
 
   if (Object.keys(profileUpdates).length > 0) {
-    const { error: updateErr } = await supa
-      .from('profiles')
-      .update(profileUpdates)
-      .eq('id', userId);
+    const { error: updateErr } = await supa.from('profiles').update(profileUpdates).eq('id', userId);
 
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 400 });
@@ -162,33 +186,12 @@ export async function DELETE(request: NextRequest, context: Params) {
 
   const supa = getAdminClient();
 
-  // Delete from auth (sessions etc. are removed); clean up extra tables if needed.
-  const { error: delErr } = await supa.auth.admin.deleteUser(userId);
-  if (delErr) {
-    const res = await supa.auth.admin.deleteUser(userId);
-    if (res.error) {
-      const e: any = res.error;
+  const res = await supa.auth.admin.deleteUser(userId);
 
-      const parts = [
-        e.message,
-        e.status ? `status=${e.status}` : null,
-        e.code ? `code=${e.code}` : null,
-        e.details ? `details=${e.details}` : null,
-        e.hint ? `hint=${e.hint}` : null,
-      ].filter(Boolean);
-
-      return NextResponse.json(
-        { error: parts.join(' | ') },
-        { status: 400 }
-      );
-}
-
-return NextResponse.json({ ok: true });
-
+  if (res.error) {
+    console.error('deleteUser failed', { userId, error: res.error });
+    return NextResponse.json({ error: formatAdminError(res.error) }, { status: 400 });
   }
-
-  // If profiles isn't set to cascade from auth, you can optionally hard-delete here:
-  // await supa.from('profiles').delete().eq('id', userId);
 
   return NextResponse.json({ ok: true });
 }
