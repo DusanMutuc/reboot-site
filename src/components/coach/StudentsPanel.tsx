@@ -220,7 +220,7 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
           </Box>
 
           {selectedId && (
-            <Box>
+            <Stack spacing={1}>
               <Button
                 component={NextLink}
                 href={`/coach/notes?userId=${selectedId}`}
@@ -229,7 +229,15 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
               >
                 Open Coaching Notes
               </Button>
-            </Box>
+              <Button
+                component={NextLink}
+                href={`/coach/kpi-tracker/${selectedId}`}
+                variant="outlined"
+                size="small"
+              >
+                Edit KPIs
+              </Button>
+            </Stack>
           )}
         </Box>
 
