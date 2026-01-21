@@ -30,6 +30,20 @@ type Props = {
   userId: string | null;
 };
 
+/**
+ * Your UI + RPCs clearly assume wins have these fields.
+ * If your Win type already includes them, this intersection is harmless.
+ */
+type WinRow = Win & {
+  id: string;
+  added_by?: string | null;
+};
+
+type ProfileMini = {
+  id: string;
+  first_name: string | null;
+};
+
 function formatDateTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -37,7 +51,7 @@ function formatDateTime(iso: string) {
 }
 
 export default function UserWinsPanel({ userId }: Props) {
-  const [wins, setWins] = useState<Win[]>([]);
+  const [wins, setWins] = useState<WinRow[]>([]);
   const [winsLoading, setWinsLoading] = useState(false);
 
   const [newWinBody, setNewWinBody] = useState('');
@@ -45,9 +59,7 @@ export default function UserWinsPanel({ userId }: Props) {
 
   const [error, setError] = useState<string | null>(null);
 
-  const [firstNameByProfileId, setFirstNameByProfileId] = useState<
-    Record<string, string>
-  >({});
+  const [firstNameByProfileId, setFirstNameByProfileId] = useState<Record<string, string>>({});
 
   // Edit state
   const [editOpen, setEditOpen] = useState(false);
@@ -61,8 +73,8 @@ export default function UserWinsPanel({ userId }: Props) {
   const [deleting, setDeleting] = useState(false);
 
   const winsById = useMemo(() => {
-    const m = new Map<string, Win>();
-    for (const w of wins) m.set((w as any).id, w);
+    const m = new Map<string, WinRow>();
+    for (const w of wins) m.set(w.id, w);
     return m;
   }, [wins]);
 
@@ -95,7 +107,7 @@ export default function UserWinsPanel({ userId }: Props) {
         return;
       }
 
-      const loadedWins = (data ?? []) as Win[];
+      const loadedWins = (data ?? []) as unknown as WinRow[];
       setWins(loadedWins);
       setWinsLoading(false);
 
@@ -103,8 +115,8 @@ export default function UserWinsPanel({ userId }: Props) {
       const addedByIds = Array.from(
         new Set(
           loadedWins
-            .map((w) => (w as any).added_by as string | null | undefined)
-            .filter((x): x is string => !!x)
+            .map((w) => w.added_by ?? null)
+            .filter((x): x is string => typeof x === 'string' && x.length > 0)
         )
       );
 
@@ -122,8 +134,10 @@ export default function UserWinsPanel({ userId }: Props) {
         return;
       }
 
+      const rows = (profilesData ?? []) as unknown as ProfileMini[];
+
       const map: Record<string, string> = {};
-      for (const p of profilesData ?? []) {
+      for (const p of rows) {
         if (p?.id) map[p.id] = p.first_name ?? '';
       }
       setFirstNameByProfileId(map);
@@ -153,12 +167,12 @@ export default function UserWinsPanel({ userId }: Props) {
     }
 
     if (data) {
-      const newWin = data as Win;
+      const newWin = data as unknown as WinRow;
       setWins((prev) => [newWin, ...prev]);
       setNewWinBody('');
 
       // best-effort hydrate added_by name for newly created row
-      const addedBy = (newWin as any).added_by as string | undefined;
+      const addedBy = newWin.added_by ?? undefined;
       if (addedBy && !firstNameByProfileId[addedBy]) {
         const { data: prof } = await supabase
           .from('profiles')
@@ -166,10 +180,12 @@ export default function UserWinsPanel({ userId }: Props) {
           .eq('id', addedBy)
           .maybeSingle();
 
-        if (prof?.id) {
+        const p = (prof ?? null) as unknown as ProfileMini | null;
+
+        if (p?.id) {
           setFirstNameByProfileId((prev) => ({
             ...prev,
-            [prof.id]: prof.first_name ?? '',
+            [p.id]: p.first_name ?? '',
           }));
         }
       }
@@ -178,9 +194,9 @@ export default function UserWinsPanel({ userId }: Props) {
     setSavingWin(false);
   };
 
-  const openEdit = (w: Win) => {
+  const openEdit = (w: WinRow) => {
     setError(null);
-    setEditWinId((w as any).id);
+    setEditWinId(w.id);
     setEditBody(w.body ?? '');
     setEditOpen(true);
   };
@@ -213,19 +229,17 @@ export default function UserWinsPanel({ userId }: Props) {
     }
 
     if (data) {
-      const updated = data as Win;
-      setWins((prev) =>
-        prev.map((w) => (((w as any).id as string) === editWinId ? updated : w))
-      );
+      const updated = data as unknown as WinRow;
+      setWins((prev) => prev.map((w) => (w.id === editWinId ? updated : w)));
     }
 
     setSavingEdit(false);
     closeEdit();
   };
 
-  const openDelete = (w: Win) => {
+  const openDelete = (w: WinRow) => {
     setError(null);
-    setDeleteWinId((w as any).id);
+    setDeleteWinId(w.id);
     setDeleteOpen(true);
   };
 
@@ -251,10 +265,10 @@ export default function UserWinsPanel({ userId }: Props) {
       return;
     }
 
-    const deleted = data as Win | null;
-    const deletedId = deleted ? ((deleted as any).id as string) : deleteWinId;
+    const deleted = (data ?? null) as unknown as WinRow | null;
+    const deletedId = deleted?.id ?? deleteWinId;
 
-    setWins((prev) => prev.filter((w) => ((w as any).id as string) !== deletedId));
+    setWins((prev) => prev.filter((w) => w.id !== deletedId));
     setDeleting(false);
     closeDelete();
   };
@@ -327,9 +341,10 @@ export default function UserWinsPanel({ userId }: Props) {
         <Box sx={{ maxHeight: 260, overflowY: 'auto', mb: 2, pr: 1 }}>
           <Stack spacing={1.5}>
             {wins.map((w) => {
-              const id = (w as any).id as string;
-              const addedBy = (w as any).added_by as string | null | undefined;
+              const id = w.id;
+              const addedBy = w.added_by ?? null;
               const addedByName = addedBy ? firstNameByProfileId[addedBy] : '';
+
               const footer = addedByName?.trim()
                 ? `${formatDateTime(w.created_at)} · Added by ${addedByName}`
                 : `${formatDateTime(w.created_at)}${addedBy ? ' · Added by (unknown)' : ''}`;
@@ -354,7 +369,12 @@ export default function UserWinsPanel({ userId }: Props) {
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography
                         variant="body1"
-                        sx={{ mb: 0.75, lineHeight: 1.6, fontSize: 15, whiteSpace: 'pre-wrap' }}
+                        sx={{
+                          mb: 0.75,
+                          lineHeight: 1.6,
+                          fontSize: 15,
+                          whiteSpace: 'pre-wrap',
+                        }}
                       >
                         {w.body}
                       </Typography>
