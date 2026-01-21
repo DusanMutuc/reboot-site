@@ -4,9 +4,12 @@ import CoachKpiTrackerPage from '@/components/coach/CoachKpiTrackerPage';
 export const dynamic = 'force-dynamic';
 
 interface CoachKpiTrackerRouteProps {
-  params: { userId: string };
+  params: Promise<{ userId: string }>;
 }
 
-export default function CoachKpiTrackerRoute({ params }: CoachKpiTrackerRouteProps) {
-  return <CoachKpiTrackerPage userId={params.userId} />;
+export default async function CoachKpiTrackerRoute({
+  params,
+}: CoachKpiTrackerRouteProps) {
+  const { userId } = await params;
+  return <CoachKpiTrackerPage userId={userId} />;
 }
