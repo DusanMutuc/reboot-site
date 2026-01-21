@@ -67,8 +67,35 @@ export default function CoachKpiTrackerPage({ userId }: CoachKpiTrackerPageProps
     setDashKey((prev) => prev + 1);
   };
 
-  if (loading) return <Loading />;
-  if (error) return <ErrorMessage message={error} />;
+  if (loading) {
+    return (
+      <Container maxWidth="md" sx={{ py: 6 }}>
+        <Stack spacing={2}>
+          <Box>
+            <Button variant="outlined" size="small" onClick={() => router.back()}>
+              Back
+            </Button>
+          </Box>
+          <Loading />
+        </Stack>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="md" sx={{ py: 6 }}>
+        <Stack spacing={2}>
+          <Box>
+            <Button variant="outlined" size="small" onClick={() => router.back()}>
+              Back
+            </Button>
+          </Box>
+          <ErrorMessage message={error} />
+        </Stack>
+      </Container>
+    );
+  }
 
   if (!userId) {
     return (
