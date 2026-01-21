@@ -1146,27 +1146,36 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
         <Stack direction="row" spacing={1}>
           <Button
-            variant="contained"
-            size="medium"
-            onClick={handleRequestCreateNote}
-            disabled={notesLoading}
-            startIcon={<AddIcon />}
-            sx={{
-              textTransform: 'none',
-              borderRadius: 2,
-              px: 3,
-              py: 1,
-              fontWeight: 600,
-              boxShadow: 2,
-              '&:hover': {
-                transform: 'translateY(-2px)',
-                boxShadow: 4,
-              },
-              transition: 'all 0.2s',
-            }}
-          >
-            {notes.length ? 'New note' : 'Create first note'}
-          </Button>
+  variant="contained"
+  size="large"
+  onClick={handleRequestCreateNote}
+  disabled={notesLoading}
+  startIcon={<AddIcon />}
+  sx={{
+    textTransform: 'none',
+    borderRadius: 2,
+    px: 3.5,
+    py: 1.4,
+    fontWeight: 700,
+    fontSize: 16,
+    color: '#3a2a00',
+    background: 'linear-gradient(135deg, #facc15 0%, #eab308 100%)',
+    boxShadow: '0 4px 12px rgba(234, 179, 8, 0.35)',
+    '&:hover': {
+      background: 'linear-gradient(135deg, #fde047 0%, #facc15 100%)',
+      transform: 'translateY(-2px)',
+      boxShadow: '0 8px 20px rgba(234, 179, 8, 0.45)',
+    },
+    '&:active': {
+      transform: 'translateY(0)',
+      boxShadow: '0 4px 12px rgba(234, 179, 8, 0.35)',
+    },
+    transition: 'all 0.2s ease',
+  }}
+>
+  {notes.length ? 'New note' : 'Create first note'}
+</Button>
+
 
           {selectedNote && (
             <Button
