@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Box, Button, Container, Paper, Stack, Typography } from '@mui/material';
 import { supabase } from '@/lib/supabaseClient';
 import KpiTracker from '@/components/KpiTracker';
@@ -20,6 +21,7 @@ interface CoachKpiTrackerPageProps {
 }
 
 export default function CoachKpiTrackerPage({ userId }: CoachKpiTrackerPageProps) {
+  const router = useRouter();
   const [roster, setRoster] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +114,9 @@ export default function CoachKpiTrackerPage({ userId }: CoachKpiTrackerPageProps
     >
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Stack direction="row" alignItems="center" spacing={1.5} mb={3}>
+          <Button variant="outlined" size="small" onClick={() => router.back()}>
+            Back
+          </Button>
           <Typography variant="h5" sx={{ fontWeight: 800 }}>
             KPI Tracker
           </Typography>
