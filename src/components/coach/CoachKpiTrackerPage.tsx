@@ -71,7 +71,33 @@ export default function CoachKpiTrackerPage({ userId }: CoachKpiTrackerPageProps
   if (error) return <ErrorMessage message={error} />;
 
   if (!userId) {
-    return <ErrorMessage message="No student selected for KPI tracking." />;
+    return (
+      <Container maxWidth="md" sx={{ py: 6 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            borderRadius: 3,
+            border: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
+          <Stack spacing={2}>
+            <Typography variant="h6" fontWeight={700}>
+              No student selected
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Pick a student to start editing KPIs.
+            </Typography>
+            <Box>
+              <Button variant="outlined" size="small" onClick={() => router.back()}>
+                Back
+              </Button>
+            </Box>
+          </Stack>
+        </Paper>
+      </Container>
+    );
   }
 
   if (!selectedStudent) {
@@ -93,11 +119,14 @@ export default function CoachKpiTrackerPage({ userId }: CoachKpiTrackerPageProps
             <Typography variant="body2" color="text.secondary">
               You can only edit KPIs for students on your roster.
             </Typography>
-            <Box>
+            <Stack direction="row" spacing={1.5}>
+              <Button variant="outlined" size="small" onClick={() => router.back()}>
+                Back
+              </Button>
               <Button component={Link} href="/coach" variant="outlined" size="small">
                 Back to Coach Home
               </Button>
-            </Box>
+            </Stack>
           </Stack>
         </Paper>
       </Container>
