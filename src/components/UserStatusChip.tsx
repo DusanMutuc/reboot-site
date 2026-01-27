@@ -74,7 +74,7 @@ function UserStatusChipBase({
       label={getChipLabel(status)}
       variant={clickable ? 'filled' : 'outlined'}
       onClick={clickable ? onClick : undefined}
-      sx={{ fontWeight: 500 }}
+      sx={{ fontWeight: 500, fontSize:12 }}
     />
   );
 

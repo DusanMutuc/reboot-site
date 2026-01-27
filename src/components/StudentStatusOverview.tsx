@@ -52,10 +52,11 @@ const STATUS_RANK: Record<UserStatus, number> = { red: 3, yellow: 2, green: 1 };
 
 // SIX-column grid now: Name | Status | Attendance | Email | Phone | Actions
 const GRID_COLS = {
-  xs: '1.5fr 0.9fr 0.9fr 1.2fr 1fr auto',
-  sm: '1.7fr 0.9fr 0.9fr 1.4fr 1.1fr auto',
-  md: '1.9fr 0.9fr 0.9fr 1.6fr 1.2fr auto',
+  xs: 'minmax(0,1.5fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1.2fr) minmax(0,1fr) minmax(160px,200px)',
+  sm: 'minmax(0,1.7fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(180px,220px)',
+  md: 'minmax(0,1.9fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1.6fr) minmax(0,1.2fr) minmax(200px,240px)',
 };
+
 
 interface StudentStatusOverviewProps {
   courseId: number | null;
