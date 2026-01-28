@@ -35,7 +35,6 @@ type CourseState =
 
 type Maps = {
   nodeById: Map<number, NodeSubtree>;
-  slugToId: Map<string, number>;
   parentById: Map<number, number | null>;
 };
 
@@ -51,22 +50,18 @@ function formatContentLabel(nodeType: string) {
 
 function buildMaps(course: NodeSubtree): Maps {
   const nodeById = new Map<number, NodeSubtree>();
-  const slugToId = new Map<string, number>();
   const parentById = new Map<number, number | null>();
 
   const visit = (subtree: NodeSubtree, parentId: number | null) => {
     nodeById.set(subtree.node.id, subtree);
     parentById.set(subtree.node.id, parentId);
-    if (subtree.node.slug) {
-      slugToId.set(subtree.node.slug, subtree.node.id);
-    }
     for (const child of subtree.children) {
       visit(child.subtree, subtree.node.id);
     }
   };
 
   visit(course, null);
-  return { nodeById, slugToId, parentById };
+  return { nodeById, parentById };
 }
 
 function toNestedLockMap(source: Record<number, ChildUnlockStatus[]>): Record<number, Record<number, ChildUnlockStatus>> {
@@ -91,6 +86,24 @@ function collectParentPath(nodeId: number, parentById: Map<number, number | null
     current = parent;
   }
   return path;
+}
+
+function findContentNodeBySlug(course: NodeSubtree, slug: string) {
+  let matchId: number | null = null;
+  let matchCount = 0;
+
+  const visit = (subtree: NodeSubtree) => {
+    if (subtree.node.slug === slug && isContentNodeType(subtree.node.node_type)) {
+      matchId = subtree.node.id;
+      matchCount += 1;
+    }
+    for (const child of subtree.children) {
+      visit(child.subtree);
+    }
+  };
+
+  visit(course);
+  return { matchId, matchCount };
 }
 
 function isNodeLocked(
@@ -334,14 +347,20 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   }, [state]);
 
   const nodeById = maps?.nodeById ?? null;
-  const slugToId = maps?.slugToId ?? null;
   const parentById = maps?.parentById ?? null;
 
-  const requestedContentId = lessonSlug && slugToId ? slugToId.get(lessonSlug) ?? null : null;
+  const requestedContentLookup =
+    lessonSlug && state.status === 'ready' ? findContentNodeBySlug(state.course, lessonSlug) : null;
+  const requestedContentId = requestedContentLookup?.matchId ?? null;
   let selectedContent: NodeSubtree | null = null;
   let contentError: string | null = null;
 
-  if (requestedContentId != null && nodeById && parentById) {
+  if (requestedContentLookup && requestedContentLookup.matchCount > 1) {
+    contentError =
+      'Multiple items share this slug in this course. Please ask an admin to make the slugs unique.';
+  }
+
+  if (!contentError && requestedContentId != null && nodeById && parentById) {
     const candidate = nodeById.get(requestedContentId) ?? null;
     if (!candidate || !isContentNodeType(candidate.node.node_type)) {
       contentError = 'We couldn’t open this item.';
