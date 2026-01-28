@@ -410,6 +410,13 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     }
 
     // Fallback: no SmartDocs and no trackable videos => complete on 80% scroll
+    const initialScrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    if (initialScrollHeight <= 0) {
+      completedOnceRef.current = true;
+      void completeLesson();
+      return;
+    }
+
     const onScroll = () => {
       const y = window.scrollY || document.documentElement.scrollTop;
       const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
