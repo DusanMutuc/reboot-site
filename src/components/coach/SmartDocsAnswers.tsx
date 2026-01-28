@@ -112,22 +112,48 @@ export default function SmartDocsAnswers({
 
     (async () => {
       setLoadingList(true);
-      const { data, error } = await supabase.rpc('list_user_smartdoc_instances', {
-        _user_id: userId,
-        _course_id: courseId,
-        _only_submitted: onlySubmitted,
-      });
+      let data: InstanceRow[] | null = null;
+      let error: unknown = null;
+
+      if (mode === 'admin') {
+        try {
+          const res = await fetch('/api/admin/smartdoc/instances', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              user_id: userId,
+              course_id: courseId,
+              only_submitted: onlySubmitted,
+            }),
+          });
+          if (!res.ok) {
+            throw new Error(`Admin instances fetch failed (${res.status})`);
+          }
+          const payload = (await res.json()) as { data?: InstanceRow[] | null };
+          data = payload.data ?? [];
+        } catch (err) {
+          error = err;
+        }
+      } else {
+        const result = await supabase.rpc('list_user_smartdoc_instances', {
+          _user_id: userId,
+          _course_id: courseId,
+          _only_submitted: onlySubmitted,
+        });
+        data = result.data as InstanceRow[] | null;
+        error = result.error;
+      }
       if (!active) return;
       setLoadingList(false);
       if (!error && Array.isArray(data)) {
-        setInstances(data as InstanceRow[]);
+        setInstances(data);
       }
     })();
 
     return () => {
       active = false;
     };
-  }, [courseId, userId, onlySubmitted]);
+  }, [courseId, mode, userId, onlySubmitted]);
 
   const grouped = useMemo(() => {
     const lessons = new Map<
@@ -197,10 +223,35 @@ export default function SmartDocsAnswers({
 
       if (!shouldFetch) return;
 
-      const { data, error } = await supabase.rpc('get_user_smartdoc_answers', {
-        _user_id: userId,
-        _content_block_id: contentBlockId,
-      });
+      let data: AnswerRow[] | null = null;
+      let error: unknown = null;
+
+      if (mode === 'admin') {
+        try {
+          const res = await fetch('/api/admin/smartdoc/answers', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              user_id: userId,
+              content_block_id: contentBlockId,
+            }),
+          });
+          if (!res.ok) {
+            throw new Error(`Admin answers fetch failed (${res.status})`);
+          }
+          const payload = (await res.json()) as { data?: AnswerRow[] | null };
+          data = payload.data ?? [];
+        } catch (err) {
+          error = err;
+        }
+      } else {
+        const result = await supabase.rpc('get_user_smartdoc_answers', {
+          _user_id: userId,
+          _content_block_id: contentBlockId,
+        });
+        data = result.data as AnswerRow[] | null;
+        error = result.error;
+      }
 
       setAnswers((prev) => ({
         ...prev,
@@ -210,7 +261,7 @@ export default function SmartDocsAnswers({
         },
       }));
     },
-    [userId]
+    [mode, userId]
   );
 
   // Preload answers for everything so print view is fully populated
