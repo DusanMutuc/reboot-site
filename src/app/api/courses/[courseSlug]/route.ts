@@ -56,6 +56,7 @@ export async function GET(req: NextRequest, context: unknown) {
     const { data: courseRow, error: courseError } = await adminClient
       .from('content_nodes')
       .select('id, node_type, state')
+      .eq('node_type', 'course')
       .eq('slug', courseSlug)
       .maybeSingle();
 
