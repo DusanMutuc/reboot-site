@@ -394,6 +394,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   useEffect(() => {
     if (completedOnceRef.current) return;
     if (blocksState !== 'ready' || !nodeId) return;
+    if (assetBlockIds.length > 0 && resourceState !== 'ready') return;
 
     const hasSmartDocs = smartDocBlockIds.length > 0;
     const hasVideos = vimeoVideoBlockIds.length > 0;
@@ -410,6 +411,13 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     }
 
     // Fallback: no SmartDocs and no trackable videos => complete on 80% scroll
+    const initialScrollHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+    if (initialScrollHeight <= 0) {
+      completedOnceRef.current = true;
+      void completeLesson();
+      return;
+    }
+
     const onScroll = () => {
       const y = window.scrollY || document.documentElement.scrollTop;
       const h = document.documentElement.scrollHeight - document.documentElement.clientHeight;
@@ -432,6 +440,8 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     allSmartDocsSubmitted, // ⬅️ dependency changed
     vimeoVideoBlockIds.length,
     allVideosComplete,
+    assetBlockIds.length,
+    resourceState,
     completeLesson,
   ]);
 
