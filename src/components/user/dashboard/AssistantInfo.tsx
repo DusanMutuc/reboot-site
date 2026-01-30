@@ -41,33 +41,43 @@ export default function AssistantInfoPanel() {
   }, []);
 
   return (
-    <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, mt: 3 }}>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-        Your Assistant
-      </Typography>
+    <Box sx={{ px: { xs: 2, md: 4 }, maxWidth: 1200, mx: 'auto', mt: 3 }}>
+      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+        <Typography
+          variant="h5"
+          fontWeight={700}
+          sx={{ mb: 1, fontSize: { xs: '1.4rem', md: '1.75rem' } }}
+        >
+          Your Assistant
+        </Typography>
 
-      {loading ? (
-        <Stack spacing={1}>
-          <Skeleton variant="text" width="45%" />
-          <Skeleton variant="text" width="35%" />
-        </Stack>
-      ) : error ? (
-        <Alert severity="error">{error}</Alert>
-      ) : assistant ? (
-        <Box>
-          <Typography fontWeight={600}>{assistant.name}</Typography>
-          {assistant.email ? (
-            <Typography color="text.secondary">{assistant.email}</Typography>
-          ) : null}
-          {assistant.assigned_at ? (
-            <Typography variant="caption" color="text.secondary">
-              Assigned {new Date(assistant.assigned_at).toLocaleDateString()}
+        {loading ? (
+          <Stack spacing={1}>
+            <Skeleton variant="text" width="45%" />
+            <Skeleton variant="text" width="35%" />
+          </Stack>
+        ) : error ? (
+          <Alert severity="error">{error}</Alert>
+        ) : assistant ? (
+          <Box>
+            <Typography fontWeight={600} sx={{ fontSize: { xs: '1.05rem', md: '1.15rem' } }}>
+              {assistant.name}
             </Typography>
-          ) : null}
-        </Box>
-      ) : (
-        <Alert severity="info">No assistant assigned yet.</Alert>
-      )}
-    </Paper>
+            {assistant.email ? (
+              <Typography color="text.secondary" sx={{ fontSize: { xs: '1rem', md: '1.05rem' } }}>
+                {assistant.email}
+              </Typography>
+            ) : null}
+            {assistant.assigned_at ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Assigned {new Date(assistant.assigned_at).toLocaleDateString()}
+              </Typography>
+            ) : null}
+          </Box>
+        ) : (
+          <Alert severity="info">No assistant assigned yet.</Alert>
+        )}
+      </Paper>
+    </Box>
   );
 }
