@@ -11,20 +11,25 @@ export default async function Home() {
 
   if (!user) redirect('/login')
 
-  // 1 = admin, 2 = coach (adjust if different in your roles table)
-  const { data: roles, error } = await supabase
+  const { data: rolesRows, error } = await supabase
     .from('user_roles')
-    .select('role_id')
+    .select('roles ( code )')
     .eq('user_id', user.id)
-    .in('role_id', [1, 2])
 
   if (error) {
     redirect('/dashboard') // safe fallback
   }
 
-  const ids = new Set((roles ?? []).map(r => r.role_id))
+  const codes = (rolesRows ?? [])
+    .flatMap((row) => {
+      const r = row.roles;
+      return Array.isArray(r) ? r : r ? [r] : [];
+    })
+    .map((roleRow) => roleRow?.code)
+    .filter((code): code is string => typeof code === 'string');
 
-  if (ids.has(1)) redirect('/admin')
-  if (ids.has(2)) redirect('/coach')
+  if (codes.includes('admin')) redirect('/admin')
+  if (codes.includes('coach')) redirect('/coach')
+  if (codes.includes('assistant')) redirect('/assistant-library')
   redirect('/dashboard')
 }

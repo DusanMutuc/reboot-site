@@ -59,9 +59,9 @@ export async function requireAdmin(request?: NextRequest) {
     const supaAdmin = getAdminClient();
     const { data: row, error } = await supaAdmin
       .from('user_roles')
-      .select('user_id')
+      .select('user_id, roles!inner(code)')
       .eq('user_id', user.id)
-      .eq('role_id', 1)
+      .eq('roles.code', 'admin')
       .maybeSingle();
 
     console.log('📊 requireAdmin role check:', { row, error, userId: user.id });

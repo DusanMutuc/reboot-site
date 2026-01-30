@@ -72,6 +72,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const assistantAllowed =
+    pathname === '/assistant-library' ||
+    pathname.startsWith('/assistant-library/') ||
+    pathname.startsWith('/api');
+
+  if (!assistantAllowed) {
+    const { data: isAssistant, error: assistantErr } = await supabase.rpc('is_assistant');
+    if (!assistantErr && isAssistant) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/assistant-library';
+      return NextResponse.redirect(url);
+    }
+  }
+
   return res;
 }
 
