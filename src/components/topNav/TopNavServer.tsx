@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import TopNav from './topNav'; // keep casing consistent with your other imports
 
-type Role = 'user' | 'coach' | 'admin';
+type Role = 'user' | 'coach' | 'admin' | 'assistant';
 
 export default async function TopNavServer({
   title,
@@ -30,20 +30,23 @@ export default async function TopNavServer({
 
   let role: Role = 'user';
   if (user?.id) {
-    const { data: ur } = await supabase
+    const { data: rolesRows } = await supabase
       .from('user_roles')
-      .select('role_id')
+      .select('roles ( code )')
       .eq('user_id', user.id);
 
-    if (ur?.length) {
-      const { data: roles } = await supabase
-        .from('roles')
-        .select('code')
-        .in('id', ur.map(r => r.role_id));
+    if (rolesRows?.length) {
+      const codes = (rolesRows ?? [])
+        .flatMap((row) => {
+          const r = row.roles;
+          return Array.isArray(r) ? r : r ? [r] : [];
+        })
+        .map((roleRow) => roleRow?.code)
+        .filter((code): code is string => typeof code === 'string');
 
-      const codes = (roles ?? []).map(r => r.code as string);
       if (codes.includes('admin')) role = 'admin';
       else if (codes.includes('coach')) role = 'coach';
+      else if (codes.includes('assistant')) role = 'assistant';
     }
   }
 

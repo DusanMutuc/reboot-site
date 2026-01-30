@@ -13,7 +13,7 @@ import type { Theme } from '@mui/material/styles';
 import type { SystemStyleObject } from '@mui/system';
 
 type Section = { id: string; label: string };
-type Role = 'user' | 'coach' | 'admin' | 'unknown';
+type Role = 'user' | 'coach' | 'admin' | 'assistant' | 'unknown';
 
 const DEFAULT_SECTIONS: Section[] = [
   { id: 'links',     label: 'COACHING LINKS' },
@@ -46,27 +46,25 @@ export default function TopNav({
       const uid = auth.user?.id;
       if (!uid) { if (mounted) setRole('user'); return; }
 
-      const { data: ur, error: urErr } = await supabase
+      const { data: rolesRows, error: rolesErr } = await supabase
         .from('user_roles')
-        .select('role_id')
+        .select('roles ( code )')
         .eq('user_id', uid);
 
       if (!mounted) return;
-      if (urErr || !ur?.length) { setRole('user'); return; }
+      if (rolesErr || !rolesRows?.length) { setRole('user'); return; }
 
-      const roleIds = ur.map(r => r.role_id);
+      const codes = (rolesRows ?? [])
+        .flatMap((row) => {
+          const r = row.roles;
+          return Array.isArray(r) ? r : r ? [r] : [];
+        })
+        .map((role) => role?.code)
+        .filter((code): code is string => typeof code === 'string');
 
-      const { data: roles, error: rErr } = await supabase
-        .from('roles')
-        .select('code')
-        .in('id', roleIds);
-
-      if (!mounted) return;
-      if (rErr || !roles?.length) { setRole('user'); return; }
-
-      const codes = roles.map(r => r.code as string);
       if (codes.includes('admin')) setRole('admin');
       else if (codes.includes('coach')) setRole('coach');
+      else if (codes.includes('assistant')) setRole('assistant');
       else setRole('user');
     })();
 

@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 
-type Form = { email: string; first_name: string; last_name: string; role: 'user' | 'coach' | 'admin' };
+type Form = { email: string; first_name: string; last_name: string; role: 'user' | 'coach' | 'admin' | 'assistant' };
 
 export default function AddUserForm() {
   const [form, setForm] = useState<Form>({ email: '', first_name: '', last_name: '', role: 'user' });
@@ -75,6 +75,7 @@ export default function AddUserForm() {
           <MenuItem value="user">user</MenuItem>
           <MenuItem value="coach">coach</MenuItem>
           <MenuItem value="admin">admin</MenuItem>
+          <MenuItem value="assistant">assistant</MenuItem>
         </TextField>
 
         <LoadingButton type="submit" variant="contained" loading={busy}>

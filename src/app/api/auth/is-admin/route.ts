@@ -59,9 +59,9 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supaAdmin
       .from('user_roles')
-      .select('user_id, role_id')
+      .select('user_id, roles!inner(code)')
       .eq('user_id', user.id)
-      .eq('role_id', 1) // admin
+      .eq('roles.code', 'admin')
       .maybeSingle();
 
     console.log('📊 user_roles query result:', { data, error });
