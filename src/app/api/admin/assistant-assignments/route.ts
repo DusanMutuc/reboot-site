@@ -15,7 +15,7 @@ export async function GET() {
   const supa = getAdminClient();
   const { data: rows, error } = await supa
     .from('user_assistants')
-    .select('user_id, assistant_id, assigned_at');
+    .select('user_id, assistant_id, assigned_at, is_active');
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   if (!rows?.length) return NextResponse.json({ items: [] });
@@ -42,6 +42,7 @@ export async function GET() {
       user: { id: row.user_id, name: userName || row.user_id },
       assistant: { id: row.assistant_id, name: assistantName || row.assistant_id },
       assigned_at: row.assigned_at ?? null,
+      is_active: row.is_active ?? false,
     };
   });
 
@@ -63,14 +64,19 @@ export async function POST(request: NextRequest) {
   if (replace) {
     const { error: clearErr } = await supa
       .from('user_assistants')
-      .delete()
+      .update({ is_active: false, ended_at: new Date().toISOString() })
       .eq('user_id', body.user_id);
     if (clearErr) return NextResponse.json({ error: clearErr.message }, { status: 400 });
   }
 
   const { error } = await supa
     .from('user_assistants')
-    .insert({ user_id: body.user_id, assistant_id: body.assistant_id });
+    .insert({
+      user_id: body.user_id,
+      assistant_id: body.assistant_id,
+      assigned_by: guard.user.id,
+      is_active: true,
+    });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
@@ -91,7 +97,7 @@ export async function DELETE(request: NextRequest) {
   const supa = getAdminClient();
   const { error } = await supa
     .from('user_assistants')
-    .delete()
+    .update({ is_active: false, ended_at: new Date().toISOString() })
     .eq('user_id', userId)
     .eq('assistant_id', assistantId);
 

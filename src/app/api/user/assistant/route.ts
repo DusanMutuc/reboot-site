@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
     .from('user_assistants')
     .select('assistant_id, assigned_at')
     .eq('user_id', user.id)
+    .eq('is_active', true)
     .order('assigned_at', { ascending: false })
     .limit(1)
     .maybeSingle();

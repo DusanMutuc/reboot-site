@@ -22,6 +22,7 @@ type Assignment = {
   user: { id: string; name: string };
   assistant: { id: string; name: string };
   assigned_at?: string | null;
+  is_active?: boolean;
 };
 
 async function getJSON<T>(url: string): Promise<T> {
@@ -54,7 +55,11 @@ export default function AssignAssistantPanel() {
     ]);
     setUsers(u.items || []);
     setAssistants(a.items || []);
-    setAssignments(asg.items || []);
+    const normalized = (asg.items || []).map((item) => ({
+      ...item,
+      is_active: item.is_active !== false,
+    }));
+    setAssignments(normalized);
   };
 
   useEffect(() => {
@@ -149,8 +154,12 @@ export default function AssignAssistantPanel() {
       );
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || res.statusText);
-      setAssignments((prev) => prev.filter((a) => !(a.user.id === userId && a.assistant.id === assistantId)));
-      setSnack({ open: true, message: 'Assignment removed.', severity: 'success' });
+      setAssignments((prev) =>
+        prev.map((a) =>
+          a.user.id === userId && a.assistant.id === assistantId ? { ...a, is_active: false } : a
+        )
+      );
+      setSnack({ open: true, message: 'Assignment ended.', severity: 'success' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Error removing assignment';
       setSnack({ open: true, message, severity: 'error' });
@@ -295,11 +304,19 @@ export default function AssignAssistantPanel() {
                       Assigned {new Date(assignment.assigned_at).toLocaleDateString()}
                     </Typography>
                   ) : null}
+                  {!assignment.is_active ? (
+                    <Typography variant="caption" color="text.secondary">
+                      Inactive
+                    </Typography>
+                  ) : null}
                 </Box>
                 <IconButton
                   aria-label={`Remove assignment for ${assignment.user.name}`}
                   onClick={() => removeAssignment(assignment.user.id, assignment.assistant.id)}
-                  disabled={removing === `${assignment.user.id}:${assignment.assistant.id}`}
+                  disabled={
+                    removing === `${assignment.user.id}:${assignment.assistant.id}` ||
+                    assignment.is_active === false
+                  }
                 >
                   <CloseIcon fontSize="small" />
                 </IconButton>
