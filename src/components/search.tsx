@@ -61,6 +61,8 @@ type ResourceRow = {
   tags: ResourceTag[] | null;
   score: number | null;
   page_slug?: string | null;  // 👈 NEW
+  open_path?: string | null;
+
 };
 
 
@@ -148,6 +150,15 @@ function formatRecentSearches(items: string[]) {
 function mergeRecentSearches(newEntry: string | null, existing: string[]) {
   return formatRecentSearches(newEntry ? [newEntry, ...existing] : existing);
 }
+
+function getResourceHref(row: ResourceRow) {
+  return row.open_path ?? (row.page_slug ? `/library/${row.page_slug}` : row.url);
+}
+
+function toAbsoluteUrl(href: string) {
+  return href.startsWith('/') ? `${location.origin}${href}` : href;
+}
+
 
 type SearchBarProps = {
   value: string;
@@ -631,9 +642,10 @@ function ResultRow({ row, onOpenResource, onSelectTag, selectedTagIds, isMobile 
 
   const handleCopyLink = async () => {
     try {
-      const href = row.page_slug ? `${location.origin}/library/${row.page_slug}` : row.url;
+      const href = getResourceHref(row);
       if (!href) return;
-      await navigator.clipboard.writeText(href);
+      await navigator.clipboard.writeText(toAbsoluteUrl(href));
+
     } catch (err) {
       console.error(err);
     }
@@ -831,9 +843,10 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
 
   const handleCopy = async () => {
     try {
-      const href = row.page_slug ? `${location.origin}/library/${row.page_slug}` : row.url;
+      const href = getResourceHref(row);
       if (!href) return;
-      await navigator.clipboard.writeText(href);
+      await navigator.clipboard.writeText(toAbsoluteUrl(href));
+
     } catch (err) {
       console.error(err);
     }
@@ -1208,11 +1221,11 @@ export default function Search() {
       supabase.from('resource_access').insert({ resource_id: row.id, user_id: userId }).then(() => undefined);
     }
   
-    const href = row.page_slug ? `/library/${row.page_slug}` : row.url;
-    if (!href) return; // guard if somehow missing
-  
-    // Keep your current “Open ↗” behavior (new tab):
+    const href = getResourceHref(row);
+    if (!href) return;
+
     window.open(href, '_blank', 'noopener,noreferrer');
+
   };
   
 
