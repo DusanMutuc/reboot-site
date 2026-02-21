@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, context: unknown) {
     const { data, error } = await adminClient
       .from('content_blocks')
       .select(
-        'id, node_id, block_type, position, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, updated_at'
+        'id, node_id, block_type, position, text_md, resource_id, smart_doc_id, start_ms, end_ms, label, settings, updated_at'
       )
       .eq('node_id', nodeIdNum)
       .order('position', { ascending: true });

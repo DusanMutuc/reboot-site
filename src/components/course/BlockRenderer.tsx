@@ -38,6 +38,7 @@ export type RenderableBlock = {
   start_ms: number | null;
   end_ms: number | null;
   label: string | null;
+  settings?: Record<string, unknown> | null;
 };
 
 export type RenderableResource = {
@@ -802,11 +803,38 @@ function PdfPreview({ resource }: { resource: RenderableResource }) {
   );
 }
 
-function ImagePreview({ resource }: { resource: RenderableResource }) {
+function imageWidthFromSettings(settings: Record<string, unknown> | null | undefined): number {
+  const raw = settings?.image_width_percent;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.min(100, Math.max(10, raw));
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.min(100, Math.max(10, parsed));
+    }
+  }
+  return 100;
+}
+
+function ImagePreview({ resource, block }: { resource: RenderableResource; block: RenderableBlock }) {
+  const imageWidthPercent = imageWidthFromSettings(block.settings);
+
   return (
     <Card variant="outlined">
       {resource.url ? (
-        <CardMedia component="img" image={resource.url} alt={resource.title} sx={{ maxHeight: 480 }} />
+        <CardMedia
+          component="img"
+          image={resource.url}
+          alt={resource.title}
+          sx={{
+            width: `${imageWidthPercent}%`,
+            maxWidth: '100%',
+            maxHeight: 480,
+            objectFit: 'contain',
+            mx: 'auto',
+          }}
+        />
       ) : (
         <CardContent>
           <Stack spacing={1} alignItems="flex-start">
@@ -1004,7 +1032,7 @@ export function BlockRenderer({
   }
 
   if (normalizedType === 'image') {
-    return <ImagePreview resource={resource} />;
+    return <ImagePreview resource={resource} block={block} />;
   }
 
   return <LinkPreview resource={resource} />;

@@ -43,6 +43,21 @@ type AllowedUser = {
   email: string | null;
 };
 
+function getImageWidthPercent(settings: Record<string, unknown> | null | undefined): number {
+  const raw = settings?.image_width_percent;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.min(100, Math.max(10, raw));
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.min(100, Math.max(10, parsed));
+    }
+  }
+  return 100;
+}
+
+
 // 👇 PATCH: add position here
 type SmartDocPromptDraft = {
   id: number | null;
@@ -1266,6 +1281,33 @@ const renderVisibility = () => {
     return resources[selectedBlock.resource_id] ?? null;
   }, [resources, selectedBlock]);
 
+  const selectedAssetIsImage =
+    selectedBlock?.block_type === 'asset' && (blockResource?.type ?? '').toLowerCase() === 'image';
+  const imageWidthPercent = getImageWidthPercent(selectedBlock?.settings);
+
+  const handleImageWidthChange = useCallback(
+    (raw: string) => {
+      if (!selectedBlock || selectedBlock.id < 0) return;
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        const existing = selectedBlock.settings ?? {};
+        const rest = Object.fromEntries(Object.entries(existing).filter(([key]) => key !== 'image_width_percent'));
+        onUpdateBlock(selectedBlock.id, { settings: Object.keys(rest).length ? rest : null });
+        return;
+      }
+      const parsed = Number(trimmed);
+      if (Number.isNaN(parsed)) return;
+      const clamped = Math.min(100, Math.max(10, parsed));
+      onUpdateBlock(selectedBlock.id, {
+        settings: {
+          ...(selectedBlock.settings ?? {}),
+          image_width_percent: clamped,
+        },
+      });
+    },
+    [onUpdateBlock, selectedBlock],
+  );
+
   const renderNodeDetails = () => {
     if (!subtree || !nodeDraft) {
       return <Typography color="text.secondary">Select a node to edit details.</Typography>;
@@ -1478,6 +1520,17 @@ const renderVisibility = () => {
                         disabled={isPendingBlock}
                       />
                     </Stack>
+                    {selectedAssetIsImage && (
+                      <TextField
+                        label="Image width (%)"
+                        type="number"
+                        value={String(imageWidthPercent)}
+                        onChange={(event) => handleImageWidthChange(event.target.value)}
+                        inputProps={{ min: 10, max: 100, step: 5 }}
+                        helperText="Controls how large the image renders inside this block (10–100%)."
+                        disabled={isPendingBlock}
+                      />
+                    )}
                   </Stack>
                 )}
 
