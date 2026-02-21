@@ -574,7 +574,7 @@ async function fetchCoachingNotesSection(
       return {
         id: row.id,
         created_at: row.created_at,
-        body: row.body && row.body.length > 220 ? `${row.body.slice(0, 217)}...` : row.body,
+        body: row.body,
         author_name: `${author?.first_name ?? ''} ${author?.last_name ?? ''}`.trim() || 'Unknown author',
       };
     });
@@ -658,7 +658,7 @@ export async function fetchCoachingNotesByNoteId(
     return {
       id: r.id,
       created_at: r.created_at,
-      body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
+      body: r.body,
       author_name: `${author?.first_name ?? ''} ${author?.last_name ?? ''}`.trim() || 'Unknown author',
     };
   });
