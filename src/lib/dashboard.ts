@@ -66,8 +66,16 @@ type NoteCommentRow = {
   id: number;
   body: string;
   created_at: IsoDate;
-  author: { first_name: string | null; last_name: string | null } | null;
+  author: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
 };
+
+function normalizeCommentAuthor(
+  author: NoteCommentRow['author'],
+): { first_name: string | null; last_name: string | null } | null {
+  if (!author) return null;
+  if (Array.isArray(author)) return author[0] ?? null;
+  return author;
+}
 
 type WinRow = {
   id: number;
@@ -561,12 +569,15 @@ async function fetchCoachingNotesSection(
   if (commentsErr) console.error('fetch coaching comments for latest note error', commentsErr);
 
   const notes: DashboardNotePreview[] =
-    ((comments ?? []) as NoteCommentRow[]).map((row) => ({
-      id: row.id,
-      created_at: row.created_at,
-      body: row.body && row.body.length > 220 ? `${row.body.slice(0, 217)}...` : row.body,
-      author_name: `${row.author?.first_name ?? ''} ${row.author?.last_name ?? ''}`.trim() || 'Unknown author',
-    }));
+    ((comments ?? []) as NoteCommentRow[]).map((row) => {
+      const author = normalizeCommentAuthor(row.author);
+      return {
+        id: row.id,
+        created_at: row.created_at,
+        body: row.body && row.body.length > 220 ? `${row.body.slice(0, 217)}...` : row.body,
+        author_name: `${author?.first_name ?? ''} ${author?.last_name ?? ''}`.trim() || 'Unknown author',
+      };
+    });
 
   return { actionSteps, notes };
 }
@@ -642,12 +653,15 @@ export async function fetchCoachingNotesByNoteId(
 
   if (commentsErr) console.error('commentsErr', commentsErr);
 
-  const notes: DashboardNotePreview[] = ((comments ?? []) as NoteCommentRow[]).map((r) => ({
-    id: r.id,
-    created_at: r.created_at,
-    body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
-    author_name: `${r.author?.first_name ?? ''} ${r.author?.last_name ?? ''}`.trim() || 'Unknown author',
-  }));
+  const notes: DashboardNotePreview[] = ((comments ?? []) as NoteCommentRow[]).map((r) => {
+    const author = normalizeCommentAuthor(r.author);
+    return {
+      id: r.id,
+      created_at: r.created_at,
+      body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
+      author_name: `${author?.first_name ?? ''} ${author?.last_name ?? ''}`.trim() || 'Unknown author',
+    };
+  });
 
   return { actionSteps, notes };
 }

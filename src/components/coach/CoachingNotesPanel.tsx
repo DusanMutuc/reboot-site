@@ -66,6 +66,34 @@ type CoachingNoteWithM2 = CoachingNote & {
 };
 
 
+type CommentAuthorProfile = { first_name: string | null; last_name: string | null };
+
+type CoachingNoteCommentRow = {
+  id: number;
+  coaching_note_id: number;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  author: CommentAuthorProfile | CommentAuthorProfile[] | null;
+};
+
+function normalizeCommentAuthor(author: CoachingNoteCommentRow['author']): CommentAuthorProfile | null {
+  if (!author) return null;
+  if (Array.isArray(author)) return author[0] ?? null;
+  return author;
+}
+
+function mapCommentRow(row: CoachingNoteCommentRow): CoachingNoteComment {
+  return {
+    id: row.id,
+    coaching_note_id: row.coaching_note_id,
+    author_id: row.author_id,
+    body: row.body,
+    created_at: row.created_at,
+    author: normalizeCommentAuthor(row.author),
+  };
+}
+
 function formatShortDate(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -376,7 +404,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         if (err) {
           setError((prev) => prev ?? err.message);
         } else if (data) {
-          setComments(data as CoachingNoteComment[]);
+          setComments((data as CoachingNoteCommentRow[]).map(mapCommentRow));
         }
         setCommentsLoading(false);
       }
@@ -701,7 +729,10 @@ export default function CoachingNotesPanel({ userId }: Props) {
         .eq('id', newComment.id)
         .maybeSingle();
 
-      setComments((prev) => [((hydratedComment as CoachingNoteComment | null) ?? newComment), ...prev]);
+      const nextComment = (hydratedComment as CoachingNoteCommentRow | null)
+        ? mapCommentRow(hydratedComment as CoachingNoteCommentRow)
+        : newComment;
+      setComments((prev) => [nextComment, ...prev]);
       setNewCommentBody('');
     }
 
