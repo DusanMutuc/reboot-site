@@ -235,6 +235,8 @@ export default function Properties({
   const [childType, setChildType] = useState<NodeType>('lesson');
   const [settingsDraft, setSettingsDraft] = useState('');
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [imageWidthDraft, setImageWidthDraft] = useState('100');
+  const [imageHeightDraft, setImageHeightDraft] = useState('480');
   const [smartDocDraft, setSmartDocDraft] = useState<SmartDocDraft | null>(null);
   const [smartDocLoading, setSmartDocLoading] = useState(false);
   const [smartDocSaving, setSmartDocSaving] = useState(false);
@@ -1306,6 +1308,12 @@ const renderVisibility = () => {
   const imageHeightPx = getImageHeightPx(selectedBlock?.settings);
   const imageStretch = getImageStretch(selectedBlock?.settings);
 
+  useEffect(() => {
+    if (!selectedAssetIsImage) return;
+    setImageWidthDraft(String(imageWidthPercent));
+    setImageHeightDraft(String(imageHeightPx));
+  }, [selectedAssetIsImage, imageWidthPercent, imageHeightPx, selectedBlock?.id]);
+
   const setImageSetting = useCallback(
     (key: 'image_width_percent' | 'image_height_px' | 'image_stretch', value: number | boolean | null) => {
       if (!selectedBlock || selectedBlock.id < 0) return;
@@ -1321,32 +1329,44 @@ const renderVisibility = () => {
     [onUpdateBlock, selectedBlock],
   );
 
-  const handleImageWidthChange = useCallback(
+  const commitImageWidth = useCallback(
     (raw: string) => {
       const trimmed = raw.trim();
       if (!trimmed) {
         setImageSetting('image_width_percent', null);
+        setImageWidthDraft('100');
         return;
       }
       const parsed = Number(trimmed);
-      if (Number.isNaN(parsed)) return;
-      setImageSetting('image_width_percent', Math.min(100, Math.max(10, parsed)));
+      if (Number.isNaN(parsed)) {
+        setImageWidthDraft(String(imageWidthPercent));
+        return;
+      }
+      const clamped = Math.min(100, Math.max(10, parsed));
+      setImageSetting('image_width_percent', clamped);
+      setImageWidthDraft(String(clamped));
     },
-    [setImageSetting],
+    [imageWidthPercent, setImageSetting],
   );
 
-  const handleImageHeightChange = useCallback(
+  const commitImageHeight = useCallback(
     (raw: string) => {
       const trimmed = raw.trim();
       if (!trimmed) {
         setImageSetting('image_height_px', null);
+        setImageHeightDraft('480');
         return;
       }
       const parsed = Number(trimmed);
-      if (Number.isNaN(parsed)) return;
-      setImageSetting('image_height_px', Math.min(1200, Math.max(120, parsed)));
+      if (Number.isNaN(parsed)) {
+        setImageHeightDraft(String(imageHeightPx));
+        return;
+      }
+      const clamped = Math.min(1200, Math.max(120, parsed));
+      setImageSetting('image_height_px', clamped);
+      setImageHeightDraft(String(clamped));
     },
-    [setImageSetting],
+    [imageHeightPx, setImageSetting],
   );
 
   const handleImageStretchChange = useCallback(
@@ -1573,8 +1593,16 @@ const renderVisibility = () => {
                         <TextField
                           label="Image width (%)"
                           type="number"
-                          value={String(imageWidthPercent)}
-                          onChange={(event) => handleImageWidthChange(event.target.value)}
+                          value={imageWidthDraft}
+                          onChange={(event) => setImageWidthDraft(event.target.value)}
+                          onBlur={() => commitImageWidth(imageWidthDraft)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              commitImageWidth(imageWidthDraft);
+                              (event.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
                           inputProps={{ min: 10, max: 100, step: 5 }}
                           helperText="Controls horizontal image size in this block (10–100%)."
                           disabled={isPendingBlock}
@@ -1582,8 +1610,16 @@ const renderVisibility = () => {
                         <TextField
                           label="Image height (px)"
                           type="number"
-                          value={String(imageHeightPx)}
-                          onChange={(event) => handleImageHeightChange(event.target.value)}
+                          value={imageHeightDraft}
+                          onChange={(event) => setImageHeightDraft(event.target.value)}
+                          onBlur={() => commitImageHeight(imageHeightDraft)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              commitImageHeight(imageHeightDraft);
+                              (event.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
                           inputProps={{ min: 120, max: 1200, step: 20 }}
                           helperText="Sets the rendered image height (120–1200px)."
                           disabled={isPendingBlock}
