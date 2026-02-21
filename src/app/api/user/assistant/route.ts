@@ -25,45 +25,56 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = getAdminClient();
-  const { data: assignment, error: assignErr } = await admin
+  const { data: assignments, error: assignErr } = await admin
     .from('user_assistants')
     .select('assistant_id, assigned_at')
     .eq('user_id', user.id)
     .eq('is_active', true)
-    .order('assigned_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order('assigned_at', { ascending: false });
 
   if (assignErr) {
     return NextResponse.json({ error: assignErr.message }, { status: 400 });
   }
 
-  if (!assignment?.assistant_id) {
-    return NextResponse.json({ assistant: null });
+  const assistantIds = [...new Set((assignments ?? []).map((assignment) => assignment.assistant_id).filter(Boolean))];
+
+  if (assistantIds.length === 0) {
+    return NextResponse.json({ assistants: [] });
   }
 
-  const { data: profile, error: profileErr } = await admin
+  const { data: profiles, error: profileErr } = await admin
     .from('profiles')
     .select('id, first_name, last_name')
-    .eq('id', assignment.assistant_id)
-    .maybeSingle();
+    .in('id', assistantIds);
 
   if (profileErr) {
     return NextResponse.json({ error: profileErr.message }, { status: 400 });
   }
 
-  let email = '';
-  const { data: authData } = await admin.auth.admin.getUserById(assignment.assistant_id);
-  if (authData?.user?.email) email = authData.user.email;
+  const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
 
-  const name = `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim();
+  const emailEntries = await Promise.all(
+    assistantIds.map(async (assistantId) => {
+      const { data: authData } = await admin.auth.admin.getUserById(assistantId);
+      return [assistantId, authData?.user?.email ?? ''] as const;
+    })
+  );
+  const emailMap = new Map(emailEntries);
 
-  return NextResponse.json({
-    assistant: {
-      id: assignment.assistant_id,
-      name: name || assignment.assistant_id,
-      email,
-      assigned_at: assignment.assigned_at ?? null,
-    },
+  const assistants = (assignments ?? []).flatMap((assignment) => {
+    if (!assignment.assistant_id) return [];
+    const profile = profileMap.get(assignment.assistant_id);
+    const name = `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim();
+
+    return [
+      {
+        id: assignment.assistant_id,
+        name: name || assignment.assistant_id,
+        email: emailMap.get(assignment.assistant_id) ?? '',
+        assigned_at: assignment.assigned_at ?? null,
+      },
+    ];
   });
+
+  return NextResponse.json({ assistants });
 }

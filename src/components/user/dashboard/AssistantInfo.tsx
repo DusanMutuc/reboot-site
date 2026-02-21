@@ -13,7 +13,7 @@ type AssistantInfo = {
 
 export default function AssistantInfoPanel() {
   const [loading, setLoading] = useState(true);
-  const [assistant, setAssistant] = useState<AssistantInfo | null>(null);
+  const [assistants, setAssistants] = useState<AssistantInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,10 +25,10 @@ export default function AssistantInfoPanel() {
         setError(null);
         const res = await fetch('/api/user/assistant');
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed to load assistant');
-        if (!cancelled) setAssistant(data.assistant || null);
+        if (!res.ok) throw new Error(data.error || 'Failed to load assistants');
+        if (!cancelled) setAssistants(data.assistants || []);
       } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to load assistant';
+        const message = err instanceof Error ? err.message : 'Failed to load assistants';
         if (!cancelled) setError(message);
       } finally {
         if (!cancelled) setLoading(false);
@@ -43,12 +43,12 @@ export default function AssistantInfoPanel() {
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, maxWidth: 1200, mx: 'auto', mt: 3 }}>
       <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-        <Typography
+          <Typography
           variant="h5"
           fontWeight={700}
           sx={{ mb: 1, fontSize: { xs: '1.4rem', md: '1.75rem' } }}
         >
-          Your Assistant
+          Your Assistants
         </Typography>
 
         {loading ? (
@@ -58,24 +58,28 @@ export default function AssistantInfoPanel() {
           </Stack>
         ) : error ? (
           <Alert severity="error">{error}</Alert>
-        ) : assistant ? (
-          <Box>
-            <Typography fontWeight={600} sx={{ fontSize: { xs: '1.05rem', md: '1.15rem' } }}>
-              {assistant.name}
-            </Typography>
-            {assistant.email ? (
-              <Typography color="text.secondary" sx={{ fontSize: { xs: '1rem', md: '1.05rem' } }}>
-                {assistant.email}
-              </Typography>
-            ) : null}
-            {assistant.assigned_at ? (
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                Assigned {new Date(assistant.assigned_at).toLocaleDateString()}
-              </Typography>
-            ) : null}
-          </Box>
+        ) : assistants.length > 0 ? (
+          <Stack spacing={2}>
+            {assistants.map((assistant) => (
+              <Box key={`${assistant.id}:${assistant.assigned_at ?? 'none'}`}>
+                <Typography fontWeight={600} sx={{ fontSize: { xs: '1.05rem', md: '1.15rem' } }}>
+                  {assistant.name}
+                </Typography>
+                {assistant.email ? (
+                  <Typography color="text.secondary" sx={{ fontSize: { xs: '1rem', md: '1.05rem' } }}>
+                    {assistant.email}
+                  </Typography>
+                ) : null}
+                {assistant.assigned_at ? (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    Assigned {new Date(assistant.assigned_at).toLocaleDateString()}
+                  </Typography>
+                ) : null}
+              </Box>
+            ))}
+          </Stack>
         ) : (
-          <Alert severity="info">No assistant assigned yet.</Alert>
+          <Alert severity="info">No assistants assigned yet.</Alert>
         )}
       </Paper>
     </Box>
