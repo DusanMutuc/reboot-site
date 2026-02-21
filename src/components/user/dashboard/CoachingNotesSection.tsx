@@ -32,7 +32,14 @@ import {
           Coaching Notes
         </Typography>
   
-        <Box flex={1}>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            pr: 0.5,
+          }}
+        >
           {notes.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               No recent notes yet.
@@ -78,7 +85,7 @@ import {
                       fontSize: '11px',
                     }}
                   >
-                    {formatDate(note.created_at)}
+                    {formatDate(note.created_at)} • {note.author_name}
                   </Typography>
                 </Box>
               ))}

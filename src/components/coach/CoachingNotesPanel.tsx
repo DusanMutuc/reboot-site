@@ -66,6 +66,34 @@ type CoachingNoteWithM2 = CoachingNote & {
 };
 
 
+type CommentAuthorProfile = { first_name: string | null; last_name: string | null };
+
+type CoachingNoteCommentRow = {
+  id: number;
+  coaching_note_id: number;
+  author_id: string | null;
+  body: string;
+  created_at: string;
+  author: CommentAuthorProfile | CommentAuthorProfile[] | null;
+};
+
+function normalizeCommentAuthor(author: CoachingNoteCommentRow['author']): CommentAuthorProfile | null {
+  if (!author) return null;
+  if (Array.isArray(author)) return author[0] ?? null;
+  return author;
+}
+
+function mapCommentRow(row: CoachingNoteCommentRow): CoachingNoteComment {
+  return {
+    id: row.id,
+    coaching_note_id: row.coaching_note_id,
+    author_id: row.author_id,
+    body: row.body,
+    created_at: row.created_at,
+    author: normalizeCommentAuthor(row.author),
+  };
+}
+
 function formatShortDate(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -76,6 +104,13 @@ function formatDateTime(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleString();
+}
+
+function formatAuthorName(comment: CoachingNoteComment) {
+  const first = comment.author?.first_name?.trim() ?? '';
+  const last = comment.author?.last_name?.trim() ?? '';
+  const fullName = `${first} ${last}`.trim();
+  return fullName || 'Unknown author';
 }
 
 function formatDistanceFromNow(iso: string) {
@@ -359,7 +394,9 @@ export default function CoachingNotesPanel({ userId }: Props) {
       setCommentsLoading(true);
       const { data, error: err } = await supabase
         .from('coaching_note_comments')
-        .select('*')
+        .select(
+          'id, coaching_note_id, author_id, body, created_at, author:profiles!coaching_note_comments_author_id_fkey(first_name, last_name)',
+        )
         .eq('coaching_note_id', selectedNoteId)
         .order('created_at', { ascending: false });
 
@@ -367,7 +404,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         if (err) {
           setError((prev) => prev ?? err.message);
         } else if (data) {
-          setComments(data as CoachingNoteComment[]);
+          setComments((data as CoachingNoteCommentRow[]).map(mapCommentRow));
         }
         setCommentsLoading(false);
       }
@@ -684,7 +721,18 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
     if (data) {
       const newComment = data as CoachingNoteComment;
-      setComments((prev) => [newComment, ...prev]);
+      const { data: hydratedComment } = await supabase
+        .from('coaching_note_comments')
+        .select(
+          'id, coaching_note_id, author_id, body, created_at, author:profiles!coaching_note_comments_author_id_fkey(first_name, last_name)',
+        )
+        .eq('id', newComment.id)
+        .maybeSingle();
+
+      const nextComment = (hydratedComment as CoachingNoteCommentRow | null)
+        ? mapCommentRow(hydratedComment as CoachingNoteCommentRow)
+        : newComment;
+      setComments((prev) => [nextComment, ...prev]);
       setNewCommentBody('');
     }
 
@@ -1628,7 +1676,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                             </Stack>
 
                             <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
-                              {formatDateTime(c.created_at)}
+                              {formatDateTime(c.created_at)} • {formatAuthorName(c)}
                             </Typography>
                           </Stack>
                         )}
