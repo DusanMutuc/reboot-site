@@ -483,9 +483,11 @@ function ResourceDialog({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string|null>(null);
 
-  // Upload controls (only relevant when type === 'pdf')
+  const supportsFileUpload = type === 'pdf' || type === 'image';
+
+  // Upload controls (only relevant when type supports file upload)
   const [uploadMode, setUploadMode] = useState<'link' | 'upload'>(
-    editing?.type === 'pdf' ? 'link' : 'link'
+    editing?.type === 'pdf' || editing?.type === 'image' ? 'link' : 'link'
   );
   const [file, setFile] = useState<File | null>(null);
 // Put near top of ResourceDialog file scope
@@ -508,7 +510,7 @@ function isLikelyUrl(s: string): boolean {
     setDuration(editing?.duration?.toString() ?? '');
     setStateValue(editing?.state ?? 'published');
     setSelectedTags(editing?.tags ?? []);
-    setUploadMode(editing?.type === 'pdf' ? 'link' : 'link');
+    setUploadMode(editing?.type === 'pdf' || editing?.type === 'image' ? 'link' : 'link');
     setFile(null);
     setErr(null);
   }, [editing]);
@@ -564,11 +566,12 @@ function isLikelyUrl(s: string): boolean {
       // Ensure tags exist (admin-only op; uses unique constraints)
       const tagIds = await ensureTags(selectedTags.map(t => t.name));
 
-      // Branch: PDF file upload via API
-      if (!isEdit && type === 'pdf' && uploadMode === 'upload') {
-        if (!file) throw new Error('Please choose a PDF file.');
+      // Branch: file upload via API (PDF or image)
+      if (!isEdit && supportsFileUpload && uploadMode === 'upload') {
+        if (!file) throw new Error(`Please choose a ${type === 'pdf' ? 'PDF' : 'image'} file.`);
         const fd = new FormData();
         fd.append('file', file);
+        fd.append('type', type);
         fd.append('title', title);
         if (description) fd.append('description', description);
         fd.append('tags', JSON.stringify(selectedTags.map(t => t.name)));
@@ -655,10 +658,10 @@ function isLikelyUrl(s: string): boolean {
   // Validations
   const canSave = (() => {
     // Require a URL unless we are doing a real PDF file upload
-    const requiresUrl = !(type === 'pdf' && uploadMode === 'upload');
+    const requiresUrl = !(supportsFileUpload && uploadMode === 'upload');
     const urlOk = requiresUrl ? isLikelyUrl(url) : true;
   
-    if (type === 'pdf' && uploadMode === 'upload') {
+    if (supportsFileUpload && uploadMode === 'upload') {
       return Boolean(title.trim() && file && stateValue);
     }
     return Boolean(title.trim() && stateValue && urlOk);
@@ -685,7 +688,7 @@ function isLikelyUrl(s: string): boolean {
                   const t = e.target.value as ResourceType;
                   setType(t);
                   // reset upload controls when switching type
-                  if (t !== 'pdf') {
+                  if (t !== 'pdf' && t !== 'image') {
                     setUploadMode('link');
                     setFile(null);
                   }
@@ -703,27 +706,33 @@ function isLikelyUrl(s: string): boolean {
             />
           </Stack>
 
-          {/* PDF-only: choose between link vs upload */}
-          {type === 'pdf' && (
+          {/* File-uploadable types: choose between link vs upload */}
+          {supportsFileUpload && (
             <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 2 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>PDF Source</Typography>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                {type === 'pdf' ? 'PDF Source' : 'Image Source'}
+              </Typography>
               <RadioGroup
                 row
                 value={uploadMode}
                 onChange={(e) => setUploadMode(e.target.value as 'link' | 'upload')}
               >
                 <FormControlLabel value="link" control={<Radio />} label="Use external link" />
-                <FormControlLabel value="upload" control={<Radio />} label="Upload PDF file" />
+                <FormControlLabel
+                  value="upload"
+                  control={<Radio />}
+                  label={type === 'pdf' ? 'Upload PDF file' : 'Upload image file'}
+                />
               </RadioGroup>
 
               {uploadMode === 'upload' ? (
                 <Stack spacing={1} sx={{ mt: 1 }}>
                   <Button component="label" variant="outlined">
-                    {file ? `Selected: ${file.name}` : 'Choose PDF'}
+                    {file ? `Selected: ${file.name}` : type === 'pdf' ? 'Choose PDF' : 'Choose image'}
                     <input
                       hidden
                       type="file"
-                      accept="application/pdf"
+                      accept={type === 'pdf' ? 'application/pdf' : 'image/*'}
                       onChange={(e) => setFile(e.target.files?.[0] || null)}
                     />
                   </Button>
@@ -738,19 +747,12 @@ function isLikelyUrl(s: string): boolean {
                     />
                   )}
                 </Stack>
-              ) : (
-                <TextField
-                  label="URL"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                  fullWidth
-                />
-              )}
+              ) : null}
             </Box>
           )}
 
-          {/* For all types we accept a URL, except when uploading a PDF file */}
-{(type !== 'pdf' || uploadMode === 'link') && (
+          {/* For all types we accept a URL, except when uploading a file */}
+{(!supportsFileUpload || uploadMode === 'link') && (
   <>
     <TextField
       label="URL"
@@ -812,7 +814,7 @@ function isLikelyUrl(s: string): boolean {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" disabled={!canSave || saving} onClick={handleSave}>
-          {saving ? 'Saving…' : isEdit ? 'Save' : (type === 'pdf' && uploadMode === 'upload') ? 'Upload' : 'Save'}
+          {saving ? 'Saving…' : isEdit ? 'Save' : (supportsFileUpload && uploadMode === 'upload') ? 'Upload' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>

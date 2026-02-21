@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
     const form = await req.formData();
 
     const file = form.get('file') as File | null;
+    const resourceType = String(form.get('type') || 'pdf').trim().toLowerCase();
     const title = String(form.get('title') || '').trim();
     const description = String(form.get('description') || '').trim();
     // Parsed but not required for insert yet; keep for future use.
@@ -28,8 +29,17 @@ export async function POST(req: NextRequest) {
     if (!file || !title) {
       return NextResponse.json({ error: 'Missing file or title.' }, { status: 400 });
     }
-    if (file.type !== 'application/pdf') {
+    const isPdf = resourceType === 'pdf';
+    const isImage = resourceType === 'image';
+    if (!isPdf && !isImage) {
+      return NextResponse.json({ error: 'Unsupported resource type.' }, { status: 400 });
+    }
+
+    if (isPdf && file.type !== 'application/pdf') {
       return NextResponse.json({ error: 'Only PDF files allowed.' }, { status: 400 });
+    }
+    if (isImage && !file.type.startsWith('image/')) {
+      return NextResponse.json({ error: 'Only image files allowed.' }, { status: 400 });
     }
 
     const { data: auth } = await userSupabase.auth.getUser();
@@ -49,12 +59,13 @@ export async function POST(req: NextRequest) {
     if (!isStaff) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const storageBucket = 'resources';
-    const storagePath = `pdf/${randomUUID()}.pdf`;
+    const extension = (file.name.split('.').pop() || (isPdf ? 'pdf' : 'img')).toLowerCase();
+    const storagePath = `${resourceType}/${randomUUID()}.${extension}`;
 
     const buf = Buffer.from(await file.arrayBuffer());
     const { error: upErr } = await admin.storage
       .from(storageBucket)
-      .upload(storagePath, buf, { contentType: 'application/pdf', upsert: false });
+      .upload(storagePath, buf, { contentType: file.type || undefined, upsert: false });
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
 
     const { data: inserted, error: insErr } = await admin
@@ -62,7 +73,7 @@ export async function POST(req: NextRequest) {
       .insert({
         title,
         description,
-        type: 'pdf',
+        type: resourceType,
         source: 'manual',
         state: 'published',
         created_by: auth.user.id,
@@ -77,7 +88,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: insErr?.message || 'Insert failed' }, { status: 500 });
     }
 
-    const filename = `${(title || 'file').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`;
+    const filename = `${(title || 'file').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${extension}`;
     return NextResponse.json({
       id: inserted.id,
       openUrl: `/r/${inserted.id}`,

@@ -43,6 +43,40 @@ type AllowedUser = {
   email: string | null;
 };
 
+function getImageWidthPercent(settings: Record<string, unknown> | null | undefined): number {
+  const raw = settings?.image_width_percent;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.min(100, Math.max(10, raw));
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.min(100, Math.max(10, parsed));
+    }
+  }
+  return 100;
+}
+
+function getImageHeightPx(settings: Record<string, unknown> | null | undefined): number {
+  const raw = settings?.image_height_px;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.min(1200, Math.max(120, raw));
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.min(1200, Math.max(120, parsed));
+    }
+  }
+  return 480;
+}
+
+function getImageStretch(settings: Record<string, unknown> | null | undefined): boolean {
+  const raw = settings?.image_stretch;
+  return raw === true || raw === 'true' || raw === 1 || raw === '1';
+}
+
+
 // 👇 PATCH: add position here
 type SmartDocPromptDraft = {
   id: number | null;
@@ -201,6 +235,8 @@ export default function Properties({
   const [childType, setChildType] = useState<NodeType>('lesson');
   const [settingsDraft, setSettingsDraft] = useState('');
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [imageWidthDraft, setImageWidthDraft] = useState('100');
+  const [imageHeightDraft, setImageHeightDraft] = useState('480');
   const [smartDocDraft, setSmartDocDraft] = useState<SmartDocDraft | null>(null);
   const [smartDocLoading, setSmartDocLoading] = useState(false);
   const [smartDocSaving, setSmartDocSaving] = useState(false);
@@ -1266,6 +1302,80 @@ const renderVisibility = () => {
     return resources[selectedBlock.resource_id] ?? null;
   }, [resources, selectedBlock]);
 
+  const selectedAssetIsImage =
+    selectedBlock?.block_type === 'asset' && (blockResource?.type ?? '').toLowerCase() === 'image';
+  const imageWidthPercent = getImageWidthPercent(selectedBlock?.settings);
+  const imageHeightPx = getImageHeightPx(selectedBlock?.settings);
+  const imageStretch = getImageStretch(selectedBlock?.settings);
+
+  useEffect(() => {
+    if (!selectedAssetIsImage) return;
+    setImageWidthDraft(String(imageWidthPercent));
+    setImageHeightDraft(String(imageHeightPx));
+  }, [selectedAssetIsImage, imageWidthPercent, imageHeightPx, selectedBlock?.id]);
+
+  const setImageSetting = useCallback(
+    (key: 'image_width_percent' | 'image_height_px' | 'image_stretch', value: number | boolean | null) => {
+      if (!selectedBlock || selectedBlock.id < 0) return;
+      const existing = selectedBlock.settings ?? {};
+      const next = { ...existing } as Record<string, unknown>;
+      if (value == null) {
+        delete next[key];
+      } else {
+        next[key] = value;
+      }
+      onUpdateBlock(selectedBlock.id, { settings: Object.keys(next).length ? next : null });
+    },
+    [onUpdateBlock, selectedBlock],
+  );
+
+  const commitImageWidth = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        setImageSetting('image_width_percent', null);
+        setImageWidthDraft('100');
+        return;
+      }
+      const parsed = Number(trimmed);
+      if (Number.isNaN(parsed)) {
+        setImageWidthDraft(String(imageWidthPercent));
+        return;
+      }
+      const clamped = Math.min(100, Math.max(10, parsed));
+      setImageSetting('image_width_percent', clamped);
+      setImageWidthDraft(String(clamped));
+    },
+    [imageWidthPercent, setImageSetting],
+  );
+
+  const commitImageHeight = useCallback(
+    (raw: string) => {
+      const trimmed = raw.trim();
+      if (!trimmed) {
+        setImageSetting('image_height_px', null);
+        setImageHeightDraft('480');
+        return;
+      }
+      const parsed = Number(trimmed);
+      if (Number.isNaN(parsed)) {
+        setImageHeightDraft(String(imageHeightPx));
+        return;
+      }
+      const clamped = Math.min(1200, Math.max(120, parsed));
+      setImageSetting('image_height_px', clamped);
+      setImageHeightDraft(String(clamped));
+    },
+    [imageHeightPx, setImageSetting],
+  );
+
+  const handleImageStretchChange = useCallback(
+    (checked: boolean) => {
+      setImageSetting('image_stretch', checked);
+    },
+    [setImageSetting],
+  );
+
   const renderNodeDetails = () => {
     if (!subtree || !nodeDraft) {
       return <Typography color="text.secondary">Select a node to edit details.</Typography>;
@@ -1478,6 +1588,54 @@ const renderVisibility = () => {
                         disabled={isPendingBlock}
                       />
                     </Stack>
+                    {selectedAssetIsImage && (
+                      <Stack spacing={1.5}>
+                        <TextField
+                          label="Image width (%)"
+                          type="number"
+                          value={imageWidthDraft}
+                          onChange={(event) => setImageWidthDraft(event.target.value)}
+                          onBlur={() => commitImageWidth(imageWidthDraft)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              commitImageWidth(imageWidthDraft);
+                              (event.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
+                          inputProps={{ min: 10, max: 100, step: 5 }}
+                          helperText="Controls horizontal image size in this block (10–100%)."
+                          disabled={isPendingBlock}
+                        />
+                        <TextField
+                          label="Image height (px)"
+                          type="number"
+                          value={imageHeightDraft}
+                          onChange={(event) => setImageHeightDraft(event.target.value)}
+                          onBlur={() => commitImageHeight(imageHeightDraft)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              commitImageHeight(imageHeightDraft);
+                              (event.currentTarget as HTMLInputElement).blur();
+                            }
+                          }}
+                          inputProps={{ min: 120, max: 1200, step: 20 }}
+                          helperText="Sets the rendered image height (120–1200px)."
+                          disabled={isPendingBlock}
+                        />
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={imageStretch}
+                              onChange={(event) => handleImageStretchChange(event.target.checked)}
+                              disabled={isPendingBlock}
+                            />
+                          }
+                          label="Stretch image to fill container width"
+                        />
+                      </Stack>
+                    )}
                   </Stack>
                 )}
 
