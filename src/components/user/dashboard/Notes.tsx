@@ -48,7 +48,7 @@ export default function Notes({ notes }: { notes: DashboardNotePreview[] }) {
                   color="text.secondary"
                   sx={{ display: 'block', mt: 0.5 }}
                 >
-                  {new Date(note.created_at).toLocaleString()}
+                  {new Date(note.created_at).toLocaleString()} • {note.author_name}
                 </Typography>
               </Box>
             ))}

@@ -66,6 +66,7 @@ type NoteCommentRow = {
   id: number;
   body: string;
   created_at: IsoDate;
+  author: { first_name: string | null; last_name: string | null } | null;
 };
 
 type WinRow = {
@@ -553,7 +554,7 @@ async function fetchCoachingNotesSection(
   // 5) Fetch COMMENTS for this latest note
   const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
-    .select('id, body, created_at')
+    .select('id, body, created_at, author:profiles!coaching_note_comments_author_id_fkey(first_name, last_name)')
     .eq('coaching_note_id', latestNote.id)
     .order('created_at', { ascending: false });
 
@@ -564,6 +565,7 @@ async function fetchCoachingNotesSection(
       id: row.id,
       created_at: row.created_at,
       body: row.body && row.body.length > 220 ? `${row.body.slice(0, 217)}...` : row.body,
+      author_name: `${row.author?.first_name ?? ''} ${row.author?.last_name ?? ''}`.trim() || 'Unknown author',
     }));
 
   return { actionSteps, notes };
@@ -634,7 +636,7 @@ export async function fetchCoachingNotesByNoteId(
   // Comments
   const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
-    .select('id, body, created_at')
+    .select('id, body, created_at, author:profiles!coaching_note_comments_author_id_fkey(first_name, last_name)')
     .eq('coaching_note_id', noteId)
     .order('created_at', { ascending: false });
 
@@ -644,6 +646,7 @@ export async function fetchCoachingNotesByNoteId(
     id: r.id,
     created_at: r.created_at,
     body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
+    author_name: `${r.author?.first_name ?? ''} ${r.author?.last_name ?? ''}`.trim() || 'Unknown author',
   }));
 
   return { actionSteps, notes };

@@ -78,7 +78,7 @@ import {
                       fontSize: '11px',
                     }}
                   >
-                    {formatDate(note.created_at)}
+                    {formatDate(note.created_at)} • {note.author_name}
                   </Typography>
                 </Box>
               ))}
