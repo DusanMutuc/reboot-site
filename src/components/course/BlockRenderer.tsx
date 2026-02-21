@@ -817,8 +817,29 @@ function imageWidthFromSettings(settings: Record<string, unknown> | null | undef
   return 100;
 }
 
+function imageHeightFromSettings(settings: Record<string, unknown> | null | undefined): number {
+  const raw = settings?.image_height_px;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.min(1200, Math.max(120, raw));
+  }
+  if (typeof raw === 'string') {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return Math.min(1200, Math.max(120, parsed));
+    }
+  }
+  return 480;
+}
+
+function imageStretchFromSettings(settings: Record<string, unknown> | null | undefined): boolean {
+  const raw = settings?.image_stretch;
+  return raw === true || raw === 'true' || raw === 1 || raw === '1';
+}
+
 function ImagePreview({ resource, block }: { resource: RenderableResource; block: RenderableBlock }) {
   const imageWidthPercent = imageWidthFromSettings(block.settings);
+  const imageHeightPx = imageHeightFromSettings(block.settings);
+  const imageStretch = imageStretchFromSettings(block.settings);
 
   return (
     <Card variant="outlined">
@@ -828,10 +849,11 @@ function ImagePreview({ resource, block }: { resource: RenderableResource; block
           image={resource.url}
           alt={resource.title}
           sx={{
-            width: `${imageWidthPercent}%`,
+            width: imageStretch ? '100%' : `${imageWidthPercent}%`,
             maxWidth: '100%',
-            maxHeight: 480,
-            objectFit: 'contain',
+            height: `${imageHeightPx}px`,
+            objectFit: imageStretch ? 'cover' : 'contain',
+            objectPosition: 'center',
             mx: 'auto',
           }}
         />
