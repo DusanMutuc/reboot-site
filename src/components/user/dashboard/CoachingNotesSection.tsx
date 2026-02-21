@@ -32,7 +32,14 @@ import {
           Coaching Notes
         </Typography>
   
-        <Box flex={1}>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            pr: 0.5,
+          }}
+        >
           {notes.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               No recent notes yet.
