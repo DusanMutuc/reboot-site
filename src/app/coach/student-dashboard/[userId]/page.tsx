@@ -2,20 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  Box,
-  Button,
-  Drawer,
-  IconButton,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { Box, Button, IconButton, Stack, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import NotesIcon from '@mui/icons-material/StickyNote2';
 import NextLink from 'next/link';
 import TopNav from '@/components/topNav/topNav';
 import StudentsPanel from '@/components/coach/StudentsPanel';
 import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
+
+const SIDEBAR_WIDTH = 360;
 
 export default function CoachStudentDashboardPage() {
   const params = useParams<{ userId: string }>();
@@ -43,18 +38,18 @@ export default function CoachStudentDashboardPage() {
   return (
     <>
       <TopNav sections={[{ id: 'top', label: 'STUDENT DASHBOARD' }]} />
-
       <Box id="top" sx={{ height: '56px' }} />
 
-      <Box sx={{ mt: 3, px: 2 }}>
+      <Box
+        sx={{
+          mt: 3,
+          px: 2,
+          transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
+          mr: { xs: 0, lg: notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
+        }}
+      >
         <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-          <Button
-            component={NextLink}
-            href="/coach#dashboard"
-            variant="text"
-            size="small"
-            sx={{ mb: 2 }}
-          >
+          <Button component={NextLink} href="/coach#dashboard" variant="text" size="small" sx={{ mb: 2 }}>
             ← Back to student list
           </Button>
 
@@ -64,9 +59,9 @@ export default function CoachStudentDashboardPage() {
             </Typography>
 
             <Button
-              variant="outlined"
+              variant={notesOpen ? 'contained' : 'outlined'}
               startIcon={<NotesIcon />}
-              onClick={() => setNotesOpen(true)}
+              onClick={() => setNotesOpen((prev) => !prev)}
             >
               Private notes
             </Button>
@@ -83,27 +78,59 @@ export default function CoachStudentDashboardPage() {
         </Box>
       </Box>
 
-      <Drawer
-        anchor="right"
-        open={notesOpen}
-        onClose={() => setNotesOpen(false)}
-        PaperProps={{
-          sx: {
-            width: { xs: '100%', sm: 420 },
-            p: 2,
-            bgcolor: 'background.default',
-          },
+      <Box
+        sx={{
+          position: 'fixed',
+          top: '56px',
+          right: 0,
+          bottom: 0,
+          width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
+          bgcolor: 'background.paper',
+          borderLeft: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
+          zIndex: 1200,
+          transform: notesOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          <Typography variant="h6" fontWeight={600}>Private notes</Typography>
+        <Box
+          sx={{
+            p: 2,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="h6" fontWeight={700}>Private notes</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                px: 1,
+                py: 0.25,
+                borderRadius: 99,
+                bgcolor: '#fef3c7',
+                color: '#92400e',
+                fontWeight: 600,
+              }}
+            >
+              🔒 Coach only
+            </Typography>
+          </Stack>
           <IconButton onClick={() => setNotesOpen(false)} aria-label="Close private notes panel">
             <CloseIcon />
           </IconButton>
         </Box>
 
-        {selectedStudentId && <PrivateNotesPanel userId={selectedStudentId} />}
-      </Drawer>
+        <Box sx={{ p: 2, flex: 1, minHeight: 0 }}>
+          {selectedStudentId && <PrivateNotesPanel userId={selectedStudentId} />}
+        </Box>
+      </Box>
     </>
   );
 }

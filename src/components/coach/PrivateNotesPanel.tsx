@@ -5,15 +5,10 @@ import {
   Box,
   Button,
   CircularProgress,
-  Collapse,
-  IconButton,
-  Paper,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { supabase } from '@/lib/supabaseClient';
 
 type PrivateNote = {
@@ -31,7 +26,6 @@ type AuthorProfile = {
 };
 
 export default function PrivateNotesPanel({ userId }: { userId: string }) {
-  const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState<PrivateNote[]>([]);
   const [authorsById, setAuthorsById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -78,7 +72,6 @@ export default function PrivateNotesPanel({ userId }: { userId: string }) {
   }, [userId]);
 
   useEffect(() => {
-    setExpanded(false);
     setNewNote('');
     setNotes([]);
     setAuthorsById({});
@@ -86,9 +79,8 @@ export default function PrivateNotesPanel({ userId }: { userId: string }) {
   }, [userId]);
 
   useEffect(() => {
-    if (!expanded) return;
     void loadNotes();
-  }, [expanded, loadNotes]);
+  }, [loadNotes]);
 
   const sortedNotes = useMemo(
     () => notes.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
@@ -126,56 +118,49 @@ export default function PrivateNotesPanel({ userId }: { userId: string }) {
   }
 
   return (
-    <Paper sx={{ p: 2, borderRadius: 3 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h6" fontWeight={600}>Private notes</Typography>
-        <IconButton aria-label="Toggle private notes" onClick={() => setExpanded((prev) => !prev)}>
-          {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-        </IconButton>
+    <Stack spacing={1.5} sx={{ height: '100%' }}>
+      <TextField
+        placeholder="Write a private note about this student…"
+        multiline
+        minRows={3}
+        value={newNote}
+        onChange={(e) => setNewNote(e.target.value)}
+        disabled={submitting}
+        fullWidth
+      />
+      <Button variant="contained" onClick={handleAddNote} disabled={submitting || !newNote.trim()}>
+        {submitting ? 'Saving...' : 'Add note'}
+      </Button>
+
+      {error && <Typography variant="body2" color="error">{error}</Typography>}
+
+      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto', pr: 0.5 }}>
+        {loading ? (
+          <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : sortedNotes.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">No private notes yet.</Typography>
+        ) : (
+          <Stack spacing={1}>
+            {sortedNotes.map((note) => (
+              <Box
+                key={note.id}
+                sx={{ p: 1.25, borderRadius: 2, bgcolor: 'grey.50', border: '1px solid', borderColor: 'divider' }}
+              >
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{note.body}</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                  {new Date(note.created_at).toLocaleString()} • {note.author_id ? (authorsById[note.author_id] ?? 'Unknown author') : 'Unknown author'}
+                </Typography>
+              </Box>
+            ))}
+          </Stack>
+        )}
       </Box>
 
-      <Collapse in={expanded} timeout="auto" unmountOnExit>
-        <Stack spacing={1.5} mt={0.5}>
-          <TextField
-            label="Write a private note"
-            multiline
-            minRows={3}
-            value={newNote}
-            onChange={(e) => setNewNote(e.target.value)}
-            disabled={submitting}
-            fullWidth
-          />
-          <Box>
-            <Button variant="contained" onClick={handleAddNote} disabled={submitting || !newNote.trim()}>
-              {submitting ? 'Saving...' : 'Add note'}
-            </Button>
-          </Box>
-
-          {error && <Typography variant="body2" color="error">{error}</Typography>}
-
-          {loading ? (
-            <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : sortedNotes.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">No private notes yet.</Typography>
-          ) : (
-            <Stack spacing={1}>
-              {sortedNotes.map((note) => (
-                <Box
-                  key={note.id}
-                  sx={{ p: 1.25, borderRadius: 2, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}
-                >
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{note.body}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                    {new Date(note.created_at).toLocaleString()} • {note.author_id ? (authorsById[note.author_id] ?? 'Unknown author') : 'Unknown author'}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          )}
-        </Stack>
-      </Collapse>
-    </Paper>
+      <Typography variant="caption" color="text.secondary">
+        🔒 These notes are only visible to coaches/admins, never to students.
+      </Typography>
+    </Stack>
   );
 }
