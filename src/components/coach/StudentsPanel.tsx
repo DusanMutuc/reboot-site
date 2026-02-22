@@ -32,16 +32,12 @@ interface StudentsPanelProps {
   courseId: number | null;
   initialUserId?: string;
   onStudentChange?: (id: string) => void;
-  onPrivateNotesClick?: () => void;
-  isPrivateNotesOpen?: boolean;
 }
 
 export default function StudentsPanel({
   courseId,
   initialUserId,
   onStudentChange,
-  onPrivateNotesClick,
-  isPrivateNotesOpen = false,
 }: StudentsPanelProps) {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -231,12 +227,13 @@ export default function StudentsPanel({
           </Box>
 
           {selectedId && (
-            <Stack spacing={1}>
+            <Stack spacing={1} sx={{ width: 190, flexShrink: 0 }}>
               <Button
                 component={NextLink}
                 href={`/coach/notes?userId=${selectedId}`}
                 variant="outlined"
                 size="small"
+                fullWidth
               >
                 Open Coaching Notes
               </Button>
@@ -245,15 +242,9 @@ export default function StudentsPanel({
                 href={`/coach/kpi-tracker/${selectedId}`}
                 variant="outlined"
                 size="small"
+                fullWidth
               >
                 Edit KPIs
-              </Button>
-              <Button
-                variant={isPrivateNotesOpen ? 'contained' : 'outlined'}
-                size="small"
-                onClick={onPrivateNotesClick}
-              >
-                Private notes
               </Button>
             </Stack>
           )}
