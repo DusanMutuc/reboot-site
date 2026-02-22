@@ -148,8 +148,8 @@ export default function PrivateNotesPanel({ userId }: { userId: string }) {
                 key={note.id}
                 sx={{ p: 1.25, borderRadius: 2, bgcolor: 'grey.50', border: '1px solid', borderColor: 'divider' }}
               >
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{note.body}</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.98rem' }}>{note.body}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontSize: '0.82rem' }}>
                   {new Date(note.created_at).toLocaleString()} • {note.author_id ? (authorsById[note.author_id] ?? 'Unknown author') : 'Unknown author'}
                 </Typography>
               </Box>
@@ -158,7 +158,7 @@ export default function PrivateNotesPanel({ userId }: { userId: string }) {
         )}
       </Box>
 
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem" }}>
         🔒 These notes are only visible to coaches/admins, never to students.
       </Typography>
     </Stack>

@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Box, Button, IconButton, Stack, Typography } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import NotesIcon from '@mui/icons-material/StickyNote2';
 import NextLink from 'next/link';
 import TopNav from '@/components/topNav/topNav';
 import StudentsPanel from '@/components/coach/StudentsPanel';
@@ -53,19 +52,9 @@ export default function CoachStudentDashboardPage() {
             ← Back to student list
           </Button>
 
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} gap={1}>
-            <Typography variant="h5" fontWeight={600}>
-              Student dashboard
-            </Typography>
-
-            <Button
-              variant={notesOpen ? 'contained' : 'outlined'}
-              startIcon={<NotesIcon />}
-              onClick={() => setNotesOpen((prev) => !prev)}
-            >
-              Private notes
-            </Button>
-          </Stack>
+          <Typography variant="h5" fontWeight={600} mb={2}>
+            Student dashboard
+          </Typography>
 
           <StudentsPanel
             courseId={2}
@@ -74,6 +63,8 @@ export default function CoachStudentDashboardPage() {
               setSelectedStudentId(id);
               if (id !== userId) router.replace(`/coach/student-dashboard/${id}`);
             }}
+            onPrivateNotesClick={() => setNotesOpen((prev) => !prev)}
+            isPrivateNotesOpen={notesOpen}
           />
         </Box>
       </Box>

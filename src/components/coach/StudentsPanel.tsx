@@ -32,9 +32,17 @@ interface StudentsPanelProps {
   courseId: number | null;
   initialUserId?: string;
   onStudentChange?: (id: string) => void;
+  onPrivateNotesClick?: () => void;
+  isPrivateNotesOpen?: boolean;
 }
 
-export default function StudentsPanel({ courseId, initialUserId, onStudentChange, }: StudentsPanelProps) {
+export default function StudentsPanel({
+  courseId,
+  initialUserId,
+  onStudentChange,
+  onPrivateNotesClick,
+  isPrivateNotesOpen = false,
+}: StudentsPanelProps) {
   const [rows, setRows] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setErr] = useState<string | null>(null);
@@ -239,6 +247,13 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
                 size="small"
               >
                 Edit KPIs
+              </Button>
+              <Button
+                variant={isPrivateNotesOpen ? 'contained' : 'outlined'}
+                size="small"
+                onClick={onPrivateNotesClick}
+              >
+                Private notes
               </Button>
             </Stack>
           )}
