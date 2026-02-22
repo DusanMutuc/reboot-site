@@ -53,7 +53,13 @@ export default function CoachStudentDashboardPage() {
             ← Back to student list
           </Button>
 
-          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+            sx={{ pr: { xs: 0, sm: 3 } }}
+          >
             <Typography variant="h5" fontWeight={600}>
               Student dashboard
             </Typography>
