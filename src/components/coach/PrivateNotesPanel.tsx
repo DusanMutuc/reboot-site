@@ -159,7 +159,7 @@ export default function PrivateNotesPanel({ userId }: { userId: string }) {
       </Box>
 
       <Typography variant="body2" color="text.secondary" sx={{ fontSize: "0.95rem" }}>
-        🔒 These notes are only visible to coaches/admins, never to students.
+        🔒 These notes are only visible to coaches/admins, never to members.
       </Typography>
     </Stack>
   );
