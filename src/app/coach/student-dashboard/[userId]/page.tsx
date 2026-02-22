@@ -44,39 +44,51 @@ export default function CoachStudentDashboardPage() {
 
       <Box id="top" sx={{ height: '56px' }} />
 
-      <Box sx={{ maxWidth: 1640, mx: 'auto', mt: 3, px: 2 }}>
-        <Button
-          component={NextLink}
-          href="/coach#dashboard"
-          variant="text"
-          size="small"
-          sx={{ mb: 2 }}
-        >
-          ← Back to student list
-        </Button>
+      <Box sx={{ mt: 3, px: 2 }}>
+        <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+          <Button
+            component={NextLink}
+            href="/coach#dashboard"
+            variant="text"
+            size="small"
+            sx={{ mb: 2 }}
+          >
+            ← Back to student list
+          </Button>
 
-        <Typography variant="h5" fontWeight={600} mb={2}>
-          Student dashboard
-        </Typography>
+          <Typography variant="h5" fontWeight={600} mb={2}>
+            Student dashboard
+          </Typography>
+        </Box>
 
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 320px' },
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1200px)',
+              xl: '1fr minmax(0, 1200px) 320px 1fr',
+            },
             gap: 2,
+            justifyContent: 'center',
             alignItems: 'start',
           }}
         >
-          <StudentsPanel
-            courseId={2}
-            initialUserId={userId}
-            onStudentChange={(id) => {
-              setSelectedStudentId(id);
-              router.replace(`/coach/student-dashboard/${id}`);
-            }}
-          />
+          <Box sx={{ gridColumn: { xs: '1', xl: '2' } }}>
+            <StudentsPanel
+              courseId={2}
+              initialUserId={userId}
+              onStudentChange={(id) => {
+                setSelectedStudentId(id);
+                if (id !== userId) router.replace(`/coach/student-dashboard/${id}`);
+              }}
+            />
+          </Box>
 
-          {selectedStudentId && <PrivateNotesPanel userId={selectedStudentId} />}
+          {selectedStudentId && (
+            <Box sx={{ gridColumn: { xs: '1', xl: '3' } }}>
+              <PrivateNotesPanel userId={selectedStudentId} />
+            </Box>
+          )}
         </Box>
       </Box>
     </>
