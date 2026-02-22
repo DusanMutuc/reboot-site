@@ -2,7 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Box, Button, Typography } from '@mui/material';
+import {
+  Box,
+  Button,
+  Drawer,
+  IconButton,
+  Stack,
+  Typography,
+} from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
+import NotesIcon from '@mui/icons-material/StickyNote2';
 import NextLink from 'next/link';
 import TopNav from '@/components/topNav/topNav';
 import StudentsPanel from '@/components/coach/StudentsPanel';
@@ -13,17 +22,14 @@ export default function CoachStudentDashboardPage() {
   const userId = params.userId;
   const router = useRouter();
   const [selectedStudentId, setSelectedStudentId] = useState<string>(userId ?? '');
+  const [notesOpen, setNotesOpen] = useState(false);
 
   const hasValidUser = useMemo(() => Boolean(userId), [userId]);
 
   if (!hasValidUser) {
     return (
       <>
-        <TopNav
-          sections={[
-            { id: 'top', label: 'STUDENT DASHBOARD' },
-          ]}
-        />
+        <TopNav sections={[{ id: 'top', label: 'STUDENT DASHBOARD' }]} />
         <Box id="top" sx={{ height: '56px' }} />
         <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 3, px: 2 }}>
           <Typography variant="body1" color="error">
@@ -36,11 +42,7 @@ export default function CoachStudentDashboardPage() {
 
   return (
     <>
-      <TopNav
-        sections={[
-          { id: 'top', label: 'STUDENT DASHBOARD' },
-        ]}
-      />
+      <TopNav sections={[{ id: 'top', label: 'STUDENT DASHBOARD' }]} />
 
       <Box id="top" sx={{ height: '56px' }} />
 
@@ -56,41 +58,52 @@ export default function CoachStudentDashboardPage() {
             ← Back to student list
           </Button>
 
-          <Typography variant="h5" fontWeight={600} mb={2}>
-            Student dashboard
-          </Typography>
-        </Box>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2} gap={1}>
+            <Typography variant="h5" fontWeight={600}>
+              Student dashboard
+            </Typography>
 
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: 'minmax(0, 1200px)',
-              xl: '1fr minmax(0, 1200px) 320px 1fr',
-            },
-            gap: 2,
-            justifyContent: 'center',
-            alignItems: 'start',
-          }}
-        >
-          <Box sx={{ gridColumn: { xs: '1', xl: '2' } }}>
-            <StudentsPanel
-              courseId={2}
-              initialUserId={userId}
-              onStudentChange={(id) => {
-                setSelectedStudentId(id);
-                if (id !== userId) router.replace(`/coach/student-dashboard/${id}`);
-              }}
-            />
-          </Box>
+            <Button
+              variant="outlined"
+              startIcon={<NotesIcon />}
+              onClick={() => setNotesOpen(true)}
+            >
+              Private notes
+            </Button>
+          </Stack>
 
-          {selectedStudentId && (
-            <Box sx={{ gridColumn: { xs: '1', xl: '3' } }}>
-              <PrivateNotesPanel userId={selectedStudentId} />
-            </Box>
-          )}
+          <StudentsPanel
+            courseId={2}
+            initialUserId={userId}
+            onStudentChange={(id) => {
+              setSelectedStudentId(id);
+              if (id !== userId) router.replace(`/coach/student-dashboard/${id}`);
+            }}
+          />
         </Box>
       </Box>
+
+      <Drawer
+        anchor="right"
+        open={notesOpen}
+        onClose={() => setNotesOpen(false)}
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 420 },
+            p: 2,
+            bgcolor: 'background.default',
+          },
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" fontWeight={600}>Private notes</Typography>
+          <IconButton onClick={() => setNotesOpen(false)} aria-label="Close private notes panel">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        {selectedStudentId && <PrivateNotesPanel userId={selectedStudentId} />}
+      </Drawer>
     </>
   );
 }
