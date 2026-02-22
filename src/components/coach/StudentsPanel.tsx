@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
 import UserDashboard from '@/components/user/dashboard/UserDashboard';
+import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 
 type StudentRow = {
   user_id: string;
@@ -247,7 +248,17 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
               <Typography variant="subtitle1" fontWeight={600} mb={1}>
                 {selectedName ? `${selectedName}'s Dashboard` : 'Student Dashboard'}
               </Typography>
-              <UserDashboard userId={selectedId} />
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 320px' },
+                  gap: 2,
+                  alignItems: 'start',
+                }}
+              >
+                <UserDashboard userId={selectedId} />
+                <PrivateNotesPanel userId={selectedId} />
+              </Box>
             </Box>
 
             <Box mt={3}>
