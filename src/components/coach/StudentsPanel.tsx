@@ -17,7 +17,6 @@ import { supabase } from '@/lib/supabaseClient';
 import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
 import UserDashboard from '@/components/user/dashboard/UserDashboard';
-import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 
 type StudentRow = {
   user_id: string;
@@ -32,7 +31,7 @@ type ContactInfo = {
 interface StudentsPanelProps {
   courseId: number | null;
   initialUserId?: string;
-  onStudentChange?: (id: string) => void; // NEW
+  onStudentChange?: (id: string) => void;
 }
 
 export default function StudentsPanel({ courseId, initialUserId, onStudentChange, }: StudentsPanelProps) {
@@ -124,6 +123,10 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
     }
   }, [sorted, selectedId]);
 
+  useEffect(() => {
+    if (selectedId && onStudentChange) onStudentChange(selectedId);
+  }, [selectedId, onStudentChange]);
+
   // Fetch contact info for selected student
   useEffect(() => {
     if (!selectedId) {
@@ -177,7 +180,7 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
   if (error) return <ErrorMessage message={error} />;
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', mt: 3 }}>
+    <Box sx={{ width: '100%', mt: 3 }}>
       <Paper sx={{ p: 3, borderRadius: 3 }}>
         <Box
           sx={{
@@ -203,7 +206,6 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
                 setSelectedId(id);
                 const row = sorted.find((r) => r.user_id === id);
                 setSelectedName(row?.full_name ?? null);
-                if (onStudentChange) onStudentChange(id);  // NEW
               }}
               helperText={
                 sorted.length === 0
@@ -248,17 +250,7 @@ export default function StudentsPanel({ courseId, initialUserId, onStudentChange
               <Typography variant="subtitle1" fontWeight={600} mb={1}>
                 {selectedName ? `${selectedName}'s Dashboard` : 'Student Dashboard'}
               </Typography>
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 320px' },
-                  gap: 2,
-                  alignItems: 'start',
-                }}
-              >
-                <UserDashboard userId={selectedId} />
-                <PrivateNotesPanel userId={selectedId} />
-              </Box>
+              <UserDashboard userId={selectedId} />
             </Box>
 
             <Box mt={3}>

@@ -1,17 +1,22 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Box, Button, Typography } from '@mui/material';
 import NextLink from 'next/link';
 import TopNav from '@/components/topNav/topNav';
 import StudentsPanel from '@/components/coach/StudentsPanel';
+import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 
 export default function CoachStudentDashboardPage() {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
   const router = useRouter();
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(userId ?? '');
 
-  if (!userId) {
+  const hasValidUser = useMemo(() => Boolean(userId), [userId]);
+
+  if (!hasValidUser) {
     return (
       <>
         <TopNav
@@ -39,7 +44,7 @@ export default function CoachStudentDashboardPage() {
 
       <Box id="top" sx={{ height: '56px' }} />
 
-      <Box sx={{ maxWidth: 1200, mx: 'auto', mt: 3, px: 2 }}>
+      <Box sx={{ maxWidth: 1640, mx: 'auto', mt: 3, px: 2 }}>
         <Button
           component={NextLink}
           href="/coach#dashboard"
@@ -54,14 +59,25 @@ export default function CoachStudentDashboardPage() {
           Student dashboard
         </Typography>
 
-        <StudentsPanel
-          courseId={2}
-          initialUserId={userId}
-          onStudentChange={(id) => {
-            // keep URL in sync, but stay on same page
-            router.replace(`/coach/student-dashboard/${id}`);
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 320px' },
+            gap: 2,
+            alignItems: 'start',
           }}
-        />
+        >
+          <StudentsPanel
+            courseId={2}
+            initialUserId={userId}
+            onStudentChange={(id) => {
+              setSelectedStudentId(id);
+              router.replace(`/coach/student-dashboard/${id}`);
+            }}
+          />
+
+          {selectedStudentId && <PrivateNotesPanel userId={selectedStudentId} />}
+        </Box>
       </Box>
     </>
   );
