@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Box,
+  Button,
   Container,
   Paper,
   Stack,
@@ -16,17 +17,21 @@ import {
   IconButton,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
+import NotesIcon from '@mui/icons-material/StickyNote2';
+import CloseIcon from '@mui/icons-material/Close';
 import { supabase } from '@/lib/supabaseClient';
 
 import UserDashboard from '@/components/user/dashboard/UserDashboard';
 import CoachNotesView from '@/components/coach/CoachNotesView';
 import StudentProgressView from '@/components/coach/StudentProgressView';
+import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 
 type Mode = 'coach' | 'admin';
 type StudentRow = { user_id: string; full_name: string };
 
 const TAB_VALUES = ['dashboard', 'notes', 'progress'] as const;
 type TabValue = (typeof TAB_VALUES)[number];
+const SIDEBAR_WIDTH = 360;
 
 function useQuerySync() {
   const router = useRouter();
@@ -62,6 +67,7 @@ function StudentsOverviewInner() {
   // Local for roster picker only
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   // Load roster once (RLS will scope automatically by role)
   useEffect(() => {
@@ -106,22 +112,43 @@ function StudentsOverviewInner() {
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+        transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
+        mr: { xs: 0, lg: notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
+      }}
+    >
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Stack spacing={2} sx={{ mb: 2 }}>
           {/* Header with Back to Home (/coach) */}
-          <Stack direction="row" alignItems="center" spacing={1.5}>
-            <IconButton
-              LinkComponent={Link}
-              href="/coach"
-              aria-label="Back to Coach Home"
-              size="medium"
-            >
-              <ArrowBackIosNewIcon />
-            </IconButton>
-            <Typography variant="h5" sx={{ fontWeight: 800 }}>
-              Students Overview
-            </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pr: { xs: 0, sm: 3 } }}>
+            <Stack direction="row" alignItems="center" spacing={1.5}>
+              <IconButton
+                LinkComponent={Link}
+                href="/coach"
+                aria-label="Back to Coach Home"
+                size="medium"
+              >
+                <ArrowBackIosNewIcon />
+              </IconButton>
+              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+                Students Overview
+              </Typography>
+            </Stack>
+
+            <Box sx={{ width: 190, flexShrink: 0 }}>
+              <Button
+                variant={notesOpen ? 'contained' : 'outlined'}
+                size="small"
+                fullWidth
+                startIcon={<NotesIcon />}
+                onClick={() => setNotesOpen((prev) => !prev)}
+              >
+                Private notes
+              </Button>
+            </Box>
           </Stack>
 
           {/* Compact student picker (shared across tabs) */}
@@ -221,6 +248,64 @@ function StudentsOverviewInner() {
           </Paper>
         </Stack>
       </Container>
+
+      <Box
+        sx={{
+          position: 'fixed',
+          top: '56px',
+          right: 0,
+          bottom: 0,
+          width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
+          bgcolor: 'background.paper',
+          borderLeft: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
+          zIndex: 1200,
+          transform: notesOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <Box
+          sx={{
+            p: 2,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="h6" fontWeight={700}>Private notes</Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                px: 1,
+                py: 0.25,
+                borderRadius: 99,
+                bgcolor: '#fef3c7',
+                color: '#92400e',
+                fontWeight: 600,
+              }}
+            >
+              🔒 Coach only
+            </Typography>
+          </Stack>
+          <IconButton onClick={() => setNotesOpen(false)} aria-label="Close private notes panel">
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Box sx={{ p: 2, flex: 1, minHeight: 0 }}>
+          {userId ? <PrivateNotesPanel userId={userId} /> : (
+            <Typography variant="body2" color="text.secondary">
+              Pick a student above to view private notes.
+            </Typography>
+          )}
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -235,5 +320,4 @@ export default function StudentsOverviewPage() {
     </Suspense>
   );
 }
-
 
