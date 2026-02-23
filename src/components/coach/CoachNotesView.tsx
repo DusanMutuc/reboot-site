@@ -73,7 +73,7 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
         sx={{
           py: 4,
           transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
-          mr: { xs: 0, lg: notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
+          ...(notesOpen && { mr: { xs: 0, lg: `${SIDEBAR_WIDTH}px` } }),
         }}
       >
         <Typography variant="h5" sx={{ fontWeight: 800, mb: 2, fontSize: sz(24) }}>
