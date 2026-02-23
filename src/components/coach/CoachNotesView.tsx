@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
-  Container,
   IconButton,
   Stack,
   Typography,
@@ -68,124 +67,135 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <Container
-        maxWidth="lg"
+      <Box
         sx={{
           py: 4,
+          px: 2,
           transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
-          ...(notesOpen && { mr: { xs: 0, lg: `${SIDEBAR_WIDTH}px` } }),
+          mr: { xs: 0, lg: notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
         }}
       >
-        <Typography variant="h5" sx={{ fontWeight: 800, mb: 2, fontSize: sz(24) }}>
-          Coaching Notes
-        </Typography>
-
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            mb: 3,
-            border: '1px solid',
-            borderColor: 'grey.200',
-            borderRadius: 3,
-          }}
-        >
+        <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
           <Stack
-            spacing={2}
-            direction={{ xs: 'column', sm: 'row' }}
-            alignItems={{ xs: 'stretch', sm: 'center' }}
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ mb: 2, pr: { xs: 0, sm: 3 } }}
           >
-            <TextField
-              size="small"
-              label="Search students"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+            <Typography variant="h5" sx={{ fontWeight: 800, fontSize: sz(24) }}>
+              Coaching Notes
+            </Typography>
+            <Box sx={{ width: 190, flexShrink: 0 }}>
+              <Button
+                variant={notesOpen ? 'contained' : 'outlined'}
+                size="small"
+                fullWidth
+                startIcon={<NotesIcon />}
+                onClick={() => setNotesOpen((prev) => !prev)}
+              >
+                Private notes
+              </Button>
+            </Box>
+          </Stack>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              border: '1px solid',
+              borderColor: 'grey.200',
+              borderRadius: 3,
+            }}
+          >
+            <Stack
+              spacing={2}
+              direction={{ xs: 'column', sm: 'row' }}
+              alignItems={{ xs: 'stretch', sm: 'center' }}
+            >
+              <TextField
+                size="small"
+                label="Search students"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                sx={{
+                  width: { xs: '100%', sm: 320 },
+                  ...(mode === 'coach' && {
+                    '& .MuiInputLabel-root': { fontSize: sz(13) },
+                    '& .MuiInputBase-input': { fontSize: sz(14) },
+                    '& .MuiSvgIcon-root': { fontSize: sz(20) },
+                  }),
+                }}
+              />
+            </Stack>
+          </Paper>
+
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={3}
+            alignItems="flex-start"
+            sx={{ minHeight: 0 }}
+          >
+            <Paper
+              elevation={0}
               sx={{
-                width: { xs: '100%', sm: 320 },
-                ...(mode === 'coach' && {
-                  '& .MuiInputLabel-root': { fontSize: sz(13) },
-                  '& .MuiInputBase-input': { fontSize: sz(14) },
-                  '& .MuiSvgIcon-root': { fontSize: sz(20) },
+                flexBasis: isNarrow ? '100%' : 360,
+                flexShrink: 0,
+                alignSelf: 'flex-start',
+                height: PANEL_HEIGHT,
+                maxHeight: PANEL_HEIGHT,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 3,
+                p: 0,
+                overflow: 'hidden',
+                minHeight: 0,
+                display: 'grid',
+                gridTemplateRows: '1fr',
+                ...(isCoach && {
+                  '& .MuiTypography-subtitle2': { fontSize: sz(14) },
+                  '& .MuiTypography-caption': { fontSize: sz(12) },
                 }),
               }}
-            />
-            <Button
-              variant={notesOpen ? 'contained' : 'outlined'}
-              size="small"
-              startIcon={<NotesIcon />}
-              onClick={() => setNotesOpen((prev) => !prev)}
-              sx={{ width: { xs: '100%', sm: 'auto' } }}
             >
-              Private notes
-            </Button>
+              <CoachNotesUserList
+                mode={mode}
+                search={search}
+                selectedUserId={selectedUserId}
+                onSelectUser={setSelectedUserId}
+              />
+            </Paper>
+
+            <Paper
+              elevation={0}
+              sx={{
+                flexGrow: 1,
+                height: PANEL_HEIGHT,
+                maxHeight: PANEL_HEIGHT,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 3,
+                p: 0,
+                minHeight: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden',
+                ...(isCoach && {
+                  '& .MuiTypography-body2': { fontSize: sz(14) },
+                }),
+              }}
+            >
+              <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <CoachingNotesPanel userId={selectedUserId} />
+              </Box>
+            </Paper>
           </Stack>
-        </Paper>
 
-        <Stack
-          direction={{ xs: 'column', md: 'row' }}
-          spacing={3}
-          alignItems="flex-start"
-          sx={{ minHeight: 0 }}
-        >
-          <Paper
-            elevation={0}
-            sx={{
-              flexBasis: isNarrow ? '100%' : 360,
-              flexShrink: 0,
-              alignSelf: 'flex-start',
-              height: PANEL_HEIGHT,
-              maxHeight: PANEL_HEIGHT,
-              border: '1px solid',
-              borderColor: 'grey.200',
-              borderRadius: 3,
-              p: 0,
-              overflow: 'hidden',
-              minHeight: 0,
-              display: 'grid',
-              gridTemplateRows: '1fr',
-              ...(isCoach && {
-                '& .MuiTypography-subtitle2': { fontSize: sz(14) },
-                '& .MuiTypography-caption': { fontSize: sz(12) },
-              }),
-            }}
-          >
-            <CoachNotesUserList
-              mode={mode}
-              search={search}
-              selectedUserId={selectedUserId}
-              onSelectUser={setSelectedUserId}
-            />
-          </Paper>
-
-          <Paper
-            elevation={0}
-            sx={{
-              flexGrow: 1,
-              height: PANEL_HEIGHT,
-              maxHeight: PANEL_HEIGHT,
-              border: '1px solid',
-              borderColor: 'grey.200',
-              borderRadius: 3,
-              p: 0,
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              ...(isCoach && {
-                '& .MuiTypography-body2': { fontSize: sz(14) },
-              }),
-            }}
-          >
-            <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-              <CoachingNotesPanel userId={selectedUserId} />
-            </Box>
-          </Paper>
-        </Stack>
-
-        <Box sx={{ mt: 3 }}>
-          <UserWinsPanel userId={selectedUserId} />
+          <Box sx={{ mt: 3 }}>
+            <UserWinsPanel userId={selectedUserId} />
+          </Box>
         </Box>
-      </Container>
+      </Box>
 
       <Box
         sx={{
