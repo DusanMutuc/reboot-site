@@ -1,7 +1,7 @@
 // app/admin/page.tsx
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import adminTheme from '@/lib/admintheme';
@@ -25,6 +25,7 @@ import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
 import AdminStudentTracker from '@/components/admin/AdminStudentTracker'; // 👈 NEW
 // app/admin/page.tsx (top of file, with the other admin imports)
 import UserDataTransfer from '@/components/admin/UserDataTransfer';
+import AdminHome from '@/components/admin/AdminHome';
 import { SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
 
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
@@ -41,12 +42,15 @@ import {
   ListItemIcon,
   ListItemText,
   Collapse,
+  TextField,
+  Autocomplete,
+  Chip,
 } from '@mui/material';
 
 import {
+  Home as HomeIcon,
   PersonAdd as PersonAddIcon,
   People as PeopleIcon,
-  Warning as WarningIcon,
   SchoolOutlined as SchoolIcon,
   AssignmentInd as AssignmentIndIcon,
   MenuBook as MenuBookIcon,
@@ -58,70 +62,98 @@ import {
   ExpandMore,
   Campaign as CampaignIcon,
   GroupAdd,
+  Security as SecurityIcon,
 } from '@mui/icons-material';
 
-// Navigation structure
-const navigationStructure = [
+type AdminUserOption = {
+  id: string;
+  label: string;
+};
+
+type NavigationItem = {
+  id: string;
+  label: string;
+  icon: typeof PersonAddIcon;
+  component: string;
+  description: string;
+};
+
+type NavigationSection = {
+  id: string;
+  label: string;
+  icon: typeof PersonAddIcon;
+  children: NavigationItem[];
+};
+
+// Navigation structure (workflow-oriented)
+const navigationStructure: NavigationSection[] = [
   {
-    id: 'user-management',
-    label: 'User Management',
+    id: 'overview',
+    label: 'Overview',
+    icon: HomeIcon,
+    children: [
+      {
+        id: 'admin-home',
+        label: 'Admin Home',
+        icon: HomeIcon,
+        component: 'AdminHome',
+        description: 'Quick actions and a high-level admin snapshot.',
+      },
+    ],
+  },
+  {
+    id: 'onboarding-access',
+    label: 'Onboarding & Access',
     icon: PeopleIcon,
     children: [
-      { id: 'add-user', label: 'Add User', icon: PersonAddIcon, component: 'AddUserForm' },
-      { id: 'assign-assistant', label: 'Assign Assistant', icon: AssignmentIndIcon, component: 'AssignAssistantPanel' },
-      { id: 'user-profiles', label: 'User Profiles', icon: PeopleIcon, component: 'UserProfilesAdmin' },
-      { id: 'user-partnerships', label: 'User Partnerships', icon: GroupAdd, component: 'PartnershipsAdmin' },
-      { id: 'user-data-transfer', label: 'User Data Transfer', icon: SwapHorizIcon, component: 'UserDataTransfer' },
-    ]
+      { id: 'add-user', label: 'Create User', icon: PersonAddIcon, component: 'AddUserForm', description: 'Create a new user account and assign a role.' },
+      { id: 'assign-coach', label: 'Assign/Change Coach', icon: AssignmentIndIcon, component: 'AssignCoachPanel', description: 'Set primary or implementation coach relationships.' },
+      { id: 'assign-assistant', label: 'Assign Assistant', icon: AssignmentIndIcon, component: 'AssignAssistantPanel', description: 'Grant assistant access and assign assistant-to-user support.' },
+      { id: 'user-profiles', label: 'User Profiles', icon: PeopleIcon, component: 'UserProfilesAdmin', description: 'Search and edit core user profile attributes.' },
+      { id: 'coach-profiles', label: 'Coach Profiles', icon: PeopleIcon, component: 'CoachProfilesAdmin', description: 'Manage coach profile details and booking links.' },
+      { id: 'coach-rosters', label: 'Coach Rosters', icon: PeopleIcon, component: 'CoachRosters', description: 'Review each coach roster and student assignments.' },
+      { id: 'user-partnerships', label: 'Partnerships', icon: GroupAdd, component: 'PartnershipsAdmin', description: 'Manage user partnerships and their statuses.' },
+    ],
   },
   {
-    id: 'coaching',
-    label: 'Coaching',
-    icon: SchoolIcon,
-    children: [
-      { id: 'assign-coach', label: 'Assign/Change Coach', icon: AssignmentIndIcon, component: 'AssignCoachPanel' },
-      { id: 'coach-profiles', label: 'Coach Profiles', icon: PeopleIcon, component: 'CoachProfilesAdmin' },
-      { id: 'coach-rosters', label: 'Coach Rosters', icon: PeopleIcon, component: 'CoachRosters' }
-    ]
-  },
-  {
-    id: 'content',
-    label: 'Content Management',
-    icon: MenuBookIcon,
-    children: [
-      { id: 'course-builder', label: 'Course Builder', icon: MenuBookIcon, component: 'CourseEditor' },
-      { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
-      { id: 'library-editor', label: 'Library Editor', icon: LibraryBooksIcon, component: 'LibraryEditor' },
-      { id: 'site-announcement', label: 'Home Announcement', icon: CampaignIcon, component: 'SiteAnnouncementAdmin' },
-    ]
-  },
-  {
-    id: 'student-tracking',
-    label: 'Student Tracking',
+    id: 'student-insights',
+    label: 'Student Insights',
     icon: AssessmentIcon,
     children: [
-      { id: 'student-progress', label: 'Student Progress', icon: AssessmentIcon, component: 'StudentProgressView' },
-      { id: 'status-overview', label: 'Status Overview', icon: AssessmentIcon, component: 'StudentStatusOverview' },
-      { id: 'student-tracker', label: 'Student Tracker', icon: AssessmentIcon, component: 'AdminStudentTracker' }, // 👈 NEW
-    ]
+      { id: 'student-progress', label: 'Student Detail View', icon: AssessmentIcon, component: 'StudentProgressView', description: 'Open per-student progress details and recent activity.' },
+      { id: 'status-overview', label: 'Course Status Overview', icon: SchoolIcon, component: 'StudentStatusOverview', description: 'Scan completion and health by course cohort.' },
+      { id: 'student-tracker', label: 'KPI & Dashboard Editor', icon: AssessmentIcon, component: 'AdminStudentTracker', description: 'Edit KPI data and review the selected student dashboard.' },
+      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel', description: 'Create and maintain available achievement definitions.' },
+      { id: 'achievements-manual', label: 'Manual Awards', icon: EmojiEventsIcon, component: 'ManualAwardPanel', description: 'Award or revoke user achievements manually.' },
+    ],
   },
   {
-    id: 'scheduling',
-    label: 'Scheduling',
+    id: 'content-communications',
+    label: 'Content & Communications',
+    icon: MenuBookIcon,
+    children: [
+      { id: 'course-builder', label: 'Course Builder', icon: MenuBookIcon, component: 'CourseEditor', description: 'Build and organize course structures and blocks.' },
+      { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin', description: 'Maintain published resource-library entries.' },
+      { id: 'library-editor', label: 'Library Editor', icon: LibraryBooksIcon, component: 'LibraryEditor', description: 'Edit raw library records and ordering.' },
+      { id: 'site-announcement', label: 'Home Announcement', icon: CampaignIcon, component: 'SiteAnnouncementAdmin', description: 'Publish announcements on the user home page.' },
+    ],
+  },
+  {
+    id: 'operations',
+    label: 'Operations',
     icon: EventIcon,
     children: [
-      { id: 'meetings', label: 'Meetings', icon: EventIcon, component: 'AdminMeetingsPanel' }
-    ]
+      { id: 'meetings', label: 'Meetings', icon: EventIcon, component: 'AdminMeetingsPanel', description: 'Create, edit, and track meeting attendance records.' },
+    ],
   },
   {
-    id: 'achievements',
-    label: 'Achievements',
-    icon: EmojiEventsIcon,
+    id: 'danger-zone',
+    label: 'Danger Zone',
+    icon: SecurityIcon,
     children: [
-      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' },
-      { id: 'achievements-manual', label: 'Manual Awards', icon: EmojiEventsIcon, component: 'ManualAwardPanel' }, // 👈 NEW
-    ]
-  }
+      { id: 'user-data-transfer', label: 'User Data Transfer', icon: SwapHorizIcon, component: 'UserDataTransfer', description: 'Copy or merge data between users (high impact).' },
+    ],
+  },
 ];
 
 export default function AdminPage() {
@@ -130,8 +162,10 @@ export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedView, setSelectedView] = useState('add-user');
-  const [expandedSections, setExpandedSections] = useState<string[]>(['user-management']);
+  const [selectedView, setSelectedView] = useState('admin-home');
+  const [expandedSections, setExpandedSections] = useState<string[]>(['overview', 'onboarding-access']);
+  const [userOptions, setUserOptions] = useState<AdminUserOption[]>([]);
+  const [activeUser, setActiveUser] = useState<AdminUserOption | null>(null);
 
   useEffect(() => {
     async function checkAuth() {
@@ -194,6 +228,30 @@ export default function AdminPage() {
     return () => subscription.unsubscribe();
   }, [router]);
 
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/admin/list-users');
+        const data = (await res.json()) as { items?: Array<{ id: string; name?: string; email?: string }> };
+        if (!alive) return;
+        const items = (data.items || []).map((u) => ({
+          id: u.id,
+          label: `${u.name || 'Unnamed user'} — ${u.email || 'no-email'}`,
+        }));
+        setUserOptions(items);
+      } catch {
+        setUserOptions([]);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdmin]);
+
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev =>
       prev.includes(sectionId)
@@ -202,12 +260,18 @@ export default function AdminPage() {
     );
   };
 
+
+  const syncActiveUserFromId = (userId: string | null | undefined) => {
+    const found = userOptions.find((u) => u.id === userId) || null;
+    setActiveUser(found);
+  };
+
   const renderContent = () => {
     switch (selectedView) {
       case 'add-user':
         return <AddUserForm />;
       case 'assign-assistant':
-        return <AssignAssistantPanel />;
+        return <AssignAssistantPanel activeUserId={activeUser?.id} onActiveUserChange={(selected) => syncActiveUserFromId(selected?.id)} />;
       case 'user-profiles':
         return <UserProfilesAdmin />;
       case 'user-partnerships':
@@ -215,7 +279,7 @@ export default function AdminPage() {
       case 'user-data-transfer':
         return <UserDataTransfer />; 
       case 'assign-coach':
-        return <AssignCoachPanel />;
+        return <AssignCoachPanel activeUserId={activeUser?.id} onActiveUserChange={(selected) => syncActiveUserFromId(selected?.id)} />;
       case 'coach-profiles':
         return <CoachProfilesAdmin />;
       case 'coach-rosters':
@@ -229,19 +293,23 @@ export default function AdminPage() {
       case 'site-announcement':
         return <SiteAnnouncementAdmin />;
       case 'student-progress':
-        return <StudentProgressView mode="admin" />;
+        return <StudentProgressView mode="admin" preselectedUserId={activeUser?.id} onSelectedUserChange={(userId) => {
+          syncActiveUserFromId(userId)
+        }} />;
       case 'status-overview':
         return <StudentStatusOverview courseId={2} />;
       case 'student-tracker':
-        return <AdminStudentTracker />; // 👈 NEW
+        return <AdminStudentTracker activeUserId={activeUser?.id} onActiveUserChange={(selected) => syncActiveUserFromId(selected?.id)} />;
       case 'meetings':
         return <AdminMeetingsPanel />;
       case 'achievements-admin':
         return <AchievementsAdminPanel />;
       case 'achievements-manual':
-        return <ManualAwardPanel />; // 👈 NEW
+        return <ManualAwardPanel activeUserId={activeUser?.id} onActiveUserChange={(selected) => syncActiveUserFromId(selected?.id)} />; // 👈 NEW
+      case 'admin-home':
+        return <AdminHome onNavigate={setSelectedView} />;
       default:
-        return <AddUserForm />;
+        return <AdminHome onNavigate={setSelectedView} />;
     }
   };
 
@@ -388,9 +456,15 @@ export default function AdminPage() {
                             </ListItemIcon>
                             <ListItemText
                               primary={child.label}
+                              secondary={child.description}
                               primaryTypographyProps={{ 
                                 fontSize: '1rem',
                                 lineHeight: 1.4
+                              }}
+                              secondaryTypographyProps={{
+                                fontSize: '0.76rem',
+                                lineHeight: 1.25,
+                                sx: { color: isSelected ? 'rgba(255,255,255,0.82)' : 'text.secondary' },
                               }}
                             />
                           </ListItemButton>
@@ -412,6 +486,23 @@ export default function AdminPage() {
                 .flatMap(s => s.children)
                 .find(c => c.id === selectedView)?.label || 'Admin'}
             </Typography>
+
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              <Autocomplete
+                options={userOptions}
+                value={activeUser}
+                onChange={(_, value) => setActiveUser(value)}
+                sx={{ minWidth: 320, maxWidth: 480 }}
+                renderInput={(params) => <TextField {...params} label="Active user context" size="small" />}
+              />
+              <Chip size="small" label={activeUser ? 'User selected' : 'No user selected'} color={activeUser ? 'primary' : 'default'} />
+            </Box>
+
+            {['student-progress', 'status-overview', 'student-tracker'].includes(selectedView) ? (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Student Insights workflow: Use <strong>Course Status Overview</strong> to scan cohorts, then open <strong>Student Detail View</strong> for per-user progress, and finish in <strong>KPI &amp; Dashboard Editor</strong> for updates.
+              </Alert>
+            ) : null}
 
             <Paper elevation={1} sx={{ borderRadius: 2, p: 3, mt: 3 }}>
               {renderContent()}

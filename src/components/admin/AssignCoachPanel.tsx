@@ -21,12 +21,17 @@ type AssignedCoach = Person & {
   relationship_type: RelationshipType;
 };
 
+type AssignCoachPanelProps = {
+  activeUserId?: string;
+  onActiveUserChange?: (user: Person | null) => void;
+};
+
 async function getJSON<T>(url: string): Promise<T> {
   const r = await fetch(url);
   return r.json();
 }
 
-export default function AssignCoachPanel() {
+export default function AssignCoachPanel({ activeUserId, onActiveUserChange }: AssignCoachPanelProps) {
   const [users, setUsers] = useState<Person[]>([]);
   const [coaches, setCoaches] = useState<Person[]>([]);
   const [user, setUser] = useState<Person | null>(null);
@@ -58,6 +63,14 @@ export default function AssignCoachPanel() {
     () => coaches.map(c => ({ ...c, label: `${c.name} — ${c.email}` })),
     [coaches]
   );
+
+  useEffect(() => {
+    if (!activeUserId || users.length === 0) return;
+    const found = users.find((u) => u.id === activeUserId) || null;
+    if (found && found.id !== user?.id) {
+      setUser(found);
+    }
+  }, [activeUserId, users, user?.id]);
 
   const loadCurrentCoaches = useCallback(async (userId: string, opts?: { silent?: boolean }) => {
     setLoadingCoaches(true);
@@ -156,7 +169,10 @@ export default function AssignCoachPanel() {
           <Autocomplete
             options={userOptions}
             value={user}
-            onChange={(_, v) => setUser(v)}
+            onChange={(_, v) => {
+              setUser(v);
+              onActiveUserChange?.(v);
+            }}
             renderInput={(params) => <TextField {...params} label="Select user…" />}
           />
           <Autocomplete

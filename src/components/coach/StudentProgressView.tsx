@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import {
@@ -15,7 +15,13 @@ const COACH_UI_SCALE = 1.0;
 type Mode = 'coach' | 'admin';
 type CourseLite = { id: number; title: string | null };
 
-export default function StudentProgressView({ mode }: { mode: Mode }) {
+type StudentProgressViewProps = {
+  mode: Mode;
+  preselectedUserId?: string;
+  onSelectedUserChange?: (userId: string | null) => void;
+};
+
+export default function StudentProgressView({ mode, preselectedUserId, onSelectedUserChange }: StudentProgressViewProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -25,7 +31,7 @@ export default function StudentProgressView({ mode }: { mode: Mode }) {
   const courseIdFromQuery = searchParams.get('courseId') ?? null;
 
   // Local UI state (like CoachNotesView)
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(userIdFromQuery);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(userIdFromQuery ?? preselectedUserId ?? null);
   const [courses, setCourses] = useState<CourseLite[]>([]);
   const [courseId, setCourseId] = useState<number | null>(courseIdFromQuery ? Number(courseIdFromQuery) : null);
   const [search, setSearch] = useState('');
@@ -47,6 +53,14 @@ export default function StudentProgressView({ mode }: { mode: Mode }) {
     [pathname, router, searchParams]
   );
 
+
+  useEffect(() => {
+    if (!preselectedUserId) return;
+    if (selectedUserId !== preselectedUserId) {
+      setSelectedUserId(preselectedUserId);
+    }
+  }, [preselectedUserId, selectedUserId]);
+
   // If we DON'T have a local selection yet and the URL has a userId, adopt it once.
   useEffect(() => {
     if (!selectedUserId && userIdFromQuery) {
@@ -60,6 +74,11 @@ export default function StudentProgressView({ mode }: { mode: Mode }) {
       setQuery({ userId: selectedUserId ?? null });
     }
   }, [selectedUserId, userIdFromQuery, setQuery]);
+
+
+  useEffect(() => {
+    onSelectedUserChange?.(selectedUserId);
+  }, [selectedUserId, onSelectedUserChange]);
 
   // Load courses once; adopt from URL if valid, else select first and push to URL.
   useEffect(() => {
@@ -181,7 +200,10 @@ export default function StudentProgressView({ mode }: { mode: Mode }) {
               courseId={courseId}
               search={search}
               selectedUserId={selectedUserId}
-              onSelectUser={setSelectedUserId}
+              onSelectUser={(userId) => {
+                setSelectedUserId(userId);
+                onSelectedUserChange?.(userId);
+              }}
             />
           </Paper>
 

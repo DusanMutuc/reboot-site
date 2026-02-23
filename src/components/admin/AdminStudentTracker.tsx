@@ -29,7 +29,12 @@ type ProfileRow = {
   last_name: string | null;
 };
 
-export default function AdminStudentTracker() {
+type AdminStudentTrackerProps = {
+  activeUserId?: string;
+  onActiveUserChange?: (user: AdminStudentOption | null) => void;
+};
+
+export default function AdminStudentTracker({ activeUserId, onActiveUserChange }: AdminStudentTrackerProps) {
   const [students, setStudents] = useState<AdminStudentOption[]>([]);
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [studentsError, setStudentsError] = useState<string | null>(null);
@@ -86,9 +91,20 @@ export default function AdminStudentTracker() {
     };
   }, []);
 
+
+  useEffect(() => {
+    if (!activeUserId || students.length === 0) return;
+    if (activeUserId !== selectedUserId) {
+      setSelectedUserId(activeUserId);
+      setDashKey(0);
+    }
+  }, [activeUserId, students, selectedUserId]);
+
   const handleStudentChange = (event: SelectChangeEvent<string>) => {
     const nextId = event.target.value as string;
     setSelectedUserId(nextId);
+    const found = students.find((s) => s.id === nextId) || null;
+    onActiveUserChange?.(found);
     setDashKey(0); // reset refresh signal when switching students
   };
 

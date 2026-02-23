@@ -49,7 +49,12 @@ function fmt(ts?: string) {
   return ts ? new Date(ts).toLocaleString() : '';
 }
 
-export default function ManualAwardPanel() {
+type ManualAwardPanelProps = {
+  activeUserId?: string;
+  onActiveUserChange?: (user: MinimalUser | null) => void;
+};
+
+export default function ManualAwardPanel({ activeUserId, onActiveUserChange }: ManualAwardPanelProps) {
   // Users
   const [userOptions, setUserOptions] = useState<MinimalUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -102,6 +107,15 @@ export default function ManualAwardPanel() {
       dead = true;
     };
   }, []);
+
+
+  useEffect(() => {
+    if (!activeUserId || userOptions.length === 0) return;
+    const found = userOptions.find((u) => u.id === activeUserId) || null;
+    if (found && found.id !== selectedUser?.id) {
+      setSelectedUser(found);
+    }
+  }, [activeUserId, userOptions, selectedUser?.id]);
 
   // Load achievements
   useEffect(() => {
@@ -233,7 +247,10 @@ export default function ManualAwardPanel() {
           options={userOptions}
           loading={usersLoading}
           value={selectedUser}
-          onChange={(_, v) => setSelectedUser(v)}
+          onChange={(_, v) => {
+            setSelectedUser(v);
+            onActiveUserChange?.(v);
+          }}
           getOptionLabel={(o) => (o ? o.full_name : '')}
           renderInput={(params) => (
             <TextField

@@ -25,12 +25,17 @@ type Assignment = {
   is_active?: boolean;
 };
 
+type AssignAssistantPanelProps = {
+  activeUserId?: string;
+  onActiveUserChange?: (user: Person | null) => void;
+};
+
 async function getJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
   return res.json();
 }
 
-export default function AssignAssistantPanel() {
+export default function AssignAssistantPanel({ activeUserId, onActiveUserChange }: AssignAssistantPanelProps) {
   const [users, setUsers] = useState<Person[]>([]);
   const [assistants, setAssistants] = useState<Person[]>([]);
   const [user, setUser] = useState<Person | null>(null);
@@ -76,6 +81,14 @@ export default function AssignAssistantPanel() {
     () => assistants.map((a) => ({ ...a, label: `${a.name} — ${a.email}` })),
     [assistants]
   );
+
+  useEffect(() => {
+    if (!activeUserId || users.length === 0) return;
+    const found = users.find((u) => u.id === activeUserId) || null;
+    if (!found) return;
+    setUser((prev) => (prev?.id === found.id ? prev : found));
+    setAssignmentUser((prev) => (prev?.id === found.id ? prev : found));
+  }, [activeUserId, users]);
 
   async function assign() {
     if (!user) return;
@@ -178,7 +191,10 @@ export default function AssignAssistantPanel() {
         <Autocomplete
           options={userOptions}
           value={user}
-          onChange={(_, v) => setUser(v)}
+          onChange={(_, v) => {
+            setUser(v);
+            onActiveUserChange?.(v);
+          }}
           renderInput={(params) => <TextField {...params} label="Select user…" />}
         />
         <LoadingButton variant="contained" onClick={assign} loading={busy} disabled={!user}>
@@ -198,7 +214,10 @@ export default function AssignAssistantPanel() {
           <Autocomplete
             options={userOptions}
             value={assignmentUser}
-            onChange={(_, v) => setAssignmentUser(v)}
+            onChange={(_, v) => {
+              setAssignmentUser(v);
+              onActiveUserChange?.(v);
+            }}
             renderInput={(params) => <TextField {...params} label="Select user…" />}
           />
           <Autocomplete
