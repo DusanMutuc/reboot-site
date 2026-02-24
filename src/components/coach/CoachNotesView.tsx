@@ -4,24 +4,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Button,
-  IconButton,
   Stack,
   Typography,
   Paper,
   TextField,
   useMediaQuery,
 } from '@mui/material';
-import CloseIcon from '@mui/icons-material/Close';
-import NotesIcon from '@mui/icons-material/StickyNote2';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import CoachNotesUserList from './CoachNotesUserList';
 import CoachingNotesPanel from './CoachingNotesPanel';
-import PrivateNotesPanel from './PrivateNotesPanel';
 import UserWinsPanel from './UserWinsPanel';
 
 const COACH_UI_SCALE = 1.0;
-const SIDEBAR_WIDTH = 360;
 type Mode = 'coach' | 'admin';
 
 export default function CoachNotesView({ mode }: { mode: Mode }) {
@@ -32,7 +26,6 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
 
   const [search, setSearch] = useState('');
   const [selectedUserId, setSelectedUserId] = useState<string | null>(userIdFromQuery);
-  const [notesOpen, setNotesOpen] = useState(false);
 
   const isNarrow = useMediaQuery('(max-width:900px)');
   const PANEL_HEIGHT = isNarrow ? 'auto' : '70vh';
@@ -71,31 +64,18 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
         sx={{
           py: 4,
           px: 2,
-          transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
-          mr: { xs: 0, lg: notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
         }}
       >
         <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
           <Stack
             direction="row"
-            justifyContent="space-between"
+            justifyContent="flex-start"
             alignItems="center"
             sx={{ mb: 2, pr: { xs: 0, sm: 3 } }}
           >
             <Typography variant="h5" sx={{ fontWeight: 800, fontSize: sz(24) }}>
               Coaching Notes
             </Typography>
-            <Box sx={{ width: 190, flexShrink: 0 }}>
-              <Button
-                variant={notesOpen ? 'contained' : 'outlined'}
-                size="small"
-                fullWidth
-                startIcon={<NotesIcon />}
-                onClick={() => setNotesOpen((prev) => !prev)}
-              >
-                Private notes
-              </Button>
-            </Box>
           </Stack>
 
           <Paper
@@ -194,60 +174,6 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
           <Box sx={{ mt: 3 }}>
             <UserWinsPanel userId={selectedUserId} />
           </Box>
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          position: 'fixed',
-          top: '56px',
-          right: 0,
-          bottom: 0,
-          width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
-          bgcolor: 'background.paper',
-          borderLeft: '1px solid',
-          borderColor: 'divider',
-          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
-          zIndex: 1200,
-          transform: notesOpen ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <Box
-          sx={{
-            p: 2,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="h6" fontWeight={700}>Private notes</Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                px: 1,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: '#fef3c7',
-                color: '#92400e',
-                fontWeight: 600,
-              }}
-            >
-              🔒 Coach only
-            </Typography>
-          </Stack>
-          <IconButton onClick={() => setNotesOpen(false)} aria-label="Close private notes panel">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Box sx={{ p: 2, flex: 1, minHeight: 0 }}>
-          {selectedUserId && <PrivateNotesPanel userId={selectedUserId} />}
         </Box>
       </Box>
     </Box>
