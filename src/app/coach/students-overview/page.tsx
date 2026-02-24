@@ -238,7 +238,7 @@ function StudentsOverviewInner() {
               )}
 
               {tabValue === 'notes' && (
-                <CoachNotesView mode={mode} />
+                <CoachNotesView mode={mode} showPrivateNotesButton={false} />
               )}
 
               {tabValue === 'progress' && (
@@ -320,4 +320,3 @@ export default function StudentsOverviewPage() {
     </Suspense>
   );
 }
-

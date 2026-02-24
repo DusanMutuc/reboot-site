@@ -24,7 +24,12 @@ const COACH_UI_SCALE = 1.0;
 const SIDEBAR_WIDTH = 360;
 type Mode = 'coach' | 'admin';
 
-export default function CoachNotesView({ mode }: { mode: Mode }) {
+type CoachNotesViewProps = {
+  mode: Mode;
+  showPrivateNotesButton?: boolean;
+};
+
+export default function CoachNotesView({ mode, showPrivateNotesButton = true }: CoachNotesViewProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -72,7 +77,7 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
           py: 4,
           px: 2,
           transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
-          mr: { xs: 0, lg: notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
+          mr: { xs: 0, lg: showPrivateNotesButton && notesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
         }}
       >
         <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
@@ -85,17 +90,19 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
             <Typography variant="h5" sx={{ fontWeight: 800, fontSize: sz(24) }}>
               Coaching Notes
             </Typography>
-            <Box sx={{ width: 190, flexShrink: 0 }}>
-              <Button
-                variant={notesOpen ? 'contained' : 'outlined'}
-                size="small"
-                fullWidth
-                startIcon={<NotesIcon />}
-                onClick={() => setNotesOpen((prev) => !prev)}
-              >
-                Private notes
-              </Button>
-            </Box>
+            {showPrivateNotesButton && (
+              <Box sx={{ width: 190, flexShrink: 0 }}>
+                <Button
+                  variant={notesOpen ? 'contained' : 'outlined'}
+                  size="small"
+                  fullWidth
+                  startIcon={<NotesIcon />}
+                  onClick={() => setNotesOpen((prev) => !prev)}
+                >
+                  Private notes
+                </Button>
+              </Box>
+            )}
           </Stack>
 
           <Paper
@@ -197,59 +204,61 @@ export default function CoachNotesView({ mode }: { mode: Mode }) {
         </Box>
       </Box>
 
-      <Box
-        sx={{
-          position: 'fixed',
-          top: '56px',
-          right: 0,
-          bottom: 0,
-          width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
-          bgcolor: 'background.paper',
-          borderLeft: '1px solid',
-          borderColor: 'divider',
-          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
-          zIndex: 1200,
-          transform: notesOpen ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      {showPrivateNotesButton && (
         <Box
           sx={{
-            p: 2,
-            borderBottom: '1px solid',
+            position: 'fixed',
+            top: '56px',
+            right: 0,
+            bottom: 0,
+            width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
+            bgcolor: 'background.paper',
+            borderLeft: '1px solid',
             borderColor: 'divider',
+            boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
+            zIndex: 1200,
+            transform: notesOpen ? 'translateX(0)' : 'translateX(100%)',
+            transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            flexDirection: 'column',
           }}
         >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="h6" fontWeight={700}>Private notes</Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                px: 1,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: '#fef3c7',
-                color: '#92400e',
-                fontWeight: 600,
-              }}
-            >
-              🔒 Coach only
-            </Typography>
-          </Stack>
-          <IconButton onClick={() => setNotesOpen(false)} aria-label="Close private notes panel">
-            <CloseIcon />
-          </IconButton>
-        </Box>
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="h6" fontWeight={700}>Private notes</Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 99,
+                  bgcolor: '#fef3c7',
+                  color: '#92400e',
+                  fontWeight: 600,
+                }}
+              >
+                🔒 Coach only
+              </Typography>
+            </Stack>
+            <IconButton onClick={() => setNotesOpen(false)} aria-label="Close private notes panel">
+              <CloseIcon />
+            </IconButton>
+          </Box>
 
-        <Box sx={{ p: 2, flex: 1, minHeight: 0 }}>
-          {selectedUserId && <PrivateNotesPanel userId={selectedUserId} />}
+          <Box sx={{ p: 2, flex: 1, minHeight: 0 }}>
+            {selectedUserId && <PrivateNotesPanel userId={selectedUserId} />}
+          </Box>
         </Box>
-      </Box>
+      )}
     </Box>
   );
 }
