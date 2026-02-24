@@ -429,7 +429,7 @@ export default function StudentStatusOverview({ courseId }: StudentStatusOvervie
                         variant="outlined"
                         endIcon={<OpenInNewIcon />}
                         component={NextLink}
-                        href={`/coach/student-dashboard/${s.user_id}`}
+                        href={`/coach/students-overview?userId=${s.user_id}`}
                       >
                         Open dashboard
                       </Button>
