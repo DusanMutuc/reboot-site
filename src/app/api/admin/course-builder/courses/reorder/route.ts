@@ -11,14 +11,14 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const rawIds = Array.isArray(body?.courseIds) ? body.courseIds : null;
+    const rawIds: unknown[] | null = Array.isArray(body?.courseIds) ? body.courseIds : null;
 
     if (!rawIds) {
       throw new CourseBuilderError('courseIds must be an array', 400);
     }
 
     const courseIds = rawIds
-      .map((id) => Number(id))
+      .map((id: unknown) => Number(id))
       .filter((id) => Number.isInteger(id) && id > 0);
 
     if (courseIds.length === 0) {
