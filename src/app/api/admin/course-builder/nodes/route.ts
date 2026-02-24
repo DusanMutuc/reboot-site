@@ -26,7 +26,36 @@ async function fetchRootNodeIds(nodeType?: string) {
     });
   }
 
-  return (data ?? []) as { id: number; node_type: string; title: string }[];
+  const nodes = (data ?? []) as { id: number; node_type: string; title: string }[];
+  if (nodeType !== 'course' || nodes.length === 0) {
+    return nodes;
+  }
+
+  const courseIds = nodes.map((node) => node.id);
+  const { data: sortRows, error: sortError } = await adminClient
+    .from('course_sort_orders')
+    .select('course_node_id, sort_order')
+    .in('course_node_id', courseIds);
+
+  if (sortError) {
+    throw new CourseBuilderError('Failed to load course sort order', 500, {
+      details: sortError.message,
+    });
+  }
+
+  const orderMap = new Map<number, number>((sortRows ?? []).map((row) => [row.course_node_id, row.sort_order]));
+  return [...nodes].sort((a, b) => {
+    const aOrder = orderMap.get(a.id);
+    const bOrder = orderMap.get(b.id);
+
+    if (aOrder != null && bOrder != null && aOrder !== bOrder) {
+      return aOrder - bOrder;
+    }
+    if (aOrder != null && bOrder == null) return -1;
+    if (aOrder == null && bOrder != null) return 1;
+
+    return a.title.localeCompare(b.title);
+  });
 }
 
 async function searchNodes(term: string | null) {

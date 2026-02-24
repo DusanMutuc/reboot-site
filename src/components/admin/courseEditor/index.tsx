@@ -37,6 +37,7 @@ import {
   updateChild,
   updateNode,
   updateSequentialUnlock,
+  updateCourseOrder,
 } from './api/requests';
 import { EditorStoreProvider, useEditorStore } from './state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
@@ -307,6 +308,7 @@ function CourseEditorInner() {
   const [lastActiveCourseId, setLastActiveCourseId] = useState<number | null>(null);
   const [unlockStatusRefreshToken, setUnlockStatusRefreshToken] = useState(0);
   const [sequentialLoading, setSequentialLoading] = useState(false);
+  const [courseReordering, setCourseReordering] = useState(false);
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
@@ -435,6 +437,30 @@ function CourseEditorInner() {
     }
     return null;
   }, [selectedPath]);
+
+
+  const handleReorderCourses = useCallback(async (orderedCourseIds: number[]) => {
+    const fullOrder = [
+      ...orderedCourseIds,
+      ...trees.map((tree) => tree.node.id).filter((id) => !orderedCourseIds.includes(id)),
+    ];
+
+    const rank = new Map<number, number>(fullOrder.map((id, idx) => [id, idx]));
+    const previous = trees;
+    setTrees((prev) => [...prev].sort((a, b) => (rank.get(a.node.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.node.id) ?? Number.MAX_SAFE_INTEGER)));
+
+    setCourseReordering(true);
+    try {
+      await updateCourseOrder(fullOrder);
+      setSnack({ message: 'Course order saved', severity: 'success' });
+    } catch (error) {
+      setTrees(previous);
+      const message = error instanceof Error ? error.message : 'Failed to save course order';
+      setSnack({ message, severity: 'error' });
+    } finally {
+      setCourseReordering(false);
+    }
+  }, [trees]);
 
   const courseStats = useMemo(() => {
     const map = new Map<number, { lessons: number; chapters: number }>();
@@ -1331,6 +1357,8 @@ function CourseEditorInner() {
               onCreateCourse={() =>
                 setAddChildDialog({ open: true, parentId: null, mode: 'create', type: 'course' })
               }
+              onReorderCourses={handleReorderCourses}
+              courseReordering={courseReordering}
               onQuickAddLesson={handleQuickAddLesson}
               onQuickAddChapter={handleQuickAddChapter}
               onQuickAddBlock={handleQuickAddBlock}
