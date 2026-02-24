@@ -22,6 +22,15 @@ export async function fetchCourseTrees(rootType: string = 'course') {
   return data.subtrees ?? [];
 }
 
+export async function updateCourseOrder(courseIds: number[]) {
+  const res = await fetch('/api/admin/course-builder/courses/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ courseIds }),
+  });
+  await parseJson<{ ok: boolean }>(res, 'Failed to update course order');
+}
+
 export async function fetchEdgeRules() {
   const res = await fetch('/api/admin/course-builder/rules');
   const data = await parseJson<{ rules: NodeEdgeRule[] }>(res, 'Failed to load edge rules');

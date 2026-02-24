@@ -22,11 +22,37 @@ export async function GET(request: NextRequest) {
       throw new CourseBuilderError('Failed to load courses', 500, { details: error.message });
     }
 
-    // The RPC already returns exactly the shape your frontend expects
-    // (id, title, slug, description, hero_image, icon, objectives, metadata, sequential_unlock)
-    const courses = data ?? [];
+    const courses = (data ?? []) as Array<{ id: number; title?: string | null }>;
 
-    return NextResponse.json({ courses });
+    if (courses.length === 0) {
+      return NextResponse.json({ courses });
+    }
+
+    const courseIds = courses.map((course) => course.id);
+    const { data: sortRows, error: sortError } = await adminClient
+      .from('course_sort_orders')
+      .select('course_node_id, sort_order')
+      .in('course_node_id', courseIds);
+
+    if (sortError) {
+      throw new CourseBuilderError('Failed to load course ordering', 500, { details: sortError.message });
+    }
+
+    const orderMap = new Map<number, number>((sortRows ?? []).map((row) => [row.course_node_id, row.sort_order]));
+    const sortedCourses = [...courses].sort((a, b) => {
+      const aOrder = orderMap.get(a.id);
+      const bOrder = orderMap.get(b.id);
+
+      if (aOrder != null && bOrder != null && aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      if (aOrder != null && bOrder == null) return -1;
+      if (aOrder == null && bOrder != null) return 1;
+
+      return (a.title ?? '').localeCompare(b.title ?? '');
+    });
+
+    return NextResponse.json({ courses: sortedCourses });
   } catch (error: unknown) {
     return handleCourseBuilderError(error);
   }
