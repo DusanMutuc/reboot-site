@@ -75,6 +75,7 @@ export async function middleware(req: NextRequest) {
   const assistantAllowed =
     pathname === '/assistant-library' ||
     pathname.startsWith('/assistant-library/') ||
+    pathname.startsWith('/r/') ||
     pathname.startsWith('/api');
 
   if (!assistantAllowed) {
