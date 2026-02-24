@@ -24,15 +24,13 @@ const COACH_UI_SCALE = 1.0;
 const SIDEBAR_WIDTH = 360;
 type Mode = 'coach' | 'admin';
 
-type CoachNotesViewProps = {
-  mode: Mode;
-  showPrivateNotesButton?: boolean;
-};
-
-export default function CoachNotesView({ mode, showPrivateNotesButton = true }: CoachNotesViewProps) {
+export default function CoachNotesView({ mode }: { mode: Mode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isStudentsOverviewRoute = pathname?.startsWith('/coach/students-overview')
+    || pathname?.startsWith('/coach/student-overview');
+  const showPrivateNotesButton = !isStudentsOverviewRoute;
   const userIdFromQuery = searchParams.get('userId') ?? null;
 
   const [search, setSearch] = useState('');

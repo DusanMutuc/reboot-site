@@ -238,7 +238,7 @@ function StudentsOverviewInner() {
               )}
 
               {tabValue === 'notes' && (
-                <CoachNotesView mode={mode} showPrivateNotesButton={false} />
+                <CoachNotesView mode={mode} />
               )}
 
               {tabValue === 'progress' && (
