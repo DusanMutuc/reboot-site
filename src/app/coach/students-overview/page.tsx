@@ -67,6 +67,7 @@ function StudentsOverviewInner() {
   // Local for roster picker only
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [notesOpen, setNotesOpen] = useState(false);
 
   // Load roster once (RLS will scope automatically by role)
@@ -75,6 +76,7 @@ function StudentsOverviewInner() {
     (async () => {
       try {
         setLoadingRoster(true);
+        setRosterError(null);
         const { data, error } = await supabase.rpc('get_my_users_with_status');
         if (!active) return;
         if (error) throw error;
@@ -88,6 +90,11 @@ function StudentsOverviewInner() {
         if (!userId && sorted.length > 0) {
           setQuery({ userId: sorted[0].user_id });
         }
+      } catch (err) {
+        if (!active) return;
+        const message = err instanceof Error ? err.message : 'Failed to load roster.';
+        setRosterError(message);
+        setStudents([]);
       } finally {
         if (active) setLoadingRoster(false);
       }
@@ -192,6 +199,12 @@ function StudentsOverviewInner() {
               </Typography>
             )}
           </Paper>
+
+          {rosterError && (
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'error.light', borderRadius: 3 }}>
+              <Typography variant="body2" color="error.main">{rosterError}</Typography>
+            </Paper>
+          )}
 
           {/* Tabs header – uses string values; keeps userId & courseId in URL */}
           <Paper
