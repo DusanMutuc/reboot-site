@@ -21,8 +21,10 @@ import {
   Alert,
   Stack,
   FormControl,
+  Autocomplete,
   InputLabel,
   Select,
+  TextField,
   MenuItem,
   IconButton,
   ToggleButton,
@@ -39,7 +41,6 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
 
 import {
@@ -250,6 +251,7 @@ export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
   // Selected id from the active (source) list
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [adding, setAdding] = useState(false);
+  const [quickSelectedUserId, setQuickSelectedUserId] = useState<string | null>(null);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
@@ -514,6 +516,19 @@ const unmatchedList = useMemo(() => {
   }, [rows, lookup]);
 
   const anyLoading = loadingUsers || loadingCoaches;
+
+  const quickSelectedRow = useMemo(() => {
+    if (!quickSelectedUserId) return null;
+    return rows.find((row) => row.user_id === quickSelectedUserId) ?? null;
+  }, [quickSelectedUserId, rows]);
+
+  useEffect(() => {
+    if (!quickSelectedUserId) return;
+    const stillExists = rows.some((row) => row.user_id === quickSelectedUserId);
+    if (!stillExists) {
+      setQuickSelectedUserId(null);
+    }
+  }, [quickSelectedUserId, rows]);
 
   /** ========= CSV import logic ========= */
 
@@ -921,6 +936,48 @@ const unmatchedList = useMemo(() => {
 )}
 
         </Paper>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Quick mark attended
+          </Typography>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={2}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+          >
+            <Autocomplete
+              size="small"
+              options={sortedRows}
+              value={quickSelectedRow}
+              onChange={(_event, value) => setQuickSelectedUserId(value?.user_id ?? null)}
+              getOptionLabel={(option) => getDisplayName(option)}
+              isOptionEqualToValue={(option, value) => option.user_id === value.user_id}
+              noOptionsText="No attendees available"
+              disabled={loading || importing || rows.length === 0}
+              sx={{ minWidth: { xs: '100%', sm: 320 } }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Search attendee"
+                  placeholder="Type a name"
+                />
+              )}
+            />
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="body2">Attended</Typography>
+              <Checkbox
+                checked={Boolean(quickSelectedRow?.attended)}
+                onChange={() => {
+                  if (!quickSelectedRow) return;
+                  void handleToggle(quickSelectedRow.user_id, Boolean(quickSelectedRow.attended));
+                }}
+                disabled={!quickSelectedRow || savingId === quickSelectedRow.user_id || importing}
+              />
+            </Stack>
+          </Stack>
+        </Box>
 
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle1" gutterBottom>
