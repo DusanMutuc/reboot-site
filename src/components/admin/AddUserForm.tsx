@@ -19,12 +19,25 @@ import { LoadingButton } from '@mui/lab';
 type Form = { email: string; first_name: string; last_name: string; role: 'user' | 'coach' | 'admin' | 'assistant' };
 type Person = { id: string; name: string; email: string };
 
+type PartnershipConfig = {
+  name: string;
+  shared_kpis: boolean;
+  shared_attendance: boolean;
+  shared_notes: boolean;
+};
+
 const defaultForm = (): Form => ({ email: '', first_name: '', last_name: '', role: 'user' });
 
 export default function AddUserForm() {
   const [forms, setForms] = useState<Form[]>([defaultForm()]);
   const [isPartnership, setIsPartnership] = useState(false);
   const [onboardeeCount, setOnboardeeCount] = useState(2);
+  const [partnershipConfig, setPartnershipConfig] = useState<PartnershipConfig>({
+    name: '',
+    shared_kpis: true,
+    shared_attendance: false,
+    shared_notes: false,
+  });
   const [coaches, setCoaches] = useState<Person[]>([]);
   const [primaryCoach, setPrimaryCoach] = useState<Person | null>(null);
   const [implementationCoach, setImplementationCoach] = useState<Person | null>(null);
@@ -74,6 +87,10 @@ export default function AddUserForm() {
     setForms((prev) => prev.map((f, i) => (i === index ? { ...f, ...patch } : f)));
   }
 
+  function updatePartnershipConfig(patch: Partial<PartnershipConfig>) {
+    setPartnershipConfig((prev) => ({ ...prev, ...patch }));
+  }
+
   async function assignCoach(userId: string, coachId: string, relationship_type: 'primary' | 'implementation') {
     const res = await fetch('/api/admin/assign-coach', {
       method: 'POST',
@@ -84,24 +101,23 @@ export default function AddUserForm() {
     if (!res.ok) throw new Error(j.error || res.statusText);
   }
 
-  async function createPartnership(userIds: string[], onboardeeForms: Form[]) {
+  async function createPartnership(userIds: string[], onboardeeForms: Form[], config: PartnershipConfig) {
     const memberLabels = onboardeeForms
       .map((member) => `${member.first_name} ${member.last_name}`.trim() || member.email)
       .slice(0, 2)
       .join(' & ');
 
-    const name = memberLabels ? `${memberLabels} Partnership` : 'New Partnership';
+    const fallbackName = memberLabels ? `${memberLabels} Partnership` : 'New Partnership';
 
     const res = await fetch('/api/admin/partnerships', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        name,
+        name: config.name.trim() || fallbackName,
         user_ids: userIds,
-        // Match defaults from the User Partnerships admin panel
-        shared_kpis: true,
-        shared_attendance: false,
-        shared_notes: false,
+        shared_kpis: config.shared_kpis,
+        shared_attendance: config.shared_attendance,
+        shared_notes: config.shared_notes,
         is_active: true,
       }),
     });
@@ -151,7 +167,7 @@ export default function AddUserForm() {
       }
 
       if (isPartnership && createdUserIds.length >= 2) {
-        await createPartnership(createdUserIds, forms);
+        await createPartnership(createdUserIds, forms, partnershipConfig);
       }
 
       setSnack({
@@ -181,17 +197,55 @@ export default function AddUserForm() {
         />
 
         {isPartnership && (
-          <TextField
-            label="Number of onboardees"
-            type="number"
-            value={onboardeeCount}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              setOnboardeeCount(Number.isFinite(next) ? Math.max(2, next) : 2);
-            }}
-            slotProps={{ htmlInput: { min: 2, step: 1 } }}
-            sx={{ maxWidth: 240 }}
-          />
+          <>
+            <TextField
+              label="Number of onboardees"
+              type="number"
+              value={onboardeeCount}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setOnboardeeCount(Number.isFinite(next) ? Math.max(2, next) : 2);
+              }}
+              slotProps={{ htmlInput: { min: 2, step: 1 } }}
+              sx={{ maxWidth: 240 }}
+            />
+
+            <Divider />
+            <Typography variant="subtitle1" fontWeight={600}>Partnership details</Typography>
+            <TextField
+              label="Partnership name"
+              value={partnershipConfig.name}
+              onChange={(e) => updatePartnershipConfig({ name: e.target.value })}
+              helperText="Optional. If left blank, a name will be generated from onboardees."
+            />
+            <FormControlLabel
+              control={(
+                <Checkbox
+                  checked={partnershipConfig.shared_kpis}
+                  onChange={(e) => updatePartnershipConfig({ shared_kpis: e.target.checked })}
+                />
+              )}
+              label="Share KPI data"
+            />
+            <FormControlLabel
+              control={(
+                <Checkbox
+                  checked={partnershipConfig.shared_attendance}
+                  onChange={(e) => updatePartnershipConfig({ shared_attendance: e.target.checked })}
+                />
+              )}
+              label="Share attendance"
+            />
+            <FormControlLabel
+              control={(
+                <Checkbox
+                  checked={partnershipConfig.shared_notes}
+                  onChange={(e) => updatePartnershipConfig({ shared_notes: e.target.checked })}
+                />
+              )}
+              label="Share coaching notes"
+            />
+          </>
         )}
 
         {forms.map((form, index) => (
