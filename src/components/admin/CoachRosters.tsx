@@ -14,6 +14,7 @@ type Roster = {
   coach_id: string;
   coach_name: string;
   coach_email: string;
+  effective_count: number;
   users: { user_id: string; name: string; email: string }[];
 };
 
@@ -87,7 +88,7 @@ export default function CoachRosters() {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', pr: 1 }}>
                 <Typography fontWeight={600}>{g.coach_name}</Typography>
                 <Typography color="text.secondary">• {g.coach_email}</Typography>
-                <Chip label={`${g.users.length}`} size="small" sx={{ ml: 'auto' }} />
+                <Chip label={`${g.effective_count}`} size="small" sx={{ ml: 'auto' }} />
                 <Tooltip title="Copy coach email">
                   <IconButton
                     size="small"

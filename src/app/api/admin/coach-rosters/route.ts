@@ -5,7 +5,13 @@ import { getAdminClient } from '@/lib/supabaseAdmin';
 const COURSE_ID = 2;
 
 type RosterUser = { user_id: string; name: string; email: string };
-type Roster = { coach_id: string; coach_name: string; coach_email: string; users: RosterUser[] };
+type Roster = {
+  coach_id: string;
+  coach_name: string;
+  coach_email: string;
+  users: RosterUser[];
+  effective_count: number;
+};
 
 export async function GET() {
   const guard = await requireAdmin();
@@ -24,6 +30,22 @@ export async function GET() {
   const coachIds = Array.from(new Set(rows.map((r) => r.coach_id)));
   const userIds  = Array.from(new Set(rows.map((r) => r.user_id)));
   const allIds   = Array.from(new Set([...coachIds, ...userIds]));
+
+  // active partnerships by user (for roster effective counts)
+  const { data: partnershipRows, error: partnershipErr } = await supa
+    .from('partnership_users')
+    .select('partnership_id, user_id, partnerships!inner(is_active)')
+    .in('user_id', userIds)
+    .eq('partnerships.is_active', true);
+  if (partnershipErr) {
+    return NextResponse.json({ error: partnershipErr.message }, { status: 400 });
+  }
+
+  const partnershipByUserId = new Map<string, string>();
+  for (const row of partnershipRows) {
+    // uniqueness is enforced by trg_enforce_single_active_partnership_per_domain
+    partnershipByUserId.set(row.user_id, row.partnership_id);
+  }
 
   // profiles
   const { data: profs, error: pErr } = await supa
@@ -56,10 +78,25 @@ export async function GET() {
 
     let g = group.get(r.coach_id);
     if (!g) {
-      g = { coach_id: r.coach_id, coach_name, coach_email, users: [] };
+      g = { coach_id: r.coach_id, coach_name, coach_email, users: [], effective_count: 0 };
       group.set(r.coach_id, g);
     }
     g.users.push({ user_id: r.user_id, name: user_name, email: user_email });
+  }
+
+  for (const roster of group.values()) {
+    roster.users.sort((a, b) => {
+      const byName = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      if (byName !== 0) return byName;
+      return a.email.localeCompare(b.email, undefined, { sensitivity: 'base' });
+    });
+
+    const uniqueUnits = new Set<string>();
+    for (const user of roster.users) {
+      const partnershipId = partnershipByUserId.get(user.user_id);
+      uniqueUnits.add(partnershipId ? `p:${partnershipId}` : `u:${user.user_id}`);
+    }
+    roster.effective_count = uniqueUnits.size;
   }
 
   return NextResponse.json({ items: Array.from(group.values()) });
