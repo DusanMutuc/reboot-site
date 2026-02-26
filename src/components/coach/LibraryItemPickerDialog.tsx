@@ -105,7 +105,7 @@ export default function LibraryItemPickerDialog({ open, onClose, onSelect }: Pro
     };
   }, [open, rootId]);
 
-  // Load Library children under root
+  // Load Library children under root + published courses
   useEffect(() => {
     if (!open) return;
     if (!rootId) return;
@@ -127,36 +127,59 @@ export default function LibraryItemPickerDialog({ open, onClose, onSelect }: Pro
         if (linkErr) throw linkErr;
 
         const childIds = (links ?? []).map((l) => l.child_id);
-        if (childIds.length === 0) {
-          if (!cancelled) setItems([]);
-          return;
+        const stitched: LibraryItemLite[] = [];
+
+        if (childIds.length > 0) {
+          // 2) fetch the child nodes
+          const { data: nodes, error: nodeErr } = await supabase
+            .from('content_nodes')
+            .select('id, title, description, slug, node_type')
+            .in('id', childIds);
+
+          if (nodeErr) throw nodeErr;
+
+          const nodeMap = new Map<number, LibraryItemLite>();
+          (nodes ?? []).forEach((n) => {
+            nodeMap.set(n.id as number, {
+              id: n.id as number,
+              title: n.title ?? null,
+              description: n.description ?? null,
+              slug: n.slug ?? null,
+              node_type: n.node_type ?? 'page',
+            });
+          });
+
+          stitched.push(
+            ...(links ?? [])
+              .map((l) => {
+                const child = nodeMap.get(l.child_id);
+                return child ?? null;
+              })
+              .filter((x): x is LibraryItemLite => x !== null),
+          );
         }
 
-        // 2) fetch the child nodes
-        const { data: nodes, error: nodeErr } = await supabase
+        const { data: courseNodes, error: coursesErr } = await supabase
           .from('content_nodes')
           .select('id, title, description, slug, node_type')
-          .in('id', childIds);
+          .eq('node_type', 'course')
+          .eq('state', 'published')
+          .order('title', { ascending: true });
 
-        if (nodeErr) throw nodeErr;
+        if (coursesErr) throw coursesErr;
 
-        const nodeMap = new Map<number, LibraryItemLite>();
-        (nodes ?? []).forEach((n) => {
-          nodeMap.set(n.id as number, {
-            id: n.id as number,
+        const existingIds = new Set(stitched.map((item) => item.id));
+        (courseNodes ?? []).forEach((n) => {
+          const id = n.id as number;
+          if (existingIds.has(id)) return;
+          stitched.push({
+            id,
             title: n.title ?? null,
             description: n.description ?? null,
             slug: n.slug ?? null,
-            node_type: n.node_type ?? 'page',
+            node_type: n.node_type ?? 'course',
           });
         });
-
-        const stitched: LibraryItemLite[] = (links ?? [])
-          .map((l) => {
-            const child = nodeMap.get(l.child_id);
-            return child ?? null;
-          })
-          .filter((x): x is LibraryItemLite => x !== null);
 
         if (!cancelled) setItems(stitched);
       } catch (e: unknown) {
@@ -193,13 +216,13 @@ export default function LibraryItemPickerDialog({ open, onClose, onSelect }: Pro
 
   return (
     <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
-      <DialogTitle>Choose a Library item</DialogTitle>
+      <DialogTitle>Choose a Library item or Course</DialogTitle>
       <DialogContent dividers>
         <Box sx={{ mb: 2 }}>
           <TextField
             fullWidth
             size="small"
-            label="Search Library"
+            label="Search Library/Courses"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -219,7 +242,7 @@ export default function LibraryItemPickerDialog({ open, onClose, onSelect }: Pro
 
         {!loading && !error && filtered.length === 0 && (
           <Typography variant="body2" color="text.secondary">
-            No Library items found.
+            No Library items or courses found.
           </Typography>
         )}
 
