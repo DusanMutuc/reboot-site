@@ -40,6 +40,7 @@ import type {
 } from '@/types/coaching';
 import LibraryItemPickerDialog, { LibraryItemLite } from './LibraryItemPickerDialog';
 import { createMeetingWithAttendees, upsertMeetingAttendance, getUserMeetings } from '@/lib/meetings';
+import { getContentNodeHref } from '@/lib/contentNodeLinks';
 
 type Props = {
   userId: string | null;
@@ -48,7 +49,7 @@ type Props = {
 /** ---- Local helper types to avoid `any` ---- */
 type ProfileNameRow = { first_name: string | null; last_name: string | null };
 
-type ContentNodeLite = { id: number; title: string | null; slug: string | null };
+type ContentNodeLite = { id: number; title: string | null; slug: string | null; node_type: string | null };
 
 type UserMeetingRow = {
   meeting_id: number;
@@ -184,9 +185,9 @@ export default function CoachingNotesPanel({ userId }: Props) {
   // Library picker dialog
   const [libraryDialogOpen, setLibraryDialogOpen] = useState(false);
 
-  // Map library_item_id -> { title, slug }
+  // Map linked content node id -> { title, slug, node_type }
   const [libraryItems, setLibraryItems] = useState<
-    Record<number, { title: string | null; slug: string | null }>
+    Record<number, { title: string | null; slug: string | null; node_type: string | null }>
   >({});
 
   // Editing state: action steps
@@ -369,7 +370,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
       const { data: nodes, error: nodesErr } = await supabase
         .from('content_nodes')
-        .select('id, title, slug')
+        .select('id, title, slug, node_type')
         .in('id', ids);
 
       if (cancelled) return;
@@ -379,12 +380,13 @@ export default function CoachingNotesPanel({ userId }: Props) {
         return;
       }
 
-      const map: Record<number, { title: string | null; slug: string | null }> = {};
+      const map: Record<number, { title: string | null; slug: string | null; node_type: string | null }> = {};
       (nodes ?? []).forEach((n) => {
         const node = n as ContentNodeLite;
         map[node.id] = {
           title: node.title ?? null,
           slug: node.slug ?? null,
+          node_type: node.node_type ?? null,
         };
       });
       setLibraryItems(map);
@@ -618,7 +620,11 @@ export default function CoachingNotesPanel({ userId }: Props) {
       setSteps((prev) => [...prev, newStep]);
       setLibraryItems((prev) => ({
         ...prev,
-        [item.id]: { title: item.title ?? null, slug: item.slug ?? null },
+        [item.id]: {
+          title: item.title ?? null,
+          slug: item.slug ?? null,
+          node_type: item.node_type ?? null,
+        },
       }));
     }
     setSavingStep(false);
@@ -1300,10 +1306,12 @@ export default function CoachingNotesPanel({ userId }: Props) {
                     step.library_item_id != null ? libraryItems[step.library_item_id] : undefined;
 
                   const href =
-                    step.library_item_id != null
-                      ? linked?.slug
-                        ? `/library/${linked.slug}`
-                        : `/library/${step.library_item_id}`
+                    step.library_item_id != null && linked
+                      ? getContentNodeHref({
+                          id: step.library_item_id,
+                          slug: linked.slug,
+                          node_type: linked.node_type,
+                        })
                       : null;
 
                   const isEditing = editingStepId === step.id;
@@ -1498,7 +1506,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                   },
                 }}
               >
-                + Add action step from Library
+                + Add action step from Library/Courses
               </Button>
 
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>

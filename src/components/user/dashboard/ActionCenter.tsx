@@ -11,6 +11,7 @@ import {
   Button,
 } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import { getContentNodeHref } from '@/lib/contentNodeLinks';
 import type {
   DashboardActionStep,
   DashboardNotePreview,
@@ -177,7 +178,11 @@ export default function ActionCenter({
                             textDecoration: 'underline',
                           },
                         }}
-                        href={`/library/${step.library_item_id}`}
+                        href={getContentNodeHref({
+                          id: step.library_item_id,
+                          slug: step.linked_node?.slug ?? null,
+                          node_type: step.linked_node?.node_type ?? null,
+                        })}
                       >
                         Open related resource →
                       </Button>

@@ -1,6 +1,7 @@
 // src/components/user/dashboard/ActionSteps.tsx
 import { Paper, Typography, Box, Stack, Button, Chip } from '@mui/material';
 import type { DashboardActionStep } from '@/types/dashboard';
+import { getContentNodeHref } from '@/lib/contentNodeLinks';
 
 // Status configuration
 const statusConfig = {
@@ -116,7 +117,11 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
   <Button
     size="small"
     variant="contained"
-    href={`/library/${step.library_item_id}`}
+    href={getContentNodeHref({
+      id: step.library_item_id,
+      slug: step.linked_node?.slug ?? null,
+      node_type: step.linked_node?.node_type ?? null,
+    })}
     target="_blank"
     rel="noopener noreferrer"
     sx={{
