@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   '/signup',
   RESET_PATH,
   '/api/auth',        // allow clear-first-login-flag
+  '/api/ghl',         // allow GHL webhooks to bypass auth
   '/auth',            // oauth callbacks if you have them
   '/_next',
   '/favicon.ico',
