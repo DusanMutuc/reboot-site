@@ -62,6 +62,12 @@ type ActionStepRow = {
   updated_at: IsoDate | null;
 };
 
+type LinkedContentNodeRow = {
+  id: number;
+  slug: string | null;
+  node_type: string | null;
+};
+
 type NoteCommentRow = {
   id: number;
   body: string;
@@ -548,6 +554,40 @@ async function fetchCoachingNotesSection(
       updated_at: row.updated_at ?? row.created_at,
     }));
 
+  const linkedNodeIds = Array.from(
+    new Set(rawActionSteps.map((step) => step.library_item_id).filter((id): id is number => typeof id === 'number')),
+  );
+
+  let linkedNodeMap = new Map<number, LinkedContentNodeRow>();
+  if (linkedNodeIds.length > 0) {
+    const { data: linkedNodes, error: linkedNodesErr } = await client
+      .from('content_nodes')
+      .select('id, slug, node_type')
+      .in('id', linkedNodeIds);
+
+    if (linkedNodesErr) {
+      console.error('fetch linked content nodes for action steps error', linkedNodesErr);
+    } else {
+      linkedNodeMap = new Map((linkedNodes ?? []).map((node) => [node.id as number, node as LinkedContentNodeRow]));
+    }
+  }
+
+  rawActionSteps.forEach((step) => {
+    if (step.library_item_id == null) {
+      step.linked_node = null;
+      return;
+    }
+    const linked = linkedNodeMap.get(step.library_item_id);
+    step.linked_node =
+      linked
+        ? {
+            id: linked.id,
+            slug: linked.slug,
+            node_type: linked.node_type,
+          }
+        : null;
+  });
+
   const actionSteps = sortActionSteps(rawActionSteps);
 
   // 5) Fetch COMMENTS for this latest note
@@ -619,6 +659,40 @@ export async function fetchCoachingNotesByNoteId(
     created_at: r.created_at,
     updated_at: r.updated_at ?? r.created_at,
   }));
+
+  const linkedNodeIds = Array.from(
+    new Set(rawSteps.map((step) => step.library_item_id).filter((id): id is number => typeof id === 'number')),
+  );
+
+  let linkedNodeMap = new Map<number, LinkedContentNodeRow>();
+  if (linkedNodeIds.length > 0) {
+    const { data: linkedNodes, error: linkedNodesErr } = await client
+      .from('content_nodes')
+      .select('id, slug, node_type')
+      .in('id', linkedNodeIds);
+
+    if (linkedNodesErr) {
+      console.error('fetch linked content nodes for note action steps error', linkedNodesErr);
+    } else {
+      linkedNodeMap = new Map((linkedNodes ?? []).map((node) => [node.id as number, node as LinkedContentNodeRow]));
+    }
+  }
+
+  rawSteps.forEach((step) => {
+    if (step.library_item_id == null) {
+      step.linked_node = null;
+      return;
+    }
+    const linked = linkedNodeMap.get(step.library_item_id);
+    step.linked_node =
+      linked
+        ? {
+            id: linked.id,
+            slug: linked.slug,
+            node_type: linked.node_type,
+          }
+        : null;
+  });
 
   // Same sort as your dashboard (in_progress → not_started → complete; newer first within ties)
   const statusRank: Record<DashboardActionStep['status'], number> = {

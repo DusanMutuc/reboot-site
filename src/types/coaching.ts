@@ -16,6 +16,11 @@ export interface CoachingNoteActionStep {
   coaching_note_id: number;
   label: string;
   library_item_id: number | null;
+  linked_node?: {
+    id: number;
+    slug: string | null;
+    node_type: string | null;
+  } | null;
   status: ActionStepStatus;
   created_at: string;
   updated_at: string;

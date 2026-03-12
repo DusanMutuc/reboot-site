@@ -1,7 +1,7 @@
 // app/admin/page.tsx
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import adminTheme from '@/lib/admintheme';
@@ -22,6 +22,7 @@ import StudentStatusOverview from '@/components/StudentStatusOverview';
 import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
 import AdminStudentTracker from '@/components/admin/AdminStudentTracker'; // 👈 NEW
+import StudentOverviewNew from '@/components/admin/StudentOverviewNew';
 // app/admin/page.tsx (top of file, with the other admin imports)
 import UserDataTransfer from '@/components/admin/UserDataTransfer';
 import { SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
@@ -45,7 +46,6 @@ import {
 import {
   PersonAdd as PersonAddIcon,
   People as PeopleIcon,
-  Warning as WarningIcon,
   SchoolOutlined as SchoolIcon,
   AssignmentInd as AssignmentIndIcon,
   MenuBook as MenuBookIcon,
@@ -100,6 +100,7 @@ const navigationStructure = [
     children: [
       { id: 'student-progress', label: 'Student Progress', icon: AssessmentIcon, component: 'StudentProgressView' },
       { id: 'status-overview', label: 'Status Overview', icon: AssessmentIcon, component: 'StudentStatusOverview' },
+      { id: 'student-overview-new', label: 'Student Overview New', icon: AssessmentIcon, component: 'StudentOverviewNew' },
       { id: 'student-tracker', label: 'Student Tracker', icon: AssessmentIcon, component: 'AdminStudentTracker' }, // 👈 NEW
     ]
   },
@@ -228,6 +229,8 @@ export default function AdminPage() {
         return <StudentProgressView mode="admin" />;
       case 'status-overview':
         return <StudentStatusOverview courseId={2} />;
+      case 'student-overview-new':
+        return <StudentOverviewNew />;
       case 'student-tracker':
         return <AdminStudentTracker />; // 👈 NEW
       case 'meetings':
