@@ -13,6 +13,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Drawer,
   GlobalStyles,
   MenuItem,
   Paper,
@@ -28,6 +29,7 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CloseIcon from '@mui/icons-material/Close';
 import {
   CartesianGrid,
   Legend,
@@ -1379,16 +1381,58 @@ export default function StudentOverviewNew() {
         ) : null}
       </Stack>
 
-      <Dialog
+      <Drawer
+        anchor="right"
         open={privateNotesOpen}
         onClose={() => setPrivateNotesOpen(false)}
-        fullWidth
-        maxWidth="md"
+        PaperProps={{
+          sx: {
+            width: { xs: '100%', sm: 460 },
+            maxWidth: '100vw',
+            bgcolor: '#f7f8fa',
+          },
+        }}
       >
-        <DialogTitle sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700 }}>
-          Private Notes {selectedStudent ? `- ${selectedStudent.full_name}` : ''}
-        </DialogTitle>
-        <DialogContent dividers>
+        <Box
+          sx={{
+            px: 2.5,
+            py: 2,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            bgcolor: '#ffffff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+          }}
+        >
+          <Box>
+            <Typography sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, fontSize: '1.35rem' }}>
+              Private Notes
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {selectedStudent ? selectedStudent.full_name : 'Student'}
+            </Typography>
+          </Box>
+
+          <Button
+            onClick={() => setPrivateNotesOpen(false)}
+            sx={{ minWidth: 0, p: 1, borderRadius: 999 }}
+          >
+            <CloseIcon />
+          </Button>
+        </Box>
+
+        <Box
+          sx={{
+            p: 2.5,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            height: '100%',
+            overflow: 'hidden',
+          }}
+        >
           <Stack spacing={2}>
             {privateNotesError && <Alert severity="error">{privateNotesError}</Alert>}
 
@@ -1412,46 +1456,50 @@ export default function StudentOverviewNew() {
               </Button>
             </Box>
 
-            {privateNotesLoading ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}>
-                <CircularProgress />
-              </Box>
-            ) : privateNotes.length === 0 ? (
-              <Typography color="text.secondary">
-                No private notes have been added for this student yet.
-              </Typography>
-            ) : (
-              <Stack spacing={1.5}>
-                {privateNotes.map((note) => (
-                  <Paper
-                    key={note.id}
-                    elevation={0}
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      bgcolor: '#f9fafb',
-                    }}
-                  >
-                    <Typography sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
-                      {note.body}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      {formatAwardedDate(note.createdAt)}
-                    </Typography>
-                  </Paper>
-                ))}
-              </Stack>
-            )}
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                pr: 0.5,
+              }}
+            >
+              {privateNotesLoading ? (
+                <Box sx={{ py: 4, textAlign: 'center' }}>
+                  <CircularProgress />
+                </Box>
+              ) : privateNotes.length === 0 ? (
+                <Typography color="text.secondary">
+                  No private notes have been added for this student yet.
+                </Typography>
+              ) : (
+                <Stack spacing={1.5}>
+                  {privateNotes.map((note) => (
+                    <Paper
+                      key={note.id}
+                      elevation={0}
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        bgcolor: '#ffffff',
+                      }}
+                    >
+                      <Typography sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
+                        {note.body}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        {formatAwardedDate(note.createdAt)}
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </Box>
           </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPrivateNotesOpen(false)} sx={{ textTransform: 'none' }}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      </Drawer>
 
       <Dialog
         open={achievementModalOpen}
