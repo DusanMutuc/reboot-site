@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Autocomplete,
@@ -82,6 +82,7 @@ const DISPLAY_FONT = 'Georgia, "Times New Roman", serif';
 const PAGE_BG = '#eef1f4';
 const CARD_BG = '#ffffff';
 const SIDEBAR_WIDTH = 360;
+const PRINT_EXPORT_MAX_WIDTH = 980;
 
 const RECENCY_COPY: Record<StudentOverviewRecencyKey, string> = {
   m2: 'Last M2 Meeting',
@@ -212,66 +213,83 @@ function getModuleStatusLabel(module: StudentOverviewCourseModule): string {
 function printStyles(theme: Theme) {
   return {
     '@page': {
-      margin: '14mm',
+      size: 'landscape',
+      margin: '10mm',
     },
     '@media print': {
       'html, body': {
+        margin: 0,
+        padding: 0,
         background: '#ffffff',
       },
       body: {
         background: '#ffffff',
+        WebkitPrintColorAdjust: 'exact',
+        printColorAdjust: 'exact',
       },
-      '.admin-page-shell': {
+      'body.student-overview-printing > *:not(#student-overview-print-root)': {
+        display: 'none !important',
+      },
+      '#student-overview-print-root': {
+        display: 'none',
+      },
+      'body.student-overview-printing #student-overview-print-root': {
         display: 'block !important',
-        minHeight: 'auto !important',
+        position: 'static !important',
+        width: 'auto !important',
+        height: 'auto !important',
+        padding: 0,
+      },
+      'body.student-overview-printing .student-overview-print-shell': {
+        width: 'var(--student-overview-print-width, 980px)',
+        zoom: 'var(--student-overview-print-scale, 1)',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-root': {
+        margin: '0 !important',
+        padding: '0 !important',
         background: '#ffffff !important',
-      },
-      '.admin-page-sidebar, .admin-page-title': {
-        display: 'none !important',
-      },
-      '.admin-page-main': {
-        overflow: 'visible !important',
-      },
-      '.admin-page-container': {
-        maxWidth: 'none !important',
-        width: '100% !important',
-        padding: '0 !important',
-        margin: '0 !important',
-      },
-      '.admin-page-content': {
-        margin: '0 !important',
-        padding: '0 !important',
-        border: '0 !important',
-        borderRadius: '0 !important',
-        boxShadow: 'none !important',
-        background: '#ffffff !important',
-      },
-      '.student-overview-root': {
-        background: '#ffffff',
-        margin: '0 !important',
-        padding: '0 !important',
         marginRight: '0 !important',
+        width: 'var(--student-overview-print-width, 980px)',
       },
-      '.student-overview-no-print': {
+      'body.student-overview-printing #student-overview-print-root .student-overview-no-print': {
         display: 'none !important',
       },
-      '.student-overview-sticky': {
+      'body.student-overview-printing #student-overview-print-root .student-overview-sticky': {
         position: 'static !important',
         top: 'auto !important',
         boxShadow: 'none !important',
         background: '#ffffff !important',
+        backdropFilter: 'none !important',
         borderBottom: `1px solid ${theme.palette.divider}`,
       },
-      '.student-overview-card': {
+      'body.student-overview-printing #student-overview-print-root .student-overview-card': {
         boxShadow: 'none !important',
         border: `1px solid ${theme.palette.divider}`,
         breakInside: 'avoid',
       },
-      '.student-overview-chart': {
+      'body.student-overview-printing #student-overview-print-root .student-overview-chart': {
         minHeight: '320px !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .MuiCollapse-root': {
+        height: 'auto !important',
+        overflow: 'visible !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .MuiCollapse-wrapper, body.student-overview-printing #student-overview-print-root .MuiCollapse-wrapperInner': {
+        height: 'auto !important',
       },
     },
   };
+}
+
+function getStudentOverviewPrintRoot(): HTMLDivElement | null {
+  if (typeof document === 'undefined') return null;
+  let root = document.getElementById('student-overview-print-root') as HTMLDivElement | null;
+  if (!root) {
+    root = document.createElement('div');
+    root.id = 'student-overview-print-root';
+    document.body.appendChild(root);
+  }
+  return root;
 }
 
 async function loadStudentOptions(): Promise<StudentOption[]> {
@@ -311,6 +329,7 @@ async function loadAchievementOptions(): Promise<AchievementOption[]> {
 }
 
 export default function StudentOverviewNew() {
+  const printableRef = useRef<HTMLDivElement | null>(null);
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [studentsError, setStudentsError] = useState<string | null>(null);
@@ -338,6 +357,16 @@ export default function StudentOverviewNew() {
   const [achievementActionError, setAchievementActionError] = useState<string | null>(null);
   const [achievementActionSuccess, setAchievementActionSuccess] = useState<string | null>(null);
   const [savingAchievement, setSavingAchievement] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  const cleanupPrintSnapshot = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    document.body.classList.remove('student-overview-printing');
+    const root = getStudentOverviewPrintRoot();
+    if (root) {
+      root.innerHTML = '';
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -532,8 +561,56 @@ export default function StudentOverviewNew() {
     setAchievementAwardedAt('');
   };
 
+  const handleExportPdf = useCallback(() => {
+    const source = printableRef.current;
+    const root = getStudentOverviewPrintRoot();
+    if (!source || !root || !selectedStudentId) return;
+
+    const clone = source.cloneNode(true) as HTMLDivElement;
+    const sourceRect = source.getBoundingClientRect();
+    const sourceWidth = Math.max(1, Math.ceil(sourceRect.width || source.scrollWidth));
+    const scale = Math.min(1, PRINT_EXPORT_MAX_WIDTH / sourceWidth);
+
+    root.innerHTML = '';
+
+    const shell = document.createElement('div');
+    shell.className = 'student-overview-print-shell';
+    shell.style.setProperty('--student-overview-print-width', `${sourceWidth}px`);
+    shell.style.setProperty('--student-overview-print-scale', String(scale));
+    shell.style.width = `${sourceWidth}px`;
+    shell.appendChild(clone);
+    root.appendChild(shell);
+
+    document.body.classList.add('student-overview-printing');
+    setExportingPdf(true);
+
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        window.print();
+      }, 150);
+    });
+  }, [selectedStudentId]);
+
+  useEffect(() => {
+    const root = getStudentOverviewPrintRoot();
+    if (!root) return undefined;
+
+    const handleAfterPrint = () => {
+      cleanupPrintSnapshot();
+      setExportingPdf(false);
+    };
+
+    window.addEventListener('afterprint', handleAfterPrint);
+
+    return () => {
+      window.removeEventListener('afterprint', handleAfterPrint);
+      cleanupPrintSnapshot();
+    };
+  }, [cleanupPrintSnapshot]);
+
   return (
     <Box
+      ref={printableRef}
       className="student-overview-root"
       sx={{
         bgcolor: PAGE_BG,
@@ -598,8 +675,8 @@ export default function StudentOverviewNew() {
               <Button
                 variant="contained"
                 startIcon={<PictureAsPdfIcon />}
-                onClick={() => window.print()}
-                disabled={!selectedStudentId}
+                onClick={handleExportPdf}
+                disabled={!selectedStudentId || overviewLoading || exportingPdf}
                 sx={{
                   textTransform: 'none',
                   borderRadius: 999,
@@ -607,7 +684,7 @@ export default function StudentOverviewNew() {
                   '&:hover': { bgcolor: '#111827' },
                 }}
               >
-                Export PDF
+                {exportingPdf ? 'Preparing PDF...' : 'Export PDF'}
               </Button>
             </Stack>
           </Stack>
