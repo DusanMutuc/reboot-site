@@ -565,12 +565,19 @@ export async function fetchStudentOverviewData(
 
   const latestM2Meeting =
     meetings
-      .filter((meeting) => meeting.meeting_type_code === 'M2_MEETING')
+      .filter(
+        (meeting) =>
+          meeting.meeting_type_code === 'M2_MEETING' && Boolean(meeting.attended),
+      )
       .sort((a, b) => b.meeting_date.localeCompare(a.meeting_date))[0] ?? null;
 
   const latestImplMeeting =
     meetings
-      .filter((meeting) => meeting.meeting_type_code === 'IMPLEMENTATION_MEETING')
+      .filter(
+        (meeting) =>
+          meeting.meeting_type_code === 'IMPLEMENTATION_MEETING' &&
+          Boolean(meeting.attended),
+      )
       .sort((a, b) => b.meeting_date.localeCompare(a.meeting_date))[0] ?? null;
 
   const latestKpiRowWithValues =

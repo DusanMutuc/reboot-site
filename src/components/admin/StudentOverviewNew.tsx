@@ -13,7 +13,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Drawer,
   GlobalStyles,
   MenuItem,
   Paper,
@@ -25,11 +24,11 @@ import {
 } from '@mui/material';
 import type { Theme } from '@mui/material/styles';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CloseIcon from '@mui/icons-material/Close';
+import NotesIcon from '@mui/icons-material/StickyNote2';
 import {
   CartesianGrid,
   Legend,
@@ -42,8 +41,6 @@ import {
 } from 'recharts';
 import { supabase } from '@/lib/supabaseClient';
 import {
-  addPrivateNote,
-  fetchPrivateNotes,
   fetchStudentCourseModules,
   fetchStudentOverviewData,
   type StudentOverviewActionStep,
@@ -52,9 +49,9 @@ import {
   type StudentOverviewCourseModule,
   type StudentOverviewData,
   type StudentOverviewMetric,
-  type StudentOverviewPrivateNote,
   type StudentOverviewRecencyKey,
 } from '@/lib/studentOverview';
+import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 
 type StudentOption = {
   id: string;
@@ -84,6 +81,7 @@ type RecencyTone = 'green' | 'amber' | 'red';
 const DISPLAY_FONT = 'Georgia, "Times New Roman", serif';
 const PAGE_BG = '#eef1f4';
 const CARD_BG = '#ffffff';
+const SIDEBAR_WIDTH = 360;
 
 const RECENCY_COPY: Record<StudentOverviewRecencyKey, string> = {
   m2: 'Last M2 Meeting',
@@ -299,11 +297,6 @@ export default function StudentOverviewNew() {
   const [expandedCourses, setExpandedCourses] = useState<Record<number, boolean>>({});
 
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
-  const [privateNotes, setPrivateNotes] = useState<StudentOverviewPrivateNote[]>([]);
-  const [privateNotesLoading, setPrivateNotesLoading] = useState(false);
-  const [privateNotesError, setPrivateNotesError] = useState<string | null>(null);
-  const [newPrivateNote, setNewPrivateNote] = useState('');
-  const [savingPrivateNote, setSavingPrivateNote] = useState(false);
 
   const [achievementModalOpen, setAchievementModalOpen] = useState(false);
   const [achievementOptions, setAchievementOptions] = useState<AchievementOption[]>([]);
@@ -314,8 +307,6 @@ export default function StudentOverviewNew() {
   const [achievementActionError, setAchievementActionError] = useState<string | null>(null);
   const [achievementActionSuccess, setAchievementActionSuccess] = useState<string | null>(null);
   const [savingAchievement, setSavingAchievement] = useState(false);
-
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -337,24 +328,6 @@ export default function StudentOverviewNew() {
         }
       }
     })();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    supabase.auth.getUser().then(({ data, error }) => {
-      if (!active) return;
-      if (error) {
-        console.error('StudentOverviewNew auth error', error);
-        setCurrentUserId(null);
-        return;
-      }
-      setCurrentUserId(data.user?.id ?? null);
-    });
 
     return () => {
       active = false;
@@ -393,33 +366,6 @@ export default function StudentOverviewNew() {
       active = false;
     };
   }, [selectedStudentId, refreshToken]);
-
-  useEffect(() => {
-    if (!privateNotesOpen || !selectedStudentId) return;
-
-    let active = true;
-
-    (async () => {
-      try {
-        setPrivateNotesLoading(true);
-        setPrivateNotesError(null);
-        const notes = await fetchPrivateNotes(supabase, selectedStudentId);
-        if (!active) return;
-        setPrivateNotes(notes);
-      } catch (error) {
-        if (!active) return;
-        setPrivateNotesError(error instanceof Error ? error.message : 'Failed to load private notes.');
-      } finally {
-        if (active) {
-          setPrivateNotesLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [privateNotesOpen, selectedStudentId]);
 
   useEffect(() => {
     if (!achievementModalOpen) return;
@@ -506,27 +452,6 @@ export default function StudentOverviewNew() {
     }
   };
 
-  const handleSavePrivateNote = async () => {
-    if (!selectedStudentId || !newPrivateNote.trim()) return;
-
-    try {
-      setSavingPrivateNote(true);
-      setPrivateNotesError(null);
-      await addPrivateNote(supabase, {
-        userId: selectedStudentId,
-        authorId: currentUserId,
-        body: newPrivateNote,
-      });
-      const notes = await fetchPrivateNotes(supabase, selectedStudentId);
-      setPrivateNotes(notes);
-      setNewPrivateNote('');
-    } catch (error) {
-      setPrivateNotesError(error instanceof Error ? error.message : 'Failed to save private note.');
-    } finally {
-      setSavingPrivateNote(false);
-    }
-  };
-
   const handleAwardAchievement = async () => {
     if (!selectedStudentId || !selectedAchievementId) return;
 
@@ -585,6 +510,8 @@ export default function StudentOverviewNew() {
         my: -3,
         px: { xs: 2, md: 3 },
         py: { xs: 2, md: 3 },
+        transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
+        mr: { xs: 0, lg: privateNotesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
       }}
     >
       <GlobalStyles styles={(theme) => printStyles(theme)} />
@@ -629,9 +556,9 @@ export default function StudentOverviewNew() {
               className="student-overview-no-print"
             >
               <Button
-                variant="outlined"
-                startIcon={<LockOutlinedIcon />}
-                onClick={() => setPrivateNotesOpen(true)}
+                variant={privateNotesOpen ? 'contained' : 'outlined'}
+                startIcon={<NotesIcon />}
+                onClick={() => setPrivateNotesOpen((prev) => !prev)}
                 disabled={!selectedStudentId}
                 sx={{ textTransform: 'none', borderRadius: 999 }}
               >
@@ -1381,42 +1308,55 @@ export default function StudentOverviewNew() {
         ) : null}
       </Stack>
 
-      <Drawer
-        anchor="right"
-        open={privateNotesOpen}
-        onClose={() => setPrivateNotesOpen(false)}
-        PaperProps={{
-          sx: {
-            width: { xs: '100%', sm: 460 },
-            maxWidth: '100vw',
-            bgcolor: '#f7f8fa',
-          },
+      <Box
+        sx={{
+          position: 'fixed',
+          top: 0,
+          right: 0,
+          bottom: 0,
+          width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
+          bgcolor: 'background.paper',
+          borderLeft: '1px solid',
+          borderColor: 'divider',
+          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
+          zIndex: 1200,
+          transform: privateNotesOpen ? 'translateX(0)' : 'translateX(100%)',
+          transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         <Box
           sx={{
-            px: 2.5,
-            py: 2,
+            p: 2,
             borderBottom: '1px solid',
             borderColor: 'divider',
-            bgcolor: '#ffffff',
             display: 'flex',
-            alignItems: 'center',
             justifyContent: 'space-between',
-            gap: 2,
+            alignItems: 'center',
           }}
         >
-          <Box>
-            <Typography sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, fontSize: '1.35rem' }}>
-              Private Notes
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="h6" fontWeight={700}>
+              Private notes
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {selectedStudent ? selectedStudent.full_name : 'Student'}
+            <Typography
+              variant="caption"
+              sx={{
+                px: 1,
+                py: 0.25,
+                borderRadius: 99,
+                bgcolor: '#fef3c7',
+                color: '#92400e',
+                fontWeight: 600,
+              }}
+            >
+              Coach only
             </Typography>
-          </Box>
-
+          </Stack>
           <Button
             onClick={() => setPrivateNotesOpen(false)}
+            aria-label="Close private notes panel"
             sx={{ minWidth: 0, p: 1, borderRadius: 999 }}
           >
             <CloseIcon />
@@ -1425,81 +1365,20 @@ export default function StudentOverviewNew() {
 
         <Box
           sx={{
-            p: 2.5,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-            height: '100%',
-            overflow: 'hidden',
+            p: 2,
+            flex: 1,
+            minHeight: 0,
           }}
         >
-          <Stack spacing={2}>
-            {privateNotesError && <Alert severity="error">{privateNotesError}</Alert>}
-
-            <TextField
-              label="Add a private note"
-              multiline
-              minRows={3}
-              value={newPrivateNote}
-              onChange={(event) => setNewPrivateNote(event.target.value)}
-              placeholder="Capture private coach/admin context for this student."
-            />
-
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                variant="contained"
-                onClick={() => void handleSavePrivateNote()}
-                disabled={savingPrivateNote || !newPrivateNote.trim()}
-                sx={{ textTransform: 'none' }}
-              >
-                {savingPrivateNote ? 'Saving...' : 'Save Private Note'}
-              </Button>
-            </Box>
-
-            <Box
-              sx={{
-                flex: 1,
-                minHeight: 0,
-                overflowY: 'auto',
-                pr: 0.5,
-              }}
-            >
-              {privateNotesLoading ? (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
-                  <CircularProgress />
-                </Box>
-              ) : privateNotes.length === 0 ? (
-                <Typography color="text.secondary">
-                  No private notes have been added for this student yet.
-                </Typography>
-              ) : (
-                <Stack spacing={1.5}>
-                  {privateNotes.map((note) => (
-                    <Paper
-                      key={note.id}
-                      elevation={0}
-                      sx={{
-                        p: 2,
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        bgcolor: '#ffffff',
-                      }}
-                    >
-                      <Typography sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
-                        {note.body}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        {formatAwardedDate(note.createdAt)}
-                      </Typography>
-                    </Paper>
-                  ))}
-                </Stack>
-              )}
-            </Box>
-          </Stack>
+          {selectedStudentId ? (
+            <PrivateNotesPanel userId={selectedStudentId} />
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              Pick a student above to view private notes.
+            </Typography>
+          )}
         </Box>
-      </Drawer>
+      </Box>
 
       <Dialog
         open={achievementModalOpen}
