@@ -69,14 +69,6 @@ type AchievementRow = {
     | null;
 };
 
-type CourseVisibilityRow = {
-  course_node_id: number;
-  content_nodes:
-    | { id: number; title: string | null; slug: string | null; node_type: string | null }
-    | { id: number; title: string | null; slug: string | null; node_type: string | null }[]
-    | null;
-};
-
 type CourseProgressRow = {
   total_leaves: number;
   completed_leaves: number;
@@ -270,6 +262,14 @@ function buildAttendanceSnapshot(meetings: UserMeetingRow[]): StudentOverviewAtt
   });
 
   return Array.from(map.values());
+}
+
+function getCourseProgressPercent(progressRow: CourseProgressRow | null): number {
+  return Math.max(0, Math.min(100, Math.round((progressRow?.progress ?? 0) * 100)));
+}
+
+function hasMeaningfulCourseDetail(rows: CourseDetailRow[]): boolean {
+  return rows.some((row) => row.is_completed || row.status !== 'not_started');
 }
 
 async function fetchStudentProfile(
@@ -469,21 +469,19 @@ async function fetchCourseCards(
   userId: string,
 ): Promise<StudentOverviewCourse[]> {
   const { data, error } = await client
-    .from('user_course_visibility')
-    .select('course_node_id, content_nodes!inner(id, title, slug, node_type)')
-    .eq('user_id', userId);
+    .from('content_nodes')
+    .select('id, title, slug, node_type')
+    .eq('node_type', 'course')
+    .order('title', { ascending: true });
 
   if (error) {
-    console.error('fetchCourseCards visibility error', error);
+    console.error('fetchCourseCards course list error', error);
     return [];
   }
 
-  const visibilityRows = (data ?? []) as CourseVisibilityRow[];
+  const courses = (data ?? []) as ContentNodeRow[];
   const cards = await Promise.all(
-    visibilityRows.map(async (row) => {
-      const course = one(row.content_nodes);
-      if (!course) return null;
-
+    courses.map(async (course) => {
       const { data: progressData, error: progressErr } = await client.rpc('get_user_course_progress', {
         _user_id: userId,
         _course_id: course.id,
@@ -494,10 +492,27 @@ async function fetchCourseCards(
       }
 
       const progressRow = one(progressData as CourseProgressRow | CourseProgressRow[] | null);
-      const progressPercent = Math.max(
-        0,
-        Math.min(100, Math.round((progressRow?.progress ?? 0) * 100)),
-      );
+      const progressPercent = getCourseProgressPercent(progressRow);
+
+      if (progressPercent === 0) {
+        const { data: detailData, error: detailErr } = await client.rpc(
+          'get_user_course_completion_detail',
+          {
+            _user_id: userId,
+            _course_id: course.id,
+          },
+        );
+
+        if (detailErr) {
+          console.error('fetchCourseCards detail filter error', detailErr);
+          return null;
+        }
+
+        const detailRows = (detailData ?? []) as CourseDetailRow[];
+        if (!hasMeaningfulCourseDetail(detailRows)) {
+          return null;
+        }
+      }
 
       return {
         id: course.id,

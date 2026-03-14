@@ -922,7 +922,7 @@ export default function StudentOverviewNew() {
 
                 {overviewData.courses.length === 0 ? (
                   <Typography color="text.secondary">
-                    No visible course enrollments were found for this student.
+                    No course progress available for this student yet.
                   </Typography>
                 ) : (
                   <Box
