@@ -11,7 +11,6 @@ import CoachRosters from '@/components/admin/CoachRosters';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
 import CourseEditor from '@/components/admin/courseEditor';
-import StudentProgressView from '@/components/coach/StudentProgressView';
 import LibraryEditor from '@/components/admin/libraryEditor';
 import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin';
 import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin';
@@ -112,9 +111,8 @@ const navigationStructure: AdminNavSection[] = [
     label: 'Student Tracking',
     icon: AssessmentIcon,
     children: [
-      { id: 'student-progress', label: 'Student Progress', icon: AssessmentIcon, component: 'StudentProgressView' },
+      { id: 'student-overview-new', label: 'Student Overview', icon: AssessmentIcon, component: 'StudentOverviewNew' },
       { id: 'status-overview', label: 'Status Overview', icon: AssessmentIcon, component: 'StudentStatusOverview' },
-      { id: 'student-overview-new', label: 'Student Overview New', icon: AssessmentIcon, component: 'StudentOverviewNew' },
       { id: 'student-tracker', label: 'Student Tracker', icon: AssessmentIcon, component: 'AdminStudentTracker' },
     ],
   },
@@ -284,8 +282,6 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         return <LibraryEditor />;
       case 'site-announcement':
         return <SiteAnnouncementAdmin />;
-      case 'student-progress':
-        return <StudentProgressView mode="admin" />;
       case 'status-overview':
         return <StudentStatusOverview courseId={2} />;
       case 'student-overview-new':
