@@ -215,11 +215,42 @@ function printStyles(theme: Theme) {
       margin: '14mm',
     },
     '@media print': {
+      'html, body': {
+        background: '#ffffff',
+      },
       body: {
         background: '#ffffff',
       },
+      '.admin-page-shell': {
+        display: 'block !important',
+        minHeight: 'auto !important',
+        background: '#ffffff !important',
+      },
+      '.admin-page-sidebar, .admin-page-title': {
+        display: 'none !important',
+      },
+      '.admin-page-main': {
+        overflow: 'visible !important',
+      },
+      '.admin-page-container': {
+        maxWidth: 'none !important',
+        width: '100% !important',
+        padding: '0 !important',
+        margin: '0 !important',
+      },
+      '.admin-page-content': {
+        margin: '0 !important',
+        padding: '0 !important',
+        border: '0 !important',
+        borderRadius: '0 !important',
+        boxShadow: 'none !important',
+        background: '#ffffff !important',
+      },
       '.student-overview-root': {
         background: '#ffffff',
+        margin: '0 !important',
+        padding: '0 !important',
+        marginRight: '0 !important',
       },
       '.student-overview-no-print': {
         display: 'none !important',
@@ -1309,6 +1340,7 @@ export default function StudentOverviewNew() {
       </Stack>
 
       <Box
+        className="student-overview-no-print"
         sx={{
           position: 'fixed',
           top: 0,
