@@ -82,7 +82,7 @@ const DISPLAY_FONT = 'Georgia, "Times New Roman", serif';
 const PAGE_BG = '#eef1f4';
 const CARD_BG = '#ffffff';
 const SIDEBAR_WIDTH = 360;
-const PRINT_EXPORT_MAX_WIDTH = 980;
+const PRINT_EXPORT_MAX_WIDTH = 760;
 
 const RECENCY_COPY: Record<StudentOverviewRecencyKey, string> = {
   m2: 'Last M2 Meeting',
@@ -213,7 +213,6 @@ function getModuleStatusLabel(module: StudentOverviewCourseModule): string {
 function printStyles(theme: Theme) {
   return {
     '@page': {
-      size: 'landscape',
       margin: '10mm',
     },
     '@media print': {
@@ -269,6 +268,34 @@ function printStyles(theme: Theme) {
       },
       'body.student-overview-printing #student-overview-print-root .student-overview-chart': {
         minHeight: '320px !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-header-bar': {
+        flexDirection: 'row !important',
+        alignItems: 'center !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-profile-shell': {
+        flexDirection: 'row !important',
+        alignItems: 'flex-start !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-recency-grid': {
+        display: 'grid !important',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-coaching-grid': {
+        display: 'grid !important',
+        gridTemplateColumns: '1.05fr 0.95fr !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-course-grid': {
+        display: 'grid !important',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr)) !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-metrics-grid': {
+        display: 'grid !important',
+        gridTemplateColumns: 'repeat(3, minmax(0, 1fr)) !important',
+      },
+      'body.student-overview-printing #student-overview-print-root .student-overview-achievements-grid': {
+        display: 'grid !important',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr)) !important',
       },
       'body.student-overview-printing #student-overview-print-root .MuiCollapse-root': {
         height: 'auto !important',
@@ -642,6 +669,7 @@ export default function StudentOverviewNew() {
           }}
         >
           <Stack
+            className="student-overview-header-bar"
             direction={{ xs: 'column', md: 'row' }}
             justifyContent="space-between"
             alignItems={{ xs: 'flex-start', md: 'center' }}
@@ -778,7 +806,12 @@ export default function StudentOverviewNew() {
                 bgcolor: CARD_BG,
               }}
             >
-              <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2.5} justifyContent="space-between">
+              <Stack
+                className="student-overview-profile-shell"
+                direction={{ xs: 'column', lg: 'row' }}
+                spacing={2.5}
+                justifyContent="space-between"
+              >
                 <Stack spacing={1.5}>
                   <Typography
                     variant="overline"
@@ -810,6 +843,7 @@ export default function StudentOverviewNew() {
                 </Stack>
 
                 <Box
+                  className="student-overview-recency-grid"
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
@@ -876,6 +910,7 @@ export default function StudentOverviewNew() {
                 </Typography>
 
                 <Box
+                  className="student-overview-coaching-grid"
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: { xs: '1fr', lg: '1.05fr 0.95fr' },
@@ -1034,6 +1069,7 @@ export default function StudentOverviewNew() {
                   </Typography>
                 ) : (
                   <Box
+                    className="student-overview-course-grid"
                     sx={{
                       display: 'grid',
                       gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, minmax(0, 1fr))' },
@@ -1207,6 +1243,7 @@ export default function StudentOverviewNew() {
                 </Typography>
 
                 <Box
+                  className="student-overview-metrics-grid"
                   sx={{
                     display: 'grid',
                     gridTemplateColumns: {
@@ -1292,6 +1329,7 @@ export default function StudentOverviewNew() {
                   </Typography>
                 ) : (
                   <Box
+                    className="student-overview-achievements-grid"
                     sx={{
                       display: 'grid',
                       gridTemplateColumns: {
