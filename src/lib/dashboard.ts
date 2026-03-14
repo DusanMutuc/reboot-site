@@ -72,7 +72,16 @@ type NoteCommentRow = {
   id: number;
   body: string;
   created_at: IsoDate;
+  author: { first_name: string | null; last_name: string | null } | { first_name: string | null; last_name: string | null }[] | null;
 };
+
+function normalizeCommentAuthor(
+  author: NoteCommentRow['author'],
+): { first_name: string | null; last_name: string | null } | null {
+  if (!author) return null;
+  if (Array.isArray(author)) return author[0] ?? null;
+  return author;
+}
 
 type WinRow = {
   id: number;
@@ -593,18 +602,22 @@ async function fetchCoachingNotesSection(
   // 5) Fetch COMMENTS for this latest note
   const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
-    .select('id, body, created_at')
+    .select('id, body, created_at, author:profiles!coaching_note_comments_author_id_fkey(first_name, last_name)')
     .eq('coaching_note_id', latestNote.id)
     .order('created_at', { ascending: false });
 
   if (commentsErr) console.error('fetch coaching comments for latest note error', commentsErr);
 
   const notes: DashboardNotePreview[] =
-    ((comments ?? []) as NoteCommentRow[]).map((row) => ({
-      id: row.id,
-      created_at: row.created_at,
-      body: row.body && row.body.length > 220 ? `${row.body.slice(0, 217)}...` : row.body,
-    }));
+    ((comments ?? []) as NoteCommentRow[]).map((row) => {
+      const author = normalizeCommentAuthor(row.author);
+      return {
+        id: row.id,
+        created_at: row.created_at,
+        body: row.body,
+        author_name: `${author?.first_name ?? ''} ${author?.last_name ?? ''}`.trim() || 'Unknown author',
+      };
+    });
 
   return { actionSteps, notes };
 }
@@ -708,17 +721,21 @@ export async function fetchCoachingNotesByNoteId(
   // Comments
   const { data: comments, error: commentsErr } = await client
     .from('coaching_note_comments')
-    .select('id, body, created_at')
+    .select('id, body, created_at, author:profiles!coaching_note_comments_author_id_fkey(first_name, last_name)')
     .eq('coaching_note_id', noteId)
     .order('created_at', { ascending: false });
 
   if (commentsErr) console.error('commentsErr', commentsErr);
 
-  const notes: DashboardNotePreview[] = ((comments ?? []) as NoteCommentRow[]).map((r) => ({
-    id: r.id,
-    created_at: r.created_at,
-    body: r.body && r.body.length > 220 ? `${r.body.slice(0, 217)}...` : r.body,
-  }));
+  const notes: DashboardNotePreview[] = ((comments ?? []) as NoteCommentRow[]).map((r) => {
+    const author = normalizeCommentAuthor(r.author);
+    return {
+      id: r.id,
+      created_at: r.created_at,
+      body: r.body,
+      author_name: `${author?.first_name ?? ''} ${author?.last_name ?? ''}`.trim() || 'Unknown author',
+    };
+  });
 
   return { actionSteps, notes };
 }

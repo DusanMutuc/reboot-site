@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import adminTheme from '@/lib/admintheme';
 import AddUserForm from '@/components/admin/AddUserForm';
+import AssignAssistantPanel from '@/components/admin/AssignAssistantPanel';
 import AssignCoachPanel from '@/components/admin/AssignCoachPanel';
 import CoachRosters from '@/components/admin/CoachRosters';
 import { ThemeProvider, CssBaseline } from '@mui/material';
@@ -66,7 +67,8 @@ const navigationStructure = [
     label: 'User Management',
     icon: PeopleIcon,
     children: [
-      { id: 'add-user', label: 'Add User', icon: PersonAddIcon, component: 'AddUserForm' },
+      { id: 'add-user', label: 'Onboard User', icon: PersonAddIcon, component: 'AddUserForm' },
+      { id: 'assign-assistant', label: 'Assign Assistant', icon: AssignmentIndIcon, component: 'AssignAssistantPanel' },
       { id: 'user-profiles', label: 'User Profiles', icon: PeopleIcon, component: 'UserProfilesAdmin' },
       { id: 'user-partnerships', label: 'User Partnerships', icon: GroupAdd, component: 'PartnershipsAdmin' },
       { id: 'user-data-transfer', label: 'User Data Transfer', icon: SwapHorizIcon, component: 'UserDataTransfer' },
@@ -90,6 +92,7 @@ const navigationStructure = [
       { id: 'course-builder', label: 'Course Builder', icon: MenuBookIcon, component: 'CourseEditor' },
       { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
       { id: 'library-editor', label: 'Library Editor', icon: LibraryBooksIcon, component: 'LibraryEditor' },
+      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' },
       { id: 'site-announcement', label: 'Home Announcement', icon: CampaignIcon, component: 'SiteAnnouncementAdmin' },
     ]
   },
@@ -117,7 +120,6 @@ const navigationStructure = [
     label: 'Achievements',
     icon: EmojiEventsIcon,
     children: [
-      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' },
       { id: 'achievements-manual', label: 'Manual Awards', icon: EmojiEventsIcon, component: 'ManualAwardPanel' }, // 👈 NEW
     ]
   }
@@ -154,9 +156,9 @@ export default function AdminPage() {
 
         const { data: adminRow, error: roleError } = await supabase
           .from('user_roles')
-          .select('user_id')
+          .select('user_id, roles!inner(code)')
           .eq('user_id', session.user.id)
-          .eq('role_id', 1)
+          .eq('roles.code', 'admin')
           .maybeSingle();
 
         if (roleError) {
@@ -205,6 +207,8 @@ export default function AdminPage() {
     switch (selectedView) {
       case 'add-user':
         return <AddUserForm />;
+      case 'assign-assistant':
+        return <AssignAssistantPanel />;
       case 'user-profiles':
         return <UserProfilesAdmin />;
       case 'user-partnerships':

@@ -29,9 +29,13 @@ export interface CoachingNoteActionStep {
 export interface CoachingNoteComment {
   id: number;
   coaching_note_id: number;
-  author_id: string;
+  author_id: string | null;
   body: string;
   created_at: string;
+  author?: {
+    first_name: string | null;
+    last_name: string | null;
+  } | null;
 }
 
 export interface Win {

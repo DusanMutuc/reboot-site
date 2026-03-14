@@ -11,6 +11,7 @@ import Loading from '@/components/loading';
 import ErrorMessage from '@/components/errorMessage';
 import UserDashboard from '@/components/user/dashboard/UserDashboard';
 import UserDashboardBanner from '@/components/user/dashboard/UserDashboardBanner';
+import AssistantInfoPanel from '@/components/user/dashboard/AssistantInfo';
 import AnnouncementBanner from '@/components/AnnouncementBanner';
 import { supabase } from '@/lib/supabaseClient';
 
@@ -152,6 +153,7 @@ export default function DashboardPage() {
             <>
               <UserDashboardBanner />
               <UserDashboard userId={userId} />
+              <AssistantInfoPanel />
             </>
           )}
         </section>

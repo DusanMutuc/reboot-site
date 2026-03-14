@@ -70,24 +70,30 @@ export default function LoginClient() {
     }
   
     try {
-      // 1 = admin, 2 = coach  (change if your IDs differ)
-      const { data: roles, error } = await supabase
+      const { data: rolesRows, error } = await supabase
         .from('user_roles')
-        .select('role_id')
-        .eq('user_id', user.id)
-        .in('role_id', [1, 2]); // fetch only relevant roles
-  
+        .select('roles ( code )')
+        .eq('user_id', user.id);
+
       if (error) {
         router.push('/dashboard');
         return;
       }
-  
-      const ids = new Set((roles ?? []).map(r => r.role_id));
-  
-      if (ids.has(1)) {
+
+      const codes = (rolesRows ?? [])
+        .flatMap((row) => {
+          const r = row.roles;
+          return Array.isArray(r) ? r : r ? [r] : [];
+        })
+        .map((roleRow) => roleRow?.code)
+        .filter((code): code is string => typeof code === 'string');
+
+      if (codes.includes('admin')) {
         router.push('/admin');
-      } else if (ids.has(2)) {
+      } else if (codes.includes('coach')) {
         router.push('/coach');
+      } else if (codes.includes('assistant')) {
+        router.push('/assistant-library');
       } else {
         router.push('/dashboard');
       }

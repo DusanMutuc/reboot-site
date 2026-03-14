@@ -224,7 +224,7 @@ export default function ActionCenter({
                       })}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Coach
+                      {note.author_name}
                     </Typography>
                   </Box>
                   <Typography variant="body2" sx={{ lineHeight: 1.6 }}>

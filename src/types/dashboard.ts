@@ -98,6 +98,8 @@ export interface KpiChartPoint {
     CoachingNoteComment,
     'id' | 'body' | 'created_at'
   > & {
+    author_name: string;
+
     // If you ever want a pre-truncated summary,
     // you can add a computed field here later.
   };

@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   '/signup',
   RESET_PATH,
   '/api/auth',        // allow clear-first-login-flag
+  '/api/ghl',         // allow GHL webhooks to bypass auth
   '/auth',            // oauth callbacks if you have them
   '/_next',
   '/favicon.ico',
@@ -72,9 +73,24 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  const assistantAllowed =
+    pathname === '/assistant-library' ||
+    pathname.startsWith('/assistant-library/') ||
+    pathname.startsWith('/r/') ||
+    pathname.startsWith('/api');
+
+  if (!assistantAllowed) {
+    const { data: isAssistant, error: assistantErr } = await supabase.rpc('is_assistant');
+    if (!assistantErr && isAssistant) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/assistant-library';
+      return NextResponse.redirect(url);
+    }
+  }
+
   return res;
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!api/cron|_next/static|_next/image|favicon.ico).*)'],
 };

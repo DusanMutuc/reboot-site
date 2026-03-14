@@ -33,6 +33,10 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
@@ -68,6 +72,8 @@ export type TreeProps = {
   onCollapseAll: () => void;
   onContextMenu?: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
   onCreateCourse: () => void;
+  onReorderCourses: (courseIds: number[]) => void;
+  courseReordering: boolean;
   onQuickAddLesson: () => void;
   onQuickAddChapter: () => void;
   onQuickAddBlock: () => void;
@@ -297,8 +303,78 @@ function OutlineNode({
   );
 }
 
+
+type SortableCourseItemProps = {
+  course: NodeSubtree;
+  selected: boolean;
+  stats: { lessons: number; chapters: number };
+  onSelectCourse: (courseId: number) => void;
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
+  disabled?: boolean;
+};
+
+function SortableCourseItem({ course, selected, stats, onSelectCourse, onContextMenu, disabled = false }: SortableCourseItemProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: String(course.node.id),
+    disabled,
+  });
+  const metadata = course.node.metadata as { thumbnail_url?: string } | null;
+  const thumbnail = metadata?.thumbnail_url ?? (course.node.hero_image as string | undefined);
+  const avatarContent: ReactNode = thumbnail ? (
+    <Avatar src={thumbnail} variant="rounded" sx={{ width: 36, height: 36 }} />
+  ) : (
+    <Avatar variant="rounded" sx={{ width: 36, height: 36 }}>
+      {course.node.title?.[0]?.toUpperCase() ?? <MenuBookIcon fontSize="small" />}
+    </Avatar>
+  );
+  const relative =
+    formatRelativeDate((course.node as { updated_at?: string }).updated_at ??
+      (course.node as { updatedAt?: string }).updatedAt ??
+      null) ?? 'recently';
+  const updated = `Updated ${relative}`;
+
+  return (
+    <ListItem ref={setNodeRef} key={course.node.id} disablePadding sx={{ display: 'block', opacity: isDragging ? 0.75 : 1, transform: CSS.Transform.toString(transform), transition }}>
+      <ListItemButton
+        onClick={() => onSelectCourse(course.node.id)}
+        selected={selected}
+        sx={{ alignItems: 'center', gap: 2, borderRadius: 2, p: 1.5, position: 'relative', '&::before': { content: '""', position: 'absolute', inset: '4px auto 4px 0', width: 3, borderRadius: 2, backgroundColor: selected ? 'primary.main' : 'transparent', transition: 'background-color 120ms ease' }, '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 }, '&.Mui-selected': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08) }, '&:hover': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04) } }}
+      >
+        <IconButton size="small" {...attributes} {...listeners} onClick={(event) => event.stopPropagation()} aria-label="Drag to reorder course" sx={{ cursor: disabled ? 'default' : 'grab' }} disabled={disabled}>
+          <DragIndicatorIcon fontSize="small" />
+        </IconButton>
+        {avatarContent}
+        <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+            {course.node.title ?? 'Untitled course'}
+          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Chip size="small" label={(course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase())} color={course.node.state === 'published' ? 'success' : 'default'} />
+            <Typography variant="caption" color="text.secondary">{`${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'} • ${stats.chapters} chapter${stats.chapters === 1 ? '' : 's'}`}</Typography>
+            <Typography variant="caption" color="text.secondary">{updated}</Typography>
+          </Stack>
+        </Stack>
+        {onContextMenu ? (
+          <Tooltip title="Course actions">
+            <IconButton
+              size="small"
+              onClick={(event) => {
+                event.stopPropagation();
+                onContextMenu(event, course.node.id);
+              }}
+              aria-label="Course actions"
+            >
+              <MoreVertIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        ) : null}
+      </ListItemButton>
+    </ListItem>
+  );
+}
+
 /** -----------------------------
- *  Courses list (unchanged)
+ *  Courses list
  *  ----------------------------- */
 function CoursesList({
   courses,
@@ -309,6 +385,8 @@ function CoursesList({
   activeCourseId,
   courseStats,
   onCreateCourse,
+  onReorderCourses,
+  courseReordering,
 }: {
   courses: NodeSubtree[];
   search: string;
@@ -318,6 +396,8 @@ function CoursesList({
   activeCourseId: number | null;
   courseStats: Map<number, { lessons: number; chapters: number }>;
   onCreateCourse: () => void;
+  onReorderCourses: (courseIds: number[]) => void;
+  courseReordering: boolean;
 }) {
   const searchInput = useUndoRedoInput({
     value: search,
@@ -333,6 +413,21 @@ function CoursesList({
     [courses, search],
   );
 
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    if (courseReordering || search) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filtered.findIndex((course) => String(course.node.id) === String(active.id));
+    const newIndex = filtered.findIndex((course) => String(course.node.id) === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(filtered, oldIndex, newIndex).map((course) => course.node.id);
+    onReorderCourses(reordered);
+  };
   const hasCourses = courses.length > 0;
 
   return (
@@ -365,101 +460,31 @@ function CoursesList({
           }}
         />
       </Box>
+      {search ? (
+        <Typography variant="caption" color="text.secondary">
+          Clear search to reorder courses.
+        </Typography>
+      ) : null}
       <Box sx={{ flex: 1, overflowY: 'auto' }}>
         {hasCourses ? (
           filtered.length > 0 ? (
-            <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {filtered.map((course) => {
-                const selected = activeCourseId === course.node.id;
-                const stats = courseStats.get(course.node.id) ?? { lessons: 0, chapters: 0 };
-                const metadata = course.node.metadata as { thumbnail_url?: string } | null;
-                const thumbnail = metadata?.thumbnail_url ?? (course.node.hero_image as string | undefined);
-                const avatarContent: ReactNode = thumbnail ? (
-                  <Avatar src={thumbnail} variant="rounded" sx={{ width: 36, height: 36 }} />
-                ) : (
-                  <Avatar variant="rounded" sx={{ width: 36, height: 36 }}>
-                    {course.node.title?.[0]?.toUpperCase() ?? <MenuBookIcon fontSize="small" />}
-                  </Avatar>
-                );
-                const relative =
-                  formatRelativeDate((course.node as { updated_at?: string }).updated_at ??
-                    (course.node as { updatedAt?: string }).updatedAt ??
-                    null) ?? 'recently';
-                const updated = `Updated ${relative}`;
-
-                return (
-                  <ListItem key={course.node.id} disablePadding sx={{ display: 'block' }}>
-                    <ListItemButton
-                      onClick={() => onSelectCourse(course.node.id)}
-                      selected={selected}
-                      sx={{
-                        alignItems: 'center',
-                        gap: 2,
-                        borderRadius: 2,
-                        p: 1.5,
-                        position: 'relative',
-                        '&::before': {
-                          content: '""',
-                          position: 'absolute',
-                          inset: '4px auto 4px 0',
-                          width: 3,
-                          borderRadius: 2,
-                          backgroundColor: selected ? 'primary.main' : 'transparent',
-                          transition: 'background-color 120ms ease',
-                        },
-                        '&.Mui-focusVisible': {
-                          outline: '2px solid',
-                          outlineColor: 'primary.main',
-                          outlineOffset: 2,
-                        },
-                        '&.Mui-selected': {
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08),
-                        },
-                        '&:hover': {
-                          backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04),
-                        },
-                      }}
-                    >
-                      {avatarContent}
-                      <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
-                          {course.node.title ?? 'Untitled course'}
-                        </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                          <Chip
-                            size="small"
-                            label={(course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase())}
-                            color={course.node.state === 'published' ? 'success' : 'default'}
-                          />
-                          <Typography variant="caption" color="text.secondary">
-                            {`${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'} • ${stats.chapters} chapter${
-                              stats.chapters === 1 ? '' : 's'
-                            }`}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {updated}
-                          </Typography>
-                        </Stack>
-                      </Stack>
-                      {onContextMenu ? (
-                        <Tooltip title="Course actions">
-                          <IconButton
-                            size="small"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onContextMenu(event, course.node.id);
-                            }}
-                            aria-label="Course actions"
-                          >
-                            <MoreVertIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      ) : null}
-                    </ListItemButton>
-                  </ListItem>
-                );
-              })}
-            </List>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={filtered.map((course) => String(course.node.id))} strategy={verticalListSortingStrategy}>
+                <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {filtered.map((course) => (
+                    <SortableCourseItem
+                      key={course.node.id}
+                      course={course}
+                      selected={activeCourseId === course.node.id}
+                      stats={courseStats.get(course.node.id) ?? { lessons: 0, chapters: 0 }}
+                      onSelectCourse={onSelectCourse}
+                      onContextMenu={onContextMenu}
+                      disabled={courseReordering || !!search}
+                    />
+                  ))}
+                </List>
+              </SortableContext>
+            </DndContext>
           ) : (
             <Typography variant="body2" color="text.secondary">
               No courses match your search.
@@ -1035,6 +1060,8 @@ export default function Tree({
   onCollapseAll,
   onContextMenu,
   onCreateCourse,
+  onReorderCourses,
+  courseReordering,
   onQuickAddLesson,
   onQuickAddChapter,
   onQuickAddBlock,
@@ -1143,6 +1170,8 @@ export default function Tree({
           activeCourseId={activeCourseId}
           courseStats={courseStats}
           onCreateCourse={onCreateCourse}
+          onReorderCourses={onReorderCourses}
+          courseReordering={courseReordering}
         />
       ) : activeCourse ? (
         <OutlinePanel
@@ -1180,6 +1209,8 @@ export default function Tree({
           activeCourseId={activeCourseId}
           courseStats={courseStats}
           onCreateCourse={onCreateCourse}
+          onReorderCourses={onReorderCourses}
+          courseReordering={courseReordering}
         />
       )}
     </Paper>
