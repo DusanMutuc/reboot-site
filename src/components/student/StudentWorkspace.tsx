@@ -337,139 +337,124 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     }
 
     if (tab === 'notes') {
-      if (mode === 'coach') {
-        return (
-          <Box sx={{ maxWidth: COACH_CONTENT_MAX_WIDTH, mx: 'auto' }}>
+      return (
+        <Box sx={{ maxWidth: COACH_CONTENT_MAX_WIDTH, mx: 'auto' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              border: '1px solid',
+              borderColor: 'grey.200',
+              borderRadius: 3,
+            }}
+          >
+            <TextField
+              size="small"
+              label="Search students"
+              value={coachNotesSearch}
+              onChange={(event) => setCoachNotesSearch(event.target.value)}
+              sx={{ width: { xs: '100%', sm: 320 } }}
+            />
+          </Paper>
+
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={3}
+            alignItems="flex-start"
+            sx={{ minHeight: 0 }}
+          >
             <Paper
               elevation={0}
               sx={{
-                p: 2,
-                mb: 3,
+                flexBasis: isNarrow ? '100%' : 340,
+                flexShrink: 0,
+                alignSelf: 'flex-start',
+                height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
+                maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
                 border: '1px solid',
                 borderColor: 'grey.200',
                 borderRadius: 3,
+                overflow: 'hidden',
               }}
             >
-              <TextField
-                size="small"
-                label="Search students"
-                value={coachNotesSearch}
-                onChange={(event) => setCoachNotesSearch(event.target.value)}
-                sx={{ width: { xs: '100%', sm: 320 } }}
-              />
+              <Box sx={{ px: 2.5, py: 2, bgcolor: 'grey.50', borderBottom: '2px solid', borderColor: 'grey.200' }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
+                  Students
+                </Typography>
+              </Box>
+              <List sx={{ py: 0.5, maxHeight: isNarrow ? 320 : COACH_PANEL_HEIGHT, overflowY: 'auto' }}>
+                {filteredCoachStudents.map((student) => {
+                  const isSelected = student.id === selectedStudentId;
+                  return (
+                    <ListItemButton
+                      key={student.id}
+                      selected={isSelected}
+                      onClick={() => setQuery({ userId: student.id })}
+                      sx={{
+                        py: 2,
+                        px: 2.5,
+                        mx: 0.5,
+                        mb: 0.5,
+                        borderRadius: 1.5,
+                        bgcolor: isSelected ? 'primary.50' : 'transparent',
+                        '&:hover': {
+                          bgcolor: isSelected ? 'primary.100' : 'grey.50',
+                          transform: 'translateX(2px)',
+                        },
+                        '&.Mui-selected': {
+                          bgcolor: 'primary.50',
+                          borderLeft: '3px solid',
+                          borderColor: 'primary.main',
+                        },
+                      }}
+                    >
+                      <Box>
+                        <Typography
+                          sx={{
+                            fontWeight: isSelected ? 700 : 600,
+                            color: isSelected ? 'primary.main' : 'text.primary',
+                          }}
+                        >
+                          {student.full_name}
+                        </Typography>
+                        {student.email ? (
+                          <Typography variant="caption" color="text.secondary">
+                            {student.email}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                    </ListItemButton>
+                  );
+                })}
+              </List>
             </Paper>
 
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={3}
-              alignItems="flex-start"
-              sx={{ minHeight: 0 }}
+            <Paper
+              elevation={0}
+              sx={{
+                flexGrow: 1,
+                width: '100%',
+                height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
+                maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 3,
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
             >
-              <Paper
-                elevation={0}
-                sx={{
-                  flexBasis: isNarrow ? '100%' : 340,
-                  flexShrink: 0,
-                  alignSelf: 'flex-start',
-                  height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
-                  maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
-                  border: '1px solid',
-                  borderColor: 'grey.200',
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                }}
-              >
-                <Box sx={{ px: 2.5, py: 2, bgcolor: 'grey.50', borderBottom: '2px solid', borderColor: 'grey.200' }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
-                    Students
-                  </Typography>
-                </Box>
-                <List sx={{ py: 0.5, maxHeight: isNarrow ? 320 : COACH_PANEL_HEIGHT, overflowY: 'auto' }}>
-                  {filteredCoachStudents.map((student) => {
-                    const isSelected = student.id === selectedStudentId;
-                    return (
-                      <ListItemButton
-                        key={student.id}
-                        selected={isSelected}
-                        onClick={() => setQuery({ userId: student.id })}
-                        sx={{
-                          py: 2,
-                          px: 2.5,
-                          mx: 0.5,
-                          mb: 0.5,
-                          borderRadius: 1.5,
-                          bgcolor: isSelected ? 'primary.50' : 'transparent',
-                          '&:hover': {
-                            bgcolor: isSelected ? 'primary.100' : 'grey.50',
-                            transform: 'translateX(2px)',
-                          },
-                          '&.Mui-selected': {
-                            bgcolor: 'primary.50',
-                            borderLeft: '3px solid',
-                            borderColor: 'primary.main',
-                          },
-                        }}
-                      >
-                        <Box>
-                          <Typography
-                            sx={{
-                              fontWeight: isSelected ? 700 : 600,
-                              color: isSelected ? 'primary.main' : 'text.primary',
-                            }}
-                          >
-                            {student.full_name}
-                          </Typography>
-                          {student.email ? (
-                            <Typography variant="caption" color="text.secondary">
-                              {student.email}
-                            </Typography>
-                          ) : null}
-                        </Box>
-                      </ListItemButton>
-                    );
-                  })}
-                </List>
-              </Paper>
+              <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <CoachingNotesPanel userId={selectedStudentId} />
+              </Box>
+            </Paper>
+          </Stack>
 
-              <Paper
-                elevation={0}
-                sx={{
-                  flexGrow: 1,
-                  width: '100%',
-                  height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
-                  maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
-                  border: '1px solid',
-                  borderColor: 'grey.200',
-                  borderRadius: 3,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                }}
-              >
-                <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                  <CoachingNotesPanel userId={selectedStudentId} />
-                </Box>
-              </Paper>
-            </Stack>
-
-            <Box sx={{ mt: 3 }}>
-              <UserWinsPanel userId={selectedStudentId} />
-            </Box>
+          <Box sx={{ mt: 3 }}>
+            <UserWinsPanel userId={selectedStudentId} />
           </Box>
-        );
-      }
-
-      return (
-        <Stack spacing={3}>
-          <Paper
-            elevation={0}
-            sx={{ border: '1px solid', borderColor: 'grey.200', borderRadius: 3, overflow: 'hidden' }}
-          >
-            <CoachingNotesPanel userId={selectedStudentId} />
-          </Paper>
-
-          <UserWinsPanel userId={selectedStudentId} />
-        </Stack>
+        </Box>
       );
     }
 
