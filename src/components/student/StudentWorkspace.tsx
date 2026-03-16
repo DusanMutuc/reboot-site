@@ -11,12 +11,16 @@ import {
   CircularProgress,
   Divider,
   IconButton,
+  LinearProgress,
+  List,
+  ListItemButton,
   Paper,
   Stack,
   Tab,
   Tabs,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import NotesIcon from '@mui/icons-material/StickyNote2';
@@ -33,6 +37,7 @@ import UserWinsPanel from '@/components/coach/UserWinsPanel';
 import KpiTracker from '@/components/KpiTracker';
 import UserDashboard from '@/components/user/dashboard/UserDashboard';
 import UserDashboardExpanded from '@/components/user/dashboard/UserDashboardExpanded';
+import { fetchStudentOverviewData, type StudentOverviewCourse } from '@/lib/studentOverview';
 
 type StudentWorkspaceMode = 'coach' | 'admin';
 type StudentWorkspaceTab = 'overview' | 'notes' | 'progress' | 'kpi';
@@ -62,6 +67,8 @@ type CourseLite = {
 
 const TABS: StudentWorkspaceTab[] = ['overview', 'notes', 'progress', 'kpi'];
 const NOTES_SIDEBAR_WIDTH = 360;
+const COACH_PANEL_HEIGHT = '70vh';
+const COACH_CONTENT_MAX_WIDTH = 1180;
 
 function normalizeTab(value: string | null): StudentWorkspaceTab {
   if (value === 'dashboard') {
@@ -134,9 +141,15 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   const [courses, setCourses] = useState<CourseLite[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(false);
   const [coursesError, setCoursesError] = useState<string | null>(null);
+  const [coachNotesSearch, setCoachNotesSearch] = useState('');
+  const [coachProgressCourses, setCoachProgressCourses] = useState<StudentOverviewCourse[]>([]);
+  const [coachProgressLoading, setCoachProgressLoading] = useState(false);
+  const [coachProgressError, setCoachProgressError] = useState<string | null>(null);
 
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
   const [kpiRefreshSignal, setKpiRefreshSignal] = useState(0);
+  const isCoach = mode === 'coach';
+  const isNarrow = useMediaQuery('(max-width:900px)');
 
   const setQuery = useCallback(
     (patch: Record<string, string | number | null | undefined>) => {
@@ -190,7 +203,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   }, [mode, selectedStudentId, setQuery]);
 
   useEffect(() => {
-    if (tab !== 'progress') return;
+    if (tab !== 'progress' || mode !== 'admin') return;
 
     let active = true;
 
@@ -224,7 +237,53 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     return () => {
       active = false;
     };
-  }, [selectedCourseId, setQuery, tab]);
+  }, [mode, selectedCourseId, setQuery, tab]);
+
+  useEffect(() => {
+    if (tab !== 'progress' || mode !== 'coach' || !selectedStudentId) {
+      setCoachProgressCourses([]);
+      setCoachProgressError(null);
+      setCoachProgressLoading(false);
+      return;
+    }
+
+    let active = true;
+
+    (async () => {
+      try {
+        setCoachProgressLoading(true);
+        setCoachProgressError(null);
+        const data = await fetchStudentOverviewData(supabase, selectedStudentId);
+        if (!active) return;
+
+        setCoachProgressCourses(data.courses);
+
+        if (!data.courses.length) {
+          if (selectedCourseId != null) {
+            setQuery({ courseId: null });
+          }
+          return;
+        }
+
+        if (!selectedCourseId || !data.courses.some((course) => course.id === selectedCourseId)) {
+          setQuery({ courseId: data.courses[0].id });
+        }
+      } catch (error) {
+        if (!active) return;
+        setCoachProgressError(
+          error instanceof Error ? error.message : 'Failed to load course progress.',
+        );
+      } finally {
+        if (active) {
+          setCoachProgressLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [mode, selectedCourseId, selectedStudentId, setQuery, tab]);
 
   useEffect(() => {
     setPrivateNotesOpen(false);
@@ -234,6 +293,13 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     () => students.find((student) => student.id === selectedStudentId) ?? null,
     [selectedStudentId, students],
   );
+  const filteredCoachStudents = useMemo(() => {
+    const query = coachNotesSearch.trim().toLocaleLowerCase();
+    if (!query) return students;
+    return students.filter((student) =>
+      `${student.full_name} ${student.email ?? ''}`.toLocaleLowerCase().includes(query),
+    );
+  }, [coachNotesSearch, students]);
 
   const backHref = mode === 'admin' ? '/admin/status-overview' : '/coach';
   const backLabel = mode === 'admin' ? 'Back to Student Status' : 'Back to Coach Home';
@@ -271,6 +337,128 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     }
 
     if (tab === 'notes') {
+      if (mode === 'coach') {
+        return (
+          <Box sx={{ maxWidth: COACH_CONTENT_MAX_WIDTH, mx: 'auto' }}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                mb: 3,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 3,
+              }}
+            >
+              <TextField
+                size="small"
+                label="Search students"
+                value={coachNotesSearch}
+                onChange={(event) => setCoachNotesSearch(event.target.value)}
+                sx={{ width: { xs: '100%', sm: 320 } }}
+              />
+            </Paper>
+
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={3}
+              alignItems="flex-start"
+              sx={{ minHeight: 0 }}
+            >
+              <Paper
+                elevation={0}
+                sx={{
+                  flexBasis: isNarrow ? '100%' : 340,
+                  flexShrink: 0,
+                  alignSelf: 'flex-start',
+                  height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
+                  maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                }}
+              >
+                <Box sx={{ px: 2.5, py: 2, bgcolor: 'grey.50', borderBottom: '2px solid', borderColor: 'grey.200' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
+                    Students
+                  </Typography>
+                </Box>
+                <List sx={{ py: 0.5, maxHeight: isNarrow ? 320 : COACH_PANEL_HEIGHT, overflowY: 'auto' }}>
+                  {filteredCoachStudents.map((student) => {
+                    const isSelected = student.id === selectedStudentId;
+                    return (
+                      <ListItemButton
+                        key={student.id}
+                        selected={isSelected}
+                        onClick={() => setQuery({ userId: student.id })}
+                        sx={{
+                          py: 2,
+                          px: 2.5,
+                          mx: 0.5,
+                          mb: 0.5,
+                          borderRadius: 1.5,
+                          bgcolor: isSelected ? 'primary.50' : 'transparent',
+                          '&:hover': {
+                            bgcolor: isSelected ? 'primary.100' : 'grey.50',
+                            transform: 'translateX(2px)',
+                          },
+                          '&.Mui-selected': {
+                            bgcolor: 'primary.50',
+                            borderLeft: '3px solid',
+                            borderColor: 'primary.main',
+                          },
+                        }}
+                      >
+                        <Box>
+                          <Typography
+                            sx={{
+                              fontWeight: isSelected ? 700 : 600,
+                              color: isSelected ? 'primary.main' : 'text.primary',
+                            }}
+                          >
+                            {student.full_name}
+                          </Typography>
+                          {student.email ? (
+                            <Typography variant="caption" color="text.secondary">
+                              {student.email}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                      </ListItemButton>
+                    );
+                  })}
+                </List>
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  flexGrow: 1,
+                  width: '100%',
+                  height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
+                  maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <CoachingNotesPanel userId={selectedStudentId} />
+                </Box>
+              </Paper>
+            </Stack>
+
+            <Box sx={{ mt: 3 }}>
+              <UserWinsPanel userId={selectedStudentId} />
+            </Box>
+          </Box>
+        );
+      }
+
       return (
         <Stack spacing={3}>
           <Paper
@@ -286,6 +474,149 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     }
 
     if (tab === 'progress') {
+      if (mode === 'coach') {
+        const selectedCourse = coachProgressCourses.find((course) => course.id === selectedCourseId) ?? null;
+
+        return (
+          <Box sx={{ maxWidth: COACH_CONTENT_MAX_WIDTH, mx: 'auto' }}>
+            {coachProgressError ? (
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {coachProgressError}
+              </Alert>
+            ) : null}
+
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              spacing={3}
+              alignItems="flex-start"
+              sx={{ minHeight: 0 }}
+            >
+              <Paper
+                elevation={0}
+                sx={{
+                  flexBasis: isNarrow ? '100%' : 340,
+                  flexShrink: 0,
+                  alignSelf: 'flex-start',
+                  height: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
+                  maxHeight: isNarrow ? 'none' : COACH_PANEL_HEIGHT,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                }}
+              >
+                <Box sx={{ px: 2.5, py: 2, bgcolor: 'grey.50', borderBottom: '2px solid', borderColor: 'grey.200' }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
+                    Courses
+                  </Typography>
+                </Box>
+
+                {coachProgressLoading ? (
+                  <Box sx={{ py: 6, display: 'flex', justifyContent: 'center' }}>
+                    <CircularProgress />
+                  </Box>
+                ) : coachProgressCourses.length === 0 ? (
+                  <Box sx={{ p: 3 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No courses with progress are available for this student yet.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <List sx={{ py: 1, maxHeight: isNarrow ? 360 : COACH_PANEL_HEIGHT, overflowY: 'auto' }}>
+                    {coachProgressCourses.map((course) => {
+                      const isSelected = course.id === selectedCourseId;
+                      return (
+                        <ListItemButton
+                          key={course.id}
+                          selected={isSelected}
+                          onClick={() => setQuery({ courseId: course.id })}
+                          sx={{
+                            display: 'block',
+                            py: 2,
+                            px: 2.5,
+                            mx: 0.75,
+                            mb: 1,
+                            borderRadius: 2,
+                            border: '1px solid',
+                            borderColor: isSelected ? 'primary.main' : 'grey.200',
+                            bgcolor: isSelected ? 'primary.50' : 'background.paper',
+                            '&.Mui-selected': {
+                              bgcolor: 'primary.50',
+                            },
+                          }}
+                        >
+                          <Stack spacing={1.25}>
+                            <Stack direction="row" justifyContent="space-between" spacing={1.5} alignItems="center">
+                              <Typography sx={{ fontWeight: 700, color: isSelected ? 'primary.main' : 'text.primary' }}>
+                                {course.title}
+                              </Typography>
+                              <Typography sx={{ fontWeight: 800 }}>
+                                {course.progressPercent}%
+                              </Typography>
+                            </Stack>
+                            <LinearProgress
+                              variant="determinate"
+                              value={course.progressPercent}
+                              sx={{
+                                height: 8,
+                                borderRadius: 999,
+                                bgcolor: 'grey.200',
+                                '& .MuiLinearProgress-bar': {
+                                  borderRadius: 999,
+                                  bgcolor: course.progressPercent === 100 ? 'success.main' : 'primary.main',
+                                },
+                              }}
+                            />
+                          </Stack>
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                )}
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  flexGrow: 1,
+                  width: '100%',
+                  minHeight: isNarrow ? 'auto' : COACH_PANEL_HEIGHT,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                }}
+              >
+                <Stack spacing={0}>
+                  <Box sx={{ px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'grey.200', bgcolor: 'grey.50' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                      {selectedCourse ? selectedCourse.title : 'Select a course'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedCourse
+                        ? 'Course progress details and SmartDocs for the selected course.'
+                        : 'Choose a course from the left to review progress.'}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ borderBottom: '1px solid', borderColor: 'grey.200' }}>
+                    <DetailedUserProgressView
+                      courseId={selectedCourseId}
+                      userId={selectedStudentId}
+                      mode={mode}
+                    />
+                  </Box>
+
+                  <Box sx={{ p: { xs: 2, md: 3 } }}>
+                    <SmartDocsAnswers courseId={selectedCourseId} userId={selectedStudentId} mode={mode} />
+                  </Box>
+                </Stack>
+              </Paper>
+            </Stack>
+          </Box>
+        );
+      }
+
       return (
         <Stack spacing={3}>
           <Paper
