@@ -69,6 +69,11 @@ type ApiError = {
   error?: string;
 };
 
+type StudentOverviewNewProps = {
+  userId?: string | null;
+  embedded?: boolean;
+};
+
 type CourseModuleState = {
   loading: boolean;
   loaded: boolean;
@@ -355,12 +360,15 @@ async function loadAchievementOptions(): Promise<AchievementOption[]> {
     : [];
 }
 
-export default function StudentOverviewNew() {
+export default function StudentOverviewNew({
+  userId = null,
+  embedded = false,
+}: StudentOverviewNewProps) {
   const printableRef = useRef<HTMLDivElement | null>(null);
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [studentsError, setStudentsError] = useState<string | null>(null);
-  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
+  const [internalSelectedStudentId, setInternalSelectedStudentId] = useState<string>('');
 
   const [overviewData, setOverviewData] = useState<StudentOverviewData | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -386,6 +394,10 @@ export default function StudentOverviewNew() {
   const [savingAchievement, setSavingAchievement] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
+  const selectedStudentId = embedded ? (userId ?? '') : internalSelectedStudentId;
+  const showStudentPicker = !embedded;
+  const showPrivateNotes = !embedded;
+
   const cleanupPrintSnapshot = useCallback(() => {
     if (typeof document === 'undefined') return;
     document.body.classList.remove('student-overview-printing');
@@ -396,6 +408,12 @@ export default function StudentOverviewNew() {
   }, []);
 
   useEffect(() => {
+    if (embedded) {
+      setStudentsLoading(false);
+      setStudentsError(null);
+      return;
+    }
+
     let active = true;
 
     (async () => {
@@ -405,7 +423,7 @@ export default function StudentOverviewNew() {
         const options = await loadStudentOptions();
         if (!active) return;
         setStudentOptions(options);
-        setSelectedStudentId((prev) => prev || options[0]?.id || '');
+        setInternalSelectedStudentId((prev) => prev || options[0]?.id || '');
       } catch (error) {
         if (!active) return;
         setStudentsError(error instanceof Error ? error.message : 'Failed to load students.');
@@ -419,7 +437,7 @@ export default function StudentOverviewNew() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [embedded]);
 
   useEffect(() => {
     if (!selectedStudentId) {
@@ -485,6 +503,8 @@ export default function StudentOverviewNew() {
 
   const selectedStudent =
     studentOptions.find((option) => option.id === selectedStudentId) ?? null;
+  const studentDisplayName =
+    selectedStudent?.full_name ?? overviewData?.student.fullName ?? 'Student Overview';
 
   const attendanceSeries = useMemo(() => {
     const snapshot = overviewData?.attendance.snapshot ?? [];
@@ -640,13 +660,13 @@ export default function StudentOverviewNew() {
       ref={printableRef}
       className="student-overview-root"
       sx={{
-        bgcolor: PAGE_BG,
-        mx: -3,
-        my: -3,
-        px: { xs: 2, md: 3 },
-        py: { xs: 2, md: 3 },
-        transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
-        mr: { xs: 0, lg: privateNotesOpen ? `${SIDEBAR_WIDTH}px` : 0 },
+        bgcolor: embedded ? 'transparent' : PAGE_BG,
+        mx: embedded ? 0 : -3,
+        my: embedded ? 0 : -3,
+        px: embedded ? 0 : { xs: 2, md: 3 },
+        py: embedded ? 0 : { xs: 2, md: 3 },
+        transition: showPrivateNotes ? 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)' : undefined,
+        mr: showPrivateNotes ? { xs: 0, lg: privateNotesOpen ? `${SIDEBAR_WIDTH}px` : 0 } : 0,
       }}
     >
       <GlobalStyles styles={(theme) => printStyles(theme)} />
@@ -656,8 +676,8 @@ export default function StudentOverviewNew() {
           className="student-overview-sticky student-overview-card"
           elevation={0}
           sx={{
-            position: 'sticky',
-            top: 0,
+            position: embedded ? 'static' : 'sticky',
+            top: embedded ? 'auto' : 0,
             zIndex: 4,
             px: { xs: 2, md: 3 },
             py: 1.75,
@@ -683,7 +703,7 @@ export default function StudentOverviewNew() {
                 letterSpacing: '-0.02em',
               }}
             >
-              Student Tracking / {selectedStudent?.full_name ?? 'Student Overview New'}
+              {embedded ? 'Executive Overview' : 'Student Tracking'} / {studentDisplayName}
             </Typography>
 
             <Stack
@@ -691,15 +711,17 @@ export default function StudentOverviewNew() {
               spacing={1.25}
               className="student-overview-no-print"
             >
-              <Button
-                variant={privateNotesOpen ? 'contained' : 'outlined'}
-                startIcon={<NotesIcon />}
-                onClick={() => setPrivateNotesOpen((prev) => !prev)}
-                disabled={!selectedStudentId}
-                sx={{ textTransform: 'none', borderRadius: 999 }}
-              >
-                Private Notes
-              </Button>
+              {showPrivateNotes ? (
+                <Button
+                  variant={privateNotesOpen ? 'contained' : 'outlined'}
+                  startIcon={<NotesIcon />}
+                  onClick={() => setPrivateNotesOpen((prev) => !prev)}
+                  disabled={!selectedStudentId}
+                  sx={{ textTransform: 'none', borderRadius: 999 }}
+                >
+                  Private Notes
+                </Button>
+              ) : null}
               <Button
                 variant="contained"
                 startIcon={<PictureAsPdfIcon />}
@@ -718,43 +740,45 @@ export default function StudentOverviewNew() {
           </Stack>
         </Paper>
 
-        <Paper
-          className="student-overview-card student-overview-no-print"
-          elevation={0}
-          sx={{
-            p: { xs: 2, md: 2.5 },
-            borderRadius: 3,
-            border: '1px solid',
-            borderColor: 'divider',
-            bgcolor: CARD_BG,
-          }}
-        >
-          <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} alignItems={{ xs: 'stretch', lg: 'center' }}>
-            <Box sx={{ minWidth: { xs: '100%', lg: 360 }, flex: 1 }}>
-              <Autocomplete
-                options={studentOptions}
-                loading={studentsLoading}
-                value={selectedStudent}
-                onChange={(_event, nextValue) => setSelectedStudentId(nextValue?.id ?? '')}
-                isOptionEqualToValue={(option, value) => option.id === value.id}
-                getOptionLabel={(option) => option.full_name}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Student"
-                    placeholder="Search for a student"
-                    error={Boolean(studentsError)}
-                    helperText={studentsError ?? 'Search or choose a student to review.'}
-                  />
-                )}
-              />
-            </Box>
+        {showStudentPicker ? (
+          <Paper
+            className="student-overview-card student-overview-no-print"
+            elevation={0}
+            sx={{
+              p: { xs: 2, md: 2.5 },
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: CARD_BG,
+            }}
+          >
+            <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} alignItems={{ xs: 'stretch', lg: 'center' }}>
+              <Box sx={{ minWidth: { xs: '100%', lg: 360 }, flex: 1 }}>
+                <Autocomplete
+                  options={studentOptions}
+                  loading={studentsLoading}
+                  value={selectedStudent}
+                  onChange={(_event, nextValue) => setInternalSelectedStudentId(nextValue?.id ?? '')}
+                  isOptionEqualToValue={(option, value) => option.id === value.id}
+                  getOptionLabel={(option) => option.full_name}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Student"
+                      placeholder="Search for a student"
+                      error={Boolean(studentsError)}
+                      helperText={studentsError ?? 'Search or choose a student to review.'}
+                    />
+                  )}
+                />
+              </Box>
 
-            <Typography variant="body2" color="text.secondary">
-              Coach-facing admin review for action steps, progress, metrics, achievements, and attendance.
-            </Typography>
-          </Stack>
-        </Paper>
+              <Typography variant="body2" color="text.secondary">
+                Coach-facing admin review for action steps, progress, metrics, achievements, and attendance.
+              </Typography>
+            </Stack>
+          </Paper>
+        ) : null}
 
         {overviewError && <Alert severity="error">{overviewError}</Alert>}
 
@@ -1454,78 +1478,80 @@ export default function StudentOverviewNew() {
         ) : null}
       </Stack>
 
-      <Box
-        className="student-overview-no-print"
-        sx={{
-          position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
-          bgcolor: 'background.paper',
-          borderLeft: '1px solid',
-          borderColor: 'divider',
-          boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
-          zIndex: 1200,
-          transform: privateNotesOpen ? 'translateX(0)' : 'translateX(100%)',
-          transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
+      {showPrivateNotes ? (
         <Box
+          className="student-overview-no-print"
           sx={{
-            p: 2,
-            borderBottom: '1px solid',
+            position: 'fixed',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: { xs: '100%', sm: `${SIDEBAR_WIDTH}px` },
+            bgcolor: 'background.paper',
+            borderLeft: '1px solid',
             borderColor: 'divider',
+            boxShadow: '-4px 0 24px rgba(0,0,0,0.08)',
+            zIndex: 1200,
+            transform: privateNotesOpen ? 'translateX(0)' : 'translateX(100%)',
+            transition: 'transform 0.35s cubic-bezier(0.4,0,0.2,1)',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            flexDirection: 'column',
           }}
         >
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="h6" fontWeight={700}>
-              Private notes
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                px: 1,
-                py: 0.25,
-                borderRadius: 99,
-                bgcolor: '#fef3c7',
-                color: '#92400e',
-                fontWeight: 600,
-              }}
-            >
-              Coach only
-            </Typography>
-          </Stack>
-          <Button
-            onClick={() => setPrivateNotesOpen(false)}
-            aria-label="Close private notes panel"
-            sx={{ minWidth: 0, p: 1, borderRadius: 999 }}
+          <Box
+            sx={{
+              p: 2,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
           >
-            <CloseIcon />
-          </Button>
-        </Box>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="h6" fontWeight={700}>
+                Private notes
+              </Typography>
+              <Typography
+                variant="caption"
+                sx={{
+                  px: 1,
+                  py: 0.25,
+                  borderRadius: 99,
+                  bgcolor: '#fef3c7',
+                  color: '#92400e',
+                  fontWeight: 600,
+                }}
+              >
+                Coach only
+              </Typography>
+            </Stack>
+            <Button
+              onClick={() => setPrivateNotesOpen(false)}
+              aria-label="Close private notes panel"
+              sx={{ minWidth: 0, p: 1, borderRadius: 999 }}
+            >
+              <CloseIcon />
+            </Button>
+          </Box>
 
-        <Box
-          sx={{
-            p: 2,
-            flex: 1,
-            minHeight: 0,
-          }}
-        >
-          {selectedStudentId ? (
-            <PrivateNotesPanel userId={selectedStudentId} />
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              Pick a student above to view private notes.
-            </Typography>
-          )}
+          <Box
+            sx={{
+              p: 2,
+              flex: 1,
+              minHeight: 0,
+            }}
+          >
+            {selectedStudentId ? (
+              <PrivateNotesPanel userId={selectedStudentId} />
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Pick a student above to view private notes.
+              </Typography>
+            )}
+          </Box>
         </Box>
-      </Box>
+      ) : null}
 
       <Dialog
         open={achievementModalOpen}
@@ -1534,7 +1560,7 @@ export default function StudentOverviewNew() {
         maxWidth="sm"
       >
         <DialogTitle sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700 }}>
-          Give Achievement {selectedStudent ? `- ${selectedStudent.full_name}` : ''}
+          Give Achievement {studentDisplayName ? `- ${studentDisplayName}` : ''}
         </DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2}>

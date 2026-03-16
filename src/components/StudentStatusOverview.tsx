@@ -435,8 +435,8 @@ export default function StudentStatusOverview({
                         component={NextLink}
                         href={
                           workspaceMode === 'admin'
-                            ? `/admin/student-workspace?userId=${s.user_id}&tab=dashboard`
-                            : `/coach/students-overview?userId=${s.user_id}&tab=dashboard`
+                            ? `/admin/student-workspace?userId=${s.user_id}&tab=overview`
+                            : `/coach/students-overview?userId=${s.user_id}&tab=overview`
                         }
                       >
                         Open workspace

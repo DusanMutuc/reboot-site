@@ -6,5 +6,5 @@ export default async function CoachStudentDashboardPage({
   params: Promise<{ userId: string }>;
 }) {
   const { userId } = await params;
-  redirect(`/coach/students-overview?userId=${encodeURIComponent(userId)}&tab=dashboard`);
+  redirect(`/coach/students-overview?userId=${encodeURIComponent(userId)}&tab=overview`);
 }

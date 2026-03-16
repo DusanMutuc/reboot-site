@@ -23,6 +23,7 @@ import NotesIcon from '@mui/icons-material/StickyNote2';
 import CloseIcon from '@mui/icons-material/Close';
 
 import { supabase } from '@/lib/supabaseClient';
+import StudentOverviewNew from '@/components/admin/StudentOverviewNew';
 import CoursePicker from '@/components/coach/CoursePicker';
 import CoachingNotesPanel from '@/components/coach/CoachingNotesPanel';
 import DetailedUserProgressView from '@/components/coach/DetailedUserProgressView';
@@ -34,7 +35,7 @@ import UserDashboard from '@/components/user/dashboard/UserDashboard';
 import UserDashboardExpanded from '@/components/user/dashboard/UserDashboardExpanded';
 
 type StudentWorkspaceMode = 'coach' | 'admin';
-type StudentWorkspaceTab = 'dashboard' | 'notes' | 'progress' | 'kpi';
+type StudentWorkspaceTab = 'overview' | 'notes' | 'progress' | 'kpi';
 
 type StudentOption = {
   id: string;
@@ -59,13 +60,16 @@ type CourseLite = {
   title: string | null;
 };
 
-const TABS: StudentWorkspaceTab[] = ['dashboard', 'notes', 'progress', 'kpi'];
+const TABS: StudentWorkspaceTab[] = ['overview', 'notes', 'progress', 'kpi'];
 const NOTES_SIDEBAR_WIDTH = 360;
 
 function normalizeTab(value: string | null): StudentWorkspaceTab {
+  if (value === 'dashboard') {
+    return 'overview';
+  }
   return value && TABS.includes(value as StudentWorkspaceTab)
     ? (value as StudentWorkspaceTab)
-    : 'dashboard';
+    : 'overview';
 }
 
 async function loadAdminStudents(): Promise<StudentOption[]> {
@@ -259,7 +263,10 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
       );
     }
 
-    if (tab === 'dashboard') {
+    if (tab === 'overview') {
+      if (mode === 'admin') {
+        return <StudentOverviewNew userId={selectedStudentId} embedded />;
+      }
       return <UserDashboard userId={selectedStudentId} refreshSignal={kpiRefreshSignal} />;
     }
 
@@ -474,7 +481,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
               borderColor: 'grey.200',
             }}
           >
-            <Tab value="dashboard" label="Overview" />
+            <Tab value="overview" label="Overview" />
             <Tab value="notes" label="Coaching Notes" />
             <Tab value="progress" label="Progress" />
             <Tab value="kpi" label="KPI Tracker" />
