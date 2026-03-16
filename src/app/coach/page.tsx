@@ -35,8 +35,8 @@ export default function CoachPage() {
         role="coach" // ← force coach-like buttons; no fetch, no flicker
         sections={[
           { id: 'links',     label: 'COACHING LINKS' },
-          { id: 'podcast',   label: 'PODCAST' },
-          { id: 'library',   label: 'LIBRARY' },
+          { id: 'podcast',   label: 'PRIVATE PODCAST' },
+          { id: 'library',   label: 'RESOURCE LIBRARY' },
           { id: 'dashboard', label: 'STUDENT STATUS' },
           { id: 'calendar',  label: 'CALENDAR' },
           { id: 'help',      label: 'HELP' },
@@ -58,7 +58,7 @@ export default function CoachPage() {
       </section>
 
       <section id="dashboard" style={sectionOffsetStyle}>
-        <StudentStatusOverview courseId={2} />
+        <StudentStatusOverview courseId={2} workspaceMode="coach" />
       </section>
 
       <section id="calendar" style={sectionOffsetStyle}>

@@ -1,13 +1,14 @@
-// src/app/coach/notes/page.tsx
-import { Suspense } from 'react';
-import CoachNotesView from '@/components/coach/CoachNotesView';
+import { redirect } from 'next/navigation';
 
-export const dynamic = 'force-dynamic'; // avoids static prerender when reading search params
+export const dynamic = 'force-dynamic';
 
-export default function CoachNotesPage() {
-  return (
-    <Suspense fallback={null}>
-      <CoachNotesView mode="coach" />
-    </Suspense>
-  );
+export default async function CoachNotesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ userId?: string }>;
+}) {
+  const { userId } = await searchParams;
+  const qs = new URLSearchParams({ tab: 'notes' });
+  if (userId) qs.set('userId', userId);
+  redirect(`/coach/students-overview?${qs.toString()}`);
 }

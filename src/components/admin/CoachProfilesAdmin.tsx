@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Paper,
   Typography,
@@ -12,6 +15,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 type Person = { id: string; name: string; email: string };
 
@@ -250,35 +254,28 @@ export default function CoachProfilesAdmin() {
             />
 
             <TextField
-              label="Primary / Momentum coach booking URL (m2_booking_url)"
+              label="Primary booking link"
               value={profile?.m2_booking_url ?? ''}
               onChange={(e) =>
                 handleFieldChange('m2_booking_url', e.target.value)
               }
-              helperText="This is used for the main coach booking link."
+              helperText="Main scheduling link shown to members."
             />
 
             <TextField
-              label="Implementation coach booking URL (impl_booking_url)"
+              label="Implementation booking link"
               value={profile?.impl_booking_url ?? ''}
               onChange={(e) =>
                 handleFieldChange('impl_booking_url', e.target.value)
               }
-              helperText="This is used for the Implementation Coach booking link button."
-            />
-
-            <TextField
-              label="Legacy 15-min call URL (call15_url)"
-              value={profile?.call15_url ?? ''}
-              onChange={(e) => handleFieldChange('call15_url', e.target.value)}
-              helperText="Optional legacy link; still available to reuse or phase out."
+              helperText="Secondary scheduling link used for implementation support."
             />
           </Box>
 
           {/* Right column */}
           <Box sx={{ display: 'grid', gap: 2 }}>
             <TextField
-              label="Coaching dashboard URL"
+              label="Coach dashboard link"
               value={profile?.coaching_dashboard_url ?? ''}
               onChange={(e) =>
                 handleFieldChange('coaching_dashboard_url', e.target.value)
@@ -286,22 +283,7 @@ export default function CoachProfilesAdmin() {
             />
 
             <TextField
-              label="GHL calendar embed URL"
-              value={profile?.ghl_calendar_embed_url ?? ''}
-              onChange={(e) =>
-                handleFieldChange('ghl_calendar_embed_url', e.target.value)
-              }
-            />
-
-            <TextField
-              label="GHL user ID (from profiles)"
-              value={ghlUserId}
-              onChange={(e) => setGhlUserId(e.target.value)}
-              helperText="This is now stored on the main user profile."
-            />
-
-            <TextField
-              label="Coaching notes URL"
+              label="Coaching notes link"
               value={profile?.coaching_notes_url ?? ''}
               onChange={(e) =>
                 handleFieldChange('coaching_notes_url', e.target.value)
@@ -309,10 +291,57 @@ export default function CoachProfilesAdmin() {
             />
 
             <TextField
-              label="M2 form URL"
+              label="Momentum form link"
               value={profile?.m2_form_url ?? ''}
               onChange={(e) => handleFieldChange('m2_form_url', e.target.value)}
             />
+          </Box>
+
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={600}>
+                    Advanced and legacy fields
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Only expand this section if you need older links or CRM-specific values.
+                  </Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 2,
+                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                  }}
+                >
+                  <TextField
+                    label="Legacy 15-minute call link"
+                    value={profile?.call15_url ?? ''}
+                    onChange={(e) => handleFieldChange('call15_url', e.target.value)}
+                    helperText="Optional older scheduling link kept for backwards compatibility."
+                  />
+
+                  <TextField
+                    label="Embedded calendar URL"
+                    value={profile?.ghl_calendar_embed_url ?? ''}
+                    onChange={(e) =>
+                      handleFieldChange('ghl_calendar_embed_url', e.target.value)
+                    }
+                    helperText="Used only where an embedded calendar is still required."
+                  />
+
+                  <TextField
+                    label="CRM user ID"
+                    value={ghlUserId}
+                    onChange={(e) => setGhlUserId(e.target.value)}
+                    helperText="Internal mapping value stored on the main user profile."
+                  />
+                </Box>
+              </AccordionDetails>
+            </Accordion>
           </Box>
 
           <Box sx={{ gridColumn: '1 / -1', textAlign: 'right', mt: 1 }}>

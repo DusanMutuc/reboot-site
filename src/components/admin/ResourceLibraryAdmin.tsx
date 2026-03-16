@@ -88,6 +88,7 @@ export default function ResourceLibraryAdmin() {
   // dialog
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ResourceRow | null>(null);
+  const [resourceToDelete, setResourceToDelete] = useState<ResourceRow | null>(null);
 
   // feedback
   const [snack, setSnack] = useState<{msg: string, severity: 'success'|'error'|'info'} | null>(null);
@@ -271,11 +272,16 @@ export default function ResourceLibraryAdmin() {
     setOpen(true);
   };
 
-  const onDelete = async (row: ResourceRow) => {
-    if (!confirm(`Delete "${row.title}"? This cannot be undone.`)) return;
-    const { error } = await supabase.from('resources').delete().eq('id', row.id);
+  const requestDelete = (row: ResourceRow) => {
+    setResourceToDelete(row);
+  };
+
+  const confirmDelete = async () => {
+    if (!resourceToDelete) return;
+    const { error } = await supabase.from('resources').delete().eq('id', resourceToDelete.id);
     if (error) { setSnack({ msg: error.message, severity: 'error' }); return; }
-    setRows((prev) => prev.filter(x => x.id !== row.id));
+    setRows((prev) => prev.filter(x => x.id !== resourceToDelete.id));
+    setResourceToDelete(null);
     setSnack({ msg: 'Resource deleted', severity: 'success' });
   };
 
@@ -343,14 +349,16 @@ export default function ResourceLibraryAdmin() {
             </Select>
           </FormControl>
 
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>Fuzziness</InputLabel>
-            <Select value={mode} label="Fuzziness" onChange={(e) => setMode(e.target.value as typeof mode)}>
-              <MenuItem value="strict">Strict</MenuItem>
-              <MenuItem value="balanced">Balanced</MenuItem>
-              <MenuItem value="loose">Loose</MenuItem>
-            </Select>
-          </FormControl>
+          {q.trim() ? (
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Search sensitivity</InputLabel>
+              <Select value={mode} label="Search sensitivity" onChange={(e) => setMode(e.target.value as typeof mode)}>
+                <MenuItem value="strict">Strict</MenuItem>
+                <MenuItem value="balanced">Balanced</MenuItem>
+                <MenuItem value="loose">Loose</MenuItem>
+              </Select>
+            </FormControl>
+          ) : null}
 
           <Button startIcon={<AddIcon />} variant="contained" onClick={onCreate}>New Resource</Button>
         </Stack>
@@ -391,7 +399,7 @@ export default function ResourceLibraryAdmin() {
                         <IconButton size="small" onClick={() => onEdit(r)}><EditIcon /></IconButton>
                       </Tooltip>
                       <Tooltip title="Delete">
-                        <IconButton size="small" onClick={() => onDelete(r)}><DeleteIcon /></IconButton>
+                        <IconButton size="small" onClick={() => requestDelete(r)}><DeleteIcon /></IconButton>
                       </Tooltip>
                     </Box>
                   </Stack>
@@ -437,6 +445,21 @@ export default function ResourceLibraryAdmin() {
           });
         }}
       />
+
+      <Dialog open={!!resourceToDelete} onClose={() => setResourceToDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete resource?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This will permanently remove {resourceToDelete?.title ? `"${resourceToDelete.title}"` : 'this resource'}.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setResourceToDelete(null)}>Cancel</Button>
+          <Button color="error" variant="contained" onClick={confirmDelete}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {snack && (
         <Snackbar open autoHideDuration={3000} onClose={() => setSnack(null)}>

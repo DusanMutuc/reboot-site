@@ -3,6 +3,8 @@
 
 import { useEffect, useState } from 'react';
 import {
+  Box,
+  Collapse,
   Paper,
   Stack,
   TextField,
@@ -34,6 +36,7 @@ export default function SiteAnnouncementAdmin() {
   const [buttonUrl, setButtonUrl] = useState('');
   const [buttonColor, setButtonColor] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -133,23 +136,6 @@ export default function SiteAnnouncementAdmin() {
 
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           <TextField
-            label="Background color (CSS)"
-            value={backgroundColor}
-            onChange={(e) => setBackgroundColor(e.target.value)}
-            fullWidth
-            placeholder="e.g. #f5f5f5 or rgba(92,188,168,0.06)"
-          />
-          <TextField
-            label="Text color (CSS)"
-            value={textColor}
-            onChange={(e) => setTextColor(e.target.value)}
-            fullWidth
-            placeholder="e.g. #0f172a"
-          />
-        </Stack>
-
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-          <TextField
             label="Button label (optional)"
             value={buttonLabel}
             onChange={(e) => setButtonLabel(e.target.value)}
@@ -165,13 +151,69 @@ export default function SiteAnnouncementAdmin() {
           />
         </Stack>
 
-        <TextField
-          label="Button color (CSS, optional)"
-          value={buttonColor}
-          onChange={(e) => setButtonColor(e.target.value)}
-          fullWidth
-          placeholder="e.g. #5cbca8"
-        />
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: 2,
+            bgcolor: backgroundColor || '#0f172a',
+            color: textColor || '#ffffff',
+          }}
+        >
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+            <Typography variant="body1" sx={{ flex: 1, fontWeight: 600 }}>
+              {message || 'Preview your announcement here.'}
+            </Typography>
+            {buttonLabel ? (
+              <Button
+                variant="contained"
+                disabled
+                sx={{
+                  bgcolor: buttonColor || '#5cbca8',
+                  color: '#111111',
+                  '&.Mui-disabled': {
+                    bgcolor: buttonColor || '#5cbca8',
+                    color: '#111111',
+                  },
+                }}
+              >
+                {buttonLabel}
+              </Button>
+            ) : null}
+          </Stack>
+        </Box>
+
+        <Button variant="outlined" onClick={() => setShowAdvanced((prev) => !prev)}>
+          {showAdvanced ? 'Hide advanced styling' : 'Advanced styling'}
+        </Button>
+
+        <Collapse in={showAdvanced}>
+          <Stack spacing={2}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                label="Banner background color"
+                value={backgroundColor}
+                onChange={(e) => setBackgroundColor(e.target.value)}
+                fullWidth
+                placeholder="e.g. #f5f5f5 or rgba(92,188,168,0.06)"
+              />
+              <TextField
+                label="Banner text color"
+                value={textColor}
+                onChange={(e) => setTextColor(e.target.value)}
+                fullWidth
+                placeholder="e.g. #0f172a"
+              />
+            </Stack>
+
+            <TextField
+              label="Button color"
+              value={buttonColor}
+              onChange={(e) => setButtonColor(e.target.value)}
+              fullWidth
+              placeholder="e.g. #5cbca8"
+            />
+          </Stack>
+        </Collapse>
 
         <FormControlLabel
           control={

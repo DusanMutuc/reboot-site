@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   CircularProgress,
+  Collapse,
   Divider,
   FormControl,
   FormControlLabel,
@@ -62,6 +63,7 @@ export default function UserDataTransfer() {
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -222,46 +224,6 @@ export default function UserDataTransfer() {
 
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 4 }}>
-            <FormControl fullWidth>
-              <InputLabel id="kpi_merge-label">KPI Handling</InputLabel>
-              <Select
-                labelId="kpi_merge-label"
-                label="KPI Handling"
-                value={opts.kpi_merge}
-                onChange={(e) =>
-                  setOpts((o) => ({ ...o, kpi_merge: e.target.value as TransferOptions['kpi_merge'] }))
-                }
-              >
-                <MenuItem value="prefer_source">
-                  Copy KPI from source (overwrite destination)
-                </MenuItem>
-                <MenuItem value="skip">Skip KPI data entirely</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 4 }}>
-            <FormControl fullWidth>
-              <InputLabel id="smart_doc_conflict-label">Smart Doc Conflict</InputLabel>
-            <Select
-                labelId="smart_doc_conflict-label"
-                label="Smart Doc Conflict"
-                value={opts.smart_doc_conflict}
-                onChange={(e) =>
-                  setOpts((o) => ({
-                    ...o,
-                    smart_doc_conflict: e.target.value as TransferOptions['smart_doc_conflict'],
-                  }))
-                }
-              >
-                <MenuItem value="keep_latest_submitted">Keep latest submitted</MenuItem>
-                <MenuItem value="keep_dest">Keep destination</MenuItem>
-                <MenuItem value="keep_source">Keep source</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 4 }}>
             <FormControlLabel
               control={
                 <Switch
@@ -272,21 +234,69 @@ export default function UserDataTransfer() {
               label="Dry Run (no changes)"
             />
           </Grid>
-
-          <Grid size={{ xs: 12, md: 4 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={opts.reassign_authorship}
-                  onChange={(e) =>
-                    setOpts((o) => ({ ...o, reassign_authorship: e.target.checked }))
-                  }
-                />
-              }
-              label="Reassign content authorship (move ownership)"
-            />
-          </Grid>
         </Grid>
+
+        <Button variant="outlined" onClick={() => setShowAdvanced((prev) => !prev)}>
+          {showAdvanced ? 'Hide advanced options' : 'Advanced options'}
+        </Button>
+
+        <Collapse in={showAdvanced}>
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel id="kpi_merge-label">KPI handling</InputLabel>
+                <Select
+                  labelId="kpi_merge-label"
+                  label="KPI handling"
+                  value={opts.kpi_merge}
+                  onChange={(e) =>
+                    setOpts((o) => ({ ...o, kpi_merge: e.target.value as TransferOptions['kpi_merge'] }))
+                  }
+                >
+                  <MenuItem value="prefer_source">
+                    Copy KPI data from source and replace destination values
+                  </MenuItem>
+                  <MenuItem value="skip">Leave KPI data unchanged</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 4 }}>
+              <FormControl fullWidth>
+                <InputLabel id="smart_doc_conflict-label">Smart Doc conflicts</InputLabel>
+                <Select
+                  labelId="smart_doc_conflict-label"
+                  label="Smart Doc conflicts"
+                  value={opts.smart_doc_conflict}
+                  onChange={(e) =>
+                    setOpts((o) => ({
+                      ...o,
+                      smart_doc_conflict: e.target.value as TransferOptions['smart_doc_conflict'],
+                    }))
+                  }
+                >
+                  <MenuItem value="keep_latest_submitted">Keep the latest submitted version</MenuItem>
+                  <MenuItem value="keep_dest">Keep the destination version</MenuItem>
+                  <MenuItem value="keep_source">Keep the source version</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 4 }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={opts.reassign_authorship}
+                    onChange={(e) =>
+                      setOpts((o) => ({ ...o, reassign_authorship: e.target.checked }))
+                    }
+                  />
+                }
+                label="Reassign content authorship"
+              />
+            </Grid>
+          </Grid>
+        </Collapse>
 
         <Stack direction="row" spacing={2} alignItems="center">
           <Button variant="contained" disabled={!canSubmit} onClick={handleRun}>
@@ -308,14 +318,108 @@ export default function UserDataTransfer() {
                 {result.error}
               </Alert>
             )}
-            <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-{JSON.stringify(result.ok ? result.data : { error: result.error }, null, 2)}
-              </pre>
-            </Paper>
+            {result.ok ? (
+              <Stack spacing={2}>
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} flexWrap="wrap">
+                  {formatTransferResult(result.data).map((section) => (
+                    <Paper key={section.title} variant="outlined" sx={{ p: 2, minWidth: 220, flex: '1 1 220px' }}>
+                      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                        {section.title}
+                      </Typography>
+                      <Stack spacing={0.75}>
+                        {section.items.map((item) => (
+                          <Box key={`${section.title}-${item.label}`}>
+                            <Typography variant="caption" color="text.secondary">
+                              {item.label}
+                            </Typography>
+                            <Typography variant="body2">{item.value}</Typography>
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Paper>
+                  ))}
+                </Stack>
+
+                <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
+                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                    Raw response
+                  </Typography>
+                  <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+{JSON.stringify(result.data, null, 2)}
+                  </pre>
+                </Paper>
+              </Stack>
+            ) : (
+              <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+{JSON.stringify({ error: result.error }, null, 2)}
+                </pre>
+              </Paper>
+            )}
           </Box>
         )}
       </Stack>
     </Paper>
   );
+}
+
+type TransferResultSection = {
+  title: string;
+  items: Array<{ label: string; value: string }>;
+};
+
+function formatTransferResult(data: unknown): TransferResultSection[] {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return [
+      {
+        title: 'Outcome',
+        items: [{ label: 'Result', value: formatTransferValue(data) }],
+      },
+    ];
+  }
+
+  const sections = Object.entries(data as Record<string, unknown>).map(([key, value]) => {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nestedItems = Object.entries(value as Record<string, unknown>).map(([nestedKey, nestedValue]) => ({
+        label: humanizeKey(nestedKey),
+        value: formatTransferValue(nestedValue),
+      }));
+
+      return {
+        title: humanizeKey(key),
+        items: nestedItems.length ? nestedItems : [{ label: humanizeKey(key), value: 'No details provided' }],
+      };
+    }
+
+    return {
+      title: humanizeKey(key),
+      items: [{ label: humanizeKey(key), value: formatTransferValue(value) }],
+    };
+  });
+
+  return sections.length
+    ? sections
+    : [
+        {
+          title: 'Outcome',
+          items: [{ label: 'Result', value: 'Completed' }],
+        },
+      ];
+}
+
+function humanizeKey(value: string): string {
+  return value
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatTransferValue(value: unknown): string {
+  if (value == null) return 'None';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.length ? value.map(formatTransferValue).join(', ') : 'None';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }

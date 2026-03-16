@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import adminTheme from '@/lib/admintheme';
 import AddUserForm from '@/components/admin/AddUserForm';
 import AssignAssistantPanel from '@/components/admin/AssignAssistantPanel';
@@ -20,8 +20,7 @@ import ManualAwardPanel from '@/components/admin/achievements/ManualAwardPanel';
 import StudentStatusOverview from '@/components/StudentStatusOverview';
 import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
-import AdminStudentTracker from '@/components/admin/AdminStudentTracker';
-import StudentOverviewNew from '@/components/admin/StudentOverviewNew';
+import StudentWorkspace from '@/components/student/StudentWorkspace';
 import UserDataTransfer from '@/components/admin/UserDataTransfer';
 import { SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
@@ -102,7 +101,6 @@ const navigationStructure: AdminNavSection[] = [
       { id: 'course-builder', label: 'Course Builder', icon: MenuBookIcon, component: 'CourseEditor' },
       { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
       { id: 'library-editor', label: 'Library Editor', icon: LibraryBooksIcon, component: 'LibraryEditor' },
-      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' },
       { id: 'site-announcement', label: 'Home Announcement', icon: CampaignIcon, component: 'SiteAnnouncementAdmin' },
     ],
   },
@@ -111,9 +109,8 @@ const navigationStructure: AdminNavSection[] = [
     label: 'Student Tracking',
     icon: AssessmentIcon,
     children: [
-      { id: 'student-overview-new', label: 'Student Overview', icon: AssessmentIcon, component: 'StudentOverviewNew' },
       { id: 'status-overview', label: 'Status Overview', icon: AssessmentIcon, component: 'StudentStatusOverview' },
-      { id: 'student-tracker', label: 'Student Tracker', icon: AssessmentIcon, component: 'AdminStudentTracker' },
+      { id: 'student-workspace', label: 'Student Workspace', icon: AssessmentIcon, component: 'StudentWorkspace' },
     ],
   },
   {
@@ -129,6 +126,7 @@ const navigationStructure: AdminNavSection[] = [
     label: 'Achievements',
     icon: EmojiEventsIcon,
     children: [
+      { id: 'achievements-admin', label: 'Manage Achievements', icon: EmojiEventsIcon, component: 'AchievementsAdminPanel' },
       { id: 'achievements-manual', label: 'Manual Awards', icon: EmojiEventsIcon, component: 'ManualAwardPanel' },
     ],
   },
@@ -137,12 +135,21 @@ const navigationStructure: AdminNavSection[] = [
 const validAdminViews = new Set(
   navigationStructure.flatMap((section) => section.children.map((child) => child.id)),
 );
+const ADMIN_VIEW_ALIASES: Record<string, string> = {
+  'student-overview-new': 'student-workspace',
+  'student-tracker': 'student-workspace',
+};
+const knownAdminViews = new Set([...validAdminViews, ...Object.keys(ADMIN_VIEW_ALIASES)]);
 
-function getAdminViewPath(viewId: string): string {
-  return `/admin/${viewId}`;
+function getAdminViewPath(viewId: string, queryString?: string): string {
+  const basePath = `/admin/${viewId}`;
+  return queryString ? `${basePath}?${queryString}` : basePath;
 }
 
 function normalizeAdminView(viewId?: string | null): string {
+  if (viewId && ADMIN_VIEW_ALIASES[viewId]) {
+    return ADMIN_VIEW_ALIASES[viewId];
+  }
   if (viewId && validAdminViews.has(viewId)) {
     return viewId;
   }
@@ -157,6 +164,7 @@ function getSectionIdForView(viewId: string): string | null {
 
 export default function AdminPageShell({ currentView }: { currentView?: string | null }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -168,10 +176,15 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
   });
 
   useEffect(() => {
-    if (currentView && !validAdminViews.has(currentView)) {
-      router.replace(getAdminViewPath(DEFAULT_ADMIN_VIEW));
+    if (!currentView) {
+      return;
     }
-  }, [currentView, router]);
+
+    const canonicalView = normalizeAdminView(currentView);
+    if (!knownAdminViews.has(currentView) || canonicalView !== currentView) {
+      router.replace(getAdminViewPath(canonicalView, searchParams.toString()));
+    }
+  }, [currentView, router, searchParams]);
 
   useEffect(() => {
     const activeSection = getSectionIdForView(selectedView);
@@ -283,11 +296,9 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
       case 'site-announcement':
         return <SiteAnnouncementAdmin />;
       case 'status-overview':
-        return <StudentStatusOverview courseId={2} />;
-      case 'student-overview-new':
-        return <StudentOverviewNew />;
-      case 'student-tracker':
-        return <AdminStudentTracker />;
+        return <StudentStatusOverview courseId={2} workspaceMode="admin" />;
+      case 'student-workspace':
+        return <StudentWorkspace mode="admin" />;
       case 'meetings':
         return <AdminMeetingsPanel />;
       case 'achievements-admin':
@@ -303,6 +314,7 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
     navigationStructure
       .flatMap((section) => section.children)
       .find((child) => child.id === selectedView)?.label ?? 'Admin';
+  const isWorkspaceView = selectedView === 'student-workspace';
 
   if (loading) {
     return (
@@ -465,14 +477,20 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         </Paper>
 
         <Box className="admin-page-main" sx={{ flex: 1, overflow: 'auto' }}>
-          <Container className="admin-page-container" maxWidth="xl" sx={{ py: 4 }}>
-            <Typography className="admin-page-title" variant="h4" fontWeight={700} gutterBottom>
-              {currentLabel}
-            </Typography>
+          <Container className="admin-page-container" maxWidth="xl" sx={{ py: isWorkspaceView ? 2 : 4 }}>
+            {!isWorkspaceView ? (
+              <>
+                <Typography className="admin-page-title" variant="h4" fontWeight={700} gutterBottom>
+                  {currentLabel}
+                </Typography>
 
-            <Paper className="admin-page-content" elevation={1} sx={{ borderRadius: 2, p: 3, mt: 3 }}>
-              {renderContent()}
-            </Paper>
+                <Paper className="admin-page-content" elevation={1} sx={{ borderRadius: 2, p: 3, mt: 3 }}>
+                  {renderContent()}
+                </Paper>
+              </>
+            ) : (
+              renderContent()
+            )}
           </Container>
         </Box>
       </Box>

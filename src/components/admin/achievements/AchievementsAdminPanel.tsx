@@ -1,7 +1,7 @@
 // src/components/admin/achievements/AchievementsAdminPanel.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import NextImage from 'next/image';
 import {
   Box,
@@ -23,6 +23,7 @@ import {
   Typography,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -54,7 +55,7 @@ export default function AchievementsAdminPanel() {
 
   const filtered = useMemo(() => items, [items]);
 
-  async function load(query?: string) {
+  const load = useCallback(async (query?: string) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/admin/achievements${query ? `?q=${encodeURIComponent(query)}` : ''}`);
@@ -63,11 +64,15 @@ export default function AchievementsAdminPanel() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      void load(q.trim() || undefined);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [load, q]);
 
   function onCreate() {
     setEditing(null);
@@ -95,20 +100,21 @@ export default function AchievementsAdminPanel() {
             placeholder="Search by title/code"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') load(q);
-            }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
                   <SearchIcon fontSize="small" />
                 </InputAdornment>
               ),
+              endAdornment: q ? (
+                <InputAdornment position="end">
+                  <IconButton size="small" aria-label="Clear achievement search" onClick={() => setQ('')}>
+                    <ClearIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ) : null,
             }}
           />
-          <Button variant="outlined" onClick={() => load(q)} disabled={loading}>
-            Search
-          </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={onCreate}>
             New
           </Button>

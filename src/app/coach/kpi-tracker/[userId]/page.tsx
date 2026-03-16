@@ -1,5 +1,4 @@
-// src/app/coach/kpi-tracker/[userId]/page.tsx
-import CoachKpiTrackerPage from '@/components/coach/CoachKpiTrackerPage';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,5 +10,5 @@ export default async function CoachKpiTrackerRoute({
   params,
 }: CoachKpiTrackerRouteProps) {
   const { userId } = await params;
-  return <CoachKpiTrackerPage userId={userId} />;
+  redirect(`/coach/students-overview?userId=${encodeURIComponent(userId)}&tab=kpi`);
 }

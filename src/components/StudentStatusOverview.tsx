@@ -60,9 +60,13 @@ const GRID_COLS = {
 
 interface StudentStatusOverviewProps {
   courseId: number | null;
+  workspaceMode?: 'coach' | 'admin';
 }
 
-export default function StudentStatusOverview({ courseId }: StudentStatusOverviewProps) {
+export default function StudentStatusOverview({
+  courseId,
+  workspaceMode = 'coach',
+}: StudentStatusOverviewProps) {
   const [rows, setRows] = useState<RosterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setErr] = useState<string | null>(null);
@@ -429,9 +433,13 @@ export default function StudentStatusOverview({ courseId }: StudentStatusOvervie
                         variant="outlined"
                         endIcon={<OpenInNewIcon />}
                         component={NextLink}
-                        href={`/coach/students-overview?userId=${s.user_id}`}
+                        href={
+                          workspaceMode === 'admin'
+                            ? `/admin/student-workspace?userId=${s.user_id}&tab=dashboard`
+                            : `/coach/students-overview?userId=${s.user_id}&tab=dashboard`
+                        }
                       >
-                        Open dashboard
+                        Open workspace
                       </Button>
                     </Box>
                   </ListItem>
