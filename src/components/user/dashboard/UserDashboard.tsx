@@ -1,22 +1,18 @@
 // src/components/user/dashboard/UserDashboard.tsx
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Typography, CircularProgress, Stack } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import { supabase } from '@/lib/supabaseClient';
-import { fetchDashboardData } from '@/lib/dashboard';
-import type { UserDashboardData } from '@/types/dashboard';
-
 import KpiCharts from './KpiCharts';
 import BigMoneyCards from './BigMoneyCards';
-import KpiSection from './KpiSection';
 import KpiMiniCards from './KpiMiniCards';
 import ActionSteps from './ActionSteps';
 import Wins from './Wins';
 import Achievements from './Achievements';
 import AttendanceSection from './AttendanceSection';
 import CoachingNotesSection from './CoachingNotesSection';
+import useDashboardData from './useDashboardData';
 
 type Props = {
   userId: string;
@@ -25,64 +21,16 @@ type Props = {
 };
 
 export default function UserDashboard({ userId, refreshSignal }: Props) {
-  const [data, setData] = useState<UserDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // chart-only refresh UX
-  const [chartRefreshing, setChartRefreshing] = useState(false);
-  const [chartVersion, setChartVersion] = useState(0);
-
   // Refs to measure heights
   const topRowRef = useRef<HTMLDivElement>(null);
   const bottomRowRef = useRef<HTMLDivElement>(null);
   const [topRowHeight, setTopRowHeight] = useState<number | null>(null);
   const [bottomRowHeight, setBottomRowHeight] = useState<number | null>(null);
-
-  // 1) Full fetch on first load or when userId changes
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const result = await fetchDashboardData(supabase, userId);
-        if (!cancelled) setData(result);
-      } catch (err) {
-        console.error('Error loading dashboard data', err);
-        if (!cancelled) setError('There was a problem loading your dashboard.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
-
-  // 2) Chart-only refetch when refreshSignal changes
-  useEffect(() => {
-    if (!refreshSignal || !userId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        setChartRefreshing(true);
-        // We reuse fetchDashboardData for simplicity, but only keep its kpiChart part.
-        const result = await fetchDashboardData(supabase, userId);
-        if (cancelled) return;
-        setData(prev =>
-          prev
-            ? { ...prev, kpiChart: result.kpiChart } // replace only the chart data
-            : result
-        );
-        setChartVersion(v => v + 1); // bump to re-animate chart
-      } catch (err) {
-        console.error('Error refreshing KPI chart', err);
-        // Non-fatal; don't surface as page error
-      } finally {
-        if (!cancelled) setChartRefreshing(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [refreshSignal, userId]);
+  const { data, loading, error, refreshing: chartRefreshing, chartVersion } = useDashboardData({
+    userId,
+    refreshSignal,
+    refreshMode: 'chart-only',
+  });
 
   // Measure heights after data loads and on window resize
   useEffect(() => {

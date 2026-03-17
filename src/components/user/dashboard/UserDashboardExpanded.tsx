@@ -1,12 +1,10 @@
 // src/components/user/dashboard/UserDashboardExpanded.tsx
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Box, CircularProgress, Stack } from '@mui/material';
+import { useCallback, useState } from 'react';
+import { Box, CircularProgress, Stack, Typography } from '@mui/material';
 import Grid from '@mui/material/Grid';
-import { supabase } from '@/lib/supabaseClient';
-import { fetchDashboardData } from '@/lib/dashboard';
-import type { UserDashboardData, CoachingNotesSectionProps } from '@/types/dashboard';
+import type { CoachingNotesSectionProps } from '@/types/dashboard';
 
 import KpiCharts from './KpiCharts';
 import BigMoneyCards from './BigMoneyCards';
@@ -17,30 +15,38 @@ import Achievements from './Achievements';
 import AttendanceSection from './AttendanceSection';
 import CoachingNotesPicker from './CoachingNotesPicker';
 import CoachingNotesSection from './CoachingNotesSection';
+import useDashboardData from './useDashboardData';
 
 type Props = { userId: string; refreshSignal?: number | string };
 
-export default function UserDashboardExpanded({ userId }: Props) {
-  const [data, setData] = useState<UserDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function UserDashboardExpanded({ userId, refreshSignal }: Props) {
+  const [selectedNote, setSelectedNote] = useState<CoachingNotesSectionProps>({
+    actionSteps: [],
+    notes: [],
+  });
+  const { data, loading, error, refreshing, chartVersion } = useDashboardData({
+    userId,
+    refreshSignal,
+    refreshMode: 'full',
+  });
 
-  const [selectedNote, setSelectedNote] = useState<CoachingNotesSectionProps>({ actionSteps: [], notes: [] });
   const handleSectionChange = useCallback((section: CoachingNotesSectionProps) => {
     setSelectedNote(section);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const result = await fetchDashboardData(supabase, userId);
-      if (!cancelled) { setData(result); setLoading(false); }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
-
   if (loading) return <Box display="flex" justifyContent="center" mt={8}><CircularProgress /></Box>;
-  if (!data) return null;
+  if (error || !data) {
+    return (
+      <Box textAlign="center" mt={8}>
+        <Typography variant="h6" color="error" gutterBottom>
+          {error ?? 'No data available.'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Try refreshing the page or coming back later.
+        </Typography>
+      </Box>
+    );
+  }
 
   const { revenueProfit, kpi, kpiChart, attendance, wins, achievements } = data;
 
@@ -63,7 +69,12 @@ export default function UserDashboardExpanded({ userId }: Props) {
                     profitDeltaPct={revenueProfit.profitDeltaPct}
                     periodLabel={revenueProfit.periodLabel}
                   />
-                  <KpiCharts series={kpiChart.series} periodLabel={kpiChart.periodLabel} />
+                  <KpiCharts
+                    series={kpiChart.series}
+                    periodLabel={kpiChart.periodLabel}
+                    version={chartVersion}
+                    refreshing={refreshing}
+                  />
                   <KpiMiniCards
                     kpis={kpi.kpis}
                     mapping={{
