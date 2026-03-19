@@ -43,7 +43,7 @@ declare module '@mui/material/TextField' {
 
 /** ── GLOBAL SIZE KNOB ───────────────────────────── */
 const SCALE = 0.6;                            // <— tweak this to shrink/grow the whole UI
-const ROOT_REM_PX = 16 * SCALE;                // what 1rem equals (in px) for your app
+const ROOT_REM_PX = 20 * SCALE;                // what 1rem equals (in px) for your app
 const SPACING_BASE = 8 * SCALE;                // theme.spacing() base
 const RADIUS_BASE = 8 * SCALE;                 // theme.shape.borderRadius
 

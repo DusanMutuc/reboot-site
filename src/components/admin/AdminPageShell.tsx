@@ -3,8 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ThemeProvider } from '@mui/material';
-import { adminTheme } from '@/lib/theme';
 import Loading from '@/components/loading';
 import AddUserForm from '@/components/admin/AddUserForm';
 import AssignAssistantPanel from '@/components/admin/AssignAssistantPanel';
@@ -360,127 +358,125 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
   }
 
   return (
-    <ThemeProvider theme={adminTheme}>
-      <Box className="admin-page-shell" sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'grey.50' }}>
-        <Paper
-          className="admin-page-sidebar"
-          elevation={0}
-          sx={{
-            width: 260,
-            flexShrink: 0,
-            borderRight: 1,
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-            overflowY: 'auto',
-          }}
-        >
-          <Box sx={{ p: 2.5, pb: 2 }}>
-            <Typography variant="h6">
-              Admin Panel
-            </Typography>
-          </Box>
-
-          <List component="nav" sx={{ px: 1.5, py: 0 }}>
-            {navigationStructure.map((section) => {
-              const SectionIcon = section.icon;
-              const isExpanded = expandedSections.includes(section.id);
-
-              return (
-                <Box key={section.id} sx={{ mb: 0.5 }}>
-                  <ListItemButton
-                    onClick={() => toggleSection(section.id)}
-                    sx={{
-                      borderRadius: 1,
-                      py: 0.75,
-                      px: 1.5,
-                      minHeight: 0,
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      <SectionIcon sx={{ fontSize: 20 }} />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={section.label}
-                      primaryTypographyProps={{
-                        variant: 'body1',
-                        fontWeight: 600,
-                      }}
-                    />
-                    {isExpanded ? (
-                      <ExpandLess sx={{ fontSize: 20 }} />
-                    ) : (
-                      <ExpandMore sx={{ fontSize: 20 }} />
-                    )}
-                  </ListItemButton>
-
-                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                    <List component="div" disablePadding sx={{ mt: 0.5 }}>
-                      {section.children.map((child) => {
-                        const ChildIcon = child.icon;
-                        const isSelected = selectedView === child.id;
-
-                        return (
-                          <ListItemButton
-                            key={child.id}
-                            selected={isSelected}
-                            onClick={() => navigateToView(child.id)}
-                            sx={{
-                              pl: 5,
-                              pr: 1.5,
-                              py: 0.625,
-                              borderRadius: 1,
-                              mb: 0.25,
-                              minHeight: 0,
-                              '&.Mui-selected': {
-                                bgcolor: 'primary.main',
-                                color: 'white',
-                                '&:hover': {
-                                  bgcolor: 'primary.dark',
-                                },
-                                '& .MuiListItemIcon-root': {
-                                  color: 'white',
-                                },
-                              },
-                            }}
-                          >
-                            <ListItemIcon sx={{ minWidth: 32 }}>
-                              <ChildIcon sx={{ fontSize: 18 }} />
-                            </ListItemIcon>
-                            <ListItemText
-                              primary={child.label}
-                              primaryTypographyProps={{
-                                variant: 'body1',
-                              }}
-                            />
-                          </ListItemButton>
-                        );
-                      })}
-                    </List>
-                  </Collapse>
-                </Box>
-              );
-            })}
-          </List>
-        </Paper>
-
-        <Box className="admin-page-main" sx={{ flex: 1, overflow: 'auto' }}>
-          <Container className="admin-page-container" maxWidth="xl" sx={{ py: isWorkspaceView ? 2 : 4 }}>
-            {!isWorkspaceView ? (
-              <>
-                <Typography className="admin-page-title" variant="h4" fontWeight={700} gutterBottom>
-                  {currentLabel}
-                </Typography>
-
-                <Paper className="admin-page-content" elevation={1} sx={{ borderRadius: 2, p: 3, mt: 3 }}>
-                  {renderContent()}
-                </Paper>
-              </>
-            ) : (
-              renderContent()
-            )}
-          </Container>
+    <Box className="admin-page-shell" sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'grey.50' }}>
+      <Paper
+        className="admin-page-sidebar"
+        elevation={0}
+        sx={{
+          width: 260,
+          flexShrink: 0,
+          borderRight: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          overflowY: 'auto',
+        }}
+      >
+        <Box sx={{ p: 2.5, pb: 2 }}>
+          <Typography variant="h6">
+            Admin Panel
+          </Typography>
         </Box>
+
+        <List component="nav" sx={{ px: 1.5, py: 0 }}>
+          {navigationStructure.map((section) => {
+            const SectionIcon = section.icon;
+            const isExpanded = expandedSections.includes(section.id);
+
+            return (
+              <Box key={section.id} sx={{ mb: 0.5 }}>
+                <ListItemButton
+                  onClick={() => toggleSection(section.id)}
+                  sx={{
+                    borderRadius: 1,
+                    py: 0.75,
+                    px: 1.5,
+                    minHeight: 0,
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 36 }}>
+                    <SectionIcon sx={{ fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={section.label}
+                    primaryTypographyProps={{
+                      variant: 'body1',
+                      fontWeight: 600,
+                    }}
+                  />
+                  {isExpanded ? (
+                    <ExpandLess sx={{ fontSize: 20 }} />
+                  ) : (
+                    <ExpandMore sx={{ fontSize: 20 }} />
+                  )}
+                </ListItemButton>
+
+                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding sx={{ mt: 0.5 }}>
+                    {section.children.map((child) => {
+                      const ChildIcon = child.icon;
+                      const isSelected = selectedView === child.id;
+
+                      return (
+                        <ListItemButton
+                          key={child.id}
+                          selected={isSelected}
+                          onClick={() => navigateToView(child.id)}
+                          sx={{
+                            pl: 5,
+                            pr: 1.5,
+                            py: 0.625,
+                            borderRadius: 1,
+                            mb: 0.25,
+                            minHeight: 0,
+                            '&.Mui-selected': {
+                              bgcolor: 'primary.main',
+                              color: 'white',
+                              '&:hover': {
+                                bgcolor: 'primary.dark',
+                              },
+                              '& .MuiListItemIcon-root': {
+                                color: 'white',
+                              },
+                            },
+                          }}
+                        >
+                          <ListItemIcon sx={{ minWidth: 32 }}>
+                            <ChildIcon sx={{ fontSize: 18 }} />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={child.label}
+                            primaryTypographyProps={{
+                              variant: 'body1',
+                            }}
+                          />
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                </Collapse>
+              </Box>
+            );
+          })}
+        </List>
+      </Paper>
+
+      <Box className="admin-page-main" sx={{ flex: 1, overflow: 'auto' }}>
+        <Container className="admin-page-container" maxWidth="xl" sx={{ py: isWorkspaceView ? 2 : 4 }}>
+          {!isWorkspaceView ? (
+            <>
+              <Typography className="admin-page-title" variant="h4" fontWeight={700} gutterBottom>
+                {currentLabel}
+              </Typography>
+
+              <Paper className="admin-page-content" elevation={1} sx={{ borderRadius: 2, p: 3, mt: 3 }}>
+                {renderContent()}
+              </Paper>
+            </>
+          ) : (
+            renderContent()
+          )}
+        </Container>
       </Box>
-    </ThemeProvider>
+    </Box>
   );
 }
