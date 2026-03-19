@@ -30,99 +30,80 @@ export default function NoteSelector({
       justifyContent="space-between"
       alignItems={{ xs: 'flex-start', md: 'center' }}
       spacing={2}
-      sx={{ mb: 3 }}
+      sx={{ mb: 3, rowGap: 1.5 }}
     >
-      <Box>
-        <Typography
-          variant="subtitle2"
-          sx={{
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            fontSize: 13,
-            letterSpacing: 1,
-            color: 'text.secondary',
-            mb: 1.5,
-          }}
-        >
-          Coaching Notes
-        </Typography>
+      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+        {notes.map((note, index) => {
+          const isSelected = note.id === selectedNoteId;
+          const labelDate = note.m2_meeting?.date || note.created_at;
+          const label = `Note ${index + 1} - ${formatShortDate(labelDate)}`;
 
-        <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-          {notes.map((note, index) => {
-            const isSelected = note.id === selectedNoteId;
-            const labelDate = note.m2_meeting?.date || note.created_at;
-            const label = `Note ${index + 1} - ${formatShortDate(labelDate)}`;
+          return (
+            <Button
+              key={note.id}
+              size="small"
+              variant={isSelected ? 'contained' : 'outlined'}
+              color={isSelected ? 'primary' : 'inherit'}
+              onClick={() => onSelectNote(note.id)}
+              sx={{
+                textTransform: 'none',
+                borderRadius: 999,
+                py: 0.9,
+                px: 2.25,
+                fontSize: 14,
+                fontWeight: isSelected ? 700 : 500,
+                bgcolor: isSelected ? 'primary.main' : 'background.paper',
+                color: isSelected ? 'primary.contrastText' : 'text.secondary',
+                borderColor: isSelected ? 'primary.main' : 'grey.300',
+                boxShadow: isSelected ? '0 6px 14px rgba(92,188,168,0.18)' : 'none',
+                '&:hover': {
+                  bgcolor: isSelected ? 'primary.dark' : 'grey.50',
+                  borderColor: isSelected ? 'primary.dark' : 'grey.400',
+                },
+              }}
+            >
+              {label}
+            </Button>
+          );
+        })}
 
-            return (
-              <Button
-                key={note.id}
-                size="small"
-                variant={isSelected ? 'contained' : 'outlined'}
-                color={isSelected ? 'primary' : 'inherit'}
-                onClick={() => onSelectNote(note.id)}
-                sx={{
-                  textTransform: 'none',
-                  borderRadius: 2,
-                  py: 0.75,
-                  px: 2,
-                  fontSize: 13,
-                  fontWeight: isSelected ? 600 : 500,
-                  bgcolor: isSelected ? 'primary.main' : 'transparent',
-                  borderColor: isSelected ? 'primary.main' : 'grey.300',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    bgcolor: isSelected ? 'primary.dark' : 'grey.50',
-                    transform: 'translateY(-1px)',
-                    boxShadow: isSelected ? 2 : 1,
-                  },
-                }}
-              >
-                {label}
-              </Button>
-            );
-          })}
-
-          {!notesLoading && notes.length === 0 ? (
-            <Typography variant="body2" color="text.secondary">
-              No coaching notes yet.
-            </Typography>
-          ) : null}
-        </Stack>
-      </Box>
-
-      <Stack direction="row" spacing={1}>
         <Button
-          variant="contained"
-          size="large"
+          variant="outlined"
+          size="small"
           onClick={onCreateNote}
           disabled={notesLoading}
           startIcon={<AddIcon />}
           sx={{
             textTransform: 'none',
-            borderRadius: 2,
-            px: 3.5,
-            py: 1.4,
-            fontWeight: 700,
-            fontSize: 16,
-            color: '#3a2a00',
-            background: 'linear-gradient(135deg, #facc15 0%, #eab308 100%)',
-            boxShadow: '0 4px 12px rgba(234, 179, 8, 0.35)',
+            borderRadius: 999,
+            py: 0.9,
+            px: 2.25,
+            fontWeight: 600,
+            borderStyle: 'dashed',
+            borderWidth: 1.5,
+            color: 'primary.main',
+            borderColor: 'primary.light',
+            bgcolor: 'background.paper',
             '&:hover': {
-              background: 'linear-gradient(135deg, #fde047 0%, #facc15 100%)',
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 20px rgba(234, 179, 8, 0.45)',
+              borderStyle: 'dashed',
+              borderWidth: 1.5,
+              borderColor: 'primary.main',
+              bgcolor: 'primary.50',
             },
-            '&:active': {
-              transform: 'translateY(0)',
-              boxShadow: '0 4px 12px rgba(234, 179, 8, 0.35)',
-            },
-            transition: 'all 0.2s ease',
           }}
         >
           {notes.length ? 'New note' : 'Create first note'}
         </Button>
 
-        {selectedNote ? (
+        {!notesLoading && notes.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ alignSelf: 'center', ml: 0.5 }}>
+            No coaching notes yet.
+          </Typography>
+        ) : null}
+      </Stack>
+
+      {selectedNote ? (
+        <Box sx={{ alignSelf: { xs: 'stretch', md: 'center' } }}>
           <Button
             variant="text"
             size="small"
@@ -132,13 +113,15 @@ export default function NoteSelector({
             sx={{
               textTransform: 'none',
               fontWeight: 500,
-              alignSelf: 'center',
+              minWidth: 0,
             }}
           >
             Delete note
           </Button>
-        ) : null}
-      </Stack>
+        </Box>
+      ) : (
+        <Box />
+      )}
     </Stack>
   );
 }

@@ -9,11 +9,6 @@ export type StudentOption = {
   email: string | null;
 };
 
-export type CourseLite = {
-  id: number;
-  title: string | null;
-};
-
 export type WorkspaceQueryPatch = Record<string, string | number | null | undefined>;
 
 export type CoachProgressCourse = StudentOverviewCourse;

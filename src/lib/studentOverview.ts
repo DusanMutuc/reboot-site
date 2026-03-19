@@ -464,7 +464,7 @@ async function fetchLatestCoachingWorkspace(
   };
 }
 
-async function fetchCourseCards(
+export async function fetchStudentProgressCourses(
   client: SupabaseClient,
   userId: string,
 ): Promise<StudentOverviewCourse[]> {
@@ -572,7 +572,7 @@ export async function fetchStudentOverviewData(
       fetchUserMeetings(client, userId),
       fetchKpiHistory(client, userId),
       fetchLatestKpiUpdate(client, userId),
-      fetchCourseCards(client, userId),
+      fetchStudentProgressCourses(client, userId),
       fetchAchievements(client, userId),
     ]);
 

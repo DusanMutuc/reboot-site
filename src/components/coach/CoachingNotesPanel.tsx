@@ -12,9 +12,10 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Divider,
+  Paper,
   Stack,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import type {
   ActionStepStatus,
@@ -102,6 +103,7 @@ function mapCommentRow(row: CoachingNoteCommentRow): CoachingNoteComment {
 }
 
 export default function CoachingNotesPanel({ userId }: Props) {
+  const isNarrow = useMediaQuery('(max-width:900px)');
   const [notes, setNotes] = useState<CoachingNoteWithM2[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
@@ -945,14 +947,14 @@ export default function CoachingNotesPanel({ userId }: Props) {
         }}
       >
         <Typography variant="body2" color="text.secondary">
-          Select a student on the left to view coaching notes.
+          Select a student above to view coaching notes.
         </Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ p: 2.5 }}>
+    <Box>
       {error ? (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -1070,75 +1072,27 @@ export default function CoachingNotesPanel({ userId }: Props) {
         onSelect={handleAddStepFromLibrary}
       />
 
-      <NoteSelector
-        notes={notes}
-        notesLoading={notesLoading}
-        selectedNoteId={selectedNoteId}
-        selectedNote={selectedNote}
-        onCreateNote={handleRequestCreateNote}
-        onDeleteNote={handleRequestDeleteNote}
-        onSelectNote={setSelectedNoteId}
-      />
-
-      <Divider sx={{ mb: 3 }} />
-
-      {notesLoading && !selectedNote ? (
-        <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-          <CircularProgress size={24} />
-        </Box>
-      ) : null}
-
-      {selectedNote ? (
-        <Stack direction="column" spacing={3} sx={{ mt: 1 }}>
-          <ActionStepsPanel
-            editingStepId={editingStepId}
-            editingStepLabel={editingStepLabel}
-            libraryItems={libraryItems}
-            newStepLabel={newStepLabel}
-            savingStep={savingStep}
-            steps={steps}
-            stepsLoading={stepsLoading}
-            onAddStep={handleAddStep}
-            onCancelEditStep={cancelEditStep}
-            onChangeEditingStepLabel={setEditingStepLabel}
-            onChangeNewStepLabel={setNewStepLabel}
-            onChangeStepStatus={(stepId, status) => {
-              void handleChangeStepStatus(stepId, status);
-            }}
-            onOpenLibraryDialog={() => setLibraryDialogOpen(true)}
-            onRequestDeleteStep={handleRequestDeleteStep}
-            onSaveEditStep={() => {
-              void saveEditStep();
-            }}
-            onStartEditStep={startEditStep}
-          />
-
-          <CommentsPanel
-            comments={comments}
-            commentsLoading={commentsLoading}
-            editingCommentBody={editingCommentBody}
-            editingCommentId={editingCommentId}
-            newCommentBody={newCommentBody}
-            savingComment={savingComment}
-            onAddComment={() => {
-              void handleAddComment();
-            }}
-            onCancelEditComment={cancelEditComment}
-            onChangeEditingCommentBody={setEditingCommentBody}
-            onChangeNewCommentBody={setNewCommentBody}
-            onRequestDeleteComment={handleRequestDeleteComment}
-            onSaveEditComment={() => {
-              void saveEditComment();
-            }}
-            onStartEditComment={startEditComment}
-          />
-
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="flex-start">
+        <Paper
+          elevation={0}
+          sx={{
+            flexBasis: isNarrow ? '100%' : 320,
+            flexShrink: 0,
+            width: '100%',
+            border: '1px solid',
+            borderColor: 'grey.200',
+            borderRadius: 3,
+            p: 2.5,
+            bgcolor: 'background.paper',
+          }}
+        >
           <MeetingSlotsPanel
             attendanceSavingKey={attendanceSavingKey}
-            m2Exists={Boolean(selectedNote.m2_meeting_id)}
+            m2Exists={Boolean(selectedNote?.m2_meeting_id)}
             meetingSlots={meetingSlots}
             meetingSlotsLoading={meetingSlotsLoading}
             newMeetingDates={newMeetingDates}
+            noteSelected={Boolean(selectedNote)}
             slotSavingKey={slotSavingKey}
             onChangeExistingDate={(slotKey, value) => {
               void handleChangeSlotDate(slotKey, value);
@@ -1159,12 +1113,87 @@ export default function CoachingNotesPanel({ userId }: Props) {
               void handleToggleSlotAttendance(slotKey);
             }}
           />
-        </Stack>
-      ) : (
-        <Typography variant="body2" color="text.secondary">
-          Create a coaching note to add action steps, notes, and meetings.
-        </Typography>
-      )}
+        </Paper>
+
+        <Box sx={{ flexGrow: 1, width: '100%', minWidth: 0 }}>
+          <NoteSelector
+            notes={notes}
+            notesLoading={notesLoading}
+            selectedNoteId={selectedNoteId}
+            selectedNote={selectedNote}
+            onCreateNote={handleRequestCreateNote}
+            onDeleteNote={handleRequestDeleteNote}
+            onSelectNote={setSelectedNoteId}
+          />
+
+          {notesLoading && !selectedNote ? (
+            <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : null}
+
+          {selectedNote ? (
+            <Stack direction="column" spacing={3} sx={{ mt: 1 }}>
+              <CommentsPanel
+                comments={comments}
+                commentsLoading={commentsLoading}
+                editingCommentBody={editingCommentBody}
+                editingCommentId={editingCommentId}
+                newCommentBody={newCommentBody}
+                savingComment={savingComment}
+                onAddComment={() => {
+                  void handleAddComment();
+                }}
+                onCancelEditComment={cancelEditComment}
+                onChangeEditingCommentBody={setEditingCommentBody}
+                onChangeNewCommentBody={setNewCommentBody}
+                onRequestDeleteComment={handleRequestDeleteComment}
+                onSaveEditComment={() => {
+                  void saveEditComment();
+                }}
+                onStartEditComment={startEditComment}
+              />
+
+              <ActionStepsPanel
+                editingStepId={editingStepId}
+                editingStepLabel={editingStepLabel}
+                libraryItems={libraryItems}
+                newStepLabel={newStepLabel}
+                savingStep={savingStep}
+                steps={steps}
+                stepsLoading={stepsLoading}
+                onAddStep={handleAddStep}
+                onCancelEditStep={cancelEditStep}
+                onChangeEditingStepLabel={setEditingStepLabel}
+                onChangeNewStepLabel={setNewStepLabel}
+                onChangeStepStatus={(stepId, status) => {
+                  void handleChangeStepStatus(stepId, status);
+                }}
+                onOpenLibraryDialog={() => setLibraryDialogOpen(true)}
+                onRequestDeleteStep={handleRequestDeleteStep}
+                onSaveEditStep={() => {
+                  void saveEditStep();
+                }}
+                onStartEditStep={startEditStep}
+              />
+            </Stack>
+          ) : (
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 2,
+              }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                Create a coaching note to start capturing notes, action steps, and meetings.
+              </Typography>
+            </Paper>
+          )}
+        </Box>
+      </Stack>
     </Box>
   );
 }

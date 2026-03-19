@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { fetchStudentOverviewData } from '@/lib/studentOverview';
+import { fetchStudentProgressCourses } from '@/lib/studentOverview';
 import type {
   CoachProgressCourse,
-  CourseLite,
   StudentOption,
   StudentWorkspaceMode,
   StudentWorkspaceTab,
@@ -64,20 +63,6 @@ async function loadCoachStudents(): Promise<StudentOption[]> {
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 }
 
-async function loadCourses(): Promise<CourseLite[]> {
-  const { data, error } = await supabase
-    .from('content_nodes')
-    .select('id,title')
-    .eq('node_type', 'course')
-    .order('title', { ascending: true });
-
-  if (error) {
-    throw error;
-  }
-
-  return (data ?? []) as CourseLite[];
-}
-
 export function useStudentWorkspaceState({
   mode,
   tab,
@@ -88,10 +73,6 @@ export function useStudentWorkspaceState({
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [studentsError, setStudentsError] = useState<string | null>(null);
-
-  const [courses, setCourses] = useState<CourseLite[]>([]);
-  const [coursesLoading, setCoursesLoading] = useState(false);
-  const [coursesError, setCoursesError] = useState<string | null>(null);
 
   const [coachProgressCourses, setCoachProgressCourses] = useState<CoachProgressCourse[]>([]);
   const [coachProgressLoading, setCoachProgressLoading] = useState(false);
@@ -133,44 +114,7 @@ export function useStudentWorkspaceState({
   }, [mode, selectedStudentId, setQuery]);
 
   useEffect(() => {
-    if (tab !== 'progress' || mode !== 'admin') return;
-
-    let active = true;
-
-    (async () => {
-      try {
-        setCoursesLoading(true);
-        setCoursesError(null);
-        const items = await loadCourses();
-        if (!active) return;
-
-        setCourses(items);
-
-        if (!selectedCourseId && items[0]) {
-          setQuery({ courseId: items[0].id });
-          return;
-        }
-
-        if (selectedCourseId && !items.some((item) => item.id === selectedCourseId)) {
-          setQuery({ courseId: items[0]?.id ?? null });
-        }
-      } catch (error) {
-        if (!active) return;
-        setCoursesError(error instanceof Error ? error.message : 'Failed to load courses.');
-      } finally {
-        if (active) {
-          setCoursesLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [mode, selectedCourseId, setQuery, tab]);
-
-  useEffect(() => {
-    if (tab !== 'progress' || mode !== 'coach' || !selectedStudentId) {
+    if (tab !== 'progress' || !selectedStudentId) {
       setCoachProgressCourses([]);
       setCoachProgressError(null);
       setCoachProgressLoading(false);
@@ -183,20 +127,20 @@ export function useStudentWorkspaceState({
       try {
         setCoachProgressLoading(true);
         setCoachProgressError(null);
-        const data = await fetchStudentOverviewData(supabase, selectedStudentId);
+        const progressCourses = await fetchStudentProgressCourses(supabase, selectedStudentId);
         if (!active) return;
 
-        setCoachProgressCourses(data.courses);
+        setCoachProgressCourses(progressCourses);
 
-        if (!data.courses.length) {
+        if (!progressCourses.length) {
           if (selectedCourseId != null) {
             setQuery({ courseId: null });
           }
           return;
         }
 
-        if (!selectedCourseId || !data.courses.some((course) => course.id === selectedCourseId)) {
-          setQuery({ courseId: data.courses[0].id });
+        if (!selectedCourseId || !progressCourses.some((course) => course.id === selectedCourseId)) {
+          setQuery({ courseId: progressCourses[0].id });
         }
       } catch (error) {
         if (!active) return;
@@ -224,9 +168,6 @@ export function useStudentWorkspaceState({
     coachProgressCourses,
     coachProgressError,
     coachProgressLoading,
-    courses,
-    coursesError,
-    coursesLoading,
     selectedStudent,
     students,
     studentsError,

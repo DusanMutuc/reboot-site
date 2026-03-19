@@ -75,7 +75,6 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   const selectedCourseId = courseIdFromQuery ? Number(courseIdFromQuery) : null;
 
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
-  const [coachNotesSearch, setCoachNotesSearch] = useState('');
   const [kpiRefreshSignal, setKpiRefreshSignal] = useState(0);
 
   const setQuery = useCallback(
@@ -101,9 +100,6 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     coachProgressCourses,
     coachProgressError,
     coachProgressLoading,
-    courses,
-    coursesError,
-    coursesLoading,
     selectedStudent,
     students,
     studentsError,
@@ -145,11 +141,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
       case 'notes':
         return (
           <NotesTab
-            searchValue={coachNotesSearch}
             selectedStudentId={selectedStudentId}
-            students={students}
-            onSearchChange={setCoachNotesSearch}
-            onSelectStudent={(studentId) => setQuery({ userId: studentId })}
           />
         );
       case 'progress':
@@ -158,9 +150,6 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
             coachCourses={coachProgressCourses}
             coachError={coachProgressError}
             coachLoading={coachProgressLoading}
-            courses={courses}
-            coursesError={coursesError}
-            coursesLoading={coursesLoading}
             mode={mode}
             selectedCourseId={selectedCourseId}
             selectedStudentId={selectedStudentId}
