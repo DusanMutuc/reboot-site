@@ -1,6 +1,7 @@
 // components/admin/AddUserForm.tsx
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import FormActions from '@/components/FormActions';
 import {
   Box,
   TextField,
@@ -187,9 +188,7 @@ export default function AddUserForm() {
   }
 
   return (
-    <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, maxWidth: 760 }}>
-      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Onboard User</Typography>
-
+    <Box sx={{ maxWidth: 760 }}>
       <Box component="form" onSubmit={onSubmit} noValidate sx={{ display: 'grid', gap: 2 }}>
         <FormControlLabel
           control={<Checkbox checked={isPartnership} onChange={(e) => setIsPartnership(e.target.checked)} />}
@@ -303,13 +302,15 @@ export default function AddUserForm() {
           renderInput={(params) => <TextField {...params} label="Implementation coach (optional)" />}
         />
 
-        <LoadingButton type="submit" variant="contained" loading={busy}>
-          {forms.length > 1 ? 'Onboard Users' : 'Onboard User'}
-        </LoadingButton>
-
-        <Alert severity="info" sx={{ mt: 1 }}>
+        <Alert severity="info" variant="outlined">
           Optionally assign a primary coach and/or implementation coach during onboarding.
         </Alert>
+
+        <FormActions>
+          <LoadingButton type="submit" variant="contained" loading={busy}>
+            {forms.length > 1 ? 'Onboard Users' : 'Onboard User'}
+          </LoadingButton>
+        </FormActions>
       </Box>
 
       <Snackbar
@@ -318,6 +319,6 @@ export default function AddUserForm() {
         onClose={() => setSnack({ ...snack, open: false })}
         message={snack.message}
       />
-    </Paper>
+    </Box>
   );
 }

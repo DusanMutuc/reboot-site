@@ -267,12 +267,8 @@ export default function UserProfilesAdmin() {
   );
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
-    >
+    <>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h6" fontWeight={600}>User Profiles</Typography>
         <Box display="flex" alignItems="center" gap={2}>
           <TextField
             size="small"
@@ -407,6 +403,6 @@ export default function UserProfilesAdmin() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Paper>
+    </>
   );
 }

@@ -1,11 +1,16 @@
-import Typography from '@mui/material/Typography';
+import { Alert, Box } from '@mui/material';
 
-type Props = { message: string };
+type Props = {
+  message: string;
+  severity?: 'error' | 'warning' | 'info';
+};
 
-export default function ErrorMessage({ message }: Props) {
+export default function ErrorMessage({ message, severity = 'error' }: Props) {
   return (
-    <div style={{ padding: 40 }}>
-      <Typography color="error">{message}</Typography>
-    </div>
+    <Box sx={{ p: 3 }}>
+      <Alert severity={severity} variant="outlined">
+        {message}
+      </Alert>
+    </Box>
   );
 }

@@ -198,14 +198,7 @@ export default function CoachProfilesAdmin() {
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
-    >
-      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-        Coach Profiles
-      </Typography>
-
+    <>
       {/* Coach selector */}
       <Box sx={{ mb: 3 }}>
         {loadingCoaches ? (
@@ -363,6 +356,6 @@ export default function CoachProfilesAdmin() {
         onClose={() => setSnack((prev) => ({ ...prev, open: false }))}
         message={snack.message}
       />
-    </Paper>
+    </>
   );
 }

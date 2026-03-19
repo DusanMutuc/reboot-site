@@ -1,9 +1,21 @@
-import Typography from '@mui/material/Typography';
+import { Box, CircularProgress, Typography } from '@mui/material';
 
-export default function Loading() {
+type Props = {
+  message?: string;
+  minHeight?: number | string;
+};
+
+export default function Loading({ message, minHeight = 200 }: Props) {
   return (
-    <div style={{ padding: 40 }}>
-      <Typography>Loading...</Typography>
-    </div>
+    <Box sx={{ display: 'grid', placeItems: 'center', minHeight }}>
+      <Box sx={{ textAlign: 'center' }}>
+        <CircularProgress size={28} />
+        {message && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+            {message}
+          </Typography>
+        )}
+      </Box>
+    </Box>
   );
 }

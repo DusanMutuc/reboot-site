@@ -92,8 +92,7 @@ export default function AchievementsAdminPanel() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h6">Achievements</Typography>
+      <Stack direction="row" justifyContent="flex-end" alignItems="center" mb={2}>
         <Stack direction="row" spacing={1}>
           <TextField
             size="small"

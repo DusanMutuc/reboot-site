@@ -52,9 +52,8 @@ export default function CoachRosters() {
   }
 
   return (
-    <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+    <>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h6" fontWeight={600}>Coach Rosters</Typography>
         <Chip label={`${items.reduce((n, g) => n + g.users.length, 0)} users`} size="small" />
         <Chip label={`${items.length} coaches`} size="small" />
         <Box sx={{ flex: 1 }} />
@@ -134,6 +133,6 @@ export default function CoachRosters() {
           </Accordion>
         ))
       )}
-    </Paper>
+    </>
   );
 }

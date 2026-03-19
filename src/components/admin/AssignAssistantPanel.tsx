@@ -169,11 +169,7 @@ export default function AssignAssistantPanel() {
   }
 
   return (
-    <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-        Assign Assistant Role
-      </Typography>
-
+    <>
       <Box sx={{ display: 'grid', gap: 2, maxWidth: 480, mb: 4 }}>
         <Autocomplete
           options={userOptions}
@@ -185,7 +181,7 @@ export default function AssignAssistantPanel() {
           Grant assistant access
         </LoadingButton>
 
-        <Alert severity="info">
+        <Alert severity="info" variant="outlined">
           Assistants can access only the assistant library experience. Use this to grant or remove assistant access.
         </Alert>
       </Box>
@@ -207,7 +203,7 @@ export default function AssignAssistantPanel() {
             onChange={(_, v) => setAssignmentAssistant(v)}
             renderInput={(params) => <TextField {...params} label="Select assistant…" />}
           />
-          <Alert severity="info">
+          <Alert severity="info" variant="outlined">
             Assign an assistant to a user so they can see who supports them on their dashboard.
           </Alert>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -332,6 +328,6 @@ export default function AssignAssistantPanel() {
         onClose={() => setSnack({ ...snack, open: false })}
         message={snack.message}
       />
-    </Paper>
+    </>
   );
 }

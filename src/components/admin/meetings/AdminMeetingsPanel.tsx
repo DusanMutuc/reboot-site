@@ -203,11 +203,7 @@ export default function AdminMeetingsPanel() {
 
   return (
     <Box>
-      <Typography variant="h5" gutterBottom>
-        Meetings and Attendance
-      </Typography>
-
-      <Paper sx={{ p: 2, mb: 2 }}>
+      <Box sx={{ mb: 2 }}>
         <Stack
           direction={{ xs: 'column', md: 'row' }}
           spacing={2}
@@ -265,7 +261,7 @@ export default function AdminMeetingsPanel() {
             </Button>
           </Stack>
         </Stack>
-      </Paper>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -273,7 +269,7 @@ export default function AdminMeetingsPanel() {
         </Alert>
       )}
 
-      <Paper sx={{ p: 2 }}>
+      <Box>
         {loading ? (
           <Box display="flex" justifyContent="center" py={4}>
             <CircularProgress />
@@ -361,7 +357,7 @@ export default function AdminMeetingsPanel() {
             </TableBody>
           </Table>
         )}
-      </Paper>
+      </Box>
 
       <CreateMeetingDialog
         open={createOpen}

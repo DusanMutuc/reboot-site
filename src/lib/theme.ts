@@ -155,4 +155,19 @@ const theme = createTheme({
   },
 });
 
+const ADMIN_ROOT_REM_PX = 20; // 14.4px for admin/coach pages
+
+export const adminTheme = createTheme(theme, {
+  typography: {
+    htmlFontSize: ADMIN_ROOT_REM_PX,
+  },
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: { fontSize: `${ADMIN_ROOT_REM_PX}px` },
+      },
+    },
+  },
+});
+
 export default theme;

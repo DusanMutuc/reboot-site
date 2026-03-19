@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import FormActions from '@/components/FormActions';
 import {
   Box,
   Collapse,
@@ -119,11 +120,7 @@ export default function SiteAnnouncementAdmin() {
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h6" sx={{ mb: 1.5 }}>
-        Home Page Announcement
-      </Typography>
-
+    <>
       <Stack spacing={2}>
         <TextField
           label="Announcement text"
@@ -155,8 +152,8 @@ export default function SiteAnnouncementAdmin() {
           sx={{
             p: 2,
             borderRadius: 2,
-            bgcolor: backgroundColor || '#0f172a',
-            color: textColor || '#ffffff',
+            bgcolor: backgroundColor || 'secondary.main',
+            color: textColor || 'secondary.contrastText',
           }}
         >
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }}>
@@ -168,11 +165,11 @@ export default function SiteAnnouncementAdmin() {
                 variant="contained"
                 disabled
                 sx={{
-                  bgcolor: buttonColor || '#5cbca8',
-                  color: '#111111',
+                  bgcolor: buttonColor || 'primary.main',
+                  color: 'text.primary',
                   '&.Mui-disabled': {
-                    bgcolor: buttonColor || '#5cbca8',
-                    color: '#111111',
+                    bgcolor: buttonColor || 'primary.main',
+                    color: 'text.primary',
                   },
                 }}
               >
@@ -225,10 +222,12 @@ export default function SiteAnnouncementAdmin() {
           label="Show on user home page"
         />
 
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
-        </Button>
+        <FormActions>
+          <Button variant="contained" onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
+        </FormActions>
       </Stack>
-    </Paper>
+    </>
   );
 }

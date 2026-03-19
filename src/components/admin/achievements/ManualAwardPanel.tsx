@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import FormActions from '@/components/FormActions';
 import {
   Alert,
   Box,
@@ -221,10 +222,6 @@ export default function ManualAwardPanel() {
 
   return (
     <Box>
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Manual Awards
-      </Typography>
-
       <Stack spacing={2} sx={{ maxWidth: 720 }}>
         {err && <Alert severity="error">{err}</Alert>}
         {ok && <Alert severity="success">{ok}</Alert>}
@@ -290,13 +287,15 @@ export default function ManualAwardPanel() {
           InputLabelProps={{ shrink: true }}
         />
 
-        <Button
-          variant="contained"
-          onClick={handleGiveAchievement}
-          disabled={!selectedUser || !selectedAchievementId || saving}
-        >
-          {saving ? 'Saving…' : 'Give Achievement'}
-        </Button>
+        <FormActions>
+          <Button
+            variant="contained"
+            onClick={handleGiveAchievement}
+            disabled={!selectedUser || !selectedAchievementId || saving}
+          >
+            {saving ? 'Saving…' : 'Give Achievement'}
+          </Button>
+        </FormActions>
       </Stack>
 
       <Box sx={{ mt: 4 }}>

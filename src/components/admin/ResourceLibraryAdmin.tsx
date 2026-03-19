@@ -310,9 +310,7 @@ export default function ResourceLibraryAdmin() {
 
   return (
     <Box>
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }} justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h6" fontWeight={800}>Resource Library</Typography>
-
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }} justifyContent="flex-end" sx={{ mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} alignItems={{ xs: 'stretch', md: 'center' }}>
           <TextField
             size="small"
@@ -378,7 +376,7 @@ export default function ResourceLibraryAdmin() {
           <Grid container spacing={2}>
             {rows.map((r) => (
               <Grid key={r.id} size={{ xs: 12, sm: 6, md: 4 }}>
-                <Box sx={{ border: '1px solid #eee', borderRadius: 2, p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <Stack direction="row" spacing={1} alignItems="center">
                     {TYPE_ICONS[r.type]}
                     <Typography variant="overline">{r.type.toUpperCase()}</Typography>
@@ -404,7 +402,7 @@ export default function ResourceLibraryAdmin() {
                     </Box>
                   </Stack>
 
-                  <Typography variant="h6" sx={{ fontWeight: 800 }}>{r.title}</Typography>
+                  <Typography variant="h6">{r.title}</Typography>
                   {r.description && <Typography variant="body2" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.description}</Typography>}
 
                   <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: .5 }}>
@@ -875,7 +873,7 @@ function TagSelector({
   const remove = (id: number) => onChange(value.filter(v => v.id !== id));
 
   return (
-    <Box sx={{ border: '1px solid rgba(0,0,0,0.23)', borderRadius: 1, p: 1 }}>
+    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
         {value.map(v => (
           <Chip key={v.id} label={`#${v.name}`} onDelete={() => remove(v.id)} />

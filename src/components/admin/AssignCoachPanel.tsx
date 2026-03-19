@@ -146,11 +146,7 @@ export default function AssignCoachPanel() {
   }
 
   return (
-    <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-        Assign Coach
-      </Typography>
-
+    <>
       <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: 'stretch' }}>
         <Box sx={{ display: 'grid', gap: 2, width: { xs: '100%', md: 360 } }}>
           <Autocomplete
@@ -204,7 +200,7 @@ export default function AssignCoachPanel() {
             Assign
           </LoadingButton>
 
-          <Alert severity="info">
+          <Alert severity="info" variant="outlined">
             Adds the coach alongside any current coaches. Check &quot;replace existing coach&quot; to remove them first.
           </Alert>
         </Box>
@@ -268,6 +264,6 @@ export default function AssignCoachPanel() {
         onClose={() => setSnack({ ...snack, open: false })}
         message={snack.message}
       />
-    </Paper>
+    </>
   );
 }

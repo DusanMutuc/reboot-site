@@ -155,9 +155,8 @@ export default function UserDataTransfer() {
   }
 
   return (
-    <Paper elevation={3} sx={{ p: 3 }}>
+    <>
       <Stack spacing={2}>
-        <Typography variant="h6">User Data Transfer</Typography>
         <Typography variant="body2">
           Copy data from a source user into a destination user. The source user&apos;s data is left
           intact (except optional authorship reassignment). Start with a dry run to see what would
@@ -359,7 +358,7 @@ export default function UserDataTransfer() {
           </Box>
         )}
       </Stack>
-    </Paper>
+    </>
   );
 }
 

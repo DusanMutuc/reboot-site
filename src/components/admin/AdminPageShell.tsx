@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
-import adminTheme from '@/lib/admintheme';
+import { ThemeProvider } from '@mui/material';
+import { adminTheme } from '@/lib/theme';
+import Loading from '@/components/loading';
 import AddUserForm from '@/components/admin/AddUserForm';
 import AssignAssistantPanel from '@/components/admin/AssignAssistantPanel';
 import AssignCoachPanel from '@/components/admin/AssignCoachPanel';
 import CoachRosters from '@/components/admin/CoachRosters';
-import { ThemeProvider, CssBaseline } from '@mui/material';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
 import CourseEditor from '@/components/admin/courseEditor';
 import LibraryEditor from '@/components/admin/libraryEditor';
@@ -29,7 +30,6 @@ import {
   Container,
   Paper,
   Typography,
-  CircularProgress,
   Alert,
   Button,
   List,
@@ -317,17 +317,7 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
   const isWorkspaceView = selectedView === 'student-workspace';
 
   if (loading) {
-    return (
-      <Container
-        maxWidth="lg"
-        sx={{ py: 6, display: 'grid', placeItems: 'center', minHeight: '60vh' }}
-      >
-        <CircularProgress />
-        <Typography sx={{ mt: 2 }} variant="body2">
-          Checking access...
-        </Typography>
-      </Container>
-    );
+    return <Loading message="Checking access..." minHeight="60vh" />;
   }
 
   if (error) {
@@ -371,7 +361,6 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
 
   return (
     <ThemeProvider theme={adminTheme}>
-      <CssBaseline />
       <Box className="admin-page-shell" sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'grey.50' }}>
         <Paper
           className="admin-page-sidebar"
@@ -386,7 +375,7 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
           }}
         >
           <Box sx={{ p: 2.5, pb: 2 }}>
-            <Typography variant="h6" fontWeight={700} sx={{ fontSize: '1.1rem' }}>
+            <Typography variant="h6">
               Admin Panel
             </Typography>
           </Box>
@@ -413,9 +402,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
                     <ListItemText
                       primary={section.label}
                       primaryTypographyProps={{
+                        variant: 'body1',
                         fontWeight: 600,
-                        fontSize: '1rem',
-                        lineHeight: 1.4,
                       }}
                     />
                     {isExpanded ? (
@@ -461,8 +449,7 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
                             <ListItemText
                               primary={child.label}
                               primaryTypographyProps={{
-                                fontSize: '1rem',
-                                lineHeight: 1.4,
+                                variant: 'body1',
                               }}
                             />
                           </ListItemButton>

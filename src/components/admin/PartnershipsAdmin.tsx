@@ -503,22 +503,13 @@ export default function PartnershipsAdmin() {
     !form.shared_notes;
 
   return (
-    <Paper
-      elevation={0}
-      sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
-    >
+    <>
       <Stack
         direction="row"
         alignItems="center"
-        justifyContent="space-between"
+        justifyContent="flex-end"
         sx={{ mb: 2 }}
       >
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <GroupIcon fontSize="small" />
-          <Typography variant="h6" fontWeight={600}>
-            Partnerships
-          </Typography>
-        </Stack>
         <Button
           variant="contained"
           size="small"
@@ -825,6 +816,6 @@ export default function PartnershipsAdmin() {
         onClose={() => setSnack((prev) => ({ ...prev, open: false }))}
         message={snack.message}
       />
-    </Paper>
+    </>
   );
 }
