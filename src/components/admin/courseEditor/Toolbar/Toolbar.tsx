@@ -5,6 +5,18 @@ import type { NodeState, NodeSubtree } from '@/types/course';
 import type { NodeDraft } from '../Sidebar/Properties';
 import { useEditorStore } from '../state/editorStore';
 
+const toolbarToggleGroupSx = {
+  '& .MuiToggleButton-root': {
+    px: 1.25,
+    py: 0.5,
+    minHeight: 30,
+    fontSize: '0.72rem',
+    lineHeight: 1.15,
+    fontWeight: 600,
+    textTransform: 'none',
+  },
+} as const;
+
 export type ToolbarProps = {
   subtree: NodeSubtree | null;
   nodeDraft: NodeDraft | null;
@@ -44,6 +56,7 @@ export default function Toolbar({ subtree, nodeDraft, onStateChange, onShowDetai
           exclusive
           value={editorMode}
           onChange={(_, value) => value && setEditorMode(value)}
+          sx={toolbarToggleGroupSx}
         >
           <ToggleButton value="edit">Edit</ToggleButton>
           <ToggleButton value="preview">Preview</ToggleButton>
@@ -53,6 +66,7 @@ export default function Toolbar({ subtree, nodeDraft, onStateChange, onShowDetai
           exclusive
           value={subtree.node.state}
           onChange={(_, value) => value && onStateChange(value)}
+          sx={toolbarToggleGroupSx}
         >
           <ToggleButton value="draft">Draft</ToggleButton>
           <ToggleButton value="published">Published</ToggleButton>
@@ -81,11 +95,18 @@ function SaveStatus({ state, message }: SaveStatusProps) {
       label={message}
       sx={{
         borderRadius: 999,
+        height: 28,
         '& .MuiChip-label': {
           display: 'flex',
           alignItems: 'center',
-          gap: 1,
+          gap: 0.75,
+          px: 1,
+          py: 0,
+          fontSize: '0.78rem',
+          fontWeight: 600,
+          lineHeight: 1.2,
         },
+        '& .MuiChip-icon': { ml: 0.875, mr: -0.125 },
       }}
       icon={<StatusDot color={color} />}
     />
@@ -93,5 +114,5 @@ function SaveStatus({ state, message }: SaveStatusProps) {
 }
 
 function StatusDot({ color }: { color: string }) {
-  return <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: color }} />;
+  return <Box sx={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: color }} />;
 }

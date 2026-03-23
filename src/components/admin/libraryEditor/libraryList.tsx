@@ -97,8 +97,15 @@ function StatusChip({ state }: { state: NodeState }) {
       label={state === 'published' ? 'Published' : 'Draft'}
       color={state === 'published' ? 'success' : 'default'}
       sx={{
-        height: 20,
-        '& .MuiChip-label': { px: 0.75, py: 0 },
+        height: 18,
+        borderRadius: 999,
+        '& .MuiChip-label': {
+          px: 0.625,
+          py: 0,
+          fontSize: '0.66rem',
+          fontWeight: 700,
+          lineHeight: 1.1,
+        },
       }}
     />
   );
@@ -354,17 +361,21 @@ export default function LibraryList({
 
                   {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Stack direction="row" alignItems="center" spacing={1}>
-                      <StatusDot state={state} />
+                    <Stack direction="row" alignItems="flex-start" spacing={1}>
                       <Typography
                         variant="body2"
                         fontWeight={600}
                         sx={{
                           color: isSelected ? 'primary.main' : 'text.primary',
+                          minWidth: 0,
+                          lineHeight: 1.3,
                           overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
                           flex: 1,
+                          display: '-webkit-box',
+                          WebkitBoxOrient: 'vertical',
+                          WebkitLineClamp: 2,
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
                         }}
                       >
                         {title || (isLesson ? 'Untitled lesson' : 'Untitled item')}
@@ -540,17 +551,21 @@ export default function LibraryList({
                             </Box>
 
                             <Box sx={{ flex: 1, minWidth: 0 }}>
-                              <Stack direction="row" alignItems="center" spacing={1}>
-                                <StatusDot state={chState} />
+                              <Stack direction="row" alignItems="flex-start" spacing={1}>
                                 <Typography
                                   variant="body2"
                                   fontWeight={600}
                                   sx={{
                                     color: chIsSelected ? 'primary.main' : 'text.primary',
+                                    minWidth: 0,
+                                    lineHeight: 1.3,
                                     overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
                                     flex: 1,
+                                    display: '-webkit-box',
+                                    WebkitBoxOrient: 'vertical',
+                                    WebkitLineClamp: 2,
+                                    whiteSpace: 'normal',
+                                    wordBreak: 'break-word',
                                   }}
                                 >
                                   {chTitle || 'Untitled chapter'}

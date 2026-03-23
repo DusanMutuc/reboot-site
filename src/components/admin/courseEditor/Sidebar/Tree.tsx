@@ -157,7 +157,7 @@ function TruncateTooltip({
     const el = ref.current;
     if (!el) return;
 
-    const check = () => setTruncated(el.scrollWidth > el.clientWidth);
+    const check = () => setTruncated(el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight);
     check();
 
     const ro = new ResizeObserver(check);
@@ -809,11 +809,11 @@ function LessonRow({
       }
       sx={{
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: 1.25,
         pl: 6,
         pr: 2,
-        py: 1.5,
+        py: 1.25,
         borderTop: divider ? '1px solid' : 'none',
         borderColor: 'divider',
         cursor: 'pointer',
@@ -822,15 +822,31 @@ function LessonRow({
         transition: 'background-color .2s',
       }}
     >
-      <ArticleIcon fontSize="small" sx={{ color: iconColor }} />
+      <ArticleIcon fontSize="small" sx={{ color: iconColor, mt: 0.3 }} />
       <TruncateTooltip title={subtree.node.title || 'Untitled'}>
-        <Typography variant="body2" noWrap sx={{ color: textColor, flex: 1 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: textColor,
+            flex: 1,
+            minWidth: 0,
+            fontSize: 15,
+            fontWeight: 600,
+            lineHeight: 1.3,
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+            overflow: 'hidden',
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+          }}
+        >
           {subtree.node.title || 'Untitled'}
         </Typography>
       </TruncateTooltip>
       {isLocked ? (
         <Tooltip title={lockReason ?? 'Locked'}>
-          <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled', mt: 0.3 }}>
             <LockOutlinedIcon fontSize="small" sx={{ pointerEvents: 'none' }} />
           </Box>
         </Tooltip>
