@@ -11,15 +11,25 @@ import Image from 'next/image';
 import { useRouter, useSelectedLayoutSegment } from 'next/navigation';
 import {
   fetchLibrarySidebarItems,
-  resolveLibraryRootId,
   type LibrarySidebarItem,
+  type LibraryScope,
 } from './shared';
 
 type LibrarySidebarLayoutProps = {
   basePath: string;
+  scope: LibraryScope;
   title: string;
   children: ReactNode;
 };
+
+function getRouteKey(item: Pick<LibrarySidebarItem, 'id'>) {
+  return String(item.id);
+}
+
+function matchesSelectedItem(selectedSegment: string | null, item: Pick<LibrarySidebarItem, 'id' | 'slug'>) {
+  if (!selectedSegment) return false;
+  return selectedSegment === String(item.id) || selectedSegment === item.slug;
+}
 
 function Thumb({
   src,
@@ -76,11 +86,11 @@ const ChapterRow = memo(function ChapterRow({
 }: {
   chapter: LibrarySidebarItem;
   selected: boolean;
-  onOpen: (slug: string) => void;
+  onOpen: (item: LibrarySidebarItem) => void;
 }) {
   return (
     <Box
-      onClick={() => onOpen(chapter.slug)}
+      onClick={() => onOpen(chapter)}
       sx={{
         display: 'flex',
         gap: 1.25,
@@ -138,10 +148,10 @@ const LessonCard = memo(function LessonCard({
 }: {
   lesson: LibrarySidebarItem;
   selectedSlug: string | null;
-  onOpen: (slug: string) => void;
+  onOpen: (item: LibrarySidebarItem) => void;
 }) {
-  const selectedLesson = lesson.slug === selectedSlug;
-  const hasSelectedChild = lesson.children?.some((chapter) => chapter.slug === selectedSlug);
+  const selectedLesson = matchesSelectedItem(selectedSlug, lesson);
+  const hasSelectedChild = lesson.children?.some((chapter) => matchesSelectedItem(selectedSlug, chapter));
   const isActive = selectedLesson || hasSelectedChild;
 
   return (
@@ -162,7 +172,7 @@ const LessonCard = memo(function LessonCard({
       }}
     >
       <Box
-        onClick={() => onOpen(lesson.slug)}
+        onClick={() => onOpen(lesson)}
         sx={{ display: 'flex', gap: 2, alignItems: 'center', cursor: 'pointer', p: 2 }}
       >
         <Thumb src={lesson.hero_image} alt={lesson.title || ''} width={72} height={48} />
@@ -201,7 +211,7 @@ const LessonCard = memo(function LessonCard({
               <ChapterRow
                 key={chapter.id}
                 chapter={chapter}
-                selected={selectedSlug === chapter.slug}
+                selected={matchesSelectedItem(selectedSlug, chapter)}
                 onOpen={onOpen}
               />
             ))}
@@ -223,7 +233,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
   basePath: string;
   items: LibrarySidebarItem[];
   selectedSlug: string | null;
-  onOpenItem: (slug: string) => void;
+  onOpenItem: (item: LibrarySidebarItem) => void;
 }) {
   return (
     <Box
@@ -270,6 +280,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
 
 export default function LibrarySidebarLayout({
   basePath,
+  scope,
   title,
   children,
 }: LibrarySidebarLayoutProps) {
@@ -277,17 +288,16 @@ export default function LibrarySidebarLayout({
   const selectedSegment = useSelectedLayoutSegment();
   const selectedSlug = selectedSegment ? decodeURIComponent(selectedSegment) : null;
 
-  const [rootId, setRootId] = useState<number | null>(null);
   const [items, setItems] = useState<LibrarySidebarItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRootId() {
+    async function loadItems() {
       try {
-        const nextRootId = await resolveLibraryRootId();
+        const nextItems = await fetchLibrarySidebarItems(scope);
         if (!cancelled) {
-          setRootId(nextRootId);
+          setItems(nextItems);
         }
       } catch {
         if (!cancelled) {
@@ -296,59 +306,39 @@ export default function LibrarySidebarLayout({
       }
     }
 
-    void loadRootId();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (rootId === null) return;
-
-    const currentRootId = rootId;
-
-    let cancelled = false;
-
-    async function loadItems() {
-      const nextItems = await fetchLibrarySidebarItems(currentRootId);
-      if (!cancelled) {
-        setItems(nextItems);
-      }
-    }
-
     void loadItems();
 
     return () => {
       cancelled = true;
     };
-  }, [rootId]);
+  }, [scope]);
 
   useEffect(() => {
     if (!items.length || !selectedSlug) return;
 
-    const lesson = items.find((item) => item.slug === selectedSlug);
+    const lesson = items.find((item) => matchesSelectedItem(selectedSlug, item));
     if (!lesson || !lesson.children?.length) return;
 
-    const firstChapterSlug = lesson.children[0].slug;
-    if (firstChapterSlug && firstChapterSlug !== selectedSlug) {
-      router.push(`${basePath}/${firstChapterSlug}`);
+    const firstChapterKey = getRouteKey(lesson.children[0]);
+    if (firstChapterKey !== selectedSlug) {
+      router.push(`${basePath}/${firstChapterKey}`);
     }
   }, [basePath, items, router, selectedSlug]);
 
   const openItem = useCallback(
-    (slug: string) => {
-      const lesson = items.find((item) => item.slug === slug);
+    (item: LibrarySidebarItem) => {
+      const lesson = items.find((candidate) => candidate.id === item.id);
       if (lesson) {
-        const targetSlug = lesson.children?.[0]?.slug ?? lesson.slug;
-        if (selectedSlug !== targetSlug) {
-          router.push(`${basePath}/${targetSlug}`);
+        const targetKey = getRouteKey(lesson.children?.[0] ?? lesson);
+        if (selectedSlug !== targetKey) {
+          router.push(`${basePath}/${targetKey}`);
         }
         return;
       }
 
-      if (selectedSlug !== slug) {
-        router.push(`${basePath}/${slug}`);
+      const targetKey = getRouteKey(item);
+      if (selectedSlug !== targetKey) {
+        router.push(`${basePath}/${targetKey}`);
       }
     },
     [basePath, items, router, selectedSlug],

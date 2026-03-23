@@ -6,6 +6,7 @@ export default function LibraryPage() {
   return (
     <LibraryCollectionPage
       basePath="/library"
+      scope="main"
       title="Library"
       backHref="/resources"
       backLabel="Back to Resources"

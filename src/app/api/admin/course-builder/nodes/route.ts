@@ -103,6 +103,18 @@ export async function GET(request: NextRequest) {
     }
 
     const rootType = url.searchParams.get('rootType') ?? undefined;
+    const rootIdValue = url.searchParams.get('rootId');
+    const rootId = rootIdValue ? Number(rootIdValue) : null;
+
+    if (rootIdValue) {
+      if (!Number.isFinite(rootId) || (rootId as number) <= 0) {
+        throw new CourseBuilderError('Invalid rootId', 400, { value: rootIdValue });
+      }
+
+      const subtree = await fetchNodeSubtree(rootId as number);
+      return NextResponse.json({ subtrees: [subtree] });
+    }
+
     const ids = await fetchRootNodeIds(rootType);
 
     const subtrees = [] as Awaited<ReturnType<typeof fetchNodeSubtree>>[];

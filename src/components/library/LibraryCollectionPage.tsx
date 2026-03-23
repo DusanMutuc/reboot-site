@@ -21,12 +21,13 @@ import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import {
   fetchLibraryChildren,
   resolveLibraryHeroSrc,
-  resolveLibraryRootId,
   type LibraryChildRow,
+  type LibraryScope,
 } from './shared';
 
 type LibraryCollectionPageProps = {
   basePath: string;
+  scope: LibraryScope;
   title: string;
   backHref?: string;
   backLabel?: string;
@@ -67,62 +68,29 @@ function SkeletonCard() {
 
 export default function LibraryCollectionPage({
   basePath,
+  scope,
   title,
   backHref,
   backLabel,
   headerAccessory,
 }: LibraryCollectionPageProps) {
   const [loading, setLoading] = useState(true);
-  const [rootId, setRootId] = useState<number | null>(null);
   const [items, setItems] = useState<LibraryChildRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadRootId() {
-      try {
-        setError(null);
-        const nextRootId = await resolveLibraryRootId();
-        if (!cancelled) {
-          setRootId(nextRootId);
-        }
-      } catch (loadError: unknown) {
-        const message = loadError instanceof Error ? loadError.message : 'Failed to load';
-        if (!cancelled) {
-          setError(message);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    void loadRootId();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (rootId === null) return;
-
-    const currentRootId = rootId;
-
-    let cancelled = false;
-
     async function loadChildren() {
       try {
         setLoading(true);
         setError(null);
-        const nextItems = await fetchLibraryChildren(currentRootId);
+        const nextItems = await fetchLibraryChildren(scope);
         if (!cancelled) {
           setItems(nextItems);
         }
       } catch (loadError: unknown) {
-        const message = loadError instanceof Error ? loadError.message : 'Failed to load Library items';
+        const message = loadError instanceof Error ? loadError.message : 'Failed to load';
         if (!cancelled) {
           setError(message);
         }
@@ -138,7 +106,7 @@ export default function LibraryCollectionPage({
     return () => {
       cancelled = true;
     };
-  }, [rootId]);
+  }, [scope]);
 
   const gridContent = useMemo(() => {
     if (loading) {
@@ -176,7 +144,7 @@ export default function LibraryCollectionPage({
       <Grid container spacing={3}>
         {items.map(({ child }) => {
           const heroSrc = resolveLibraryHeroSrc(child.hero_image ?? null);
-          const href = child.slug ? `${basePath}/${child.slug}` : `${basePath}/${child.id}`;
+          const href = `${basePath}/${child.id}`;
 
           return (
             <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>

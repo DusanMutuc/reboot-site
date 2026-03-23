@@ -16,8 +16,14 @@ async function parseJson<T>(res: Response, fallback: string): Promise<T> {
   return json;
 }
 
-export async function fetchCourseTrees(rootType: string = 'course') {
-  const res = await fetch(`/api/admin/course-builder/nodes?rootType=${encodeURIComponent(rootType)}`);
+export async function fetchCourseTrees(rootType: string = 'course', rootId?: number) {
+  const params = new URLSearchParams();
+  params.set('rootType', rootType);
+  if (rootId != null) {
+    params.set('rootId', String(rootId));
+  }
+
+  const res = await fetch(`/api/admin/course-builder/nodes?${params.toString()}`);
   const data = await parseJson<{ subtrees: NodeSubtree[] }>(res, 'Failed to load course tree');
   return data.subtrees ?? [];
 }

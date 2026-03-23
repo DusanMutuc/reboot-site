@@ -79,9 +79,30 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/r/') ||
     pathname.startsWith('/api');
 
-  if (!assistantAllowed) {
+  const assistantPath =
+    pathname === '/assistant-library' ||
+    pathname.startsWith('/assistant-library/');
+
+  let assistantStatus: boolean | null = null;
+  const isAssistantUser = async () => {
+    if (assistantStatus != null) return assistantStatus;
     const { data: isAssistant, error: assistantErr } = await supabase.rpc('is_assistant');
-    if (!assistantErr && isAssistant) {
+    assistantStatus = !assistantErr && !!isAssistant;
+    return assistantStatus;
+  };
+
+  if (assistantPath) {
+    const isAssistant = await isAssistantUser();
+    if (!isAssistant) {
+      const url = req.nextUrl.clone();
+      url.pathname = '/library';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  if (!assistantAllowed) {
+    const isAssistant = await isAssistantUser();
+    if (isAssistant) {
       const url = req.nextUrl.clone();
       url.pathname = '/assistant-library';
       return NextResponse.redirect(url);

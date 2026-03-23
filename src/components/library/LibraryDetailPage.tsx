@@ -2,22 +2,22 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Box, Container, Skeleton, Stack, Typography } from '@mui/material';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { BlockRenderer } from '@/components/course/BlockRenderer';
 import type { ContentBlock } from '@/types/course';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import {
   fetchLibraryDetailData,
-  resolveLibrarySlugFromNodeId,
   type LibraryDetailNode,
+  type LibraryScope,
 } from './shared';
 
 type LibraryDetailPageProps = {
   basePath: string;
+  scope: LibraryScope;
 };
 
-export default function LibraryDetailPage({ basePath }: LibraryDetailPageProps) {
-  const router = useRouter();
+export default function LibraryDetailPage({ basePath, scope }: LibraryDetailPageProps) {
   const { slug } = useParams<{ slug: string }>();
 
   const [loading, setLoading] = useState(true);
@@ -25,25 +25,6 @@ export default function LibraryDetailPage({ basePath }: LibraryDetailPageProps) 
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
   const [resources, setResources] = useState<Record<number, RenderableResource>>({});
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function normalizeNumericSlug() {
-      if (!slug || !/^\d+$/.test(slug)) return;
-
-      const resolvedSlug = await resolveLibrarySlugFromNodeId(Number(slug));
-      if (!cancelled && resolvedSlug) {
-        router.replace(`${basePath}/${resolvedSlug}`);
-      }
-    }
-
-    void normalizeNumericSlug();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [basePath, router, slug]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -61,7 +42,7 @@ export default function LibraryDetailPage({ basePath }: LibraryDetailPageProps) 
         setLoading(true);
         setError(null);
 
-        const data = await fetchLibraryDetailData(slug);
+        const data = await fetchLibraryDetailData(scope, slug);
         if (!cancelled) {
           setNode(data.node);
           setBlocks(data.blocks);
@@ -84,7 +65,7 @@ export default function LibraryDetailPage({ basePath }: LibraryDetailPageProps) 
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [scope, slug]);
 
   const content = useMemo(() => {
     if (loading) {

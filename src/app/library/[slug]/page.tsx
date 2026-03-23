@@ -1,5 +1,5 @@
 import LibraryDetailPage from '@/components/library/LibraryDetailPage';
 
 export default function LibraryDetailRoute() {
-  return <LibraryDetailPage basePath="/library" />;
+  return <LibraryDetailPage basePath="/library" scope="main" />;
 }

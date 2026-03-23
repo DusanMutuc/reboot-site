@@ -1,7 +1,16 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, CircularProgress, Snackbar, Stack } from '@mui/material';
+import {
+  Alert,
+  Box,
+  CircularProgress,
+  Snackbar,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material';
 
 import type {
   BlockType,
@@ -113,6 +122,60 @@ function normalizeHtmlContent(html?: string | null) {
 }
 // -----------------------------------------------------------------------------------
 
+type LibraryMode = 'main' | 'assistant';
+
+async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
+  if (mode === 'assistant') {
+    const { data: assistantRoot, error } = await supabase
+      .from('content_nodes')
+      .select('id')
+      .eq('slug', 'assistant-library')
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!assistantRoot?.id) {
+      throw new Error('Assistant Library collection not found.');
+    }
+
+    return assistantRoot.id;
+  }
+
+  const { data: librarySlug, error: slugError } = await supabase
+    .from('content_nodes')
+    .select('id')
+    .eq('slug', 'library')
+    .maybeSingle();
+
+  if (slugError) {
+    throw new Error(slugError.message);
+  }
+
+  if (librarySlug?.id) {
+    return librarySlug.id;
+  }
+
+  const { data: latestCollection, error: latestError } = await supabase
+    .from('content_nodes')
+    .select('id')
+    .eq('node_type', 'collection')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestError) {
+    throw new Error(latestError.message);
+  }
+
+  if (!latestCollection?.id) {
+    throw new Error('No Library collection found.');
+  }
+
+  return latestCollection.id;
+}
+
 function LibraryEditorInner() {
   const {
     selectedNodeId,
@@ -133,6 +196,7 @@ function LibraryEditorInner() {
   const [rules, setRules] = useState<NodeEdgeRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>('main');
 
   // library-specific
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
@@ -242,14 +306,15 @@ function LibraryEditorInner() {
     setLoading(true);
     setError(null);
     try {
-      const [subtrees, edgeRules] = await Promise.all([fetchCourseTrees('collection'), fetchEdgeRules()]);
+      const rootId = await resolveLibraryEditorRootId(libraryMode);
+      const [subtrees, edgeRules] = await Promise.all([
+        fetchCourseTrees('collection', rootId),
+        fetchEdgeRules(),
+      ]);
       setTrees(subtrees);
       setRules(edgeRules);
 
-      // Auto-select the first collection root if nothing selected
-      if (subtrees[0]?.node?.id != null) {
-        setSelectedNodeId((prev) => prev ?? subtrees[0].node.id);
-      }
+      setSelectedNodeId(subtrees[0]?.node?.id ?? null);
       setSelectedBlockId(null);
       setEditingBlockId(null);
     } catch (err) {
@@ -258,7 +323,7 @@ function LibraryEditorInner() {
     } finally {
       setLoading(false);
     }
-  }, [setEditingBlockId, setSelectedBlockId, setSelectedNodeId]);
+  }, [libraryMode, setEditingBlockId, setSelectedBlockId, setSelectedNodeId]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
@@ -573,22 +638,48 @@ function LibraryEditorInner() {
     }
   }, [editorMode, setEditingBlockId, setSelectedBlockId]);
 
-  if (loading) {
-    return <Box sx={{ p: 6, display: 'grid', placeItems: 'center' }}><CircularProgress /></Box>;
-  }
-  if (error) {
-    return (
-      <Box sx={{ p: 6 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-      </Box>
-    );
-  }
-
   // We assume single Library root for now (first subtree). If you have more, show them all in LibraryList.
   const libraryRoot = trees[0] ?? null;
 
   return (
-    <Fragment>
+    <Stack spacing={2}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1.5}
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        justifyContent="space-between"
+      >
+        <Box>
+          <Typography variant="subtitle1" fontWeight={700}>
+            Editing Target
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Switch between the public Library tree and the assistant-only Library tree.
+          </Typography>
+        </Box>
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={libraryMode}
+          onChange={(_, nextValue: LibraryMode | null) => {
+            if (nextValue) setLibraryMode(nextValue);
+          }}
+        >
+          <ToggleButton value="main">Main Library</ToggleButton>
+          <ToggleButton value="assistant">Assistant Library</ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
+
+      {loading ? (
+        <Box sx={{ p: 6, display: 'grid', placeItems: 'center' }}>
+          <CircularProgress />
+        </Box>
+      ) : error ? (
+        <Box sx={{ p: 2 }}>
+          <Alert severity="error">{error}</Alert>
+        </Box>
+      ) : (
+        <Fragment>
       <Stack sx={{ height: '100%', minHeight: '80vh', border: '1px solid', borderColor: 'divider', borderRadius: 3 }}>
         <Toolbar
           subtree={selectedSubtree}
@@ -725,6 +816,8 @@ function LibraryEditorInner() {
         {snack ? <Alert severity={snack.severity}>{snack.message}</Alert> : undefined}
       </Snackbar>
     </Fragment>
+      )}
+    </Stack>
   );
 }
 
