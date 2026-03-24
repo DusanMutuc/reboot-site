@@ -571,14 +571,13 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Typography
-                      variant="subtitle1"
+                      variant="kpiTrackerMetricTitle"
                       fontWeight="700"
                       color="text.primary"
                       gutterBottom
                       sx={{
                         textTransform: 'uppercase',
                         letterSpacing: 0.5,
-                        fontSize: '0.95rem',
                         mb: 0.5,
                       }}
                     >
@@ -589,7 +588,7 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
                         variant="body2"
                         color="text.secondary"
                         display="block"
-                        sx={{ mb: 2, fontSize: '0.875rem', lineHeight: 1.4 }}
+                        sx={{ mb: 2, lineHeight: 1.4 }}
                       >
                         {metric.description}
                       </Typography>

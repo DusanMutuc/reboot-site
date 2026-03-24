@@ -18,9 +18,14 @@ type Props = {
   userId: string;
   /** Change this value to refresh ONLY the KPI chart (no remount). */
   refreshSignal?: number | string;
+  compactMetricLabels?: boolean;
 };
 
-export default function UserDashboard({ userId, refreshSignal }: Props) {
+export default function UserDashboard({
+  userId,
+  refreshSignal,
+  compactMetricLabels = false,
+}: Props) {
   // Refs to measure heights
   const topRowRef = useRef<HTMLDivElement>(null);
   const bottomRowRef = useRef<HTMLDivElement>(null);
@@ -85,6 +90,7 @@ export default function UserDashboard({ userId, refreshSignal }: Props) {
                     revenueDeltaPct={revenueProfit.revenueDeltaPct}
                     profitDeltaPct={revenueProfit.profitDeltaPct}
                     periodLabel={revenueProfit.periodLabel}
+                    compactLabels={compactMetricLabels}
                   />
 
                   <Box sx={{ mt: 1 }}>
@@ -104,6 +110,7 @@ export default function UserDashboard({ userId, refreshSignal }: Props) {
                       repeatReferral: 'repeat_referral',
                       daysOff: 'days_off',
                     }}
+                    compactLabels={compactMetricLabels}
                   />
                 </Stack>
               </div>

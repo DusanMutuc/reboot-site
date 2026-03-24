@@ -15,5 +15,11 @@ export default function OverviewTab({ mode, userId, refreshSignal }: OverviewTab
     return <StudentOverviewNew userId={userId} embedded />;
   }
 
-  return <UserDashboard userId={userId} refreshSignal={refreshSignal} />;
+  return (
+    <UserDashboard
+      userId={userId}
+      refreshSignal={refreshSignal}
+      compactMetricLabels
+    />
+  );
 }

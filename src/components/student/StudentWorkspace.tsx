@@ -34,6 +34,7 @@ import { useStudentWorkspaceState } from '@/components/student/workspace/useStud
 
 const TABS: StudentWorkspaceTab[] = ['overview', 'notes', 'progress', 'kpi'];
 const NOTES_SIDEBAR_WIDTH = 360;
+const COACH_WORKSPACE_SHELL_MAX_WIDTH = 1200;
 
 function normalizeTab(value: string | null): StudentWorkspaceTab {
   if (value === 'dashboard') {
@@ -177,158 +178,171 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
         mr: { xs: 0, lg: privateNotesOpen ? `${NOTES_SIDEBAR_WIDTH}px` : 0 },
       }}
     >
-      <Stack spacing={2} sx={{ px: { xs: 0, md: 1 }, pb: 2 }}>
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ pr: { xs: 0, sm: 3 } }}
-        >
-          <Stack direction="row" spacing={mode === 'coach' ? 1.5 : 0} alignItems="center">
-            {mode === 'coach' ? (
-              <IconButton
-                LinkComponent={Link}
-                href={backHref}
-                aria-label={backLabel}
-                size="medium"
-              >
-                <ArrowBackIosNewIcon />
-              </IconButton>
-            ) : null}
-            <Box>
-              {sectionLabel ? (
-                <Typography
-                  variant="overline"
-                  color="text.secondary"
-                  sx={{ letterSpacing: 0.8 }}
+      <Box
+        sx={
+          mode === 'coach'
+            ? {
+                width: '100%',
+                maxWidth: COACH_WORKSPACE_SHELL_MAX_WIDTH,
+                mx: 'auto',
+                px: { xs: 2, md: 4 },
+              }
+            : undefined
+        }
+      >
+        <Stack spacing={2} sx={{ px: mode === 'coach' ? 0 : { xs: 0, md: 1 }, pb: 2 }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            sx={{ pr: mode === 'coach' ? 0 : { xs: 0, sm: 3 } }}
+          >
+            <Stack direction="row" spacing={mode === 'coach' ? 1.5 : 0} alignItems="center">
+              {mode === 'coach' ? (
+                <IconButton
+                  LinkComponent={Link}
+                  href={backHref}
+                  aria-label={backLabel}
+                  size="medium"
                 >
-                  {sectionLabel}
-                </Typography>
+                  <ArrowBackIosNewIcon />
+                </IconButton>
               ) : null}
-              <Typography
-                variant={mode === 'admin' ? 'adminPageTitle' : 'h5'}
-                sx={mode === 'admin' ? undefined : { fontWeight: 800 }}
+              <Box>
+                {sectionLabel ? (
+                  <Typography
+                    variant="overline"
+                    color="text.secondary"
+                    sx={{ letterSpacing: 0.8 }}
+                  >
+                    {sectionLabel}
+                  </Typography>
+                ) : null}
+                <Typography
+                  variant={mode === 'admin' ? 'adminPageTitle' : 'h5'}
+                  sx={mode === 'admin' ? undefined : { fontWeight: 800 }}
+                >
+                  Student Workspace
+                </Typography>
+              </Box>
+            </Stack>
+
+            <Box sx={{ width: 190, flexShrink: 0 }}>
+              <Button
+                variant={privateNotesOpen ? 'contained' : 'outlined'}
+                size="small"
+                fullWidth
+                startIcon={<NotesIcon />}
+                onClick={() => setPrivateNotesOpen((prev) => !prev)}
+                disabled={!selectedStudentId}
               >
-                Student Workspace
-              </Typography>
+                Private notes
+              </Button>
             </Box>
           </Stack>
 
-          <Box sx={{ width: 190, flexShrink: 0 }}>
-            <Button
-              variant={privateNotesOpen ? 'contained' : 'outlined'}
-              size="small"
-              fullWidth
-              startIcon={<NotesIcon />}
-              onClick={() => setPrivateNotesOpen((prev) => !prev)}
-              disabled={!selectedStudentId}
-            >
-              Private notes
-            </Button>
-          </Box>
-        </Stack>
-
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            border: '1px solid',
-            borderColor: 'grey.200',
-            borderRadius: 3,
-          }}
-        >
-          <Stack spacing={2}>
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              spacing={2}
-              alignItems={{ xs: 'stretch', md: 'center' }}
-            >
-              <Box sx={{ minWidth: 300, flex: 1 }}>
-                <Autocomplete
-                  options={students}
-                  loading={studentsLoading}
-                  value={selectedStudent}
-                  onChange={(_event, nextValue) => {
-                    setQuery({ userId: nextValue?.id ?? null });
-                  }}
-                  getOptionLabel={(option) => option.full_name}
-                  isOptionEqualToValue={(option, value) => option.id === value.id}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Student"
-                      placeholder="Search for a student"
-                      error={Boolean(studentsError)}
-                      helperText={studentsError ?? scopeCopy}
-                    />
-                  )}
-                />
-              </Box>
-
-              {selectedStudent ? (
-                <Box sx={{ minWidth: { xs: '100%', md: 240 } }}>
-                  <Typography
-                    variant={mode === 'admin' ? 'adminSectionTitle' : 'body1'}
-                    sx={{ fontWeight: 700 }}
-                  >
-                    {selectedStudent.full_name}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {selectedStudent.email ||
-                      (mode === 'coach' ? 'Roster student' : 'Email unavailable')}
-                  </Typography>
-                </Box>
-              ) : null}
-            </Stack>
-          </Stack>
-        </Paper>
-
-        <Paper
-          elevation={0}
-          sx={{
-            border: '1px solid',
-            borderColor: 'grey.200',
-            borderRadius: 3,
-            overflow: 'hidden',
-          }}
-        >
-          <Tabs
-            value={tab}
-            onChange={(_event, nextValue: StudentWorkspaceTab) => setQuery({ tab: nextValue })}
-            variant="scrollable"
-            scrollButtons="auto"
-            aria-label="Student workspace tabs"
+          <Paper
+            elevation={0}
             sx={{
-              px: 1,
-              borderBottom: '1px solid',
+              p: 2,
+              border: '1px solid',
               borderColor: 'grey.200',
+              borderRadius: 3,
             }}
           >
-            <Tab value="overview" label="Overview" />
-            <Tab value="notes" label="Coaching Notes" />
-            <Tab value="progress" label="Progress" />
-            <Tab value="kpi" label="KPI Tracker" />
-          </Tabs>
+            <Stack spacing={2}>
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                alignItems={{ xs: 'stretch', md: 'center' }}
+              >
+                <Box sx={{ minWidth: 300, flex: 1 }}>
+                  <Autocomplete
+                    options={students}
+                    loading={studentsLoading}
+                    value={selectedStudent}
+                    onChange={(_event, nextValue) => {
+                      setQuery({ userId: nextValue?.id ?? null });
+                    }}
+                    getOptionLabel={(option) => option.full_name}
+                    isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Student"
+                        placeholder="Search for a student"
+                        error={Boolean(studentsError)}
+                        helperText={studentsError ?? scopeCopy}
+                      />
+                    )}
+                  />
+                </Box>
 
-          <Box sx={{ p: { xs: 2, md: 3 } }}>
-            {studentsLoading ? (
-              <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              renderTabContent()
-            )}
-          </Box>
-        </Paper>
+                {selectedStudent ? (
+                  <Box sx={{ minWidth: { xs: '100%', md: 240 } }}>
+                    <Typography
+                      variant={mode === 'admin' ? 'adminSectionTitle' : 'body1'}
+                      sx={{ fontWeight: 700 }}
+                    >
+                      {selectedStudent.full_name}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedStudent.email ||
+                        (mode === 'coach' ? 'Roster student' : 'Email unavailable')}
+                    </Typography>
+                  </Box>
+                ) : null}
+              </Stack>
+            </Stack>
+          </Paper>
 
-        {!studentsLoading && students.length === 0 ? (
-          <Alert severity="info">
-            {mode === 'admin'
-              ? 'No students are available yet.'
-              : 'No students were found on your roster.'}
-          </Alert>
-        ) : null}
-      </Stack>
+          <Paper
+            elevation={0}
+            sx={{
+              border: '1px solid',
+              borderColor: 'grey.200',
+              borderRadius: 3,
+              overflow: 'hidden',
+            }}
+          >
+            <Tabs
+              value={tab}
+              onChange={(_event, nextValue: StudentWorkspaceTab) => setQuery({ tab: nextValue })}
+              variant="scrollable"
+              scrollButtons="auto"
+              aria-label="Student workspace tabs"
+              sx={{
+                px: 1,
+                borderBottom: '1px solid',
+                borderColor: 'grey.200',
+              }}
+            >
+              <Tab value="overview" label="Overview" />
+              <Tab value="notes" label="Coaching Notes" />
+              <Tab value="progress" label="Progress" />
+              <Tab value="kpi" label="KPI Tracker" />
+            </Tabs>
+
+            <Box sx={{ p: { xs: 2, md: 3 } }}>
+              {studentsLoading ? (
+                <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                renderTabContent()
+              )}
+            </Box>
+          </Paper>
+
+          {!studentsLoading && students.length === 0 ? (
+            <Alert severity="info">
+              {mode === 'admin'
+                ? 'No students are available yet.'
+                : 'No students were found on your roster.'}
+            </Alert>
+          ) : null}
+        </Stack>
+      </Box>
 
       <Box
         sx={{

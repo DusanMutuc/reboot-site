@@ -1295,10 +1295,9 @@ export default function StudentOverviewNew({
                     >
                       <Stack spacing={1}>
                         <Typography
-                          variant="body2"
+                          variant="metricLabelCompact"
                           sx={{
                             color: 'text.secondary',
-                            fontWeight: 600,
                           }}
                         >
                           {metric.label}

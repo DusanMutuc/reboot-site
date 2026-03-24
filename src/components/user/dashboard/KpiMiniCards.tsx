@@ -15,10 +15,16 @@ type Props = {
     repeatReferral: KpiKey;    // 'repeat_referral'
     daysOff: KpiKey;           // 'days_off'
   };
+  compactLabels?: boolean;
 };
 
-export default function KpiMiniCards({ kpis, mapping }: Props) {
+export default function KpiMiniCards({
+  kpis,
+  mapping,
+  compactLabels = false,
+}: Props) {
   const byKey = (k: KpiKey) => kpis.find((m) => m.key === k)?.value ?? 0;
+  const labelVariant = compactLabels ? 'metricLabelCompact' : 'subtitle2';
 
   const items = [
     { title: 'Total Closed', value: byKey(mapping.totalClosed) },
@@ -32,7 +38,7 @@ export default function KpiMiniCards({ kpis, mapping }: Props) {
       {items.map((t, i) => (
         <Grid key={i} size={{ xs: 6, md: 3 }}>
           <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 }, borderRadius: 2 }}>
-            <Typography variant="subtitle2" color="text.secondary">
+            <Typography variant={labelVariant} color="text.secondary">
               {t.title}
             </Typography>
             <Typography sx={{ fontWeight: 700, fontSize: { xs: '1.4rem', md: '1.6rem' }, lineHeight: 1.1 }}>

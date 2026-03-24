@@ -26,7 +26,12 @@ export default function KpiTab({ refreshSignal, userId, onSaved }: KpiTabProps) 
       </Paper>
 
       <Box>
-        <UserDashboardExpanded userId={userId} refreshSignal={refreshSignal} />
+        <UserDashboardExpanded
+          userId={userId}
+          refreshSignal={refreshSignal}
+          compactMetricLabels
+          kpiContentTextBump
+        />
       </Box>
     </Stack>
   );

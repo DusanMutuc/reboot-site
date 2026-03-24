@@ -28,7 +28,16 @@ const statusConfig = {
   },
 };
 
-export default function ActionSteps({ steps }: { steps: DashboardActionStep[] }) {
+export default function ActionSteps({
+  steps,
+  textSizeBump = false,
+}: {
+  steps: DashboardActionStep[];
+  textSizeBump?: boolean;
+}) {
+  const titleVariant = textSizeBump ? 'body1' : 'body2';
+  const chipLabelVariant = textSizeBump ? 'body2' : 'caption';
+
   return (
     <Paper 
       elevation={0}
@@ -82,12 +91,11 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
                   {/* Header with title and status */}
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
                     <Typography
-                      variant="h6"
+                      variant={titleVariant}
                       fontWeight={600}
                       sx={{
                         lineHeight: 1.4,
                         color: isCompleted ? 'text.secondary' : 'text.primary',
-                        fontSize: '13px',
                         flex: 1,
                       }}
                     >
@@ -95,19 +103,21 @@ export default function ActionSteps({ steps }: { steps: DashboardActionStep[] })
                     </Typography>
                     
                     <Chip
-                      label={status.label}
-                      size="small"
+                      label={(
+                        <Typography
+                          component="span"
+                          variant={chipLabelVariant}
+                          sx={{ color: 'inherit', fontWeight: 600 }}
+                        >
+                          {status.label}
+                        </Typography>
+                      )}
+                      size={textSizeBump ? 'medium' : 'small'}
                       sx={{
-                        height: 22,
-                        fontSize: '11px',
-                        fontWeight: 600,
                         bgcolor: 'white',
                         color: status.color,
                         border: `1.5px solid ${status.color}`,
                         flexShrink: 0,
-                        '& .MuiChip-label': {
-                          px: 1,
-                        }
                       }}
                     />
                   </Box>

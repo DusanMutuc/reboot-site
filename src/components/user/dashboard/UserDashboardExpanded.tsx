@@ -17,9 +17,19 @@ import CoachingNotesPicker from './CoachingNotesPicker';
 import CoachingNotesSection from './CoachingNotesSection';
 import useDashboardData from './useDashboardData';
 
-type Props = { userId: string; refreshSignal?: number | string };
+type Props = {
+  userId: string;
+  refreshSignal?: number | string;
+  compactMetricLabels?: boolean;
+  kpiContentTextBump?: boolean;
+};
 
-export default function UserDashboardExpanded({ userId, refreshSignal }: Props) {
+export default function UserDashboardExpanded({
+  userId,
+  refreshSignal,
+  compactMetricLabels = false,
+  kpiContentTextBump = false,
+}: Props) {
   const [selectedNote, setSelectedNote] = useState<CoachingNotesSectionProps>({
     actionSteps: [],
     notes: [],
@@ -68,6 +78,7 @@ export default function UserDashboardExpanded({ userId, refreshSignal }: Props) 
                     revenueDeltaPct={revenueProfit.revenueDeltaPct}
                     profitDeltaPct={revenueProfit.profitDeltaPct}
                     periodLabel={revenueProfit.periodLabel}
+                    compactLabels={compactMetricLabels}
                   />
                   <KpiCharts
                     series={kpiChart.series}
@@ -83,11 +94,15 @@ export default function UserDashboardExpanded({ userId, refreshSignal }: Props) 
                       repeatReferral: 'repeat_referral',
                       daysOff: 'days_off',
                     }}
+                    compactLabels={compactMetricLabels}
                   />
                 </Stack>
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
-                <ActionSteps steps={selectedNote.actionSteps} />
+                <ActionSteps
+                  steps={selectedNote.actionSteps}
+                  textSizeBump={kpiContentTextBump}
+                />
               </Grid>
             </Grid>
 
@@ -97,7 +112,10 @@ export default function UserDashboardExpanded({ userId, refreshSignal }: Props) 
                 <AttendanceSection {...attendance} />
               </Grid>
               <Grid size={{ xs: 12, md: 6 }}>
-                <CoachingNotesSection {...selectedNote} />
+                <CoachingNotesSection
+                  {...selectedNote}
+                  textSizeBump={kpiContentTextBump}
+                />
               </Grid>
             </Grid>
 

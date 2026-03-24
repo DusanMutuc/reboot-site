@@ -37,6 +37,8 @@ declare module '@mui/material/styles' {
     adminSectionTitle: React.CSSProperties;
     adminMetric: React.CSSProperties;
     adminEyebrow: React.CSSProperties;
+    metricLabelCompact: React.CSSProperties;
+    kpiTrackerMetricTitle: React.CSSProperties;
   }
 
   interface TypographyVariantsOptions {
@@ -45,6 +47,8 @@ declare module '@mui/material/styles' {
     adminSectionTitle?: React.CSSProperties;
     adminMetric?: React.CSSProperties;
     adminEyebrow?: React.CSSProperties;
+    metricLabelCompact?: React.CSSProperties;
+    kpiTrackerMetricTitle?: React.CSSProperties;
   }
 }
 
@@ -55,6 +59,8 @@ declare module '@mui/material/Typography' {
     adminSectionTitle: true;
     adminMetric: true;
     adminEyebrow: true;
+    metricLabelCompact: true;
+    kpiTrackerMetricTitle: true;
   }
 }
 
@@ -140,6 +146,18 @@ const theme = createTheme({
       lineHeight: 1.3,
       textTransform: 'uppercase',
       letterSpacing: '0.1em',
+    },
+    metricLabelCompact: {
+      fontFamily: BODY_FONT_FAMILY,
+      fontSize: '0.82rem',
+      fontWeight: 600,
+      lineHeight: 1.2,
+    },
+    kpiTrackerMetricTitle: {
+      fontFamily: BODY_FONT_FAMILY,
+      fontSize: '1.05rem',
+      fontWeight: 700,
+      lineHeight: 1.2,
     },
   },
   spacing: (factor: number) => SPACING_BASE * factor,
