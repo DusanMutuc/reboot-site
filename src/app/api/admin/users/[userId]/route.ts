@@ -50,7 +50,7 @@ async function fetchUserPayload(userId: string) {
     await Promise.all([
       supa
         .from('profiles')
-        .select('first_name, last_name, looker_link, ghl_user_id')
+        .select('first_name, last_name, looker_link, ghl_user_id, introduced_at')
         .eq('id', userId)
         .maybeSingle(),
       supa.auth.admin.getUserById(userId),
@@ -77,6 +77,7 @@ async function fetchUserPayload(userId: string) {
       last_name: profile.last_name ?? '',
       looker_link: profile.looker_link?.trim() ?? '',
       ghl_user_id: profile.ghl_user_id?.trim() ?? '',
+      introduced_at: profile.introduced_at ?? null,
     },
   } as const;
 }
@@ -118,12 +119,13 @@ export async function PATCH(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  const { first_name, last_name, looker_link, phone, ghl_user_id } = body as Partial<{
+  const { first_name, last_name, looker_link, phone, ghl_user_id, introduced_at } = body as Partial<{
     first_name: string;
     last_name: string;
     looker_link: string | null;
     phone: string | null;
     ghl_user_id: string | null;
+    introduced_at: string | null;
   }>;
 
   const profileUpdates: Record<string, string | null> = {};
@@ -145,6 +147,13 @@ export async function PATCH(request: NextRequest, context: Params) {
     profileUpdates.ghl_user_id = trimmed === '' ? null : trimmed;
   } else if (ghl_user_id === null) {
     profileUpdates.ghl_user_id = null;
+  }
+
+  if (typeof introduced_at === 'string') {
+    const trimmed = introduced_at.trim();
+    profileUpdates.introduced_at = trimmed === '' ? null : trimmed;
+  } else if (introduced_at === null) {
+    profileUpdates.introduced_at = null;
   }
 
   const supa = getAdminClient();

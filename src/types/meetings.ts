@@ -31,12 +31,13 @@ export type MeetingType = {
     updated_at?: string;
   };
   
-  export type MeetingAttendanceWithProfile = MeetingAttendance & {
-    profiles?: {
-      first_name?: string | null;
-      last_name?: string | null;
-    } | null;
-  };
+export type MeetingAttendanceWithProfile = MeetingAttendance & {
+  profiles?: {
+    first_name?: string | null;
+    last_name?: string | null;
+    introduced_at?: string | null;
+  } | null;
+};
   
   export type UserMeeting = {
     meeting_id: number;

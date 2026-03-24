@@ -195,7 +195,7 @@ export async function getMeetingAttendance(
         'attended',
         'created_at',
         'updated_at',
-        'profiles ( first_name, last_name )', // FK works on the base table
+        'profiles ( first_name, last_name, introduced_at )', // FK works on the base table
       ].join(', ')
     )
     .eq('meeting_id', meetingId)

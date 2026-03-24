@@ -21,7 +21,7 @@ export async function GET() {
   // Step 2: profiles
   const { data: profs, error: pErr } = await supa
     .from('profiles')
-    .select('id, first_name, last_name')
+    .select('id, first_name, last_name, introduced_at')
     .in('id', ids);
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
   const profMap = new Map(profs.map((p) => [p.id, p]));
@@ -42,7 +42,12 @@ export async function GET() {
   const items = ids.map((id) => {
     const p = profMap.get(id);
     const name = `${p?.first_name ?? ''} ${p?.last_name ?? ''}`.trim();
-    return { id, name, email: emailMap.get(id) || '' };
+    return {
+      id,
+      name,
+      email: emailMap.get(id) || '',
+      introduced_at: p?.introduced_at ?? null,
+    };
   });
 
   return NextResponse.json({ items });

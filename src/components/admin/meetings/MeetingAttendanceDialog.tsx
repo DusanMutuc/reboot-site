@@ -53,6 +53,7 @@ import type { MeetingAttendanceWithProfile } from '@/types/meetings';
 type Props = {
   open: boolean;
   meetingId: number | null;
+  meetingDate: string | null;
   onClose: () => void;
 };
 
@@ -60,6 +61,7 @@ type SimpleUser = {
   id: string;
   name: string;
   email: string;
+  introduced_at: string | null;
 };
 
 type Source = 'members' | 'coaches';
@@ -77,11 +79,13 @@ function toSimpleUser(u: unknown): SimpleUser | null {
   const id = obj.id;
   const name = obj.name;
   const email = obj.email;
+  const introducedAt = obj.introduced_at;
   if (typeof id !== 'string' && typeof id !== 'number') return null;
   return {
     id: String(id),
     name: typeof name === 'string' ? name : '',
     email: typeof email === 'string' ? email : '',
+    introduced_at: typeof introducedAt === 'string' ? introducedAt : null,
   };
 }
 
@@ -229,12 +233,59 @@ async function parseCsvNames(file: File): Promise<{ names: string[]; detectedCol
   return { names, detectedColumn: nameCol };
 }
 
+function buildIntroducedTimestamp(meetingDate: string | null): string | null {
+  if (!meetingDate || !/^\d{4}-\d{2}-\d{2}$/.test(meetingDate)) {
+    return null;
+  }
+
+  // Store midday UTC so the calendar date remains stable when rendered in local time.
+  return `${meetingDate}T12:00:00.000Z`;
+}
+
+async function patchIntroducedAt(userId: string, introducedAt: string): Promise<string | null> {
+  const response = await fetch(`/api/admin/users/${userId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ introduced_at: introducedAt }),
+  });
+
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      payload &&
+      typeof payload === 'object' &&
+      typeof (payload as { error?: unknown }).error === 'string'
+        ? (payload as { error: string }).error
+        : 'Failed to mark attendee as introduced';
+
+    throw new Error(message);
+  }
+
+  if (payload && typeof payload === 'object') {
+    const nextIntroducedAt = (payload as { introduced_at?: unknown }).introduced_at;
+    if (typeof nextIntroducedAt === 'string' || nextIntroducedAt === null) {
+      return nextIntroducedAt;
+    }
+  }
+
+  return introducedAt;
+}
+
 /** ========= component ========= */
 
-export function MeetingAttendanceDialog({ open, meetingId, onClose }: Props) {
+export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose }: Props) {
   const [rows, setRows] = useState<MeetingAttendanceWithProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [introducingId, setIntroducingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Members (users) list
@@ -395,6 +446,58 @@ const unmatchedList = useMemo(() => {
     return activePool.filter((p) => !existing.has(p.id));
   }, [activePool, rows]);
 
+  const syncIntroducedState = (userId: string, introducedAt: string | null) => {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.user_id === userId
+          ? {
+              ...row,
+              profiles: {
+                ...(row.profiles ?? {}),
+                introduced_at: introducedAt,
+              },
+            }
+          : row
+      )
+    );
+    setAllUsers((prev) =>
+      prev.map((user) => (user.id === userId ? { ...user, introduced_at: introducedAt } : user))
+    );
+    setAllCoaches((prev) =>
+      prev.map((user) => (user.id === userId ? { ...user, introduced_at: introducedAt } : user))
+    );
+  };
+
+  const getIntroducedAt = (row: MeetingAttendanceWithProfile) =>
+    row.profiles?.introduced_at ?? lookup.get(row.user_id)?.introduced_at ?? null;
+
+  const handleMarkIntroduced = async (userId: string) => {
+    const introducedAt = buildIntroducedTimestamp(meetingDate);
+    if (!introducedAt) {
+      setError('Meeting date is unavailable, so the introduction date could not be saved.');
+      return;
+    }
+
+    const existingRow = rows.find((row) => row.user_id === userId) ?? null;
+    const previousIntroducedAt =
+      existingRow?.profiles?.introduced_at ?? lookup.get(userId)?.introduced_at ?? null;
+
+    setIntroducingId(userId);
+    setError(null);
+    syncIntroducedState(userId, introducedAt);
+
+    try {
+      const persistedIntroducedAt = await patchIntroducedAt(userId, introducedAt);
+      syncIntroducedState(userId, persistedIntroducedAt);
+    } catch (err: unknown) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : 'Failed to mark attendee as introduced');
+      syncIntroducedState(userId, previousIntroducedAt);
+    } finally {
+      setIntroducingId(null);
+    }
+  };
+
   const handleToggle = async (userId: string, currentValue: boolean) => {
     if (!meetingId) return;
     const newValue = !currentValue;
@@ -441,7 +544,11 @@ const unmatchedList = useMemo(() => {
           meeting_id: meetingId,
           user_id: selectedUserId,
           attended: false,
-          profiles: { first_name: firstName || null, last_name: lastName || null },
+          profiles: {
+            first_name: firstName || null,
+            last_name: lastName || null,
+            introduced_at: user?.introduced_at ?? null,
+          },
         } as MeetingAttendanceWithProfile,
       ]);
 
@@ -484,7 +591,7 @@ const unmatchedList = useMemo(() => {
   };
 
   const handleClose = () => {
-    if (savingId || adding || removingId || importing) return;
+    if (savingId || introducingId || adding || removingId || importing) return;
     setError(null);
     setImportSummary(null);
     setImportInfo(null);
@@ -521,6 +628,8 @@ const unmatchedList = useMemo(() => {
     if (!quickSelectedUserId) return null;
     return rows.find((row) => row.user_id === quickSelectedUserId) ?? null;
   }, [quickSelectedUserId, rows]);
+
+  const quickSelectedIntroducedAt = quickSelectedRow ? getIntroducedAt(quickSelectedRow) : null;
 
   useEffect(() => {
     if (!quickSelectedUserId) return;
@@ -626,7 +735,11 @@ const unmatchedList = useMemo(() => {
               meeting_id: meetingId,
               user_id: userId,
               attended: true,
-              profiles: { first_name: firstName || null, last_name: lastName || null },
+              profiles: {
+                first_name: firstName || null,
+                last_name: lastName || null,
+                introduced_at: u?.introduced_at ?? null,
+              },
             } as MeetingAttendanceWithProfile);
           }
         }
@@ -973,9 +1086,32 @@ const unmatchedList = useMemo(() => {
                   if (!quickSelectedRow) return;
                   void handleToggle(quickSelectedRow.user_id, Boolean(quickSelectedRow.attended));
                 }}
-                disabled={!quickSelectedRow || savingId === quickSelectedRow.user_id || importing}
+                disabled={
+                  !quickSelectedRow ||
+                  savingId === quickSelectedRow.user_id ||
+                  introducingId === quickSelectedRow.user_id ||
+                  importing
+                }
               />
             </Stack>
+
+            {quickSelectedRow && !quickSelectedIntroducedAt && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  void handleMarkIntroduced(quickSelectedRow.user_id);
+                }}
+                disabled={
+                  !meetingDate ||
+                  introducingId === quickSelectedRow.user_id ||
+                  savingId === quickSelectedRow.user_id ||
+                  importing
+                }
+              >
+                {introducingId === quickSelectedRow.user_id ? 'Saving...' : 'Mark introduced'}
+              </Button>
+            )}
           </Stack>
         </Box>
 
@@ -1048,39 +1184,61 @@ const unmatchedList = useMemo(() => {
               <TableRow>
                 <TableCell>Attendee</TableCell>
                 <TableCell align="center">Attended</TableCell>
+                <TableCell align="center">Introduce</TableCell>
                 <TableCell align="center">Remove</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {sortedRows.map((row) => (
-                <TableRow key={row.user_id}>
-                  <TableCell>{getDisplayName(row)}</TableCell>
-                  <TableCell align="center">
-                    <Checkbox
-                      checked={!!row.attended}
-                      onChange={() => handleToggle(row.user_id, !!row.attended)}
-                      disabled={savingId === row.user_id || importing}
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <IconButton
-                      size="small"
-                      color="error"
-                      onClick={() => openRemoveDialog(row)}
-                      disabled={removingId === row.user_id || importing}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {sortedRows.map((row) => {
+                const introducedAt = getIntroducedAt(row);
+
+                return (
+                  <TableRow key={row.user_id}>
+                    <TableCell>{getDisplayName(row)}</TableCell>
+                    <TableCell align="center">
+                      <Checkbox
+                        checked={!!row.attended}
+                        onChange={() => handleToggle(row.user_id, !!row.attended)}
+                        disabled={savingId === row.user_id || introducingId === row.user_id || importing}
+                      />
+                    </TableCell>
+                    <TableCell align="center">
+                      {!introducedAt ? (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            void handleMarkIntroduced(row.user_id);
+                          }}
+                          disabled={!meetingDate || introducingId === row.user_id || savingId === row.user_id || importing}
+                        >
+                          {introducingId === row.user_id ? 'Saving...' : 'Mark introduced'}
+                        </Button>
+                      ) : null}
+                    </TableCell>
+                    <TableCell align="center">
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => openRemoveDialog(row)}
+                        disabled={removingId === row.user_id || introducingId === row.user_id || importing}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
       </DialogContent>
 
       <DialogActions>
-        <Button onClick={handleClose} disabled={Boolean(savingId || adding || removingId || importing)}>
+        <Button
+          onClick={handleClose}
+          disabled={Boolean(savingId || introducingId || adding || removingId || importing)}
+        >
           Close
         </Button>
       </DialogActions>

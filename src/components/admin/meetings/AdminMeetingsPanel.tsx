@@ -50,7 +50,7 @@ export default function AdminMeetingsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [attendanceMeetingId, setAttendanceMeetingId] = useState<number | null>(null);
+  const [attendanceMeeting, setAttendanceMeeting] = useState<Meeting | null>(null);
 
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -105,12 +105,12 @@ export default function AdminMeetingsPanel() {
     void loadMeetings();
   };
 
-  const handleOpenAttendance = (meetingId: number) => {
-    setAttendanceMeetingId(meetingId);
+  const handleOpenAttendance = (meeting: Meeting) => {
+    setAttendanceMeeting(meeting);
   };
 
   const handleCloseAttendance = () => {
-    setAttendanceMeetingId(null);
+    setAttendanceMeeting(null);
   };
 
   const handleCreatedMeeting = () => {
@@ -327,7 +327,7 @@ export default function AdminMeetingsPanel() {
                       <Button
                         size="small"
                         variant="outlined"
-                        onClick={() => handleOpenAttendance(m.id)}
+                        onClick={() => handleOpenAttendance(m)}
                       >
                         Attendance
                       </Button>
@@ -367,8 +367,9 @@ export default function AdminMeetingsPanel() {
       />
 
       <MeetingAttendanceDialog
-        open={Boolean(attendanceMeetingId)}
-        meetingId={attendanceMeetingId}
+        open={Boolean(attendanceMeeting)}
+        meetingId={attendanceMeeting?.id ?? null}
+        meetingDate={attendanceMeeting?.date ?? null}
         onClose={handleCloseAttendance}
       />
 
