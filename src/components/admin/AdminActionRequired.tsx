@@ -436,7 +436,7 @@ export default function AdminActionRequired() {
       {showGlobalSpinner ? (
         <Paper sx={{ p: 4, display: 'grid', placeItems: 'center' }}>
           <CircularProgress />
-          <Typography sx={{ mt: 2 }} color="text.secondary">
+          <Typography variant="body2" sx={{ mt: 2 }} color="text.secondary">
             Loading admin data…
           </Typography>
         </Paper>
@@ -474,7 +474,7 @@ export default function AdminActionRequired() {
                     return (
                       <MenuItem key={course.id} value={course.id}>
                         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                          <Typography>{course.name}</Typography>
+                          <Typography variant="body1">{course.name}</Typography>
                           {date && (
                             <Typography variant="caption" color="text.secondary">
                               Starts {date}
@@ -501,8 +501,8 @@ export default function AdminActionRequired() {
                 <Box sx={{ display: 'grid', gap: 1 }}>
                   {missingCoaches.map((user) => (
                     <Paper key={user.id} variant="outlined" sx={{ p: 1.5 }}>
-                      <Typography fontWeight={600}>{user.name}</Typography>
-                      <Typography color="text.secondary">{user.email || 'No email on file'}</Typography>
+                      <Typography variant="body1" fontWeight={600}>{user.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">{user.email || 'No email on file'}</Typography>
                     </Paper>
                   ))}
                 </Box>
@@ -531,8 +531,8 @@ export default function AdminActionRequired() {
                       <Paper key={user.id} variant="outlined" sx={{ p: 2 }}>
                         <Stack spacing={1.5}>
                           <Box>
-                            <Typography fontWeight={600}>{user.name}</Typography>
-                            <Typography color="text.secondary">{user.email || 'No email on file'}</Typography>
+                            <Typography variant="body1" fontWeight={600}>{user.name}</Typography>
+                            <Typography variant="body2" color="text.secondary">{user.email || 'No email on file'}</Typography>
                           </Box>
                           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
                             <TextField
@@ -584,8 +584,8 @@ export default function AdminActionRequired() {
                       <Paper key={user.id} variant="outlined" sx={{ p: 2 }}>
                         <Stack spacing={1.5}>
                           <Box>
-                            <Typography fontWeight={600}>{user.name}</Typography>
-                            <Typography color="text.secondary">{user.email || 'No email on file'}</Typography>
+                            <Typography variant="body1" fontWeight={600}>{user.name}</Typography>
+                            <Typography variant="body2" color="text.secondary">{user.email || 'No email on file'}</Typography>
                           </Box>
                           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
                             <TextField
@@ -654,7 +654,7 @@ export default function AdminActionRequired() {
               ) : (
                 <Stack spacing={2} divider={<Divider flexItem />}>
                       <Stack spacing={1.5}>
-                        <Typography fontWeight={600}>Profile information</Typography>
+                        <Typography variant="adminSectionTitle">Profile information</Typography>
                         <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                           <TextField
                             label="First name"
@@ -686,7 +686,7 @@ export default function AdminActionRequired() {
                       </Stack>
 
                       <Stack spacing={1.5}>
-                    <Typography fontWeight={600}>Contact</Typography>
+                    <Typography variant="adminSectionTitle">Contact</Typography>
                     <TextField
                       label="Email"
                       value={userDetails.email}

@@ -1,27 +1,60 @@
 import { createTheme } from '@mui/material/styles';
 
+const BODY_FONT_FAMILY = '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif';
+const DISPLAY_FONT_FAMILY = '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif';
+
+export const adminCompactTextSx = {
+  fontSize: '0.75rem',
+  lineHeight: 1.2,
+} as const;
+
+export const adminCompactLabelSx = {
+  ...adminCompactTextSx,
+  fontWeight: 600,
+} as const;
+
+export const adminCompactStrongSx = {
+  ...adminCompactTextSx,
+  fontWeight: 700,
+} as const;
+
 declare module '@mui/material/styles' {
   interface Palette {
     turquoise: Palette['primary'];
     gray: Palette['primary'];
     pastelCyan: Palette['primary'];
   }
+
   interface PaletteOptions {
     turquoise?: PaletteOptions['primary'];
     gray?: PaletteOptions['primary'];
     pastelCyan?: PaletteOptions['primary'];
   }
+
   interface TypographyVariants {
     handwritten: React.CSSProperties;
+    adminPageTitle: React.CSSProperties;
+    adminSectionTitle: React.CSSProperties;
+    adminMetric: React.CSSProperties;
+    adminEyebrow: React.CSSProperties;
   }
+
   interface TypographyVariantsOptions {
     handwritten?: React.CSSProperties;
+    adminPageTitle?: React.CSSProperties;
+    adminSectionTitle?: React.CSSProperties;
+    adminMetric?: React.CSSProperties;
+    adminEyebrow?: React.CSSProperties;
   }
 }
 
 declare module '@mui/material/Typography' {
   interface TypographyPropsVariantOverrides {
     handwritten: true;
+    adminPageTitle: true;
+    adminSectionTitle: true;
+    adminMetric: true;
+    adminEyebrow: true;
   }
 }
 
@@ -41,11 +74,10 @@ declare module '@mui/material/TextField' {
   }
 }
 
-/** ── GLOBAL SIZE KNOB ───────────────────────────── */
-const SCALE = 0.6;                            // <— tweak this to shrink/grow the whole UI
-const ROOT_REM_PX = 16 * SCALE;                // what 1rem equals (in px) for your app
-const SPACING_BASE = 8 * SCALE;                // theme.spacing() base
-const RADIUS_BASE = 8 * SCALE;                 // theme.shape.borderRadius
+const SCALE = 0.6;
+const ROOT_REM_PX = 16 * SCALE;
+const SPACING_BASE = 8 * SCALE;
+const RADIUS_BASE = 8 * SCALE;
 
 const theme = createTheme({
   palette: {
@@ -57,43 +89,71 @@ const theme = createTheme({
     background: { default: '#ffffff', paper: '#ffffff' },
     text: { primary: '#2a2a2a', secondary: '#666666' },
   },
-
-  /** Make rem + theme.spacing scale */
   typography: {
-    htmlFontSize: ROOT_REM_PX,   // drives MUI’s pxToRem
-    fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
-    h1: { fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 700, fontSize: '3rem', lineHeight: 1.2 },
-    h2: { fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 600, fontSize: '2.5rem', lineHeight: 1.2 },
-    h3: { fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 600, fontSize: '2rem', lineHeight: 1.2 },
-    h4: { fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 600, fontSize: '1.75rem', lineHeight: 1.2 },
-    h5: { fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 600, fontSize: '1.5rem', lineHeight: 1.2 },
-    h6: { fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 600, fontSize: '1.25rem', lineHeight: 1.2 },
-    body1: { fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif', fontSize: '1rem', lineHeight: 1.5 },
-    body2: { fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif', fontSize: '0.875rem', lineHeight: 1.5 },
-    button: { fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif', fontWeight: 600, textTransform: 'none' },
-    caption: { fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif', fontSize: '0.75rem', lineHeight: 1.5 },
-    overline: { fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' },
-    handwritten: { fontFamily: '"Permanent Marker", "cursive", "Roboto", "Helvetica", "Arial", sans-serif', fontSize: '1.1rem', lineHeight: 1.4, fontWeight: 400 },
+    htmlFontSize: ROOT_REM_PX,
+    fontFamily: BODY_FONT_FAMILY,
+    h1: { fontFamily: DISPLAY_FONT_FAMILY, fontWeight: 700, fontSize: '3rem', lineHeight: 1.2 },
+    h2: { fontFamily: DISPLAY_FONT_FAMILY, fontWeight: 600, fontSize: '2.5rem', lineHeight: 1.2 },
+    h3: { fontFamily: DISPLAY_FONT_FAMILY, fontWeight: 600, fontSize: '2rem', lineHeight: 1.2 },
+    h4: { fontFamily: DISPLAY_FONT_FAMILY, fontWeight: 600, fontSize: '1.75rem', lineHeight: 1.2 },
+    h5: { fontFamily: DISPLAY_FONT_FAMILY, fontWeight: 600, fontSize: '1.5rem', lineHeight: 1.2 },
+    h6: { fontFamily: BODY_FONT_FAMILY, fontWeight: 600, fontSize: '1.25rem', lineHeight: 1.2 },
+    body1: { fontFamily: BODY_FONT_FAMILY, fontSize: '1rem', lineHeight: 1.5 },
+    body2: { fontFamily: BODY_FONT_FAMILY, fontSize: '0.875rem', lineHeight: 1.5 },
+    button: { fontFamily: BODY_FONT_FAMILY, fontWeight: 600, textTransform: 'none' },
+    caption: { fontFamily: BODY_FONT_FAMILY, fontSize: '0.75rem', lineHeight: 1.5 },
+    overline: {
+      fontFamily: BODY_FONT_FAMILY,
+      fontSize: '0.75rem',
+      fontWeight: 600,
+      textTransform: 'uppercase',
+      letterSpacing: '0.1em',
+    },
+    handwritten: {
+      fontFamily: '"Permanent Marker", "cursive", "Roboto", "Helvetica", "Arial", sans-serif',
+      fontSize: '1.1rem',
+      lineHeight: 1.4,
+      fontWeight: 400,
+    },
+    adminPageTitle: {
+      fontFamily: DISPLAY_FONT_FAMILY,
+      fontWeight: 700,
+      fontSize: '1.75rem',
+      lineHeight: 1.2,
+    },
+    adminSectionTitle: {
+      fontFamily: BODY_FONT_FAMILY,
+      fontWeight: 600,
+      fontSize: '1.25rem',
+      lineHeight: 1.3,
+    },
+    adminMetric: {
+      fontFamily: DISPLAY_FONT_FAMILY,
+      fontWeight: 700,
+      fontSize: '1.5rem',
+      lineHeight: 1.2,
+    },
+    adminEyebrow: {
+      fontFamily: BODY_FONT_FAMILY,
+      fontSize: '0.75rem',
+      fontWeight: 600,
+      lineHeight: 1.3,
+      textTransform: 'uppercase',
+      letterSpacing: '0.1em',
+    },
   },
-
-  /** Make theme.spacing() scale */
   spacing: (factor: number) => SPACING_BASE * factor,
-
-  /** Make default radius scale */
   shape: { borderRadius: RADIUS_BASE },
-
   components: {
-    /** Sync the browser root so *plain* CSS rem also scales */
     MuiCssBaseline: {
       styleOverrides: {
-        html: { fontSize: `${ROOT_REM_PX}px` },  // ensures 1rem == ROOT_REM_PX everywhere
+        html: { fontSize: `${ROOT_REM_PX}px` },
       },
     },
-
     MuiButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8,         // already scales via shape.borderRadius above
+          borderRadius: 8,
           padding: '12px 24px',
           fontSize: '1rem',
           fontWeight: 600,
@@ -128,7 +188,6 @@ const theme = createTheme({
         },
       },
     },
-
     MuiTextField: {
       styleOverrides: {
         root: {
@@ -144,18 +203,20 @@ const theme = createTheme({
         },
       },
     },
-
     MuiPaper: {
-      styleOverrides: { root: { borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' } },
+      styleOverrides: {
+        root: { borderRadius: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.1)' },
+      },
     },
-
     MuiDialog: {
-      styleOverrides: { paper: { borderRadius: 12 } },
+      styleOverrides: {
+        paper: { borderRadius: 12 },
+      },
     },
   },
 });
 
-const ADMIN_ROOT_REM_PX = 24 * SCALE; // 14.4px for admin/coach pages
+const ADMIN_ROOT_REM_PX = 24 * SCALE;
 
 export const adminTheme = createTheme(theme, {
   typography: {

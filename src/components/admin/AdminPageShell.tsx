@@ -370,9 +370,9 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
           bgcolor: 'background.paper',
           overflowY: 'auto',
         }}
-      >
+        >
         <Box sx={{ p: 2.5, pb: 2 }}>
-          <Typography variant="h6">
+          <Typography variant="adminSectionTitle">
             Admin Panel
           </Typography>
         </Box>
@@ -446,7 +446,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
                           <ListItemText
                             primary={child.label}
                             primaryTypographyProps={{
-                              variant: 'body1',
+                              variant: 'body2',
+                              fontWeight: 500,
                             }}
                           />
                         </ListItemButton>
@@ -464,7 +465,7 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         <Container className="admin-page-container" maxWidth="xl" sx={{ py: isWorkspaceView ? 2 : 4 }}>
           {!isWorkspaceView ? (
             <>
-              <Typography className="admin-page-title" variant="h4" fontWeight={700} gutterBottom>
+              <Typography className="admin-page-title" variant="adminPageTitle" gutterBottom>
                 {currentLabel}
               </Typography>
 

@@ -275,7 +275,7 @@ export default function AdminMeetingsPanel() {
             <CircularProgress />
           </Box>
         ) : meetings.length === 0 ? (
-          <Typography color="text.secondary">
+          <Typography variant="body2" color="text.secondary">
             No meetings found for this filter.
           </Typography>
         ) : (
@@ -376,13 +376,13 @@ export default function AdminMeetingsPanel() {
       <Dialog open={deleteDialogOpen} onClose={closeDeleteDialog}>
         <DialogTitle>Delete meeting</DialogTitle>
         <DialogContent dividers>
-          <Typography>
+          <Typography variant="body1">
             Are you sure you want to delete this meeting and all of its
             attendance records?
           </Typography>
           {meetingToDelete && (
             <Box mt={2}>
-              <Typography variant="subtitle2">
+              <Typography variant="adminSectionTitle">
                 {formatDate(meetingToDelete.date)} –{' '}
                 {meetingToDelete.meeting_type_name ||
                   meetingToDelete.meeting_type_code ||

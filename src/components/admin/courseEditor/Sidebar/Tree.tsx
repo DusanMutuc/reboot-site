@@ -37,6 +37,7 @@ import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { adminCompactLabelSx } from '@/lib/theme';
 
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
@@ -49,6 +50,19 @@ const NODE_ICONS: Record<string, ReactElement> = {
   collection: <CollectionsBookmarkIcon fontSize="small" />,
   playlist: <PlaylistPlayIcon fontSize="small" />,
 };
+
+const compactControlButtonSx = {
+  ...adminCompactLabelSx,
+} as const;
+
+const compactHeaderActionButtonSx = {
+  ...compactControlButtonSx,
+  px: '7px',
+} as const;
+
+const compactStatusChipSx = {
+  '& .MuiChip-label': adminCompactLabelSx,
+} as const;
 
 export type SidebarMode = 'courses' | 'outline';
 
@@ -345,11 +359,16 @@ function SortableCourseItem({ course, selected, stats, onSelectCourse, onContext
         </IconButton>
         {avatarContent}
         <Stack spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 600 }} noWrap>
+          <Typography variant="body1" sx={{ fontWeight: 600 }} noWrap>
             {course.node.title ?? 'Untitled course'}
           </Typography>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Chip size="small" label={(course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase())} color={course.node.state === 'published' ? 'success' : 'default'} />
+            <Chip
+              size="small"
+              label={(course.node.state ?? 'draft').replace(/\b\w/g, (char) => char.toUpperCase())}
+              color={course.node.state === 'published' ? 'success' : 'default'}
+              sx={compactStatusChipSx}
+            />
             <Typography variant="caption" color="text.secondary">{`${stats.lessons} lesson${stats.lessons === 1 ? '' : 's'} • ${stats.chapters} chapter${stats.chapters === 1 ? '' : 's'}`}</Typography>
             <Typography variant="caption" color="text.secondary">{updated}</Typography>
           </Stack>
@@ -434,7 +453,7 @@ function CoursesList({
     <Stack spacing={2} sx={{ height: '100%', p: 3 }}>
       <Box>
         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-          <Typography variant="subtitle1">Courses</Typography>
+          <Typography variant="adminSectionTitle">Courses</Typography>
           <Button
             variant="contained"
             size="small"
@@ -492,7 +511,7 @@ function CoursesList({
           )
         ) : (
           <Stack spacing={2} alignItems="flex-start">
-            <Typography color="text.secondary">Create your first course to get started.</Typography>
+            <Typography variant="body2" color="text.secondary">Create your first course to get started.</Typography>
             <Button variant="contained" onClick={onCreateCourse} startIcon={<AddIcon fontSize="small" />}>
               New course
             </Button>
@@ -554,16 +573,16 @@ function OutlineHeader({
         </Button>
 
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <Button size="small" variant="outlined" onClick={onExpandAll}>
+          <Button size="small" variant="outlined" onClick={onExpandAll} sx={compactHeaderActionButtonSx}>
             EXPAND ALL
           </Button>
-          <Button size="small" variant="outlined" onClick={onCollapseAll}>
+          <Button size="small" variant="outlined" onClick={onCollapseAll} sx={compactHeaderActionButtonSx}>
             COLLAPSE ALL
           </Button>
         </Box>
       </Box>
 
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+      <Typography variant="adminPageTitle" sx={{ fontWeight: 700, mb: 1 }}>
         {course.node.title ?? 'Untitled course'}
       </Typography>
 
@@ -574,8 +593,7 @@ function OutlineHeader({
           sx={{
             bgcolor: '#fff3cd',
             color: '#856404',
-            fontWeight: 600,
-            '& .MuiChip-label': { px: 1.25, py: 0.5 },
+            '& .MuiChip-label': { ...adminCompactLabelSx, px: 1.25, py: 0.5 },
           }}
         />
         <Chip size="small" label={`${stats.lessons} lessons`} sx={{ bgcolor: '#e7f3ff', color: '#0c5ba0', fontWeight: 600 }} />
@@ -594,7 +612,7 @@ function OutlineHeader({
           />
         }
         label="All nodes require previous nodes"
-        sx={{ mt: 2, '& .MuiFormControlLabel-label': { fontSize: 13 } }}
+        sx={{ mt: 2, '& .MuiFormControlLabel-label': adminCompactLabelSx }}
       />
 
       {previewMode ? (
@@ -727,7 +745,8 @@ function ChapterCard({
 
         <TruncateTooltip title={subtree.node.title || 'Untitled'}>
           <Typography
-            sx={{ fontWeight: 700, fontSize: 15, flex: 1, color: isLocked ? 'text.disabled' : 'text.primary' }}
+            variant="body1"
+            sx={{ fontWeight: 700, flex: 1, color: isLocked ? 'text.disabled' : 'text.primary' }}
             noWrap
           >
             {subtree.node.title || 'Untitled'}
@@ -830,7 +849,6 @@ function LessonRow({
             color: textColor,
             flex: 1,
             minWidth: 0,
-            fontSize: 15,
             fontWeight: 600,
             lineHeight: 1.3,
             whiteSpace: 'normal',
@@ -974,13 +992,13 @@ function OutlinePanel({
           flexWrap: 'wrap',
         }}
       >
-        <Button variant="contained" size="small" onClick={onQuickAddLesson} disabled={!canAddLesson} startIcon={<AddIcon />}>
+        <Button variant="contained" size="small" onClick={onQuickAddLesson} disabled={!canAddLesson} startIcon={<AddIcon />} sx={compactControlButtonSx}>
           LESSON
         </Button>
-        <Button variant="outlined" size="small" onClick={onQuickAddChapter} disabled={!canAddChapter} startIcon={<AddIcon />}>
+        <Button variant="outlined" size="small" onClick={onQuickAddChapter} disabled={!canAddChapter} startIcon={<AddIcon />} sx={compactControlButtonSx}>
           CHAPTER
         </Button>
-        <Button variant="outlined" size="small" onClick={onQuickAddBlock} disabled={!canAddBlock} startIcon={<AddIcon />}>
+        <Button variant="outlined" size="small" onClick={onQuickAddBlock} disabled={!canAddBlock} startIcon={<AddIcon />} sx={compactControlButtonSx}>
           BLOCK
         </Button>
       </Box>

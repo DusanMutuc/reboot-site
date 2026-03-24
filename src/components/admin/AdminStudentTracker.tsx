@@ -110,7 +110,7 @@ export default function AdminStudentTracker() {
       <Container maxWidth="lg" sx={{ py: 4 }}>
         {/* Header */}
         <Stack direction="row" alignItems="center" spacing={1.5} mb={3}>
-          <Typography variant="h5" sx={{ fontWeight: 800 }}>
+          <Typography variant="adminPageTitle" sx={{ fontWeight: 800 }}>
             Student Tracker
           </Typography>
           {selectedStudent && (

@@ -210,7 +210,7 @@ export default function AddUserForm() {
             />
 
             <Divider />
-            <Typography variant="subtitle1" fontWeight={600}>Partnership details</Typography>
+            <Typography variant="adminSectionTitle">Partnership details</Typography>
             <TextField
               label="Partnership name"
               value={partnershipConfig.name}
@@ -252,7 +252,7 @@ export default function AddUserForm() {
             {forms.length > 1 && (
               <>
                 <Divider sx={{ mt: index === 0 ? 0 : 1 }} />
-                <Typography variant="subtitle1" fontWeight={600}>Person {index + 1}</Typography>
+                <Typography variant="adminSectionTitle">Person {index + 1}</Typography>
               </>
             )}
 

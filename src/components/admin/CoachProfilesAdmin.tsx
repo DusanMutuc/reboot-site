@@ -294,7 +294,7 @@ export default function CoachProfilesAdmin() {
             <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                 <Box>
-                  <Typography variant="subtitle1" fontWeight={600}>
+                  <Typography variant="adminSectionTitle">
                     Advanced and legacy fields
                   </Typography>
                   <Typography variant="body2" color="text.secondary">

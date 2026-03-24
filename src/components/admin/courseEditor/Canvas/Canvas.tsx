@@ -164,7 +164,7 @@ export default function Canvas({
   if (!subtree) {
     return (
       <Box sx={{ p: 4 }}>
-        <Typography color="text.secondary">Select a node to preview its blocks.</Typography>
+        <Typography variant="body2" color="text.secondary">Select a node to preview its blocks.</Typography>
       </Box>
     );
   }
@@ -180,13 +180,13 @@ export default function Canvas({
   return (
     <Box sx={{ p: 3, height: '100%', overflowY: 'auto' }}>
       <Stack spacing={3} sx={{ maxWidth: 900, mx: 'auto' }}>
-      <Typography
-  variant={previewMode ? 'h4' : 'h6'}
-  component={previewMode ? 'h1' : 'span'}
-  sx={previewMode ? { fontWeight: 'bold' } : undefined}
->
-  {subtree.node.title ?? 'Untitled node'}
-</Typography>
+        <Typography
+          variant={previewMode ? 'adminPageTitle' : 'adminSectionTitle'}
+          component={previewMode ? 'h1' : 'span'}
+          sx={previewMode ? { fontWeight: 'bold' } : undefined}
+        >
+          {subtree.node.title ?? 'Untitled node'}
+        </Typography>
         {!previewMode && blocks.length === 0 ? (
           <Alert severity="info" sx={{ textAlign: 'center' }}>
             {getEmptyStateMessage(subtree.node.node_type)}

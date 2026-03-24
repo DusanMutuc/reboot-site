@@ -24,6 +24,7 @@ import HeadphonesIcon from '@mui/icons-material/Headphones';
 import LinkIcon from '@mui/icons-material/Link';
 import ClearIcon from '@mui/icons-material/Clear';
 import { supabase } from '@/lib/supabaseClient';
+import { adminCompactLabelSx } from '@/lib/theme';
 
 type ResourceType = 'video' | 'podcast' | 'pdf' | 'document' | 'audio' | 'image' | 'link';
 type ResourceState = 'draft' | 'published' | 'archived';
@@ -62,6 +63,10 @@ const TYPE_ICONS: Record<ResourceType, ReactElement> = {
 
 const ALL_TYPES: ResourceType[] = ['video','podcast','pdf','document','audio','image','link'];
 const SUPPORTED_RPC_SORTS: ReadonlySet<SortValue> = new Set(['relevance', 'date_desc', 'date_asc']);
+
+const resourceTagChipSx = {
+  '& .MuiChip-label': adminCompactLabelSx,
+} as const;
 
 function useDebounced<T>(value: T, delay = 250) {
   const [debounced, setDebounced] = useState(value);
@@ -371,7 +376,7 @@ export default function ResourceLibraryAdmin() {
         ) : error ? (
           <Alert severity="error">{error}</Alert>
         ) : rows.length === 0 ? (
-          <Typography color="text.secondary">No resources yet.</Typography>
+          <Typography variant="body2" color="text.secondary">No resources yet.</Typography>
         ) : (
           <Grid container spacing={2}>
             {rows.map((r) => (
@@ -406,8 +411,8 @@ export default function ResourceLibraryAdmin() {
                   {r.description && <Typography variant="body2" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.description}</Typography>}
 
                   <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: .5 }}>
-                    {r.tags?.map(t => <Chip key={t.id} label={`#${t.name}`} size="small" />)}
                     <Chip label={r.state} size="small" color={r.state === 'published' ? 'success' : r.state === 'archived' ? 'error' : 'default'} />
+                    {r.tags?.map(t => <Chip key={t.id} label={`#${t.name}`} size="small" sx={resourceTagChipSx} />)}
                   </Stack>
 
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 'auto' }}>
@@ -730,7 +735,7 @@ function isLikelyUrl(s: string): boolean {
           {/* File-uploadable types: choose between link vs upload */}
           {supportsFileUpload && (
             <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 2 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              <Typography variant="adminSectionTitle" sx={{ mb: 1 }}>
                 {type === 'pdf' ? 'PDF Source' : 'Image Source'}
               </Typography>
               <RadioGroup
@@ -876,7 +881,7 @@ function TagSelector({
     <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
       <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
         {value.map(v => (
-          <Chip key={v.id} label={`#${v.name}`} onDelete={() => remove(v.id)} />
+          <Chip key={v.id} label={`#${v.name}`} onDelete={() => remove(v.id)} sx={resourceTagChipSx} />
         ))}
       </Stack>
       <TextField
@@ -898,6 +903,7 @@ function TagSelector({
             onClick={() => addByName(o.name)}
             variant="outlined"
             size="small"
+            sx={resourceTagChipSx}
           />
         ))}
       </Stack>

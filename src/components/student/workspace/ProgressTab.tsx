@@ -39,6 +39,7 @@ export default function ProgressTab({
   onSelectCourse,
 }: ProgressTabProps) {
   const isNarrow = useMediaQuery('(max-width:900px)');
+  const isAdminMode = mode === 'admin';
   const selectedCourse = coachCourses.find((course) => course.id === selectedCourseId) ?? null;
 
   return (
@@ -78,7 +79,7 @@ export default function ProgressTab({
               borderColor: 'grey.200',
             }}
           >
-            <Typography variant="subtitle2" sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
+            <Typography variant={isAdminMode ? 'adminSectionTitle' : 'subtitle2'} sx={{ fontWeight: 800, letterSpacing: 0.3 }}>
               Courses
             </Typography>
           </Box>
@@ -126,6 +127,7 @@ export default function ProgressTab({
                         alignItems="center"
                       >
                         <Typography
+                          variant="body1"
                           sx={{
                             fontWeight: 700,
                             color: isSelected ? 'primary.main' : 'text.primary',
@@ -133,7 +135,9 @@ export default function ProgressTab({
                         >
                           {course.title}
                         </Typography>
-                        <Typography sx={{ fontWeight: 800 }}>{course.progressPercent}%</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 800 }}>
+                          {course.progressPercent}%
+                        </Typography>
                       </Stack>
                       <LinearProgress
                         variant="determinate"
@@ -179,7 +183,7 @@ export default function ProgressTab({
                 bgcolor: 'grey.50',
               }}
             >
-              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+              <Typography variant={isAdminMode ? 'adminSectionTitle' : 'h6'} sx={{ fontWeight: 800 }}>
                 {selectedCourse ? selectedCourse.title : 'Select a course'}
               </Typography>
               <Typography variant="body2" color="text.secondary">

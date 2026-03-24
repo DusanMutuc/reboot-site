@@ -696,7 +696,7 @@ export default function StudentOverviewNew({
             spacing={1.5}
           >
             <Typography
-              variant="h6"
+              variant={embedded ? 'adminPageTitle' : 'h6'}
               sx={{
                 fontFamily: DISPLAY_FONT,
                 fontWeight: 700,
@@ -795,7 +795,7 @@ export default function StudentOverviewNew({
               bgcolor: CARD_BG,
             }}
           >
-            <Typography variant="h6" sx={{ fontFamily: DISPLAY_FONT }}>
+            <Typography variant="adminSectionTitle" sx={{ fontFamily: DISPLAY_FONT }}>
               Pick a student to open the overview.
             </Typography>
           </Paper>
@@ -813,7 +813,7 @@ export default function StudentOverviewNew({
             }}
           >
             <CircularProgress />
-            <Typography sx={{ mt: 2 }} color="text.secondary">
+            <Typography variant="body2" sx={{ mt: 2 }} color="text.secondary">
               Loading student overview...
             </Typography>
           </Paper>
@@ -838,13 +838,13 @@ export default function StudentOverviewNew({
               >
                 <Stack spacing={1.5}>
                   <Typography
-                    variant="overline"
+                    variant="adminEyebrow"
                     sx={{ color: '#6b7280', letterSpacing: '0.12em' }}
                   >
                     Student Profile
                   </Typography>
                   <Typography
-                    variant="h3"
+                    variant={embedded ? 'adminPageTitle' : 'h3'}
                     sx={{
                       fontFamily: DISPLAY_FONT,
                       fontWeight: 700,
@@ -890,23 +890,23 @@ export default function StudentOverviewNew({
                           bgcolor: toneColors.bg,
                         }}
                       >
-                        <Typography variant="caption" sx={{ fontWeight: 700, color: toneColors.fg }}>
-                          {RECENCY_COPY[key]}
-                        </Typography>
-                        <Typography
-                          sx={{
-                            mt: 0.5,
-                            fontFamily: DISPLAY_FONT,
-                            fontWeight: 700,
-                            fontSize: '1.15rem',
-                            color: toneColors.fg,
-                          }}
-                        >
-                          {formatDateLabel(value)}
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: toneColors.fg, opacity: 0.9 }}>
-                          {formatDaysAgo(value)}
-                        </Typography>
+                        <Stack spacing={0.75}>
+                          <Typography variant="adminEyebrow" sx={{ fontWeight: 600, color: toneColors.fg }}>
+                            {RECENCY_COPY[key]}
+                          </Typography>
+                          <Typography
+                            variant="body1"
+                            sx={{
+                              fontWeight: 700,
+                              color: toneColors.fg,
+                            }}
+                          >
+                            {formatDateLabel(value)}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: toneColors.fg, opacity: 0.9 }}>
+                            {formatDaysAgo(value)}
+                          </Typography>
+                        </Stack>
                       </Box>
                     );
                   })}
@@ -927,7 +927,7 @@ export default function StudentOverviewNew({
             >
               <Stack spacing={2}>
                 <Typography
-                  variant="h4"
+                  variant={embedded ? 'adminSectionTitle' : 'h4'}
                   sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
                 >
                   Coaching Workspace
@@ -950,12 +950,12 @@ export default function StudentOverviewNew({
                       borderColor: 'divider',
                     }}
                   >
-                    <Typography variant="h6" sx={{ fontFamily: DISPLAY_FONT, mb: 2 }}>
+                    <Typography variant="adminSectionTitle" sx={{ fontFamily: DISPLAY_FONT, mb: 2 }}>
                       Action Steps
                     </Typography>
 
                     {overviewData.coachingWorkspace.actionSteps.length === 0 ? (
-                      <Typography color="text.secondary">
+                      <Typography variant="body2" color="text.secondary">
                         No assigned action steps on the latest coaching cycle.
                       </Typography>
                     ) : (
@@ -976,7 +976,9 @@ export default function StudentOverviewNew({
                             >
                               <Stack spacing={1.25}>
                                 <Stack direction="row" justifyContent="space-between" spacing={1.5}>
-                                  <Typography sx={{ fontWeight: 600 }}>{step.label}</Typography>
+                                  <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                    {step.label}
+                                  </Typography>
                                   <Chip
                                     label={STATUS_COPY[step.status]}
                                     size="small"
@@ -1022,13 +1024,14 @@ export default function StudentOverviewNew({
                       borderColor: 'divider',
                     }}
                   >
-                    <Typography variant="h6" sx={{ fontFamily: DISPLAY_FONT, mb: 2 }}>
+                    <Typography variant="adminSectionTitle" sx={{ fontFamily: DISPLAY_FONT, mb: 2 }}>
                       Coaching Notes
                     </Typography>
 
                     {overviewData.coachingWorkspace.notesSummary ? (
                       <>
                         <Typography
+                          variant="body1"
                           sx={{
                             color: 'text.primary',
                             lineHeight: 1.7,
@@ -1059,7 +1062,7 @@ export default function StudentOverviewNew({
                         </Typography>
                       </>
                     ) : (
-                      <Typography color="text.secondary">
+                      <Typography variant="body2" color="text.secondary">
                         No coaching note comments available for the latest cycle.
                       </Typography>
                     )}
@@ -1081,14 +1084,14 @@ export default function StudentOverviewNew({
             >
               <Stack spacing={2}>
                 <Typography
-                  variant="h4"
+                  variant={embedded ? 'adminSectionTitle' : 'h4'}
                   sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
                 >
                   Course Progress
                 </Typography>
 
                 {overviewData.courses.length === 0 ? (
-                  <Typography color="text.secondary">
+                  <Typography variant="body2" color="text.secondary">
                     No course progress available for this student yet.
                   </Typography>
                 ) : (
@@ -1134,15 +1137,15 @@ export default function StudentOverviewNew({
                           >
                             <Stack spacing={1.5}>
                               <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                                <Typography variant="h6" sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700 }}>
+                                <Typography variant="adminSectionTitle" sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700 }}>
                                   {course.title}
                                 </Typography>
                                 <Stack direction="row" spacing={1.25} alignItems="center">
                                   <Typography
+                                    variant="adminSectionTitle"
                                     sx={{
                                       fontFamily: DISPLAY_FONT,
                                       fontWeight: 700,
-                                      fontSize: '1.25rem',
                                     }}
                                   >
                                     {course.progressPercent}%
@@ -1190,7 +1193,7 @@ export default function StudentOverviewNew({
                               {state?.loading ? (
                                 <Stack direction="row" spacing={1.25} alignItems="center" sx={{ py: 2 }}>
                                   <CircularProgress size={18} />
-                                  <Typography color="text.secondary">Loading modules...</Typography>
+                                  <Typography variant="body2" color="text.secondary">Loading modules...</Typography>
                                 </Stack>
                               ) : state?.error ? (
                                 <Alert severity="error" sx={{ mt: 2 }}>
@@ -1213,6 +1216,7 @@ export default function StudentOverviewNew({
                                       }}
                                     >
                                       <Typography
+                                        variant="body1"
                                         sx={{
                                           pl: `${Math.max(0, module.depth - 1) * 12}px`,
                                           fontWeight: module.depth === 1 ? 700 : 500,
@@ -1233,7 +1237,7 @@ export default function StudentOverviewNew({
                                   ))}
                                 </Stack>
                               ) : (
-                                <Typography color="text.secondary" sx={{ mt: 2 }}>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
                                   No module details available for this course yet.
                                 </Typography>
                               )}
@@ -1260,7 +1264,7 @@ export default function StudentOverviewNew({
             >
               <Stack spacing={2}>
                 <Typography
-                  variant="h4"
+                  variant={embedded ? 'adminSectionTitle' : 'h4'}
                   sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
                 >
                   Business Metrics
@@ -1289,22 +1293,26 @@ export default function StudentOverviewNew({
                         bgcolor: '#fbfcfd',
                       }}
                     >
-                      <Typography
-                        variant="caption"
-                        sx={{ color: 'text.secondary', letterSpacing: '0.06em' }}
-                      >
-                        {metric.label}
-                      </Typography>
-                      <Typography
-                        sx={{
-                          mt: 0.75,
-                          fontFamily: DISPLAY_FONT,
-                          fontWeight: 700,
-                          fontSize: '1.55rem',
-                        }}
-                      >
-                        {formatMetricValue(metric)}
-                      </Typography>
+                      <Stack spacing={1}>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: 'text.secondary',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {metric.label}
+                        </Typography>
+                        <Typography
+                          variant="adminMetric"
+                          sx={{
+                            fontFamily: 'inherit',
+                            lineHeight: 1.15,
+                          }}
+                        >
+                          {formatMetricValue(metric)}
+                        </Typography>
+                      </Stack>
                     </Box>
                   ))}
                 </Box>
@@ -1330,7 +1338,7 @@ export default function StudentOverviewNew({
                   spacing={1.5}
                 >
                   <Typography
-                    variant="h4"
+                    variant={embedded ? 'adminSectionTitle' : 'h4'}
                     sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
                   >
                     Achievements
@@ -1348,7 +1356,7 @@ export default function StudentOverviewNew({
                 </Stack>
 
                 {overviewData.achievements.length === 0 ? (
-                  <Typography color="text.secondary">
+                  <Typography variant="body2" color="text.secondary">
                     No achievements have been awarded yet.
                   </Typography>
                 ) : (
@@ -1402,7 +1410,9 @@ export default function StudentOverviewNew({
                         )}
 
                         <Box sx={{ minWidth: 0 }}>
-                          <Typography sx={{ fontWeight: 700 }}>{achievement.title}</Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                            {achievement.title}
+                          </Typography>
                           <Typography variant="body2" color="text.secondary">
                             {formatAwardedDate(achievement.achievedAt)}
                           </Typography>
@@ -1433,7 +1443,7 @@ export default function StudentOverviewNew({
                   spacing={1.5}
                 >
                   <Typography
-                    variant="h4"
+                    variant={embedded ? 'adminSectionTitle' : 'h4'}
                     sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
                   >
                     Attendance History
@@ -1509,11 +1519,11 @@ export default function StudentOverviewNew({
             }}
           >
             <Stack direction="row" spacing={1} alignItems="center">
-              <Typography variant="h6" fontWeight={700}>
+              <Typography variant="adminSectionTitle" fontWeight={700}>
                 Private notes
               </Typography>
               <Typography
-                variant="caption"
+                variant="adminEyebrow"
                 sx={{
                   px: 1,
                   py: 0.25,

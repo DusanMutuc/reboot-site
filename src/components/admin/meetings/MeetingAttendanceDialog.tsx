@@ -735,7 +735,7 @@ const unmatchedList = useMemo(() => {
             justifyContent="space-between"
           >
             <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              <Typography variant="adminSectionTitle" sx={{ fontWeight: 700 }}>
                 Import from Zoom CSV
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -852,7 +852,7 @@ const unmatchedList = useMemo(() => {
           <Stack spacing={2}>
             {/* Added */}
             <Box>
-              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
                 Added (wasn&apos;t on the attendance list)
               </Typography>
 
@@ -878,7 +878,7 @@ const unmatchedList = useMemo(() => {
 
             {/* Unmatched */}
             <Box>
-              <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
                 Unmatched names (from CSV)
               </Typography>
 
@@ -902,7 +902,7 @@ const unmatchedList = useMemo(() => {
             {/* Ambiguous (optional list) */}
             {importSummary.ambiguous.length > 0 && (
               <Box>
-                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+                <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
                   Ambiguous matches
                 </Typography>
 
@@ -938,7 +938,7 @@ const unmatchedList = useMemo(() => {
         </Paper>
 
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
+          <Typography variant="adminSectionTitle" gutterBottom>
             Quick mark attended
           </Typography>
           <Stack
@@ -980,7 +980,7 @@ const unmatchedList = useMemo(() => {
         </Box>
 
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
+          <Typography variant="adminSectionTitle" gutterBottom>
             Add attendee
           </Typography>
 
@@ -1041,7 +1041,7 @@ const unmatchedList = useMemo(() => {
             <CircularProgress />
           </Box>
         ) : rows.length === 0 ? (
-          <Typography color="text.secondary">No attendees for this meeting yet.</Typography>
+          <Typography variant="body2" color="text.secondary">No attendees for this meeting yet.</Typography>
         ) : (
           <Table size="small">
             <TableHead>
@@ -1088,10 +1088,10 @@ const unmatchedList = useMemo(() => {
       <Dialog open={removeDialogOpen} onClose={closeRemoveDialog}>
         <DialogTitle>Remove attendee</DialogTitle>
         <DialogContent dividers>
-          <Typography>Remove this user from the meeting&apos;s expected attendees?</Typography>
+          <Typography variant="body1">Remove this user from the meeting&apos;s expected attendees?</Typography>
           {userToRemove && (
             <Box mt={2}>
-              <Typography variant="subtitle2">{getDisplayName(userToRemove)}</Typography>
+              <Typography variant="adminSectionTitle">{getDisplayName(userToRemove)}</Typography>
             </Box>
           )}
         </DialogContent>

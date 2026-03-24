@@ -122,7 +122,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
     mode === 'admin'
       ? 'Showing every member in the system.'
       : 'Showing students on your roster only.';
-  const sectionLabel = mode === 'admin' ? 'Admin Panel' : 'Coach Workspace';
+  const sectionLabel = mode === 'coach' ? 'Coach Workspace' : null;
 
   const renderTabContent = () => {
     if (!selectedStudentId) {
@@ -184,21 +184,31 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
           justifyContent="space-between"
           sx={{ pr: { xs: 0, sm: 3 } }}
         >
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <IconButton
-              LinkComponent={Link}
-              href={backHref}
-              aria-label={backLabel}
-              size="medium"
-            >
-              <ArrowBackIosNewIcon />
-            </IconButton>
-
+          <Stack direction="row" spacing={mode === 'coach' ? 1.5 : 0} alignItems="center">
+            {mode === 'coach' ? (
+              <IconButton
+                LinkComponent={Link}
+                href={backHref}
+                aria-label={backLabel}
+                size="medium"
+              >
+                <ArrowBackIosNewIcon />
+              </IconButton>
+            ) : null}
             <Box>
-              <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 0.8 }}>
-                {sectionLabel}
-              </Typography>
-              <Typography variant="h5" sx={{ fontWeight: 800 }}>
+              {sectionLabel ? (
+                <Typography
+                  variant="overline"
+                  color="text.secondary"
+                  sx={{ letterSpacing: 0.8 }}
+                >
+                  {sectionLabel}
+                </Typography>
+              ) : null}
+              <Typography
+                variant={mode === 'admin' ? 'adminPageTitle' : 'h5'}
+                sx={mode === 'admin' ? undefined : { fontWeight: 800 }}
+              >
                 Student Workspace
               </Typography>
             </Box>
@@ -257,7 +267,10 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
 
               {selectedStudent ? (
                 <Box sx={{ minWidth: { xs: '100%', md: 240 } }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                  <Typography
+                    variant={mode === 'admin' ? 'adminSectionTitle' : 'body1'}
+                    sx={{ fontWeight: 700 }}
+                  >
                     {selectedStudent.full_name}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -346,11 +359,11 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="h6" fontWeight={700}>
+            <Typography variant={mode === 'admin' ? 'adminSectionTitle' : 'h6'} fontWeight={700}>
               Private notes
             </Typography>
             <Typography
-              variant="caption"
+              variant={mode === 'admin' ? 'adminEyebrow' : 'caption'}
               sx={{
                 px: 1,
                 py: 0.25,

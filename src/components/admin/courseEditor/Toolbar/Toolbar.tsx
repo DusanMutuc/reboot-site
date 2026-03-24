@@ -1,17 +1,18 @@
 'use client';
 
 import { Box, Button, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { adminCompactLabelSx } from '@/lib/theme';
 import type { NodeState, NodeSubtree } from '@/types/course';
 import type { NodeDraft } from '../Sidebar/Properties';
 import { useEditorStore } from '../state/editorStore';
 
 const toolbarToggleGroupSx = {
   '& .MuiToggleButton-root': {
-    px: 1.25,
-    py: 0.5,
-    minHeight: 30,
-    fontSize: '0.72rem',
-    lineHeight: 1.15,
+    px: 1.5,
+    py: 0.75,
+    minHeight: 36,
+    fontSize: '0.875rem',
+    lineHeight: 1.4,
     fontWeight: 600,
     textTransform: 'none',
   },
@@ -30,7 +31,7 @@ export default function Toolbar({ subtree, nodeDraft, onStateChange, onShowDetai
   if (!subtree || !nodeDraft) {
     return (
       <Box sx={{ p: 3 }}>
-        <Typography variant="h6">Select a node to begin editing</Typography>
+        <Typography variant="adminSectionTitle">Select a node to begin editing</Typography>
       </Box>
     );
   }
@@ -44,7 +45,7 @@ export default function Toolbar({ subtree, nodeDraft, onStateChange, onShowDetai
       justifyContent="space-between"
     >
       <Stack spacing={0.5}>
-        <Typography variant="h6">{nodeDraft.title || subtree.node.title || 'Untitled node'}</Typography>
+        <Typography variant="adminSectionTitle">{nodeDraft.title || subtree.node.title || 'Untitled node'}</Typography>
         <Typography variant="body2" color="text.secondary">
           {subtree.node.node_type}
         </Typography>
@@ -102,9 +103,7 @@ function SaveStatus({ state, message }: SaveStatusProps) {
           gap: 0.75,
           px: 1,
           py: 0,
-          fontSize: '0.78rem',
-          fontWeight: 600,
-          lineHeight: 1.2,
+          ...adminCompactLabelSx,
         },
         '& .MuiChip-icon': { ml: 0.875, mr: -0.125 },
       }}

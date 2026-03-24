@@ -235,7 +235,9 @@ export default function StudentStatusOverview({
             justifyContent: 'space-between',
           }}
         >
-          <Typography variant="h6" fontWeight={600}>Student Status Overview</Typography>
+          <Typography variant={workspaceMode === 'admin' ? 'adminSectionTitle' : 'h6'} fontWeight={600}>
+            Student Status Overview
+          </Typography>
 
           <TextField
             size="small"
@@ -287,7 +289,9 @@ export default function StudentStatusOverview({
           >
             {/* NAME */}
             <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, mr: 0.75 }}>Name</Typography>
+              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
+                Name
+              </Typography>
               <IconButton size="small" aria-label="sort by name" onClick={openMenuFor('name')}>
                 {sortIconFor('name')}
               </IconButton>
@@ -295,7 +299,9 @@ export default function StudentStatusOverview({
 
             {/* STATUS */}
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, mr: 0.75 }}>Status</Typography>
+              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
+                Status
+              </Typography>
               <IconButton size="small" aria-label="sort by status" onClick={openMenuFor('status')}>
                 {sortIconFor('status')}
               </IconButton>
@@ -303,12 +309,16 @@ export default function StudentStatusOverview({
 
             {/* ATTENDANCE (x/y) */}
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>Attendance</Typography>
+              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700 }}>
+                Attendance
+              </Typography>
             </Box>
 
             {/* EMAIL */}
             <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, mr: 0.75 }}>Email</Typography>
+              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
+                Email
+              </Typography>
               <IconButton size="small" aria-label="sort by email" onClick={openMenuFor('email')}>
                 {sortIconFor('email')}
               </IconButton>
@@ -316,7 +326,9 @@ export default function StudentStatusOverview({
 
             {/* PHONE */}
             <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700, mr: 0.75 }}>Phone</Typography>
+              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
+                Phone
+              </Typography>
               <IconButton size="small" aria-label="sort by phone" onClick={openMenuFor('phone')}>
                 {sortIconFor('phone')}
               </IconButton>
@@ -324,7 +336,9 @@ export default function StudentStatusOverview({
 
             {/* ACTIONS */}
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>Actions</Typography>
+              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700 }}>
+                Actions
+              </Typography>
             </Box>
           </Box>
 
@@ -365,7 +379,12 @@ export default function StudentStatusOverview({
                     <Box minWidth={0}>
                       <Typography
                         variant="body1"
-                        sx={{ fontSize: { xs: '1.06rem', sm: '1.12rem' }, fontWeight: 700 }}
+                        sx={{
+                          fontWeight: 700,
+                          ...(workspaceMode === 'admin'
+                            ? {}
+                            : { fontSize: { xs: '1.06rem', sm: '1.12rem' } }),
+                        }}
                         noWrap
                         title={fullName}
                       >

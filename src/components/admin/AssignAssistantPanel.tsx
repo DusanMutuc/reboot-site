@@ -229,7 +229,7 @@ export default function AssignAssistantPanel() {
       </Box>
 
       <Box sx={{ mt: 3 }}>
-        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+        <Typography variant="adminSectionTitle" sx={{ mb: 1 }}>
           Current assistants
         </Typography>
         {assistants.length === 0 ? (
@@ -251,7 +251,7 @@ export default function AssignAssistantPanel() {
                 }}
               >
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography fontWeight={600}>{assistant.name || assistant.email}</Typography>
+                  <Typography variant="body1" fontWeight={600}>{assistant.name || assistant.email}</Typography>
                   <Typography variant="body2" color="text.secondary">
                     {assistant.email}
                   </Typography>
@@ -270,7 +270,7 @@ export default function AssignAssistantPanel() {
       </Box>
 
       <Box sx={{ mt: 4 }}>
-        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+        <Typography variant="adminSectionTitle" sx={{ mb: 1 }}>
           User assignments
         </Typography>
         {assignments.length === 0 ? (
@@ -292,7 +292,7 @@ export default function AssignAssistantPanel() {
                 }}
               >
                 <Box sx={{ minWidth: 0 }}>
-                  <Typography fontWeight={600}>
+                  <Typography variant="body1" fontWeight={600}>
                     {assignment.user.name} → {assignment.assistant.name}
                   </Typography>
                   {assignment.assigned_at ? (

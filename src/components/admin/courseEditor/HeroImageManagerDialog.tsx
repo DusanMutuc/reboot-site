@@ -26,6 +26,7 @@ import Image from 'next/image';
 import CloseIcon from '@mui/icons-material/Close';
 import Grid from '@mui/material/Grid';
 import { supabase } from '@/lib/supabaseClient';
+import { adminCompactLabelSx } from '@/lib/theme';
 
 const BUCKET = 'course-heroes';
 
@@ -766,7 +767,7 @@ export default function HeroImageManagerDialog(props: {
             </Box>
           </Box>
           <Stack spacing={0.5} sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="subtitle2">Current image</Typography>
+            <Typography variant="adminSectionTitle">Current image</Typography>
             <Tooltip title={effectivePath || 'None set'}>
               <Typography variant="caption" color="text.secondary" noWrap sx={{ maxWidth: '100%' }}>
                 {effectivePath || '—'}
@@ -810,7 +811,7 @@ export default function HeroImageManagerDialog(props: {
         ) : (
           <Stack spacing={2}>
             {/* Breadcrumbs */}
-            <Breadcrumbs aria-label="breadcrumb" sx={{ fontSize: 13 }}>
+            <Breadcrumbs aria-label="breadcrumb" sx={adminCompactLabelSx}>
               <MLink component="button" onClick={() => { setPrefix(''); setPage(0); }} disabled={!prefix}>
                 Root
               </MLink>
@@ -818,7 +819,7 @@ export default function HeroImageManagerDialog(props: {
                 const to = crumbs.slice(0, i + 1).join('/') + '/';
                 const isLast = i === crumbs.length - 1;
                 return isLast ? (
-                  <Typography key={to} color="text.primary">
+                  <Typography key={to} variant="body2" color="text.primary">
                     {c}
                   </Typography>
                 ) : (

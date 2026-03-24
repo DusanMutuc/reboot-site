@@ -650,7 +650,7 @@ function LibraryEditorInner() {
         justifyContent="space-between"
       >
         <Box>
-          <Typography variant="subtitle1" fontWeight={700}>
+          <Typography variant="adminSectionTitle" fontWeight={700}>
             Editing Target
           </Typography>
           <Typography variant="body2" color="text.secondary">

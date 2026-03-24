@@ -206,7 +206,7 @@ export default function AssignCoachPanel() {
         </Box>
 
         <Box sx={{ flex: 1, minWidth: { xs: '100%', md: 280 } }}>
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
+          <Typography variant="adminSectionTitle" sx={{ mb: 1 }}>
             Current coaches
           </Typography>
 

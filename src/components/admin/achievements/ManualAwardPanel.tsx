@@ -299,7 +299,7 @@ export default function ManualAwardPanel() {
       </Stack>
 
       <Box sx={{ mt: 4 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+        <Typography variant="adminSectionTitle" sx={{ mb: 1 }}>
           Current awards {selectedUser ? `for ${selectedUser.full_name}` : ''}
         </Typography>
         <Box sx={{ overflowX: 'auto', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>

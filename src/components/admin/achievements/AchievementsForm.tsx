@@ -304,7 +304,7 @@ export default function AchievementForm({ initial, onSaved }: Props) {
 
       {/* Link to Library lessons */}
       <Box>
-        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+        <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
           Linked Library Lessons
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>

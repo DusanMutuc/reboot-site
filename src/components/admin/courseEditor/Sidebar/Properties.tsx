@@ -439,7 +439,7 @@ const renderVisibility = () => {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="subtitle2">Visibility</Typography>
+      <Typography variant="adminSectionTitle">Visibility</Typography>
 
       {visibilityError ? <Alert severity="error">{visibilityError}</Alert> : null}
 
@@ -1111,7 +1111,7 @@ const renderVisibility = () => {
     }
 
     if (smartDocLoading || !smartDocDraft) {
-      return <Typography color="text.secondary">Loading smart doc…</Typography>;
+      return <Typography variant="body2" color="text.secondary">Loading smart doc…</Typography>;
     }
 
     return (
@@ -1136,7 +1136,7 @@ const renderVisibility = () => {
         />
         <Stack spacing={1}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="subtitle2">Prompts</Typography>
+          <Typography variant="adminSectionTitle">Prompts</Typography>
             <Button
               variant="outlined"
               size="small"
@@ -1155,7 +1155,7 @@ const renderVisibility = () => {
                 sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="subtitle2">Prompt {index + 1}</Typography>
+                <Typography variant="adminSectionTitle">Prompt {index + 1}</Typography>
                   <Stack direction="row" spacing={1}>
                     <Tooltip title="Move up">
                       <span>
@@ -1239,7 +1239,7 @@ const renderVisibility = () => {
           >
             {smartDocSaving ? 'Saving…' : smartDocDraft.docId ? 'Save smart doc' : 'Create smart doc'}
           </Button>
-          {smartDocSaving ? <Typography color="text.secondary">Saving…</Typography> : null}
+          {smartDocSaving ? <Typography variant="body2" color="text.secondary">Saving…</Typography> : null}
         </Stack>
       </Stack>
     );
@@ -1378,12 +1378,12 @@ const renderVisibility = () => {
 
   const renderNodeDetails = () => {
     if (!subtree || !nodeDraft) {
-      return <Typography color="text.secondary">Select a node to edit details.</Typography>;
+      return <Typography variant="body2" color="text.secondary">Select a node to edit details.</Typography>;
     }
 
     return (
       <Stack spacing={2}>
-        <Typography variant="subtitle2">Node details</Typography>
+        <Typography variant="adminSectionTitle">Node details</Typography>
         <TextField
           label="Title"
           value={nodeDraft.title}
@@ -1440,12 +1440,12 @@ const renderVisibility = () => {
 
   const renderChildren = () => {
     if (!subtree) {
-      return <Typography color="text.secondary">Select a node to manage children.</Typography>;
+      return <Typography variant="body2" color="text.secondary">Select a node to manage children.</Typography>;
     }
 
     return (
       <Stack spacing={2}>
-        <Typography variant="subtitle2">Children</Typography>
+        <Typography variant="adminSectionTitle">Children</Typography>
         <Stack direction="row" spacing={1} alignItems="center">
           <TabsHiddenSelect value={childType} onChange={(value) => setChildType(value)} options={availableChildTypes} />
           <Button
@@ -1472,7 +1472,7 @@ const renderVisibility = () => {
               >
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
                   <Stack spacing={0.5}>
-                    <Typography variant="subtitle2">
+                    <Typography variant="body1" fontWeight={600}>
                       {child.subtree.node.title ?? `Node #${child.subtree.node.id}`}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
@@ -1539,7 +1539,7 @@ const renderVisibility = () => {
       <Stack spacing={2}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Stack spacing={0.5}>
-            <Typography variant="subtitle2">Block {selectedBlock.position + 1}</Typography>
+            <Typography variant="adminSectionTitle">Block {selectedBlock.position + 1}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
               {selectedBlock.block_type}
             </Typography>
@@ -1697,7 +1697,7 @@ const renderVisibility = () => {
   return (
     <Stack spacing={3} sx={{ p: 3, height: '100%', overflowY: 'auto' }}>
       <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
-        <Typography variant="subtitle1">Properties</Typography>
+        <Typography variant="adminSectionTitle">Properties</Typography>
         <Typography variant="body2" color={savingState === 'error' ? 'error.main' : 'text.secondary'}>
           {savingMessage}
         </Typography>

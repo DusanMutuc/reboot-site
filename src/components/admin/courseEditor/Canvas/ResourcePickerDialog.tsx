@@ -98,7 +98,7 @@ export default function ResourcePickerDialog({ open, onClose, onSelect }: Resour
               </Typography>
             </Stack>
           )}
-          {error && <Typography color="error">{error}</Typography>}
+          {error && <Typography variant="body2" color="error">{error}</Typography>}
           {!loading && !error && (
             <Stack spacing={1}>
               {rows.map((row) => (

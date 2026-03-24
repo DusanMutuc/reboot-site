@@ -663,7 +663,7 @@ export default function PartnershipsAdmin() {
               )}
 
               <Stack spacing={1}>
-                <Typography variant="subtitle2">Members</Typography>
+                <Typography variant="adminSectionTitle">Members</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Add users to this partnership. If domains overlap with another
                   active partnership for a user, the backend trigger will reject

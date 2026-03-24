@@ -49,12 +49,12 @@ export default function DeleteDialog({ open, subtree, onClose, onConfirm }: Dele
             </Alert>
             <Stack spacing={1}>
               {stats?.nodes.map(({ type, count }) => (
-                <Typography key={type}>
+                <Typography key={type} variant="body1">
                   {count} × {type}
                 </Typography>
               ))}
               {stats?.blocks.map(({ type, count }) => (
-                <Typography key={`block-${type}`}>
+                <Typography key={`block-${type}`} variant="body1">
                   {count} × {type} blocks
                 </Typography>
               ))}

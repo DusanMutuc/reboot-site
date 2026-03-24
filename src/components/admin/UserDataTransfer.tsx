@@ -322,7 +322,7 @@ export default function UserDataTransfer() {
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} flexWrap="wrap">
                   {formatTransferResult(result.data).map((section) => (
                     <Paper key={section.title} variant="outlined" sx={{ p: 2, minWidth: 220, flex: '1 1 220px' }}>
-                      <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                      <Typography variant="adminSectionTitle" fontWeight={700} sx={{ mb: 1 }}>
                         {section.title}
                       </Typography>
                       <Stack spacing={0.75}>
@@ -340,7 +340,7 @@ export default function UserDataTransfer() {
                 </Stack>
 
                 <Paper variant="outlined" sx={{ p: 2, overflow: 'auto' }}>
-                  <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+                  <Typography variant="adminSectionTitle" fontWeight={700} sx={{ mb: 1 }}>
                     Raw response
                   </Typography>
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>

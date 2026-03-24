@@ -14,7 +14,7 @@ export default function DuplicateDialog({ open, nodeId, onClose, onConfirm }: Du
     <Dialog open={open} onClose={onClose}>
       <DialogTitle>Duplicate node</DialogTitle>
       <DialogContent dividers>
-        <Typography>Duplicate this node and attach the copy to the same parent?</Typography>
+        <Typography variant="body1">Duplicate this node and attach the copy to the same parent?</Typography>
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>

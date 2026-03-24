@@ -32,6 +32,7 @@ import NextImage from 'next/image';
 
 import type { NodeSubtree, NodeType } from '@/types/course';
 import { supabase } from '@/lib/supabaseClient';
+import { adminCompactStrongSx } from '@/lib/theme';
 
 const BUCKET = 'course-heroes';
 function toPublicUrl(keyOrUrl?: string | null) {
@@ -102,9 +103,7 @@ function StatusChip({ state }: { state: NodeState }) {
         '& .MuiChip-label': {
           px: 0.625,
           py: 0,
-          fontSize: '0.66rem',
-          fontWeight: 700,
-          lineHeight: 1.1,
+          ...adminCompactStrongSx,
         },
       }}
     />
@@ -363,7 +362,7 @@ export default function LibraryList({
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Stack direction="row" alignItems="flex-start" spacing={1}>
                       <Typography
-                        variant="body2"
+                        variant="body1"
                         fontWeight={600}
                         sx={{
                           color: isSelected ? 'primary.main' : 'text.primary',
@@ -553,7 +552,7 @@ export default function LibraryList({
                             <Box sx={{ flex: 1, minWidth: 0 }}>
                               <Stack direction="row" alignItems="flex-start" spacing={1}>
                                 <Typography
-                                  variant="body2"
+                                  variant="body1"
                                   fontWeight={600}
                                   sx={{
                                     color: chIsSelected ? 'primary.main' : 'text.primary',
