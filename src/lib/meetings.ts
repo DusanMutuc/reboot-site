@@ -38,6 +38,10 @@ type MeetingRow = {
   meeting_types: MeetingTypesJoin;
 };
 
+type MeetingAttendanceFilterRow = {
+  meeting_id: number;
+};
+
 function isMeetingRow(v: unknown): v is MeetingRow {
   if (typeof v !== 'object' || v === null) return false;
   const o = v as Record<string, unknown>;
@@ -93,10 +97,37 @@ type GetMeetingsParams = {
   from?: string; // YYYY-MM-DD
   to?: string;   // YYYY-MM-DD
   meetingTypeId?: number;
+  memberUserId?: string;
+  memberAttended?: boolean;
 };
 
 export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeting[]> {
-  const { from, to, meetingTypeId } = params;
+  const { from, to, meetingTypeId, memberUserId, memberAttended } = params;
+
+  let filteredMeetingIds: number[] | null = null;
+
+  if (memberUserId && typeof memberAttended === 'boolean') {
+    const { data: attendanceRows, error: attendanceError } = await supabase
+      .from('meeting_attendance_base')
+      .select('meeting_id')
+      .eq('user_id', memberUserId)
+      .eq('attended', memberAttended);
+
+    if (attendanceError) {
+      console.error('getMeetings attendance filter error', attendanceError);
+      throw attendanceError;
+    }
+
+    filteredMeetingIds = Array.from(
+      new Set(
+        ((attendanceRows ?? []) as MeetingAttendanceFilterRow[]).map((row) => row.meeting_id)
+      )
+    );
+
+    if (filteredMeetingIds.length === 0) {
+      return [];
+    }
+  }
 
   let query = supabase
     .from('meetings')
@@ -118,6 +149,7 @@ export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeti
   if (from) query = query.gte('date', from);
   if (to) query = query.lte('date', to);
   if (typeof meetingTypeId === 'number') query = query.eq('meeting_type_id', meetingTypeId);
+  if (filteredMeetingIds) query = query.in('id', filteredMeetingIds);
 
   const { data, error } = await query;
 

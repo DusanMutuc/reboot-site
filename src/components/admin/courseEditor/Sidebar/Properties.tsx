@@ -76,6 +76,14 @@ function getImageStretch(settings: Record<string, unknown> | null | undefined): 
   return raw === true || raw === 'true' || raw === 1 || raw === '1';
 }
 
+function formatResourceState(state: RenderableResource['state']): string {
+  if (!state) {
+    return 'Unknown';
+  }
+
+  return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
 
 // 👇 PATCH: add position here
 type SmartDocPromptDraft = {
@@ -1569,9 +1577,36 @@ const renderVisibility = () => {
                     >
                       {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
                     </Button>
-                    <Typography variant="body2" color="text.secondary">
-                      {blockResource ? blockResource.title : 'No resource selected'}
-                    </Typography>
+                    {selectedBlock.resource_id ? (
+                      <Stack
+                        spacing={1}
+                        sx={{
+                          p: 2,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          borderRadius: 2,
+                          bgcolor: 'grey.50',
+                        }}
+                      >
+                        <Typography variant="caption" color="text.secondary">
+                          Selected resource
+                        </Typography>
+                        <TextField
+                          label="Resource title"
+                          value={blockResource?.title ?? `Resource #${selectedBlock.resource_id}`}
+                          InputProps={{ readOnly: true }}
+                        />
+                        <TextField
+                          label="Resource state"
+                          value={blockResource ? formatResourceState(blockResource.state) : 'Loading...'}
+                          InputProps={{ readOnly: true }}
+                        />
+                      </Stack>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        No resource selected
+                      </Typography>
+                    )}
                     <Stack direction="row" spacing={2}>
                       <TextField
                         label="Start (ms)"

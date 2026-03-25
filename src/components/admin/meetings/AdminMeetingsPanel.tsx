@@ -1,10 +1,10 @@
 // src/components/admin/meetings/AdminMeetingsPanel.tsx
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
+  Autocomplete,
   Box,
-  Paper,
   Typography,
   Button,
   Stack,
@@ -24,6 +24,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
@@ -40,13 +42,53 @@ import type { MeetingType, Meeting } from '@/types/meetings';
 import { CreateMeetingDialog } from './CreateMeetingDialog';
 import { MeetingAttendanceDialog } from './MeetingAttendanceDialog';
 
+type SimpleUser = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+type ApiListResponse<T> = {
+  items: T[];
+};
+
+function isApiListResponse<T>(value: unknown): value is ApiListResponse<T> {
+  return typeof value === 'object' && value !== null && Array.isArray((value as ApiListResponse<T>).items);
+}
+
+function toSimpleUser(value: unknown): SimpleUser | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const obj = value as Record<string, unknown>;
+  const id = obj.id;
+  const name = obj.name;
+  const email = obj.email;
+
+  if (typeof id !== 'string' && typeof id !== 'number') {
+    return null;
+  }
+
+  return {
+    id: String(id),
+    name: typeof name === 'string' ? name : '',
+    email: typeof email === 'string' ? email : '',
+  };
+}
+
+function getSimpleUserLabel(user: SimpleUser): string {
+  return user.name || user.email || user.id;
+}
+
 export default function AdminMeetingsPanel() {
   const [meetingTypes, setMeetingTypes] = useState<MeetingType[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [members, setMembers] = useState<SimpleUser[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<number | 'all'>('all');
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [selectedMemberAttended, setSelectedMemberAttended] = useState<boolean | null>(null);
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [loadingMembers, setLoadingMembers] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -73,6 +115,55 @@ export default function AdminMeetingsPanel() {
     }
   }, []);
 
+  const loadMembers = useCallback(async () => {
+    setLoadingMembers(true);
+
+    try {
+      const response = await fetch('/api/admin/list-users');
+      if (!response.ok) {
+        throw new Error('Failed to load members');
+      }
+
+      const payload: unknown = await response.json();
+      const items = isApiListResponse<unknown>(payload) ? payload.items : [];
+      const mappedMembers = items
+        .map(toSimpleUser)
+        .filter((member): member is SimpleUser => member !== null);
+
+      setMembers(mappedMembers);
+    } catch (err: unknown) {
+      console.error(err);
+      const message = err instanceof Error ? err.message : 'Failed to load members';
+      setError((previous) => previous ?? message);
+    } finally {
+      setLoadingMembers(false);
+    }
+  }, []);
+
+  const sortedMembers = useMemo(() => {
+    const getFirstName = (member: SimpleUser) => {
+      const name = (member.name || '').trim();
+      if (!name) return '';
+      return name.split(/\s+/)[0]?.toLowerCase() ?? '';
+    };
+
+    return [...members].sort((a, b) => {
+      const firstNameA = getFirstName(a);
+      const firstNameB = getFirstName(b);
+
+      if (firstNameA && firstNameB && firstNameA !== firstNameB) {
+        return firstNameA.localeCompare(firstNameB);
+      }
+
+      return (a.email || '').localeCompare(b.email || '');
+    });
+  }, [members]);
+
+  const selectedMember = useMemo(
+    () => sortedMembers.find((member) => member.id === selectedMemberId) ?? null,
+    [sortedMembers, selectedMemberId]
+  );
+
   const loadMeetings = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -82,6 +173,14 @@ export default function AdminMeetingsPanel() {
         from: fromDate || undefined,
         to: toDate || undefined,
         meetingTypeId: selectedTypeId === 'all' ? undefined : selectedTypeId,
+        memberUserId:
+          selectedMemberId && typeof selectedMemberAttended === 'boolean'
+            ? selectedMemberId
+            : undefined,
+        memberAttended:
+          selectedMemberId && typeof selectedMemberAttended === 'boolean'
+            ? selectedMemberAttended
+            : undefined,
       });
       setMeetings(data);
     } catch (err: unknown) {
@@ -91,11 +190,15 @@ export default function AdminMeetingsPanel() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, selectedTypeId]);
+  }, [fromDate, toDate, selectedTypeId, selectedMemberId, selectedMemberAttended]);
 
   useEffect(() => {
     void loadMeetingTypes();
   }, [loadMeetingTypes]);
+
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
 
   useEffect(() => {
     void loadMeetings();
@@ -103,6 +206,7 @@ export default function AdminMeetingsPanel() {
 
   const handleRefresh = () => {
     void loadMeetings();
+    void loadMembers();
   };
 
   const handleOpenAttendance = (meeting: Meeting) => {
@@ -111,6 +215,7 @@ export default function AdminMeetingsPanel() {
 
   const handleCloseAttendance = () => {
     setAttendanceMeeting(null);
+    void loadMeetings();
   };
 
   const handleCreatedMeeting = () => {
@@ -229,6 +334,67 @@ export default function AdminMeetingsPanel() {
               ))}
             </Select>
           </FormControl>
+
+          <Autocomplete
+            size="small"
+            options={sortedMembers}
+            value={selectedMember}
+            onChange={(_event, value) => {
+              const nextMemberId = value?.id ?? null;
+              setSelectedMemberId(nextMemberId);
+              setSelectedMemberAttended((previous) => {
+                if (!nextMemberId) return null;
+                return previous ?? true;
+              });
+            }}
+            getOptionLabel={(option) => getSimpleUserLabel(option)}
+            isOptionEqualToValue={(option, value) => option.id === value.id}
+            loading={loadingMembers}
+            noOptionsText={loadingMembers ? 'Loading members...' : 'No members found'}
+            sx={{ minWidth: { xs: '100%', md: 280 } }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Member"
+                placeholder="Search member"
+              />
+            )}
+          />
+
+          <Stack spacing={0.75}>
+            <Typography variant="caption" color="text.secondary">
+              Attendance
+            </Typography>
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={
+                selectedMemberAttended === null
+                  ? null
+                  : selectedMemberAttended
+                    ? 'attended'
+                    : 'not_attended'
+              }
+              onChange={(_event, value: 'attended' | 'not_attended' | null) => {
+                if (!selectedMemberId || value === null) return;
+                setSelectedMemberAttended(value === 'attended');
+              }}
+              disabled={!selectedMemberId}
+            >
+              <ToggleButton
+                value="attended"
+                sx={{ fontSize: (theme) => theme.typography.caption.fontSize }}
+              >
+                Attended
+              </ToggleButton>
+              <ToggleButton
+                value="not_attended"
+                sx={{ fontSize: (theme) => theme.typography.caption.fontSize }}
+              >
+                Not attended
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Stack>
 
           <TextField
             label="From date"

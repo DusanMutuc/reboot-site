@@ -44,7 +44,7 @@ export default function ResourcePickerDialog({ open, onClose, onSelect }: Resour
       try {
         let request = supabase
           .from('resources')
-          .select('id,title,type,url,thumbnail,duration')
+          .select('id,title,type,state,url,thumbnail,duration')
           .order('updated_at', { ascending: false })
           .limit(50);
         const trimmed = term.trim();

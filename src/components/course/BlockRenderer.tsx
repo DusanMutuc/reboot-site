@@ -45,6 +45,7 @@ export type RenderableResource = {
   id: number;
   title: string;
   type: string | null;
+  state?: 'draft' | 'published' | 'archived' | null;
   url: string | null;
   thumbnail: string | null;
   duration: number | null;
