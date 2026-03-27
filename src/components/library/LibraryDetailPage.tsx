@@ -13,12 +13,12 @@ import {
 } from './shared';
 
 type LibraryDetailPageProps = {
-  basePath: string;
   scope: LibraryScope;
 };
 
-export default function LibraryDetailPage({ basePath, scope }: LibraryDetailPageProps) {
-  const { slug } = useParams<{ slug: string }>();
+export default function LibraryDetailPage({ scope }: LibraryDetailPageProps) {
+  const params = useParams<{ slugParts?: string[] }>();
+  const slug = params.slugParts?.[params.slugParts.length - 1] ?? null;
 
   const [loading, setLoading] = useState(true);
   const [node, setNode] = useState<LibraryDetailNode | null>(null);
@@ -36,7 +36,16 @@ export default function LibraryDetailPage({ basePath, scope }: LibraryDetailPage
     let cancelled = false;
 
     async function loadDetail() {
-      if (!slug) return;
+      if (!slug) {
+        if (!cancelled) {
+          setNode(null);
+          setBlocks([]);
+          setResources({});
+          setError('Missing library item');
+          setLoading(false);
+        }
+        return;
+      }
 
       try {
         setLoading(true);

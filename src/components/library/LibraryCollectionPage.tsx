@@ -144,7 +144,7 @@ export default function LibraryCollectionPage({
       <Grid container spacing={3}>
         {items.map(({ child }) => {
           const heroSrc = resolveLibraryHeroSrc(child.hero_image ?? null);
-          const href = `${basePath}/${child.id}`;
+          const href = `${basePath}/${child.slug || child.id}`;
 
           return (
             <Grid key={child.id} size={{ xs: 12, sm: 6, md: 4 }}>

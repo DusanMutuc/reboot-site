@@ -151,8 +151,20 @@ function mergeRecentSearches(newEntry: string | null, existing: string[]) {
   return formatRecentSearches(newEntry ? [newEntry, ...existing] : existing);
 }
 
+function normalizeInternalHref(href: string) {
+  if (/^(?:[a-z]+:)?\/\//i.test(href) || href.startsWith('/')) {
+    return href;
+  }
+
+  return `/${href.replace(/^\/+/, '')}`;
+}
+
 function getResourceHref(row: ResourceRow) {
-  return row.open_path ?? (row.page_slug ? `/library/${row.page_slug}` : row.url);
+  if (row.open_path) {
+    return normalizeInternalHref(row.open_path);
+  }
+
+  return row.page_slug ? `/library/${row.page_slug}` : row.url;
 }
 
 function toAbsoluteUrl(href: string) {

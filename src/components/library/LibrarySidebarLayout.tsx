@@ -8,7 +8,7 @@ import GridViewIcon from '@mui/icons-material/GridView';
 import ImageIcon from '@mui/icons-material/Image';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter, useSelectedLayoutSegment } from 'next/navigation';
+import { useRouter, useSelectedLayoutSegments } from 'next/navigation';
 import {
   fetchLibrarySidebarItems,
   type LibrarySidebarItem,
@@ -22,8 +22,26 @@ type LibrarySidebarLayoutProps = {
   children: ReactNode;
 };
 
-function getRouteKey(item: Pick<LibrarySidebarItem, 'id'>) {
-  return String(item.id);
+function getRouteKey(item: Pick<LibrarySidebarItem, 'id' | 'slug'>) {
+  return item.slug || String(item.id);
+}
+
+function buildItemPath(
+  basePath: string,
+  item: Pick<LibrarySidebarItem, 'id' | 'slug'>,
+  lesson?: Pick<LibrarySidebarItem, 'id' | 'slug'> | null,
+) {
+  if (lesson && lesson.id !== item.id) {
+    return `${basePath}/${getRouteKey(lesson)}/${getRouteKey(item)}`;
+  }
+
+  return `${basePath}/${getRouteKey(item)}`;
+}
+
+function findLessonForItem(items: LibrarySidebarItem[], itemId: number) {
+  return items.find(
+    (lesson) => lesson.id === itemId || lesson.children?.some((chapter) => chapter.id === itemId),
+  ) ?? null;
 }
 
 function matchesSelectedItem(selectedSegment: string | null, item: Pick<LibrarySidebarItem, 'id' | 'slug'>) {
@@ -285,8 +303,10 @@ export default function LibrarySidebarLayout({
   children,
 }: LibrarySidebarLayoutProps) {
   const router = useRouter();
-  const selectedSegment = useSelectedLayoutSegment();
-  const selectedSlug = selectedSegment ? decodeURIComponent(selectedSegment) : null;
+  const selectedSegments = useSelectedLayoutSegments();
+  const selectedSlug = selectedSegments.length
+    ? decodeURIComponent(selectedSegments[selectedSegments.length - 1])
+    : null;
 
   const [items, setItems] = useState<LibrarySidebarItem[]>([]);
 
@@ -319,26 +339,28 @@ export default function LibrarySidebarLayout({
     const lesson = items.find((item) => matchesSelectedItem(selectedSlug, item));
     if (!lesson || !lesson.children?.length) return;
 
-    const firstChapterKey = getRouteKey(lesson.children[0]);
+    const firstChapter = lesson.children[0];
+    const firstChapterKey = getRouteKey(firstChapter);
     if (firstChapterKey !== selectedSlug) {
-      router.push(`${basePath}/${firstChapterKey}`);
+      router.push(buildItemPath(basePath, firstChapter, lesson));
     }
   }, [basePath, items, router, selectedSlug]);
 
   const openItem = useCallback(
     (item: LibrarySidebarItem) => {
-      const lesson = items.find((candidate) => candidate.id === item.id);
-      if (lesson) {
-        const targetKey = getRouteKey(lesson.children?.[0] ?? lesson);
+      const lesson = findLessonForItem(items, item.id);
+      if (!lesson) {
+        const targetKey = getRouteKey(item);
         if (selectedSlug !== targetKey) {
-          router.push(`${basePath}/${targetKey}`);
+          router.push(buildItemPath(basePath, item));
         }
         return;
       }
 
-      const targetKey = getRouteKey(item);
+      const target = lesson.id === item.id ? (lesson.children?.[0] ?? lesson) : item;
+      const targetKey = getRouteKey(target);
       if (selectedSlug !== targetKey) {
-        router.push(`${basePath}/${targetKey}`);
+        router.push(buildItemPath(basePath, target, lesson));
       }
     },
     [basePath, items, router, selectedSlug],
