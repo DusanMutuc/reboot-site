@@ -1,510 +1,453 @@
-// src/components/coach/StudentStatusOverview.tsx
 'use client';
 
-import { useEffect, useMemo, useState, MouseEvent } from 'react';
-import NextLink from 'next/link';
-import {
-  Box,
-  Paper,
-  Typography,
-  Button,
-  Divider,
-  List,
-  ListItem,
-  Menu,
-  MenuItem,
-  Stack,
-  IconButton,
-  TextField,
-  InputAdornment,
-  Tooltip,
-} from '@mui/material';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
-import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
-import SearchIcon from '@mui/icons-material/Search';
-import ClearIcon from '@mui/icons-material/Clear';
-import { supabase } from '@/lib/supabaseClient';
-import Loading from '@/components/loading';
-import ErrorMessage from '@/components/errorMessage';
-import type { UserStatus, UserStatusSource } from '@/types/coaching';
-import { UserStatusChip } from '@/components/UserStatusChip';
+import {
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TableSortLabel,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { UserStatusDialog } from '@/components/UserStatusDialog';
+import { UserStatusChip } from '@/components/UserStatusChip';
+import type { StatusOverviewResponse, StatusOverviewRow } from '@/lib/statusOverviewTypes';
+import type { UserStatus } from '@/types/coaching';
 
-type RosterRow = {
-  user_id: string;
-  full_name: string;
-  email: string | null;
-  user_status: UserStatus;
-  user_status_source: UserStatusSource;   // 'manual' | 'auto'
-  user_status_manual: UserStatus | null;
-  user_status_manual_reason: string | null;
-  // NEW: attendance numbers for the 2-month window
-  attended_count: number | null;
-  expected_count: number | null;
+type WorkspaceMode = 'coach' | 'admin';
+type SortBy = 'name' | 'status' | 'kpi' | 'one_on_one' | 'group' | 'courses';
+type SortDirection = 'asc' | 'desc';
+
+type StudentStatusOverviewProps = {
+  courseId?: number | null;
+  workspaceMode: WorkspaceMode;
 };
 
-type SortBy = 'name' | 'status' | 'email' | 'phone';
-type SortDir = 'asc' | 'desc';
-
-const STATUS_RANK: Record<UserStatus, number> = { red: 3, yellow: 2, green: 1 };
-
-// SIX-column grid now: Name | Status | Attendance | Email | Phone | Actions
-const GRID_COLS = {
-  xs: 'minmax(0,1.5fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1.2fr) minmax(0,1fr) minmax(160px,200px)',
-  sm: 'minmax(0,1.7fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1.4fr) minmax(0,1.1fr) minmax(180px,220px)',
-  md: 'minmax(0,1.9fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1.6fr) minmax(0,1.2fr) minmax(200px,240px)',
+const statusRank: Record<UserStatus, number> = {
+  red: 0,
+  yellow: 1,
+  green: 2,
 };
 
+const dateFormatter = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
 
-interface StudentStatusOverviewProps {
-  courseId: number | null;
-  workspaceMode?: 'coach' | 'admin';
+function getEndpoint(workspaceMode: WorkspaceMode, courseId: number | null | undefined): string {
+  if (workspaceMode === 'admin') {
+    return '/api/admin/status-overview';
+  }
+
+  const params = new URLSearchParams();
+  if (courseId != null) {
+    params.set('courseId', String(courseId));
+  }
+
+  const query = params.toString();
+  return query ? `/api/coach/status-overview?${query}` : '/api/coach/status-overview';
+}
+
+function getWorkspaceHref(
+  workspaceMode: WorkspaceMode,
+  userId: string,
+  courseId: number | null | undefined,
+): string {
+  const params = new URLSearchParams({
+    userId,
+    tab: 'overview',
+  });
+
+  if (courseId != null) {
+    params.set('courseId', String(courseId));
+  }
+
+  const basePath =
+    workspaceMode === 'admin' ? '/admin/student-workspace' : '/coach/students-overview';
+
+  return `${basePath}?${params.toString()}`;
+}
+
+function formatDateValue(value: string | null): string {
+  if (!value) {
+    return 'No data';
+  }
+
+  const normalizedValue =
+    /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  const date = new Date(normalizedValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'No data';
+  }
+
+  return dateFormatter.format(date);
+}
+
+function compareNullableIsoDates(
+  left: string | null,
+  right: string | null,
+  direction: SortDirection,
+): number {
+  if (!left && !right) {
+    return 0;
+  }
+
+  if (!left) {
+    return 1;
+  }
+
+  if (!right) {
+    return -1;
+  }
+
+  return direction === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
+}
+
+function compareRows(left: StatusOverviewRow, right: StatusOverviewRow, sortBy: SortBy, direction: SortDirection): number {
+  switch (sortBy) {
+    case 'status': {
+      const value =
+        (statusRank[left.user_status] ?? Number.MAX_SAFE_INTEGER) -
+        (statusRank[right.user_status] ?? Number.MAX_SAFE_INTEGER);
+      if (value !== 0) {
+        return direction === 'asc' ? value : -value;
+      }
+      break;
+    }
+    case 'kpi': {
+      const value = compareNullableIsoDates(left.last_kpi_at, right.last_kpi_at, direction);
+      if (value !== 0) {
+        return value;
+      }
+      break;
+    }
+    case 'one_on_one': {
+      const value = compareNullableIsoDates(
+        left.last_one_on_one_at,
+        right.last_one_on_one_at,
+        direction,
+      );
+      if (value !== 0) {
+        return value;
+      }
+      break;
+    }
+    case 'group': {
+      const value = compareNullableIsoDates(left.last_group_at, right.last_group_at, direction);
+      if (value !== 0) {
+        return value;
+      }
+      break;
+    }
+    case 'courses': {
+      const value = left.completed_courses - right.completed_courses;
+      if (value !== 0) {
+        return direction === 'asc' ? value : -value;
+      }
+      break;
+    }
+    case 'name':
+    default:
+      break;
+  }
+
+  const leftKey = left.full_name.trim().toLocaleLowerCase();
+  const rightKey = right.full_name.trim().toLocaleLowerCase();
+  return direction === 'asc'
+    ? leftKey.localeCompare(rightKey)
+    : rightKey.localeCompare(leftKey);
+}
+
+function SortableHeader({
+  active,
+  direction,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  direction: SortDirection;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <TableSortLabel active={active} direction={direction} onClick={onClick}>
+      {label}
+    </TableSortLabel>
+  );
 }
 
 export default function StudentStatusOverview({
-  courseId,
-  workspaceMode = 'coach',
+  courseId = null,
+  workspaceMode,
 }: StudentStatusOverviewProps) {
-  const [rows, setRows] = useState<RosterRow[]>([]);
+  const [rows, setRows] = useState<StatusOverviewRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setErr] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  const [dialogUserId, setDialogUserId] = useState<string | null>(null);
-
-  // sorting state
+  const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortBy>('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [reloadToken, setReloadToken] = useState(0);
+  const [selectedRow, setSelectedRow] = useState<StatusOverviewRow | null>(null);
 
-  // overlay menu state
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [menuColumn, setMenuColumn] = useState<null | SortBy>(null);
-
-  // search state
-  const [query, setQuery] = useState<string>('');
-
-  // contact cache: user_id -> { email, phone }
-  const [contacts, setContacts] = useState<Record<string, { email: string | null; phone: string | null }>>({});
-  const [contactsLoading, setContactsLoading] = useState(false);
-
-  // Load roster (+attendance numbers)
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setErr(null);
-        const { data, error } = await supabase.rpc('get_my_users_with_status');
-        if (error) throw error;
-        if (!cancelled) setRows((data ?? []) as RosterRow[]);
-      } catch (e: unknown) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : 'Failed to load students');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [courseId, reloadToken]);
+    const controller = new AbortController();
 
-  // Load contact info only for IDs we don't have yet
-  useEffect(() => {
-    const missingIds = rows
-      .map(r => r.user_id)
-      .filter(uid => !(uid in contacts));
-    if (missingIds.length === 0) return;
+    async function loadRows() {
+      setLoading(true);
+      setError(null);
 
-    let cancelled = false;
-    (async () => {
       try {
-        setContactsLoading(true);
-        const results = await Promise.all(
-          missingIds.map(async (uid) => {
-            const { data, error } = await supabase.rpc('get_user_contact', {
-              _user_id: uid,
-              _course_id: null,
-            });
-            if (error) {
-              const fallbackEmail = rows.find(r => r.user_id === uid)?.email ?? null;
-              return [uid, { email: fallbackEmail, phone: null }] as const;
-            }
-            const row = Array.isArray(data) ? data[0] : data;
-            const email = (row?.email ?? rows.find(r => r.user_id === uid)?.email ?? null) as string | null;
-            const phone = (row?.phone ?? null) as string | null;
-            return [uid, { email, phone }] as const;
-          })
-        );
-        if (!cancelled) {
-          setContacts(prev => {
-            const next = { ...prev };
-            for (const [uid, info] of results) next[uid] = info;
-            return next;
-          });
+        const response = await fetch(getEndpoint(workspaceMode, courseId), {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | StatusOverviewResponse
+          | { error?: string }
+          | null;
+
+        if (!response.ok) {
+          throw new Error(
+            payload && 'error' in payload && payload.error
+              ? payload.error
+              : 'Failed to load status overview',
+          );
         }
+
+        setRows(payload && 'items' in payload ? payload.items : []);
+      } catch (loadError) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        const message =
+          loadError instanceof Error ? loadError.message : 'Failed to load status overview';
+        setError(message);
+        setRows([]);
       } finally {
-        if (!cancelled) setContactsLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
-    })();
-    return () => { cancelled = true; };
-  }, [rows.length, Object.keys(contacts).length]); // keep deps stable size
+    }
 
-  // Filter by name/email/phone before sorting
-  const filtered = useMemo(() => {
-    const q = query.trim().toLocaleLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
-      const name = (r.full_name || '').toLocaleLowerCase();
-      const email = (contacts[r.user_id]?.email || r.email || '').toLocaleLowerCase();
-      const phone = (contacts[r.user_id]?.phone || '').toLocaleLowerCase();
-      return name.includes(q) || email.includes(q) || phone.includes(q);
-    });
-  }, [rows, contacts, query]);
+    loadRows();
 
-  const sorted = useMemo(() => {
-    const arr = filtered.slice();
+    return () => controller.abort();
+  }, [courseId, reloadToken, workspaceMode]);
 
-    const nameKey = (r: RosterRow) => (r.full_name || r.email || '').toLocaleLowerCase();
-    const emailKey = (r: RosterRow) =>
-      (contacts[r.user_id]?.email || r.email || '').toLocaleLowerCase();
-    const phoneKey = (r: RosterRow) =>
-      (contacts[r.user_id]?.phone || '').toLocaleLowerCase();
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredRows = rows.filter((row) => {
+    if (!normalizedQuery) {
+      return true;
+    }
 
-    arr.sort((a, b) => {
-      let cmp = 0;
-      if (sortBy === 'name') {
-        cmp = nameKey(a).localeCompare(nameKey(b));
-      } else if (sortBy === 'email') {
-        cmp = emailKey(a).localeCompare(emailKey(b));
-        if (cmp === 0) cmp = nameKey(a).localeCompare(nameKey(b));
-      } else if (sortBy === 'phone') {
-        cmp = phoneKey(a).localeCompare(phoneKey(b));
-        if (cmp === 0) cmp = nameKey(a).localeCompare(nameKey(b));
-      } else {
-        const ar = STATUS_RANK[a.user_status] ?? 0;
-        const br = STATUS_RANK[b.user_status] ?? 0;
-        cmp = ar - br;
-        if (cmp === 0) cmp = nameKey(a).localeCompare(nameKey(b));
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
+    return row.full_name.toLocaleLowerCase().includes(normalizedQuery);
+  });
 
-    return arr;
-  }, [filtered, contacts, sortBy, sortDir]);
-
-  const dialogUser = useMemo(
-    () => sorted.find((r) => r.user_id === dialogUserId) ?? null,
-    [sorted, dialogUserId]
+  const visibleRows = [...filteredRows].sort((left, right) =>
+    compareRows(left, right, sortBy, sortDirection),
   );
 
-  const openMenuFor = (column: SortBy) => (e: MouseEvent<HTMLElement>) => {
-    setMenuColumn(column);
-    setMenuAnchor(e.currentTarget);
+  const handleSort = (nextSortBy: SortBy) => {
+    if (sortBy === nextSortBy) {
+      setSortDirection((current) => (current === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+
+    setSortBy(nextSortBy);
+    setSortDirection('asc');
   };
-  const closeMenu = () => { setMenuAnchor(null); setMenuColumn(null); };
-  const chooseSort = (dir: SortDir) => { if (menuColumn) { setSortBy(menuColumn); setSortDir(dir); } closeMenu(); };
 
-  if (loading) return <Loading />;
-  if (error) return <ErrorMessage message={error} />;
-
-  const sortIconFor = (column: SortBy) => {
-    if (sortBy !== column) return <UnfoldMoreIcon fontSize="small" />;
-    return sortDir === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />;
+  const handleSaved = () => {
+    setReloadToken((current) => current + 1);
   };
 
   return (
-    <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto', mt: 3 }}>
+    <>
       <Paper
+        elevation={0}
         sx={{
-          p: 2.5,
+          border: '1px solid',
+          borderColor: 'divider',
           borderRadius: 3,
-          height: { xs: '75vh', md: '80vh' },
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 360,
+          overflow: 'hidden',
         }}
       >
-        {/* Top bar: title + search */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: { xs: 'stretch', sm: 'center' },
-            gap: 2,
-            mb: 1.5,
-            flexWrap: 'wrap',
-            justifyContent: 'space-between',
-          }}
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={2}
+          justifyContent="space-between"
+          alignItems={{ xs: 'stretch', md: 'center' }}
+          sx={{ px: 3, py: 2.5, borderBottom: '1px solid', borderColor: 'divider' }}
         >
-          <Typography variant={workspaceMode === 'admin' ? 'adminSectionTitle' : 'h6'} fontWeight={600}>
-            Student Status Overview
-          </Typography>
-
-          <TextField
-            size="small"
-            placeholder="Search name, email, or phone…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            sx={{ minWidth: { xs: '100%', sm: 320 } }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-              endAdornment: query ? (
-                <InputAdornment position="end">
-                  <IconButton size="small" aria-label="clear search" onClick={() => setQuery('')}>
-                    <ClearIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
-            }}
-          />
-        </Box>
-
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-          Green = on track · Yellow = needs attention · Red = emergency
-        </Typography>
-
-        <Divider sx={{ mb: 0 }} />
-
-        {/* Scroll container with sticky header */}
-        <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', position: 'relative' }}>
-          {/* Header */}
-          <Box
-            sx={{
-              position: 'sticky',
-              top: 0,
-              zIndex: 1,
-              backgroundColor: 'background.paper',
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              py: 1,
-              px: 2,
-              display: 'grid',
-              gridTemplateColumns: GRID_COLS,
-              alignItems: 'center',
-              gap: 2,
-            }}
-          >
-            {/* NAME */}
-            <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
-                Name
-              </Typography>
-              <IconButton size="small" aria-label="sort by name" onClick={openMenuFor('name')}>
-                {sortIconFor('name')}
-              </IconButton>
-            </Box>
-
-            {/* STATUS */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
-                Status
-              </Typography>
-              <IconButton size="small" aria-label="sort by status" onClick={openMenuFor('status')}>
-                {sortIconFor('status')}
-              </IconButton>
-            </Box>
-
-            {/* ATTENDANCE (x/y) */}
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700 }}>
-                Attendance
-              </Typography>
-            </Box>
-
-            {/* EMAIL */}
-            <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
-                Email
-              </Typography>
-              <IconButton size="small" aria-label="sort by email" onClick={openMenuFor('email')}>
-                {sortIconFor('email')}
-              </IconButton>
-            </Box>
-
-            {/* PHONE */}
-            <Box sx={{ minWidth: 0, display: 'flex', alignItems: 'center' }}>
-              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700, mr: 0.75 }}>
-                Phone
-              </Typography>
-              <IconButton size="small" aria-label="sort by phone" onClick={openMenuFor('phone')}>
-                {sortIconFor('phone')}
-              </IconButton>
-            </Box>
-
-            {/* ACTIONS */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Typography variant={workspaceMode === 'admin' ? 'body1' : 'body2'} sx={{ fontWeight: 700 }}>
-                Actions
-              </Typography>
-            </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Status Overview
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Track student status, activity recency, and course completion in one view.
+            </Typography>
           </Box>
 
-          {/* Rows */}
-          {sorted.length === 0 ? (
-            <Box display="flex" alignItems="center" justifyContent="center" p={3}>
-              <Typography variant="body2" color="text.secondary">
-                No students found.
-              </Typography>
-            </Box>
-          ) : (
-            <List dense disablePadding sx={{ pt: 0 }}>
-              {sorted.map((s) => {
-                const fullName = s.full_name || s.email || 'Unknown user';
-                const email = contacts[s.user_id]?.email ?? s.email ?? null;
-                const phone = contacts[s.user_id]?.phone ?? null;
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'stretch', sm: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              {visibleRows.length} student{visibleRows.length === 1 ? '' : 's'}
+            </Typography>
+            <TextField
+              size="small"
+              label="Search students"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              sx={{ minWidth: { xs: '100%', sm: 260 } }}
+            />
+          </Stack>
+        </Stack>
 
-                const attended = s.attended_count ?? 0;
-                const expected = s.expected_count ?? 0;
-                const pct = expected > 0 ? Math.round((attended / expected) * 100) : null;
+        {loading ? (
+          <Stack alignItems="center" justifyContent="center" spacing={1.5} sx={{ py: 8 }}>
+            <CircularProgress size={28} />
+            <Typography variant="body2" color="text.secondary">
+              Loading status overview...
+            </Typography>
+          </Stack>
+        ) : error ? (
+          <Box sx={{ p: 3 }}>
+            <Alert severity="error">{error}</Alert>
+          </Box>
+        ) : visibleRows.length === 0 ? (
+          <Box sx={{ p: 4 }}>
+            <Typography variant="body2" color="text.secondary">
+              No students matched your search.
+            </Typography>
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <SortableHeader
+                      active={sortBy === 'name'}
+                      direction={sortDirection}
+                      label="Name"
+                      onClick={() => handleSort('name')}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <SortableHeader
+                      active={sortBy === 'status'}
+                      direction={sortDirection}
+                      label="Status"
+                      onClick={() => handleSort('status')}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>Attendance</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <SortableHeader
+                      active={sortBy === 'kpi'}
+                      direction={sortDirection}
+                      label="Last KPI"
+                      onClick={() => handleSort('kpi')}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <SortableHeader
+                      active={sortBy === 'one_on_one'}
+                      direction={sortDirection}
+                      label="Last 1:1"
+                      onClick={() => handleSort('one_on_one')}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <SortableHeader
+                      active={sortBy === 'group'}
+                      direction={sortDirection}
+                      label="Last Group"
+                      onClick={() => handleSort('group')}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <SortableHeader
+                      active={sortBy === 'courses'}
+                      direction={sortDirection}
+                      label="Courses"
+                      onClick={() => handleSort('courses')}
+                    />
+                  </TableCell>
+                  <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                    Actions
+                  </TableCell>
+                </TableRow>
+              </TableHead>
 
-                return (
-                  <ListItem
-                    key={s.user_id}
-                    disableGutters
-                    sx={{
-                      borderBottom: '1px solid',
-                      borderColor: 'divider',
-                      py: 1,
-                      px: 2,
-                      display: 'grid',
-                      gridTemplateColumns: GRID_COLS,
-                      alignItems: 'center',
-                      gap: 2,
-                    }}
-                  >
-                    {/* Name */}
-                    <Box minWidth={0}>
-                      <Typography
-                        variant="body1"
-                        sx={{
-                          fontWeight: 700,
-                          ...(workspaceMode === 'admin'
-                            ? {}
-                            : { fontSize: { xs: '1.06rem', sm: '1.12rem' } }),
-                        }}
-                        noWrap
-                        title={fullName}
-                      >
-                        {fullName}
+              <TableBody>
+                {visibleRows.map((row) => (
+                  <TableRow key={row.user_id} hover>
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {row.full_name || 'Unknown user'}
                       </Typography>
-                    </Box>
-
-                    {/* Status */}
-                    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    </TableCell>
+                    <TableCell>
                       <UserStatusChip
-                        status={s.user_status}
-                        source={s.user_status_source}
-                        reason={s.user_status_manual_reason}
-                        size="small"
                         clickable
-                        onClick={() => setDialogUserId(s.user_id)}
+                        onClick={() => setSelectedRow(row)}
+                        reason={row.user_status_manual_reason}
+                        source={row.user_status_source}
+                        status={row.user_status}
                       />
-                    </Box>
-
-                    {/* Attendance x/y */}
-                    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                      <Tooltip
-                        title={
-                          expected > 0
-                            ? `${attended}/${expected} (${pct}%) in the last 2 months`
-                            : 'No counted meetings in the last 2 months'
-                        }
-                      >
-                        <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {expected > 0 ? `${attended}/${expected}` : '—'}
-                        </Typography>
-                      </Tooltip>
-                    </Box>
-
-                    {/* Email */}
-                    <Box minWidth={0}>
-                      {email ? (
-                        <Tooltip title={email}>
-                          <Typography variant="body2" noWrap>
-                            {email}
-                          </Typography>
-                        </Tooltip>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">—</Typography>
-                      )}
-                    </Box>
-
-                    {/* Phone */}
-                    <Box minWidth={0}>
-                      {phone ? (
-                        <Tooltip title={phone}>
-                          <Typography variant="body2" noWrap>
-                            {phone}
-                          </Typography>
-                        </Tooltip>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">—</Typography>
-                      )}
-                    </Box>
-
-                    {/* Actions */}
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    </TableCell>
+                    <TableCell>{row.attended_count}/{row.expected_count}</TableCell>
+                    <TableCell>{formatDateValue(row.last_kpi_at)}</TableCell>
+                    <TableCell>{formatDateValue(row.last_one_on_one_at)}</TableCell>
+                    <TableCell>{formatDateValue(row.last_group_at)}</TableCell>
+                    <TableCell>
+                      {row.completed_courses}/{row.total_courses}
+                    </TableCell>
+                    <TableCell align="right">
                       <Button
+                        component={Link}
+                        href={getWorkspaceHref(workspaceMode, row.user_id, courseId)}
                         size="small"
                         variant="outlined"
-                        endIcon={<OpenInNewIcon />}
-                        component={NextLink}
-                        href={
-                          workspaceMode === 'admin'
-                            ? `/admin/student-workspace?userId=${s.user_id}&tab=overview`
-                            : `/coach/students-overview?userId=${s.user_id}&tab=overview`
-                        }
+                        endIcon={<OpenInNewIcon fontSize="small" />}
                       >
                         Open workspace
                       </Button>
-                    </Box>
-                  </ListItem>
-                );
-              })}
-            </List>
-          )}
-        </Box>
-
-        {/* Status dialog */}
-        {dialogUser && (
-          <UserStatusDialog
-            open={!!dialogUser}
-            onClose={() => setDialogUserId(null)}
-            userId={dialogUser.user_id}
-            currentStatus={dialogUser.user_status}
-            manualStatus={dialogUser.user_status_manual}
-            manualReason={dialogUser.user_status_manual_reason}
-            userLabel={dialogUser.full_name}
-            onSaved={() => setReloadToken((x) => x + 1)}
-          />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
-
-        {/* Sort overlay */}
-        <Menu
-          anchorEl={menuAnchor}
-          open={Boolean(menuAnchor)}
-          onClose={closeMenu}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-          keepMounted
-        >
-          <MenuItem onClick={() => chooseSort('asc')}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <ArrowUpwardIcon fontSize="small" />
-              <Typography variant="body2">Ascending</Typography>
-            </Stack>
-          </MenuItem>
-          <MenuItem onClick={() => chooseSort('desc')}>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <ArrowDownwardIcon fontSize="small" />
-              <Typography variant="body2">Descending</Typography>
-            </Stack>
-          </MenuItem>
-        </Menu>
       </Paper>
-    </Box>
+
+      <UserStatusDialog
+        open={Boolean(selectedRow)}
+        onClose={() => setSelectedRow(null)}
+        userId={selectedRow?.user_id ?? ''}
+        currentStatus={selectedRow?.user_status ?? null}
+        manualStatus={selectedRow?.user_status_manual ?? null}
+        manualReason={selectedRow?.user_status_manual_reason ?? null}
+        userLabel={selectedRow?.full_name || 'Unknown user'}
+        onSaved={handleSaved}
+      />
+    </>
   );
 }
