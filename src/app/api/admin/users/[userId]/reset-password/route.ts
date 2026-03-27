@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
 type Params = { params: Promise<{ userId?: string | string[] | undefined }> };
+const PASSWORD_RESET_REDIRECT_TO = 'https://hub.rebootmembers.com/reset-password';
 
 async function resolveUserId(context: Params) {
   const rawParams = await context.params;
@@ -35,7 +36,9 @@ export async function POST(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'User has no email on record' }, { status: 400 });
   }
 
-  const { error: resetErr } = await supa.auth.resetPasswordForEmail(email);
+  const { error: resetErr } = await supa.auth.resetPasswordForEmail(email, {
+    redirectTo: PASSWORD_RESET_REDIRECT_TO,
+  });
   if (resetErr) {
     return NextResponse.json({ error: resetErr.message }, { status: 400 });
   }

@@ -22,9 +22,11 @@ import {
   TableBody,
   Stack,
   Skeleton,
+  Tooltip,
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 
 type Person = { id: string; name: string; email: string };
 
@@ -82,7 +84,9 @@ export default function UserProfilesAdmin() {
   const [hasFetched, setHasFetched] = useState(false); // gate empty-state until first response
 
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
+  const [resettingIds, setResettingIds] = useState<Record<string, boolean>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [resetConfirmId, setResetConfirmId] = useState<string | null>(null);
   const [snack, setSnack] = useState<SnackbarState>({
     open: false,
     message: '',
@@ -210,6 +214,41 @@ export default function UserProfilesAdmin() {
   );
 
   const confirmDelete = (id: string) => setDeletingId(id);
+  const confirmPasswordReset = (id: string) => setResetConfirmId(id);
+
+  const handleSendPasswordReset = useCallback(async () => {
+    if (!resetConfirmId) return;
+    const id = resetConfirmId;
+    const row = rows[id];
+
+    if (!row?.email?.trim()) {
+      setSnack({ open: true, message: 'User has no email on file.', severity: 'error' });
+      setResetConfirmId(null);
+      return;
+    }
+
+    setResettingIds((prev) => ({ ...prev, [id]: true }));
+    try {
+      const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, {
+        method: 'POST',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || res.statusText);
+
+      setSnack({
+        open: true,
+        message: `Password recovery email sent to ${row.email}.`,
+        severity: 'success',
+      });
+      setResetConfirmId(null);
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to send password recovery email.';
+      setSnack({ open: true, message, severity: 'error' });
+    } finally {
+      setResettingIds((prev) => ({ ...prev, [id]: false }));
+    }
+  }, [resetConfirmId, rows]);
 
   const handleDelete = useCallback(async () => {
     if (!deletingId) return;
@@ -248,7 +287,7 @@ export default function UserProfilesAdmin() {
             <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
             <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
             <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
-            <TableCell align="right" sx={{ minWidth: 160 }}>Actions</TableCell>
+            <TableCell align="right" sx={{ minWidth: 220 }}>Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -299,13 +338,14 @@ export default function UserProfilesAdmin() {
                 <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
                 <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
                 <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
-                <TableCell align="right" sx={{ minWidth: 160 }}>Actions</TableCell>
+                <TableCell align="right" sx={{ minWidth: 220 }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filtered.map((u) => {
                 const r = rows[u.id];
                 const saving = !!savingIds[u.id];
+                const resetting = !!resettingIds[u.id];
                 return (
                   <TableRow key={u.id} hover>
                     <TableCell>
@@ -358,6 +398,18 @@ export default function UserProfilesAdmin() {
                         >
                           <DeleteForeverIcon />
                         </IconButton>
+                        <Tooltip title="Send password recovery mail">
+                          <span>
+                            <IconButton
+                              aria-label="Send password recovery mail"
+                              onClick={() => confirmPasswordReset(u.id)}
+                              color="primary"
+                              disabled={!r?.email || resetting}
+                            >
+                              {resetting ? <CircularProgress size={20} /> : <MailOutlineIcon />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
                         <LoadingButton
                           variant="contained"
                           size="small"
@@ -401,6 +453,36 @@ export default function UserProfilesAdmin() {
           <Button color="error" variant="contained" onClick={handleDelete}>
             Delete
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={!!resetConfirmId}
+        onClose={() => {
+          if (!resetConfirmId || resettingIds[resetConfirmId]) return;
+          setResetConfirmId(null);
+        }}
+      >
+        <DialogTitle>Send password recovery email?</DialogTitle>
+        <DialogContent>
+          {resetConfirmId && rows[resetConfirmId]?.email
+            ? `Send a password recovery email to ${rows[resetConfirmId].email}?`
+            : 'Send a password recovery email to this user?'}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setResetConfirmId(null)}
+            disabled={!!(resetConfirmId && resettingIds[resetConfirmId])}
+          >
+            Cancel
+          </Button>
+          <LoadingButton
+            variant="contained"
+            onClick={handleSendPasswordReset}
+            loading={!!(resetConfirmId && resettingIds[resetConfirmId])}
+          >
+            Send email
+          </LoadingButton>
         </DialogActions>
       </Dialog>
     </>
