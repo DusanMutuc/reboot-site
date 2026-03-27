@@ -10,17 +10,18 @@ export type MeetingType = {
     updated_at?: string;
   };
   
-  export type Meeting = {
-    id: number;
-    meeting_type_id: number;
-    date: string; // date in ISO format (YYYY-MM-DD)
-    created_by: string | null;
-    title: string | null;
-    meeting_type_code?: string | null;
-    meeting_type_name?: string | null;
-    meeting_type_counts_toward_engagement?: boolean | null;
-    created_at?: string;
-    updated_at?: string;
+export type Meeting = {
+  id: number;
+  meeting_type_id: number;
+  date: string; // date in ISO format (YYYY-MM-DD)
+  created_by: string | null;
+  title: string | null;
+  member_attended?: boolean | null;
+  meeting_type_code?: string | null;
+  meeting_type_name?: string | null;
+  meeting_type_counts_toward_engagement?: boolean | null;
+  created_at?: string;
+  updated_at?: string;
   };
   
   export type MeetingAttendance = {

@@ -40,6 +40,7 @@ type MeetingRow = {
 
 type MeetingAttendanceFilterRow = {
   meeting_id: number;
+  attended: boolean | null;
 };
 
 function isMeetingRow(v: unknown): v is MeetingRow {
@@ -98,31 +99,43 @@ type GetMeetingsParams = {
   to?: string;   // YYYY-MM-DD
   meetingTypeId?: number;
   memberUserId?: string;
-  memberAttended?: boolean;
+  memberAttended?: boolean | 'all';
 };
 
 export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeting[]> {
   const { from, to, meetingTypeId, memberUserId, memberAttended } = params;
 
   let filteredMeetingIds: number[] | null = null;
+  const attendanceByMeetingId = new Map<number, boolean | null>();
 
-  if (memberUserId && typeof memberAttended === 'boolean') {
-    const { data: attendanceRows, error: attendanceError } = await supabase
+  if (memberUserId) {
+    let attendanceQuery = supabase
       .from('meeting_attendance_base')
-      .select('meeting_id')
-      .eq('user_id', memberUserId)
-      .eq('attended', memberAttended);
+      .select('meeting_id, attended')
+      .eq('user_id', memberUserId);
+
+    if (typeof memberAttended === 'boolean') {
+      attendanceQuery = attendanceQuery.eq('attended', memberAttended);
+    }
+
+    const { data: attendanceRows, error: attendanceError } = await attendanceQuery;
 
     if (attendanceError) {
       console.error('getMeetings attendance filter error', attendanceError);
       throw attendanceError;
     }
 
+    const typedAttendanceRows = (attendanceRows ?? []) as MeetingAttendanceFilterRow[];
+
     filteredMeetingIds = Array.from(
       new Set(
-        ((attendanceRows ?? []) as MeetingAttendanceFilterRow[]).map((row) => row.meeting_id)
+        typedAttendanceRows.map((row) => row.meeting_id)
       )
     );
+
+    typedAttendanceRows.forEach((row) => {
+      attendanceByMeetingId.set(row.meeting_id, row.attended);
+    });
 
     if (filteredMeetingIds.length === 0) {
       return [];
@@ -168,6 +181,7 @@ export async function getMeetings(params: GetMeetingsParams = {}): Promise<Meeti
       date: row.date,
       created_by: row.created_by,
       title: row.title,
+      member_attended: memberUserId ? (attendanceByMeetingId.get(row.id) ?? null) : null,
       created_at: row.created_at,
       updated_at: row.updated_at,
       meeting_type_code: row.meeting_types?.code ?? null,

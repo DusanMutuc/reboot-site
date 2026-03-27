@@ -1,7 +1,7 @@
 // src/components/admin/meetings/AdminMeetingsPanel.tsx
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Autocomplete,
   Box,
@@ -28,6 +28,8 @@ import {
   ToggleButtonGroup,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CancelIcon from '@mui/icons-material/Cancel';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -51,6 +53,8 @@ type SimpleUser = {
 type ApiListResponse<T> = {
   items: T[];
 };
+
+type MemberAttendanceFilter = 'attended' | 'not_attended' | 'all';
 
 function isApiListResponse<T>(value: unknown): value is ApiListResponse<T> {
   return typeof value === 'object' && value !== null && Array.isArray((value as ApiListResponse<T>).items);
@@ -84,7 +88,8 @@ export default function AdminMeetingsPanel() {
   const [members, setMembers] = useState<SimpleUser[]>([]);
   const [selectedTypeId, setSelectedTypeId] = useState<number | 'all'>('all');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [selectedMemberAttended, setSelectedMemberAttended] = useState<boolean | null>(null);
+  const [selectedMemberAttended, setSelectedMemberAttended] =
+    useState<MemberAttendanceFilter | null>(null);
   const [fromDate, setFromDate] = useState<string>('');
   const [toDate, setToDate] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -103,6 +108,8 @@ export default function AdminMeetingsPanel() {
   const [editTitle, setEditTitle] = useState('');
   const [editDate, setEditDate] = useState('');
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const attendanceToggleRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const [attendanceToggleWidth, setAttendanceToggleWidth] = useState<number | null>(null);
 
   const loadMeetingTypes = useCallback(async () => {
     try {
@@ -173,13 +180,12 @@ export default function AdminMeetingsPanel() {
         from: fromDate || undefined,
         to: toDate || undefined,
         meetingTypeId: selectedTypeId === 'all' ? undefined : selectedTypeId,
-        memberUserId:
-          selectedMemberId && typeof selectedMemberAttended === 'boolean'
-            ? selectedMemberId
-            : undefined,
+        memberUserId: selectedMemberId || undefined,
         memberAttended:
-          selectedMemberId && typeof selectedMemberAttended === 'boolean'
-            ? selectedMemberAttended
+          selectedMemberId && selectedMemberAttended
+            ? selectedMemberAttended === 'all'
+              ? 'all'
+              : selectedMemberAttended === 'attended'
             : undefined,
       });
       setMeetings(data);
@@ -203,6 +209,27 @@ export default function AdminMeetingsPanel() {
   useEffect(() => {
     void loadMeetings();
   }, [loadMeetings]);
+
+  useEffect(() => {
+    const measureToggleWidth = () => {
+      const widest = attendanceToggleRefs.current.reduce((maxWidth, button) => {
+        if (!button) return maxWidth;
+        return Math.max(maxWidth, button.offsetWidth);
+      }, 0);
+
+      setAttendanceToggleWidth((currentWidth) =>
+        widest > 0 && currentWidth !== widest ? widest : currentWidth
+      );
+    };
+
+    const frameId = window.requestAnimationFrame(measureToggleWidth);
+    window.addEventListener('resize', measureToggleWidth);
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.removeEventListener('resize', measureToggleWidth);
+    };
+  }, []);
 
   const handleRefresh = () => {
     void loadMeetings();
@@ -306,6 +333,37 @@ export default function AdminMeetingsPanel() {
     return d.toLocaleDateString();
   };
 
+  const showMemberAttendanceColumn =
+    Boolean(selectedMemberId) && selectedMemberAttended === 'all';
+
+  const renderAttendedStatus = (meeting: Meeting) => {
+    const attended = meeting.member_attended;
+
+    if (attended === null || attended === undefined) {
+      return (
+        <Typography variant="body2" color="text.secondary">
+          -
+        </Typography>
+      );
+    }
+
+    return attended ? (
+      <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
+        <CheckCircleIcon color="success" fontSize="small" />
+        <Typography variant="body2" color="success.main">
+          Yes
+        </Typography>
+      </Stack>
+    ) : (
+      <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="center">
+        <CancelIcon color="error" fontSize="small" />
+        <Typography variant="body2" color="error.main">
+          No
+        </Typography>
+      </Stack>
+    );
+  };
+
   return (
     <Box>
       <Box sx={{ mb: 2 }}>
@@ -344,7 +402,7 @@ export default function AdminMeetingsPanel() {
               setSelectedMemberId(nextMemberId);
               setSelectedMemberAttended((previous) => {
                 if (!nextMemberId) return null;
-                return previous ?? true;
+                return previous ?? 'attended';
               });
             }}
             getOptionLabel={(option) => getSimpleUserLabel(option)}
@@ -362,36 +420,63 @@ export default function AdminMeetingsPanel() {
           />
 
           <Stack spacing={0.75}>
-            <Typography variant="caption" color="text.secondary">
-              Attendance
-            </Typography>
+            
             <ToggleButtonGroup
               size="small"
               exclusive
               value={
-                selectedMemberAttended === null
-                  ? null
-                  : selectedMemberAttended
-                    ? 'attended'
-                    : 'not_attended'
+                selectedMemberAttended === null ? null : selectedMemberAttended
               }
-              onChange={(_event, value: 'attended' | 'not_attended' | null) => {
+              onChange={(_event, value: MemberAttendanceFilter | null) => {
                 if (!selectedMemberId || value === null) return;
-                setSelectedMemberAttended(value === 'attended');
+                setSelectedMemberAttended(value);
               }}
               disabled={!selectedMemberId}
             >
               <ToggleButton
                 value="attended"
-                sx={{ fontSize: (theme) => theme.typography.caption.fontSize }}
+                ref={(element) => {
+                  attendanceToggleRefs.current[0] = element;
+                }}
+                sx={{
+                  fontSize: (theme) => theme.typography.caption.fontSize,
+                  minWidth: 90,
+                  px: 0.5,
+                  whiteSpace: 'nowrap',
+                  width: attendanceToggleWidth ? `${attendanceToggleWidth}px` : undefined,
+                }}
               >
                 Attended
               </ToggleButton>
               <ToggleButton
                 value="not_attended"
-                sx={{ fontSize: (theme) => theme.typography.caption.fontSize }}
+                ref={(element) => {
+                  attendanceToggleRefs.current[1] = element;
+                }}
+                sx={{
+                  fontSize: (theme) => theme.typography.caption.fontSize,
+                  minWidth: 90,
+                  px: 0.5,
+                  whiteSpace: 'nowrap',
+                  width: attendanceToggleWidth ? `${attendanceToggleWidth}px` : undefined,
+                }}
               >
                 Not attended
+              </ToggleButton>
+              <ToggleButton
+                value="all"
+                ref={(element) => {
+                  attendanceToggleRefs.current[2] = element;
+                }}
+                sx={{
+                  fontSize: (theme) => theme.typography.caption.fontSize,
+                  minWidth: 90,
+                  px: 0.5,
+                  whiteSpace: 'nowrap',
+                  width: attendanceToggleWidth ? `${attendanceToggleWidth}px` : undefined,
+                }}
+              >
+                All
               </ToggleButton>
             </ToggleButtonGroup>
           </Stack>
@@ -451,6 +536,9 @@ export default function AdminMeetingsPanel() {
                 <TableCell>Date</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Label</TableCell>
+                {showMemberAttendanceColumn ? (
+                  <TableCell align="center">Attended</TableCell>
+                ) : null}
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -486,6 +574,10 @@ export default function AdminMeetingsPanel() {
                       </Typography>
                     )}
                   </TableCell>
+
+                  {showMemberAttendanceColumn ? (
+                    <TableCell align="center">{renderAttendedStatus(m)}</TableCell>
+                  ) : null}
 
                   {/* Actions */}
                   <TableCell align="right">
