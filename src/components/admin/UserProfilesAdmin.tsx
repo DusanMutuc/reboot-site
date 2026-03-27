@@ -1,34 +1,40 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  TextField,
+  ChangeEvent,
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import {
   Alert,
-  Snackbar,
-  CircularProgress,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Box,
   Button,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Stack,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
   Skeleton,
+  Snackbar,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TablePagination,
+  TableRow,
+  TextField,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
 import MailOutlineIcon from '@mui/icons-material/MailOutline';
-
-type Person = { id: string; name: string; email: string };
 
 type UserPayload = {
   id: string;
@@ -61,27 +67,158 @@ type UsersResponse = {
   total: number;
 };
 
-async function fetchIndex(query: string, page = 1, limit = 200): Promise<UsersResponse> {
-  const u = new URL('/api/admin/users', window.location.origin);
-  if (query) u.searchParams.set('query', query);
-  u.searchParams.set('page', String(page));
-  u.searchParams.set('limit', String(limit));
-  const r = await fetch(u.toString());
-  if (!r.ok) {
-    let msg = r.statusText;
+type HandleCellChange = <K extends keyof UserPayload>(
+  id: string,
+  key: K,
+  value: UserPayload[K]
+) => void;
+
+type UserProfileTableRowProps = {
+  userId: string;
+  row: UserPayload | undefined;
+  saving: boolean;
+  resetting: boolean;
+  onCellChange: HandleCellChange;
+  onConfirmDelete: (id: string) => void;
+  onConfirmPasswordReset: (id: string) => void;
+  onSave: (id: string) => void;
+};
+
+const DEFAULT_ROWS_PER_PAGE = 50;
+const ROWS_PER_PAGE_OPTIONS = [25, 50, 100, 200];
+const SEARCH_DEBOUNCE_MS = 250;
+
+async function fetchIndex(
+  query: string,
+  page: number,
+  limit: number,
+  signal?: AbortSignal
+): Promise<UsersResponse> {
+  const url = new URL('/api/admin/users', window.location.origin);
+  if (query) url.searchParams.set('query', query);
+  url.searchParams.set('page', String(page));
+  url.searchParams.set('limit', String(limit));
+
+  const response = await fetch(url.toString(), { signal });
+  if (!response.ok) {
+    let message = response.statusText;
     try {
-      msg = (await r.json())?.error || msg;
+      message = (await response.json())?.error || message;
     } catch {}
-    throw new Error(msg);
+    throw new Error(message);
   }
-  return r.json();
+
+  return response.json();
 }
 
+function toUserPayload(row: RowFromApi): UserPayload {
+  return {
+    id: row.id,
+    email: (row.email || '').toLowerCase(),
+    phone: row.phone ?? '',
+    first_name: row.first_name ?? '',
+    last_name: row.last_name ?? '',
+    looker_link: row.looker_link ?? '',
+    ghl_user_id: row.ghl_user_id ?? '',
+  };
+}
+
+const UserProfileTableRow = memo(function UserProfileTableRow({
+  userId,
+  row,
+  saving,
+  resetting,
+  onCellChange,
+  onConfirmDelete,
+  onConfirmPasswordReset,
+  onSave,
+}: UserProfileTableRowProps) {
+  return (
+    <TableRow hover>
+      <TableCell>
+        <TextField value={row?.email ?? ''} size="small" InputProps={{ readOnly: true }} />
+      </TableCell>
+      <TableCell>
+        <TextField
+          value={row?.first_name ?? ''}
+          size="small"
+          onChange={(event) => onCellChange(userId, 'first_name', event.target.value)}
+        />
+      </TableCell>
+      <TableCell>
+        <TextField
+          value={row?.last_name ?? ''}
+          size="small"
+          onChange={(event) => onCellChange(userId, 'last_name', event.target.value)}
+        />
+      </TableCell>
+      <TableCell>
+        <TextField
+          value={row?.phone ?? ''}
+          size="small"
+          onChange={(event) => onCellChange(userId, 'phone', event.target.value)}
+          placeholder="Optional"
+        />
+      </TableCell>
+      <TableCell>
+        <TextField
+          value={row?.looker_link ?? ''}
+          size="small"
+          onChange={(event) => onCellChange(userId, 'looker_link', event.target.value)}
+          placeholder="https://..."
+        />
+      </TableCell>
+      <TableCell>
+        <TextField
+          value={row?.ghl_user_id ?? ''}
+          size="small"
+          onChange={(event) => onCellChange(userId, 'ghl_user_id', event.target.value)}
+          placeholder="Optional"
+        />
+      </TableCell>
+      <TableCell align="right">
+        <Stack direction="row" spacing={1} justifyContent="flex-end">
+          <IconButton
+            aria-label="Delete user"
+            onClick={() => onConfirmDelete(userId)}
+            sx={{ color: 'error.main' }}
+          >
+            <DeleteForeverIcon />
+          </IconButton>
+          <Tooltip title="Send password recovery mail">
+            <span>
+              <IconButton
+                aria-label="Send password recovery mail"
+                onClick={() => onConfirmPasswordReset(userId)}
+                color="primary"
+                disabled={!row?.email || resetting}
+              >
+                {resetting ? <CircularProgress size={20} /> : <MailOutlineIcon />}
+              </IconButton>
+            </span>
+          </Tooltip>
+          <LoadingButton
+            variant="contained"
+            size="small"
+            onClick={() => onSave(userId)}
+            loading={saving}
+            disabled={!row}
+          >
+            Save
+          </LoadingButton>
+        </Stack>
+      </TableCell>
+    </TableRow>
+  );
+});
+
 export default function UserProfilesAdmin() {
-  const [users, setUsers] = useState<Person[]>([]);
+  const [userIds, setUserIds] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, UserPayload>>({});
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [hasFetched, setHasFetched] = useState(false); // gate empty-state until first response
+  const [hasFetched, setHasFetched] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const [savingIds, setSavingIds] = useState<Record<string, boolean>>({});
   const [resettingIds, setResettingIds] = useState<Record<string, boolean>>({});
@@ -94,79 +231,77 @@ export default function UserProfilesAdmin() {
   });
 
   const [query, setQuery] = useState('');
-  const [serverQuery, setServerQuery] = useState(''); // debounced search value
+  const deferredQuery = useDeferredValue(query);
+  const [serverQuery, setServerQuery] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_ROWS_PER_PAGE);
   const debounceRef = useRef<number | null>(null);
 
-  // Debounce the search input before hitting the API
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
     debounceRef.current = window.setTimeout(() => {
-      setServerQuery(query.trim());
-    }, 300);
+      setServerQuery(deferredQuery.trim());
+      setPage(0);
+    }, SEARCH_DEBOUNCE_MS);
+
     return () => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
     };
-  }, [query]);
+  }, [deferredQuery]);
 
-  // Load a single, fast index of users (no N+1)
   useEffect(() => {
-    let alive = true;
+    const controller = new AbortController();
+
     (async () => {
       try {
         setLoadingUsers(true);
-        const { items } = await fetchIndex(serverQuery || '', 1, 200);
-        if (!alive) return;
+        const { items, total } = await fetchIndex(
+          serverQuery,
+          page + 1,
+          rowsPerPage,
+          controller.signal
+        );
+        if (controller.signal.aborted) return;
+
+        if (items.length === 0 && total > 0 && page > 0) {
+          const lastAvailablePage = Math.max(0, Math.ceil(total / rowsPerPage) - 1);
+          setPage(lastAvailablePage);
+          return;
+        }
 
         const nextRows: Record<string, UserPayload> = {};
-        items.forEach((it) => {
-          nextRows[it.id] = {
-            id: it.id,
-            email: (it.email || '').toLowerCase(),
-            phone: it.phone ?? '',
-            first_name: it.first_name ?? '',
-            last_name: it.last_name ?? '',
-            looker_link: it.looker_link ?? '',
-            ghl_user_id: it.ghl_user_id ?? '',
-          };
-        });
+        for (const item of items) {
+          nextRows[item.id] = toUserPayload(item);
+        }
 
-        setUsers(
-          items.map((it) => ({
-            id: it.id,
-            name: [it.first_name, it.last_name].filter(Boolean).join(' '),
-            email: it.email || '',
-          }))
-        );
+        setUserIds(items.map((item) => item.id));
         setRows(nextRows);
-      } catch {
+        setTotalUsers(total);
+      } catch (error: unknown) {
+        if (controller.signal.aborted) return;
+        if (error instanceof Error && error.name === 'AbortError') return;
         setSnack({ open: true, message: 'Failed to load users', severity: 'error' });
       } finally {
-        if (alive) {
+        if (!controller.signal.aborted) {
           setLoadingUsers(false);
           setHasFetched(true);
         }
       }
     })();
-    return () => {
-      alive = false;
-    };
-  }, [serverQuery]);
 
-  // Server already filters by query; keep this alias to minimize code changes below
-  const filtered = useMemo(() => users, [users]);
+    return () => controller.abort();
+  }, [page, refreshKey, rowsPerPage, serverQuery]);
 
-  const handleCellChange = useCallback(
-    <K extends keyof UserPayload>(id: string, key: K, value: UserPayload[K]) => {
-      setRows((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], [key]: value } } : prev));
-    },
-    []
-  );
+  const handleCellChange = useCallback<HandleCellChange>((id, key, value) => {
+    setRows((prev) => (prev[id] ? { ...prev, [id]: { ...prev[id], [key]: value } } : prev));
+  }, []);
 
   const handleSaveRow = useCallback(
     async (id: string) => {
       const row = rows[id];
       if (!row) return;
-      setSavingIds((s) => ({ ...s, [id]: true }));
+
+      setSavingIds((prev) => ({ ...prev, [id]: true }));
       try {
         const payload = {
           first_name: row.first_name.trim(),
@@ -182,13 +317,13 @@ export default function UserProfilesAdmin() {
               : null,
         };
 
-        const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || res.statusText);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error || response.statusText);
 
         setRows((prev) => ({
           ...prev,
@@ -207,14 +342,11 @@ export default function UserProfilesAdmin() {
       } catch {
         setSnack({ open: true, message: 'Failed to save user.', severity: 'error' });
       } finally {
-        setSavingIds((s) => ({ ...s, [id]: false }));
+        setSavingIds((prev) => ({ ...prev, [id]: false }));
       }
     },
     [rows]
   );
-
-  const confirmDelete = (id: string) => setDeletingId(id);
-  const confirmPasswordReset = (id: string) => setResetConfirmId(id);
 
   const handleSendPasswordReset = useCallback(async () => {
     if (!resetConfirmId) return;
@@ -229,11 +361,11 @@ export default function UserProfilesAdmin() {
 
     setResettingIds((prev) => ({ ...prev, [id]: true }));
     try {
-      const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}/reset-password`, {
         method: 'POST',
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || res.statusText);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || response.statusText);
 
       setSnack({
         open: true,
@@ -253,28 +385,35 @@ export default function UserProfilesAdmin() {
   const handleDelete = useCallback(async () => {
     if (!deletingId) return;
     const id = deletingId;
+
     try {
-      const res = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || res.statusText);
-
-      // Remove from local state
-      setUsers((prev) => prev.filter((u) => u.id !== id));
-      setRows((prev) => {
-        const n = { ...prev };
-        delete n[id];
-        return n;
-      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.error || response.statusText);
 
       setSnack({ open: true, message: 'User deleted.', severity: 'success' });
+      setRefreshKey((prev) => prev + 1);
     } catch {
       setSnack({ open: true, message: 'Failed to delete user.', severity: 'error' });
     } finally {
       setDeletingId(null);
     }
   }, [deletingId]);
+
+  const handleQueryChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
+  }, []);
+
+  const handlePageChange = useCallback((_event: unknown, nextPage: number) => {
+    setPage(nextPage);
+  }, []);
+
+  const handleRowsPerPageChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  }, []);
 
   const renderInitialSkeleton = () => (
     <Box sx={{ width: '100%', overflowX: 'auto' }}>
@@ -287,14 +426,16 @@ export default function UserProfilesAdmin() {
             <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
             <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
             <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
-            <TableCell align="right" sx={{ minWidth: 220 }}>Actions</TableCell>
+            <TableCell align="right" sx={{ minWidth: 220 }}>
+              Actions
+            </TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {Array.from({ length: 8 }).map((_, i) => (
-            <TableRow key={i}>
-              {Array.from({ length: 7 }).map((__, j) => (
-                <TableCell key={j}>
+          {Array.from({ length: 8 }).map((_, rowIndex) => (
+            <TableRow key={rowIndex}>
+              {Array.from({ length: 7 }).map((__, cellIndex) => (
+                <TableCell key={cellIndex}>
                   <Skeleton height={32} />
                 </TableCell>
               ))}
@@ -311,19 +452,26 @@ export default function UserProfilesAdmin() {
         <Box display="flex" alignItems="center" gap={2}>
           <TextField
             size="small"
-            placeholder="Search by name or email…"
+            placeholder="Search by name or email..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={handleQueryChange}
           />
           {loadingUsers && hasFetched && (
-            <Typography variant="body2" color="text.secondary">Searching…</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Searching...
+            </Typography>
           )}
         </Box>
+        {hasFetched && totalUsers > 0 && (
+          <Typography variant="body2" color="text.secondary">
+            {totalUsers} users
+          </Typography>
+        )}
       </Stack>
 
       {!hasFetched && loadingUsers ? (
         renderInitialSkeleton()
-      ) : filtered.length === 0 ? (
+      ) : userIds.length === 0 ? (
         <Alert severity="info">
           {serverQuery ? 'No matches for your search.' : 'No users found.'}
         </Alert>
@@ -338,96 +486,38 @@ export default function UserProfilesAdmin() {
                 <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
                 <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
                 <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
-                <TableCell align="right" sx={{ minWidth: 220 }}>Actions</TableCell>
+                <TableCell align="right" sx={{ minWidth: 220 }}>
+                  Actions
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filtered.map((u) => {
-                const r = rows[u.id];
-                const saving = !!savingIds[u.id];
-                const resetting = !!resettingIds[u.id];
-                return (
-                  <TableRow key={u.id} hover>
-                    <TableCell>
-                      <TextField value={r?.email ?? ''} size="small" InputProps={{ readOnly: true }} />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        value={r?.first_name ?? ''}
-                        size="small"
-                        onChange={(e) => handleCellChange(u.id, 'first_name', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        value={r?.last_name ?? ''}
-                        size="small"
-                        onChange={(e) => handleCellChange(u.id, 'last_name', e.target.value)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        value={r?.phone ?? ''}
-                        size="small"
-                        onChange={(e) => handleCellChange(u.id, 'phone', e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        value={r?.looker_link ?? ''}
-                        size="small"
-                        onChange={(e) => handleCellChange(u.id, 'looker_link', e.target.value)}
-                        placeholder="https://…"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <TextField
-                        value={r?.ghl_user_id ?? ''}
-                        size="small"
-                        onChange={(e) => handleCellChange(u.id, 'ghl_user_id', e.target.value)}
-                        placeholder="Optional"
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Stack direction="row" spacing={1} justifyContent="flex-end">
-                        <IconButton
-                          aria-label="Delete user"
-                          onClick={() => confirmDelete(u.id)}
-                          sx={{ color: 'error.main' }}
-                        >
-                          <DeleteForeverIcon />
-                        </IconButton>
-                        <Tooltip title="Send password recovery mail">
-                          <span>
-                            <IconButton
-                              aria-label="Send password recovery mail"
-                              onClick={() => confirmPasswordReset(u.id)}
-                              color="primary"
-                              disabled={!r?.email || resetting}
-                            >
-                              {resetting ? <CircularProgress size={20} /> : <MailOutlineIcon />}
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                        <LoadingButton
-                          variant="contained"
-                          size="small"
-                          onClick={() => handleSaveRow(u.id)}
-                          loading={saving}
-                          disabled={!r}
-                        >
-                          Save
-                        </LoadingButton>
-                      </Stack>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {userIds.map((userId) => (
+                <UserProfileTableRow
+                  key={userId}
+                  userId={userId}
+                  row={rows[userId]}
+                  saving={!!savingIds[userId]}
+                  resetting={!!resettingIds[userId]}
+                  onCellChange={handleCellChange}
+                  onConfirmDelete={setDeletingId}
+                  onConfirmPasswordReset={setResetConfirmId}
+                  onSave={handleSaveRow}
+                />
+              ))}
             </TableBody>
           </Table>
 
-          {/* Optional thin loading bar area under table for background fetches */}
+          <TablePagination
+            component="div"
+            count={totalUsers}
+            page={page}
+            onPageChange={handlePageChange}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleRowsPerPageChange}
+            rowsPerPageOptions={ROWS_PER_PAGE_OPTIONS}
+          />
+
           {loadingUsers && hasFetched && (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
               <CircularProgress size={18} />
@@ -440,8 +530,15 @@ export default function UserProfilesAdmin() {
         open={snack.open}
         autoHideDuration={3500}
         onClose={() => setSnack((prev) => ({ ...prev, open: false }))}
-        message={snack.message}
-      />
+      >
+        <Alert
+          onClose={() => setSnack((prev) => ({ ...prev, open: false }))}
+          severity={snack.severity}
+          sx={{ width: '100%' }}
+        >
+          {snack.message}
+        </Alert>
+      </Snackbar>
 
       <Dialog open={!!deletingId} onClose={() => setDeletingId(null)}>
         <DialogTitle>Delete user?</DialogTitle>

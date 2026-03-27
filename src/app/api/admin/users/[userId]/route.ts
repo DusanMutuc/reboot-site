@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -14,33 +15,6 @@ function isUuid(id: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     id
   );
-}
-
-type SupabaseAdminErrorLike = {
-  message: string;
-  status?: number;
-  code?: string;
-  details?: string;
-  hint?: string;
-  name?: string;
-  cause?: unknown;
-};
-
-function formatAdminError(err: unknown): string {
-  if (!err || typeof err !== 'object') return 'Unknown error';
-
-  const e = err as SupabaseAdminErrorLike;
-
-  const parts = [
-    e.message ?? 'Unknown error',
-    typeof e.status === 'number' ? `status=${e.status}` : null,
-    typeof e.code === 'string' && e.code ? `code=${e.code}` : null,
-    typeof e.details === 'string' && e.details ? `details=${e.details}` : null,
-    typeof e.hint === 'string' && e.hint ? `hint=${e.hint}` : null,
-    typeof e.name === 'string' && e.name ? `name=${e.name}` : null,
-  ].filter((x): x is string => Boolean(x));
-
-  return parts.join(' | ');
 }
 
 async function fetchUserPayload(userId: string) {
@@ -176,6 +150,8 @@ export async function PATCH(request: NextRequest, context: Params) {
     }
   }
 
+  invalidateAdminUserDirectory();
+
   const result = await fetchUserPayload(userId);
   if ('error' in result) {
     return NextResponse.json({ error: result.error }, { status: result.status });
@@ -218,8 +194,10 @@ export async function DELETE(request: NextRequest, context: Params) {
     }
 
     // DB fallback succeeded
+    invalidateAdminUserDirectory();
     return NextResponse.json({ ok: true, via: 'db_fallback' });
   }
 
+  invalidateAdminUserDirectory();
   return NextResponse.json({ ok: true, via: 'gotrue' });
 }
