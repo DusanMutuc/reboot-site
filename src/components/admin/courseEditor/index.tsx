@@ -1146,6 +1146,21 @@ function CourseEditorInner() {
     [runMutation],
   );
 
+  const handleReorderChildren = useCallback(
+    async (parentId: number, orderedChildIds: number[]) => {
+      const updates = orderedChildIds.map((childId, idx) => ({ child_id: childId, position: idx }));
+
+      await runMutation(
+        async () => {
+          const subtreeResponse = await reorderChildren(parentId, updates);
+          return { subtree: subtreeResponse };
+        },
+        { silent: true },
+      );
+    },
+    [runMutation],
+  );
+
   const handleReorderChild = useCallback(
     async (parentId: number, childId: number, direction: 'up' | 'down') => {
       const subtree = findSubtree(trees, parentId);
@@ -1158,17 +1173,12 @@ function CourseEditorInner() {
       const nextOrder = [...ordered];
       const [moved] = nextOrder.splice(index, 1);
       nextOrder.splice(targetIndex, 0, moved);
-      const updates = nextOrder.map((child, idx) => ({ child_id: child.edge.child_id, position: idx }));
-
-      await runMutation(
-        async () => {
-          const subtreeResponse = await reorderChildren(parentId, updates);
-          return { subtree: subtreeResponse };
-        },
-        { silent: true },
+      await handleReorderChildren(
+        parentId,
+        nextOrder.map((child) => child.edge.child_id),
       );
     },
-    [runMutation, trees],
+    [handleReorderChildren, trees],
   );
 
   const handleDuplicateNode = useCallback(
@@ -1359,6 +1369,29 @@ function CourseEditorInner() {
               }
               onReorderCourses={handleReorderCourses}
               courseReordering={courseReordering}
+              onReorderChildren={handleReorderChildren}
+              onRequestCreateChild={
+                editorMode === 'edit'
+                  ? (parentId, type) => setAddChildDialog({ open: true, parentId, mode: 'create', type })
+                  : undefined
+              }
+              onRequestDeleteNode={
+                editorMode === 'edit'
+                  ? (nodeId) => setDeleteDialog({ open: true, nodeId })
+                  : undefined
+              }
+              onRequestDetachChild={
+                editorMode === 'edit'
+                  ? (parentId, childId) => {
+                      void handleDetachChild(parentId, childId);
+                    }
+                  : undefined
+              }
+              onRequestHeroImage={
+                editorMode === 'edit'
+                  ? (nodeId) => setHeroDialog({ open: true, nodeId })
+                  : undefined
+              }
               onQuickAddLesson={handleQuickAddLesson}
               onQuickAddChapter={handleQuickAddChapter}
               onQuickAddBlock={handleQuickAddBlock}

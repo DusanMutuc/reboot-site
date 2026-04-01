@@ -30,8 +30,11 @@ import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import StorageIcon from '@mui/icons-material/Storage';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ImageIcon from '@mui/icons-material/Image';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
@@ -39,7 +42,7 @@ import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } 
 import { CSS } from '@dnd-kit/utilities';
 import { adminCompactLabelSx } from '@/lib/theme';
 
-import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
+import type { ChildUnlockStatus, NodeSubtree, NodeType } from '@/types/course';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 import { fetchUnlockStatus } from '../api/requests';
 
@@ -63,6 +66,75 @@ const compactHeaderActionButtonSx = {
 const compactStatusChipSx = {
   '& .MuiChip-label': adminCompactLabelSx,
 } as const;
+
+function HoverActionStack({ children }: { children: ReactNode }) {
+  return (
+    <Stack
+      direction="row"
+      spacing={0.5}
+      className="outline-node__actions"
+      sx={{
+        position: 'absolute',
+        top: 8,
+        right: 8,
+        bgcolor: 'background.paper',
+        borderRadius: 1,
+        boxShadow: 1,
+        p: 0.5,
+        opacity: 0,
+        pointerEvents: 'none',
+        transition: 'opacity .2s ease',
+        zIndex: 1,
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </Stack>
+  );
+}
+
+function ReorderButtons({
+  disableUp,
+  disableDown,
+  onMove,
+}: {
+  disableUp: boolean;
+  disableDown: boolean;
+  onMove: (direction: 'up' | 'down') => void;
+}) {
+  return (
+    <>
+      <Tooltip title="Move up">
+        <span>
+          <IconButton
+            size="small"
+            disabled={disableUp}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMove('up');
+            }}
+          >
+            <ArrowUpwardIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title="Move down">
+        <span>
+          <IconButton
+            size="small"
+            disabled={disableDown}
+            onClick={(event) => {
+              event.stopPropagation();
+              onMove('down');
+            }}
+          >
+            <ArrowDownwardIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+    </>
+  );
+}
 
 export type SidebarMode = 'courses' | 'outline';
 
@@ -88,6 +160,11 @@ export type TreeProps = {
   onCreateCourse: () => void;
   onReorderCourses: (courseIds: number[]) => void;
   courseReordering: boolean;
+  onReorderChildren?: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
+  onRequestCreateChild?: (parentId: number, type: NodeType) => void;
+  onRequestDeleteNode?: (nodeId: number) => void;
+  onRequestDetachChild?: (parentId: number, childId: number) => void;
+  onRequestHeroImage?: (nodeId: number) => void;
   onQuickAddLesson: () => void;
   onQuickAddChapter: () => void;
   onQuickAddBlock: () => void;
@@ -322,12 +399,31 @@ type SortableCourseItemProps = {
   course: NodeSubtree;
   selected: boolean;
   stats: { lessons: number; chapters: number };
+  index: number;
+  total: number;
   onSelectCourse: (courseId: number) => void;
+  onMoveCourse?: (direction: 'up' | 'down') => void;
+  onRequestCreateLesson?: (courseId: number) => void;
+  onRequestDeleteNode?: (nodeId: number) => void;
+  onRequestHeroImage?: (nodeId: number) => void;
   onContextMenu?: (event: React.MouseEvent<HTMLElement>, nodeId: number) => void;
   disabled?: boolean;
 };
 
-function SortableCourseItem({ course, selected, stats, onSelectCourse, onContextMenu, disabled = false }: SortableCourseItemProps) {
+function SortableCourseItem({
+  course,
+  selected,
+  stats,
+  index,
+  total,
+  onSelectCourse,
+  onMoveCourse,
+  onRequestCreateLesson,
+  onRequestDeleteNode,
+  onRequestHeroImage,
+  onContextMenu,
+  disabled = false,
+}: SortableCourseItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: String(course.node.id),
     disabled,
@@ -351,8 +447,16 @@ function SortableCourseItem({ course, selected, stats, onSelectCourse, onContext
     <ListItem ref={setNodeRef} key={course.node.id} disablePadding sx={{ display: 'block', opacity: isDragging ? 0.75 : 1, transform: CSS.Transform.toString(transform), transition }}>
       <ListItemButton
         onClick={() => onSelectCourse(course.node.id)}
+        onContextMenu={
+          onContextMenu
+            ? (event) => {
+                event.preventDefault();
+                onContextMenu(event, course.node.id);
+              }
+            : undefined
+        }
         selected={selected}
-        sx={{ alignItems: 'center', gap: 2, borderRadius: 2, p: 1.5, position: 'relative', '&::before': { content: '""', position: 'absolute', inset: '4px auto 4px 0', width: 3, borderRadius: 2, backgroundColor: selected ? 'primary.main' : 'transparent', transition: 'background-color 120ms ease' }, '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 }, '&.Mui-selected': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08) }, '&:hover': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04) } }}
+        sx={{ alignItems: 'center', gap: 2, borderRadius: 2, p: 1.5, position: 'relative', '&::before': { content: '""', position: 'absolute', inset: '4px auto 4px 0', width: 3, borderRadius: 2, backgroundColor: selected ? 'primary.main' : 'transparent', transition: 'background-color 120ms ease' }, '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 }, '&.Mui-selected': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.08) }, '&:hover': { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.04) }, '&:hover .outline-node__actions': { opacity: 1, pointerEvents: 'auto' } }}
       >
         <IconButton size="small" {...attributes} {...listeners} onClick={(event) => event.stopPropagation()} aria-label="Drag to reorder course" sx={{ cursor: disabled ? 'default' : 'grab' }} disabled={disabled}>
           <DragIndicatorIcon fontSize="small" />
@@ -373,19 +477,58 @@ function SortableCourseItem({ course, selected, stats, onSelectCourse, onContext
             <Typography variant="caption" color="text.secondary">{updated}</Typography>
           </Stack>
         </Stack>
-        {onContextMenu ? (
-          <Tooltip title="Course actions">
-            <IconButton
-              size="small"
-              onClick={(event) => {
-                event.stopPropagation();
-                onContextMenu(event, course.node.id);
-              }}
-              aria-label="Course actions"
-            >
-              <MoreVertIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+        {onMoveCourse || onRequestCreateLesson || onRequestHeroImage || onRequestDeleteNode ? (
+          <HoverActionStack>
+            {onRequestCreateLesson ? (
+              <Tooltip title="Add lesson">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRequestCreateLesson(course.node.id);
+                    }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            ) : null}
+            {onMoveCourse ? (
+              <ReorderButtons
+                disableUp={disabled || index === 0}
+                disableDown={disabled || index === total - 1}
+                onMove={onMoveCourse}
+              />
+            ) : null}
+            {onRequestHeroImage ? (
+              <Tooltip title="Change thumbnail">
+                <IconButton
+                  size="small"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestHeroImage(course.node.id);
+                  }}
+                >
+                  <ImageIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+            {onRequestDeleteNode ? (
+              <Tooltip title="Delete course">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestDeleteNode(course.node.id);
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </HoverActionStack>
         ) : null}
       </ListItemButton>
     </ListItem>
@@ -406,6 +549,10 @@ function CoursesList({
   onCreateCourse,
   onReorderCourses,
   courseReordering,
+  previewMode,
+  onRequestCreateChild,
+  onRequestDeleteNode,
+  onRequestHeroImage,
 }: {
   courses: NodeSubtree[];
   search: string;
@@ -417,6 +564,10 @@ function CoursesList({
   onCreateCourse: () => void;
   onReorderCourses: (courseIds: number[]) => void;
   courseReordering: boolean;
+  previewMode: boolean;
+  onRequestCreateChild?: (parentId: number, type: NodeType) => void;
+  onRequestDeleteNode?: (nodeId: number) => void;
+  onRequestHeroImage?: (nodeId: number) => void;
 }) {
   const searchInput = useUndoRedoInput({
     value: search,
@@ -436,7 +587,7 @@ function CoursesList({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const handleDragEnd = (event: DragEndEvent) => {
-    if (courseReordering || search) return;
+    if (courseReordering || search || previewMode) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -490,15 +641,28 @@ function CoursesList({
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={filtered.map((course) => String(course.node.id))} strategy={verticalListSortingStrategy}>
                 <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {filtered.map((course) => (
+                  {filtered.map((course, index) => (
                     <SortableCourseItem
                       key={course.node.id}
                       course={course}
                       selected={activeCourseId === course.node.id}
                       stats={courseStats.get(course.node.id) ?? { lessons: 0, chapters: 0 }}
+                      index={index}
+                      total={filtered.length}
                       onSelectCourse={onSelectCourse}
+                      onMoveCourse={(direction) => {
+                        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+                        if (index < 0 || targetIndex < 0 || targetIndex >= filtered.length) return;
+                        const reordered = arrayMove(filtered, index, targetIndex).map((item) => item.node.id);
+                        onReorderCourses(reordered);
+                      }}
+                      onRequestCreateLesson={
+                        !previewMode && onRequestCreateChild ? (courseId) => onRequestCreateChild(courseId, 'lesson') : undefined
+                      }
+                      onRequestDeleteNode={!previewMode ? onRequestDeleteNode : undefined}
+                      onRequestHeroImage={!previewMode ? onRequestHeroImage : undefined}
                       onContextMenu={onContextMenu}
-                      disabled={courseReordering || !!search}
+                      disabled={courseReordering || !!search || previewMode}
                     />
                   ))}
                 </List>
@@ -628,6 +792,7 @@ function OutlineHeader({
  *  Chapter card + Lesson row – artifact look
  *  ----------------------------- */
 function ChapterCard({
+  parentId,
   subtree,
   expanded,
   onToggle,
@@ -637,7 +802,15 @@ function ChapterCard({
   previewMode,
   lockStatus,
   childLocks,
+  reorderEnabled,
+  siblingIndex,
+  siblingCount,
+  onReorderSibling,
+  onReorderChildren,
+  onRequestCreateChild,
+  onRequestDetachChild,
 }: {
+  parentId: number;
   subtree: NodeSubtree;
   expanded: Set<number>;
   onToggle: (id: number) => void;
@@ -647,12 +820,28 @@ function ChapterCard({
   previewMode: boolean;
   lockStatus?: ChildUnlockStatus;
   childLocks?: Record<number, ChildUnlockStatus>;
+  reorderEnabled: boolean;
+  siblingIndex: number;
+  siblingCount: number;
+  onReorderSibling?: (direction: 'up' | 'down') => void;
+  onReorderChildren?: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
+  onRequestCreateChild?: (parentId: number, type: NodeType) => void;
+  onRequestDetachChild?: (parentId: number, childId: number) => void;
 }) {
-  const hasChildren = subtree.children.length > 0;
+  const orderedChildren = useMemo(
+    () => [...subtree.children].sort((a, b) => a.edge.position - b.edge.position),
+    [subtree.children],
+  );
+  const hasChildren = orderedChildren.length > 0;
   const isExpanded = expanded.has(subtree.node.id);
   const isSelected = selectedId === subtree.node.id;
   const isLocked = !!(previewMode && lockStatus?.locked);
   const lockReason = lockStatus?.reason ?? null;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: String(subtree.node.id),
+    disabled: !reorderEnabled,
+  });
 
   const effectiveChildLocks = useMemo<Record<number, ChildUnlockStatus> | undefined>(
     () => {
@@ -661,7 +850,7 @@ function ChapterCard({
       }
 
       const merged: Record<number, ChildUnlockStatus> = {};
-      subtree.children.forEach((child) => {
+      orderedChildren.forEach((child) => {
         const childId = child.subtree.node.id;
         const existing = childLocks?.[childId];
 
@@ -676,19 +865,37 @@ function ChapterCard({
 
       return merged;
     },
-    [previewMode, isLocked, childLocks, lockReason, subtree],
+    [previewMode, isLocked, childLocks, lockReason, orderedChildren],
   );
 
   const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
+  const showActions =
+    !previewMode &&
+    Boolean(onReorderSibling || onRequestCreateChild || onRequestDetachChild);
+  const handleChildDragEnd = (event: DragEndEvent) => {
+    if (!reorderEnabled || !onReorderChildren) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = orderedChildren.findIndex((child) => String(child.subtree.node.id) === String(active.id));
+    const newIndex = orderedChildren.findIndex((child) => String(child.subtree.node.id) === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(orderedChildren, oldIndex, newIndex).map((child) => child.edge.child_id);
+    void onReorderChildren(subtree.node.id, reordered);
+  };
 
   return (
     <Box
+      ref={setNodeRef}
       sx={{
+        transform: CSS.Transform.toString(transform),
+        transition: [transition, 'box-shadow .2s', 'border-color .2s'].filter(Boolean).join(', '),
+        opacity: isDragging ? 0.75 : 1,
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 2,
         overflow: 'hidden',
-        transition: 'box-shadow .2s, border-color .2s',
         '&:hover': { borderColor: 'grey.300', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
       }}
     >
@@ -705,6 +912,7 @@ function ChapterCard({
             : undefined
         }
         sx={{
+          position: 'relative',
           display: 'flex',
           alignItems: 'center',
           gap: 1.5,
@@ -714,8 +922,32 @@ function ChapterCard({
           cursor: 'pointer',
           userSelect: 'none',
           '&:hover': { bgcolor: (t) => (isSelected ? alpha(t.palette.primary.main, 0.16) : t.palette.action.hover) },
+          '&:hover .outline-node__actions': {
+            opacity: 1,
+            pointerEvents: 'auto',
+          },
         }}
       >
+        {!previewMode ? (
+          <Tooltip title="Drag to reorder lesson">
+            <span>
+              <IconButton
+                size="small"
+                {...attributes}
+                {...listeners}
+                onClick={(event) => event.stopPropagation()}
+                aria-label="Drag to reorder lesson"
+                sx={{
+                  color: 'text.disabled',
+                  cursor: reorderEnabled && siblingCount > 1 ? 'grab' : 'default',
+                }}
+                disabled={!onReorderSibling || !reorderEnabled || siblingCount <= 1}
+              >
+                <DragIndicatorIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        ) : null}
         <Box sx={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {hasChildren ? (
             <IconButton
@@ -760,40 +992,104 @@ function ChapterCard({
             </Box>
           </Tooltip>
         ) : null}
-
+        {showActions ? (
+          <HoverActionStack>
+            {onRequestCreateChild ? (
+              <Tooltip title="Add chapter">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRequestCreateChild(subtree.node.id, 'chapter');
+                    }}
+                  >
+                    <AddIcon fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            ) : null}
+            {onReorderSibling ? (
+              <ReorderButtons
+                disableUp={!reorderEnabled || siblingIndex === 0}
+                disableDown={!reorderEnabled || siblingIndex === siblingCount - 1}
+                onMove={onReorderSibling}
+              />
+            ) : null}
+            {onRequestDetachChild ? (
+              <Tooltip title="Remove from course">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestDetachChild(parentId, subtree.node.id);
+                  }}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </HoverActionStack>
+        ) : null}
       </Box>
 
       {/* Lesson list (or empty state) */}
       {hasChildren && isExpanded ? (
-        <Stack sx={{ bgcolor: 'background.paper' }}>
-          {subtree.children.length ? (
-            subtree.children.map((child, idx) => (
-              <LessonRow
-                key={child.subtree.node.id}
-                subtree={child.subtree}
-                onSelect={onSelect}
-                selected={selectedId === child.subtree.node.id}
-                onContextMenu={onContextMenu}
-                divider={idx > 0}
-                previewMode={previewMode}
-                lockStatus={effectiveChildLocks?.[child.subtree.node.id]}
-              />
-            ))
-          ) : (
-            <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary', bgcolor: 'background.default' }}>
-              <StorageIcon sx={{ opacity: 0.3, fontSize: 36, mb: 1 }} />
-              <Typography variant="body2">
-                This chapter has no content yet. Use the + Block action to add content.
-              </Typography>
-            </Box>
-          )}
-        </Stack>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChildDragEnd}>
+          <SortableContext
+            items={orderedChildren.map((child) => String(child.subtree.node.id))}
+            strategy={verticalListSortingStrategy}
+          >
+          <Stack sx={{ bgcolor: 'background.paper' }}>
+            {orderedChildren.length ? (
+              orderedChildren.map((child, idx) => (
+                <LessonRow
+                  key={child.subtree.node.id}
+                  parentId={subtree.node.id}
+                  subtree={child.subtree}
+                  onSelect={onSelect}
+                  selected={selectedId === child.subtree.node.id}
+                  onContextMenu={onContextMenu}
+                  divider={idx > 0}
+                  previewMode={previewMode}
+                  lockStatus={effectiveChildLocks?.[child.subtree.node.id]}
+                  reorderEnabled={reorderEnabled}
+                  siblingIndex={idx}
+                  siblingCount={orderedChildren.length}
+                  onReorderSibling={
+                    onReorderChildren
+                      ? (direction) => {
+                          const targetIndex = direction === 'up' ? idx - 1 : idx + 1;
+                          if (targetIndex < 0 || targetIndex >= orderedChildren.length) return;
+                          const reordered = arrayMove(orderedChildren, idx, targetIndex).map(
+                            (orderedChild) => orderedChild.edge.child_id,
+                          );
+                          void onReorderChildren(subtree.node.id, reordered);
+                        }
+                      : undefined
+                  }
+                  onRequestDetachChild={onRequestDetachChild}
+                />
+              ))
+            ) : (
+              <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary', bgcolor: 'background.default' }}>
+                <StorageIcon sx={{ opacity: 0.3, fontSize: 36, mb: 1 }} />
+                <Typography variant="body2">
+                  This chapter has no content yet. Use the + Block action to add content.
+                </Typography>
+              </Box>
+            )}
+          </Stack>
+          </SortableContext>
+        </DndContext>
       ) : null}
     </Box>
   );
 }
 
 function LessonRow({
+  parentId,
   subtree,
   onSelect,
   selected,
@@ -801,7 +1097,13 @@ function LessonRow({
   divider,
   previewMode,
   lockStatus,
+  reorderEnabled,
+  siblingIndex,
+  siblingCount,
+  onReorderSibling,
+  onRequestDetachChild,
 }: {
+  parentId: number;
   subtree: NodeSubtree;
   onSelect: (id: number) => void;
   selected: boolean;
@@ -809,14 +1111,25 @@ function LessonRow({
   divider?: boolean;
   previewMode: boolean;
   lockStatus?: ChildUnlockStatus;
+  reorderEnabled: boolean;
+  siblingIndex: number;
+  siblingCount: number;
+  onReorderSibling?: (direction: 'up' | 'down') => void;
+  onRequestDetachChild?: (parentId: number, childId: number) => void;
 }) {
   const isLocked = !!(previewMode && lockStatus?.locked);
   const lockReason = lockStatus?.reason ?? null;
   const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
   const textColor = isLocked ? 'text.disabled' : 'text.primary';
+  const showActions = !previewMode && Boolean(onReorderSibling || onRequestDetachChild);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: String(subtree.node.id),
+    disabled: !reorderEnabled,
+  });
 
   return (
     <Box
+      ref={setNodeRef}
       onClick={() => onSelect(subtree.node.id)}
       onContextMenu={
         onContextMenu
@@ -827,10 +1140,14 @@ function LessonRow({
           : undefined
       }
       sx={{
+        position: 'relative',
+        transform: CSS.Transform.toString(transform),
+        transition: [transition, 'background-color .2s'].filter(Boolean).join(', '),
+        opacity: isDragging ? 0.75 : 1,
         display: 'flex',
         alignItems: 'flex-start',
         gap: 1.25,
-        pl: 6,
+        pl: 4,
         pr: 2,
         py: 1.25,
         borderTop: divider ? '1px solid' : 'none',
@@ -838,9 +1155,33 @@ function LessonRow({
         cursor: 'pointer',
         bgcolor: selected ? (t) => alpha(t.palette.primary.main, 0.08) : 'transparent',
         '&:hover': { bgcolor: 'action.hover' },
-        transition: 'background-color .2s',
+        '&:hover .outline-node__actions': {
+          opacity: 1,
+          pointerEvents: 'auto',
+        },
       }}
     >
+      {!previewMode ? (
+        <Tooltip title="Drag to reorder chapter">
+          <span>
+            <IconButton
+              size="small"
+              {...attributes}
+              {...listeners}
+              onClick={(event) => event.stopPropagation()}
+              aria-label="Drag to reorder chapter"
+              sx={{
+                color: 'text.disabled',
+                cursor: reorderEnabled && siblingCount > 1 ? 'grab' : 'default',
+                mt: -0.25,
+              }}
+              disabled={!onReorderSibling || !reorderEnabled || siblingCount <= 1}
+            >
+              <DragIndicatorIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+      ) : null}
       <ArticleIcon fontSize="small" sx={{ color: iconColor, mt: 0.3 }} />
       <TruncateTooltip title={subtree.node.title || 'Untitled'}>
         <Typography
@@ -868,6 +1209,31 @@ function LessonRow({
             <LockOutlinedIcon fontSize="small" sx={{ pointerEvents: 'none' }} />
           </Box>
         </Tooltip>
+      ) : null}
+      {showActions ? (
+        <HoverActionStack>
+          {onReorderSibling ? (
+            <ReorderButtons
+              disableUp={!reorderEnabled || siblingIndex === 0}
+              disableDown={!reorderEnabled || siblingIndex === siblingCount - 1}
+              onMove={onReorderSibling}
+            />
+          ) : null}
+          {onRequestDetachChild ? (
+            <Tooltip title="Remove from lesson">
+              <IconButton
+                size="small"
+                color="error"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRequestDetachChild(parentId, subtree.node.id);
+                }}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+        </HoverActionStack>
       ) : null}
 
     </Box>
@@ -899,6 +1265,9 @@ function OutlinePanel({
   stats,
   previewMode,
   unlockStatuses,
+  onReorderChildren,
+  onRequestCreateChild,
+  onRequestDetachChild,
   onToggleSequential,
   sequentialLoading,
 }: {
@@ -923,6 +1292,9 @@ function OutlinePanel({
   stats: { lessons: number; chapters: number };
   previewMode: boolean;
   unlockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
+  onReorderChildren?: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
+  onRequestCreateChild?: (parentId: number, type: NodeType) => void;
+  onRequestDetachChild?: (parentId: number, childId: number) => void;
   onToggleSequential: (courseId: number, on: boolean) => void;
   sequentialLoading: boolean;
 }) {
@@ -931,16 +1303,20 @@ function OutlinePanel({
     onChange: onSearchChange,
     scopeKey: `outline-${course.node.id}`,
   });
+  const orderedChildren = useMemo(
+    () => [...course.children].sort((a, b) => a.edge.position - b.edge.position),
+    [course.children],
+  );
   const filteredChildren = useMemo(
     () =>
-      course.children
-        .map((child) => child.subtree)
-        .filter((child) => {
+      orderedChildren.filter((child) => {
           if (!search) return true;
-          return subtreeContainsQuery(child, search);
+          return subtreeContainsQuery(child.subtree, search);
         }),
-    [course.children, search],
+    [orderedChildren, search],
   );
+  const reorderEnabled = Boolean(onReorderChildren) && !previewMode && !search;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const hasLessons = course.children.length > 0;
 
@@ -958,6 +1334,19 @@ function OutlinePanel({
       contextualMessage = 'This chapter has no content yet. Use the + Block action to add content.';
     }
   }
+
+  const handleLessonDragEnd = (event: DragEndEvent) => {
+    if (!reorderEnabled || !onReorderChildren) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = filteredChildren.findIndex((child) => String(child.subtree.node.id) === String(active.id));
+    const newIndex = filteredChildren.findIndex((child) => String(child.subtree.node.id) === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(filteredChildren, oldIndex, newIndex).map((child) => child.edge.child_id);
+    void onReorderChildren(course.node.id, reordered);
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -1027,6 +1416,14 @@ function OutlinePanel({
         />
       </Box>
 
+      {search && onReorderChildren && !previewMode ? (
+        <Box sx={{ px: 3, pt: 2 }}>
+          <Typography variant="caption" color="text.secondary">
+            Clear search to reorder lessons and chapters.
+          </Typography>
+        </Box>
+      ) : null}
+
       {/* Contextual hint */}
       {contextualMessage && (
         <Box sx={{ mx: 3, my: 2, p: 2, borderRadius: 2, bgcolor: (t) => alpha(t.palette.primary.main, 0.08) }}>
@@ -1040,22 +1437,48 @@ function OutlinePanel({
       <Box sx={{ flex: 1, overflowY: 'auto', px: 3, py: 2 }}>
         {hasLessons ? (
           filteredChildren.length > 0 ? (
-            <Stack spacing={1.5}>
-              {filteredChildren.map((child) => (
-                <ChapterCard
-                  key={child.node.id}
-                  subtree={child}
-                  expanded={expanded}
-                  onToggle={onToggle}
-                  onSelect={onSelect}
-                  selectedId={selectedNodeId}
-                  onContextMenu={onContextMenu}
-                  previewMode={previewMode}
-                  lockStatus={previewMode ? courseLockMap[child.node.id] : undefined}
-                  childLocks={getChildLocks(child.node.id)}
-                />
-              ))}
-            </Stack>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLessonDragEnd}>
+              <SortableContext
+                items={filteredChildren.map((child) => String(child.subtree.node.id))}
+                strategy={verticalListSortingStrategy}
+              >
+                <Stack spacing={1.5}>
+                  {filteredChildren.map((child, index) => (
+                    <ChapterCard
+                      key={child.subtree.node.id}
+                      parentId={course.node.id}
+                      subtree={child.subtree}
+                      expanded={expanded}
+                      onToggle={onToggle}
+                      onSelect={onSelect}
+                      selectedId={selectedNodeId}
+                      onContextMenu={onContextMenu}
+                      previewMode={previewMode}
+                      lockStatus={previewMode ? courseLockMap[child.subtree.node.id] : undefined}
+                      childLocks={getChildLocks(child.subtree.node.id)}
+                      reorderEnabled={reorderEnabled}
+                      siblingIndex={index}
+                      siblingCount={filteredChildren.length}
+                      onReorderSibling={
+                        onReorderChildren
+                          ? (direction) => {
+                              const targetIndex = direction === 'up' ? index - 1 : index + 1;
+                              if (targetIndex < 0 || targetIndex >= filteredChildren.length) return;
+                              const reordered = arrayMove(filteredChildren, index, targetIndex).map(
+                                (orderedChild) => orderedChild.edge.child_id,
+                              );
+                              void onReorderChildren(course.node.id, reordered);
+                            }
+                          : undefined
+                      }
+                      onReorderChildren={onReorderChildren}
+                      onRequestCreateChild={onRequestCreateChild}
+                      onRequestDetachChild={onRequestDetachChild}
+                    />
+                  ))}
+                </Stack>
+              </SortableContext>
+            </DndContext>
           ) : (
             <Typography variant="body2" color="text.secondary">
               No matches in this course.
@@ -1096,6 +1519,11 @@ export default function Tree({
   onCreateCourse,
   onReorderCourses,
   courseReordering,
+  onReorderChildren,
+  onRequestCreateChild,
+  onRequestDeleteNode,
+  onRequestDetachChild,
+  onRequestHeroImage,
   onQuickAddLesson,
   onQuickAddChapter,
   onQuickAddBlock,
@@ -1206,6 +1634,10 @@ export default function Tree({
           onCreateCourse={onCreateCourse}
           onReorderCourses={onReorderCourses}
           courseReordering={courseReordering}
+          previewMode={previewMode}
+          onRequestCreateChild={onRequestCreateChild}
+          onRequestDeleteNode={onRequestDeleteNode}
+          onRequestHeroImage={onRequestHeroImage}
         />
       ) : activeCourse ? (
         <OutlinePanel
@@ -1230,6 +1662,9 @@ export default function Tree({
           stats={courseStats.get(activeCourse.node.id) ?? { lessons: 0, chapters: 0 }}
           previewMode={previewMode}
           unlockStatuses={unlockStatuses}
+          onReorderChildren={onReorderChildren}
+          onRequestCreateChild={onRequestCreateChild}
+          onRequestDetachChild={onRequestDetachChild}
           onToggleSequential={onToggleSequential}
           sequentialLoading={sequentialLoading}
         />
@@ -1245,6 +1680,10 @@ export default function Tree({
           onCreateCourse={onCreateCourse}
           onReorderCourses={onReorderCourses}
           courseReordering={courseReordering}
+          previewMode={previewMode}
+          onRequestCreateChild={onRequestCreateChild}
+          onRequestDeleteNode={onRequestDeleteNode}
+          onRequestHeroImage={onRequestHeroImage}
         />
       )}
     </Paper>

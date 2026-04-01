@@ -497,6 +497,14 @@ function LibraryEditorInner() {
     }, { silent: true });
   }, [runMutation]);
 
+  const handleReorderChildren = useCallback(async (parentId: number, orderedChildIds: number[]) => {
+    const updates = orderedChildIds.map((childId, idx) => ({ child_id: childId, position: idx }));
+    await runMutation(async () => {
+      const subtreeResp = await reorderChildren(parentId, updates);
+      return { subtree: subtreeResp };
+    }, { silent: true });
+  }, [runMutation]);
+
   const handleReorderChild = useCallback(async (parentId: number, childId: number, direction: 'up' | 'down') => {
     const subtree = findSubtree(trees, parentId);
     if (!subtree) return;
@@ -507,12 +515,8 @@ function LibraryEditorInner() {
     const nextOrder = [...ordered];
     const [moved] = nextOrder.splice(index, 1);
     nextOrder.splice(targetIndex, 0, moved);
-    const updates = nextOrder.map((c, idx) => ({ child_id: c.edge.child_id, position: idx }));
-    await runMutation(async () => {
-      const subtreeResp = await reorderChildren(parentId, updates);
-      return { subtree: subtreeResp };
-    }, { silent: true });
-  }, [runMutation, trees]);
+    await handleReorderChildren(parentId, nextOrder.map((c) => c.edge.child_id));
+  }, [handleReorderChildren, trees]);
 
   const handleAttachChild = useCallback(async (parentId: number, childId: number) => {
     await runMutation(async () => {
@@ -717,6 +721,7 @@ function LibraryEditorInner() {
               onDetachChild={handleDetachChild}
               onDuplicateNode={handleDuplicateNode}
               onReorderChild={handleReorderChild}
+              onReorderChildren={handleReorderChildren}
               getAvailableChildTypes={getAvailableChildTypes}
               onOpenHeroDialog={(nodeId) => setHeroDialog({ open: true, nodeId })}
             />

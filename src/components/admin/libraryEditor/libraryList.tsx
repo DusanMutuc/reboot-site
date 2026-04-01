@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState, useRef } from 'react';
+import { type ReactNode, useEffect, useMemo, useState, useRef } from 'react';
 import {
   Box,
   Button,
@@ -29,6 +29,9 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ImageIcon from '@mui/icons-material/Image';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import NextImage from 'next/image';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import type { NodeSubtree, NodeType } from '@/types/course';
 import { supabase } from '@/lib/supabaseClient';
@@ -53,6 +56,7 @@ type Props = {
   onDetachChild: (parentId: number, childId: number) => void;
   onDuplicateNode: (nodeId: number) => void;
   onReorderChild: (parentId: number, childId: number, direction: 'up' | 'down') => void;
+  onReorderChildren: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
 
   getAvailableChildTypes: (parentId: number | null) => NodeType[];
   onOpenHeroDialog: (nodeId: number) => void;
@@ -110,6 +114,24 @@ function StatusChip({ state }: { state: NodeState }) {
   );
 }
 
+type SortableRenderProps = Pick<
+  ReturnType<typeof useSortable>,
+  'attributes' | 'listeners' | 'setNodeRef' | 'transform' | 'transition' | 'isDragging'
+>;
+
+function SortableItem({
+  id,
+  disabled = false,
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  children: (props: SortableRenderProps) => ReactNode;
+}) {
+  const sortable = useSortable({ id, disabled });
+  return <>{children(sortable)}</>;
+}
+
 export default function LibraryList({
   rootSubtree,
   selectedNodeId,
@@ -118,10 +140,12 @@ export default function LibraryList({
   onDetachChild,
   onDuplicateNode,
   onReorderChild,
+  onReorderChildren,
   getAvailableChildTypes,
   onOpenHeroDialog,
 }: Props) {
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const children = useMemo(() => {
     if (!rootSubtree) return [] as NodeSubtree['children'];
@@ -251,6 +275,17 @@ export default function LibraryList({
   }
 
   const canAddLessonAtRoot = getAvailableChildTypes(rootSubtree.node.id).includes('lesson');
+  const handleLessonDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = children.findIndex((child) => String(child.subtree.node.id) === String(active.id));
+    const newIndex = children.findIndex((child) => String(child.subtree.node.id) === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+
+    const reordered = arrayMove(children, oldIndex, newIndex).map((child) => child.edge.child_id);
+    void onReorderChildren(rootSubtree.node.id, reordered);
+  };
 
   return (
     <Stack sx={{ height: '100%', bgcolor: 'background.paper' }}>
@@ -282,8 +317,10 @@ export default function LibraryList({
 
       {/* Items List */}
       <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5 }}>
-        <Stack spacing={1}>
-          {children.map(({ edge, subtree }) => {
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleLessonDragEnd}>
+          <SortableContext items={children.map((child) => String(child.subtree.node.id))} strategy={verticalListSortingStrategy}>
+            <Stack spacing={1}>
+              {children.map(({ subtree }, lessonIndex) => {
             const isSelected = subtree.node.id === selectedNodeId;
             const isHovered = hoveredId === subtree.node.id;
 
@@ -299,10 +336,30 @@ export default function LibraryList({
             const canAddChapterHere = isLesson && getAvailableChildTypes(subtree.node.id).includes('chapter');
 
             const state = getNodeState(subtree.node);
+            const handleChapterDragEnd = (event: DragEndEvent) => {
+              const { active, over } = event;
+              if (!over || active.id === over.id) return;
+
+              const oldIndex = childRows.findIndex((child) => String(child.subtree.node.id) === String(active.id));
+              const newIndex = childRows.findIndex((child) => String(child.subtree.node.id) === String(over.id));
+              if (oldIndex < 0 || newIndex < 0) return;
+
+              const reordered = arrayMove(childRows, oldIndex, newIndex).map((child) => child.edge.child_id);
+              void onReorderChildren(subtree.node.id, reordered);
+            };
 
             return (
-              <Fragment key={subtree.node.id}>
+              <SortableItem key={subtree.node.id} id={String(subtree.node.id)}>
+                {({ setNodeRef, attributes, listeners, transform, transition, isDragging }) => (
                 <Box
+                  ref={setNodeRef}
+                  sx={{
+                    transform: CSS.Transform.toString(transform),
+                    transition,
+                    opacity: isDragging ? 0.75 : 1,
+                  }}
+                >
+                  <Box
                   onMouseEnter={() => setHoveredId(subtree.node.id)}
                   onMouseLeave={() => setHoveredId(null)}
                   onClick={() => onSelectNode(subtree.node.id)}
@@ -327,9 +384,21 @@ export default function LibraryList({
                   }}
                 >
                   {/* Drag Handle */}
-                  <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled', cursor: 'grab' }}>
-                    <DragIndicatorIcon fontSize="small" />
-                  </Box>
+                  <Tooltip title="Drag to reorder lesson">
+                    <span>
+                      <IconButton
+                        size="small"
+                        {...attributes}
+                        {...listeners}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label="Drag to reorder lesson"
+                        sx={{ color: 'text.disabled', cursor: children.length > 1 ? 'grab' : 'default' }}
+                        disabled={children.length <= 1}
+                      >
+                        <DragIndicatorIcon fontSize="small" />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
 
                   {/* Thumbnail */}
                   <Box
@@ -437,7 +506,7 @@ export default function LibraryList({
                           <IconButton
                             size="small"
                             onClick={() => onReorderChild(rootSubtree.node.id, subtree.node.id, 'up')}
-                            disabled={edge.position === 0}
+                            disabled={lessonIndex === 0}
                           >
                             <ArrowUpwardIcon fontSize="small" />
                           </IconButton>
@@ -448,7 +517,7 @@ export default function LibraryList({
                           <IconButton
                             size="small"
                             onClick={() => onReorderChild(rootSubtree.node.id, subtree.node.id, 'down')}
-                            disabled={edge.position === children.length - 1}
+                            disabled={lessonIndex === children.length - 1}
                           >
                             <ArrowDownwardIcon fontSize="small" />
                           </IconButton>
@@ -480,8 +549,10 @@ export default function LibraryList({
                 {/* Indented chapters under lessons */}
                 {isLesson && childRows.length > 0 && (
                   <Box sx={{ pl: 4 }}>
-                    <Stack spacing={1}>
-                      {childRows.map(({ edge: chEdge, subtree: chTree }) => {
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleChapterDragEnd}>
+                      <SortableContext items={childRows.map((child) => String(child.subtree.node.id))} strategy={verticalListSortingStrategy}>
+                        <Stack spacing={1}>
+                          {childRows.map(({ subtree: chTree }, chapterIndex) => {
                         const chIsSelected = chTree.node.id === selectedNodeId;
                         const chIsHovered = hoveredId === chTree.node.id;
 
@@ -492,7 +563,17 @@ export default function LibraryList({
                         const chState = getNodeState(chTree.node);
 
                         return (
+                          <SortableItem key={chTree.node.id} id={String(chTree.node.id)}>
+                            {({ setNodeRef: setChapterRef, attributes: chapterAttributes, listeners: chapterListeners, transform: chapterTransform, transition: chapterTransition, isDragging: chapterDragging }) => (
                           <Box
+                            ref={setChapterRef}
+                            sx={{
+                              transform: CSS.Transform.toString(chapterTransform),
+                              transition: chapterTransition,
+                              opacity: chapterDragging ? 0.75 : 1,
+                            }}
+                          >
+                            <Box
                             key={chTree.node.id}
                             onMouseEnter={() => setHoveredId(chTree.node.id)}
                             onMouseLeave={() => setHoveredId(null)}
@@ -519,9 +600,21 @@ export default function LibraryList({
                               },
                             }}
                           >
-                            <Box sx={{ display: 'flex', alignItems: 'center', color: 'text.disabled', cursor: 'grab' }}>
-                              <DragIndicatorIcon fontSize="small" />
-                            </Box>
+                            <Tooltip title="Drag to reorder chapter">
+                              <span>
+                                <IconButton
+                                  size="small"
+                                  {...chapterAttributes}
+                                  {...chapterListeners}
+                                  onClick={(event) => event.stopPropagation()}
+                                  aria-label="Drag to reorder chapter"
+                                  sx={{ color: 'text.disabled', cursor: childRows.length > 1 ? 'grab' : 'default' }}
+                                  disabled={childRows.length <= 1}
+                                >
+                                  <DragIndicatorIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
 
                             <Box
                               sx={{
@@ -607,7 +700,7 @@ export default function LibraryList({
                                     <IconButton
                                       size="small"
                                       onClick={() => onReorderChild(subtree.node.id, chTree.node.id, 'up')}
-                                      disabled={chEdge.position === 0}
+                                      disabled={chapterIndex === 0}
                                     >
                                       <ArrowUpwardIcon fontSize="small" />
                                     </IconButton>
@@ -618,7 +711,7 @@ export default function LibraryList({
                                     <IconButton
                                       size="small"
                                       onClick={() => onReorderChild(subtree.node.id, chTree.node.id, 'down')}
-                                      disabled={chEdge.position === childRows.length - 1}
+                                      disabled={chapterIndex === childRows.length - 1}
                                     >
                                       <ArrowDownwardIcon fontSize="small" />
                                     </IconButton>
@@ -641,17 +734,26 @@ export default function LibraryList({
                               </Stack>
                             )}
                           </Box>
+                        </Box>
+                      )}
+                    </SortableItem>
                         );
                       })}
-                    </Stack>
+                        </Stack>
+                      </SortableContext>
+                    </DndContext>
                   </Box>
                 )}
 
-                {edge.position < children.length - 1 && <Divider />}
-              </Fragment>
+                {lessonIndex < children.length - 1 && <Divider />}
+              </Box>
+                    )}
+                  </SortableItem>
             );
-          })}
-        </Stack>
+              })}
+            </Stack>
+          </SortableContext>
+        </DndContext>
       </Box>
 
       {/* Context Menu */}
