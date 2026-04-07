@@ -1653,7 +1653,7 @@ const renderVisibility = () => {
                       }
                       label="Required"
                     />
-                    <Tooltip title="Detach child">
+                    <Tooltip title="Delete child">
                       <IconButton size="small" color="error" onClick={() => onRemoveChild(child.edge.child_id)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>

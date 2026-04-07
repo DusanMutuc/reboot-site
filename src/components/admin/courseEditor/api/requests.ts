@@ -131,8 +131,10 @@ export async function searchAudienceUsers(query: string, limit = 8) {
 
 export async function deleteNode(nodeId: number) {
   const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}`, { method: 'DELETE' });
-  const data = await parseJson<{ subtree?: NodeSubtree }>(res, 'Failed to delete node');
-  return data.subtree ?? null;
+  return parseJson<{ subtree?: NodeSubtree; parentSubtree?: NodeSubtree | null }>(
+    res,
+    'Failed to delete node',
+  );
 }
 
 export async function duplicateNode(nodeId: number, parent: number | null) {

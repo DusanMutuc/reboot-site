@@ -52,8 +52,7 @@ type Props = {
   onSelectNode: (nodeId: number) => void;
 
   onCreateNode: (parentId: number | null, payload: { node_type: NodeType; title: string }) => void;
-  // onAttachChild was unused here; keep it in the parent component where it's actually used.
-  onDetachChild: (parentId: number, childId: number) => void;
+  onRequestDeleteNode: (nodeId: number) => void;
   onDuplicateNode: (nodeId: number) => void;
   onReorderChild: (parentId: number, childId: number, direction: 'up' | 'down') => void;
   onReorderChildren: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
@@ -137,7 +136,7 @@ export default function LibraryList({
   selectedNodeId,
   onSelectNode,
   onCreateNode,
-  onDetachChild,
+  onRequestDeleteNode,
   onDuplicateNode,
   onReorderChild,
   onReorderChildren,
@@ -257,9 +256,9 @@ export default function LibraryList({
     closeContextMenu();
   };
 
-  const handleCtxDetach = () => {
-    if (ctx.parentId == null || ctx.nodeId == null) return;
-    onDetachChild(ctx.parentId, ctx.nodeId);
+  const handleCtxDelete = () => {
+    if (ctx.nodeId == null) return;
+    onRequestDeleteNode(ctx.nodeId);
     closeContextMenu();
   };
 
@@ -533,11 +532,11 @@ export default function LibraryList({
                           <ImageIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Remove from library">
+                      <Tooltip title="Delete lesson">
                         <IconButton
                           size="small"
                           color="error"
-                          onClick={() => onDetachChild(rootSubtree.node.id, subtree.node.id)}
+                          onClick={() => onRequestDeleteNode(subtree.node.id)}
                         >
                           <DeleteIcon fontSize="small" />
                         </IconButton>
@@ -722,11 +721,11 @@ export default function LibraryList({
                                     <ContentCopyIcon fontSize="small" />
                                   </IconButton>
                                 </Tooltip>
-                                <Tooltip title="Remove from lesson">
+                                <Tooltip title="Delete chapter">
                                   <IconButton
                                     size="small"
                                     color="error"
-                                    onClick={() => onDetachChild(subtree.node.id, chTree.node.id)}
+                                    onClick={() => onRequestDeleteNode(chTree.node.id)}
                                   >
                                     <DeleteIcon fontSize="small" />
                                   </IconButton>
@@ -802,9 +801,9 @@ export default function LibraryList({
         )}
 
         {ctx.nodeId != null && ctx.parentId != null && (
-          <MenuItem onClick={handleCtxDetach} sx={{ color: 'error.main' }}>
+          <MenuItem onClick={handleCtxDelete} sx={{ color: 'error.main' }}>
             <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
-            <ListItemText primary={ctx.nodeType === 'chapter' ? 'Remove from lesson' : 'Remove from library'} />
+            <ListItemText primary={ctx.nodeType === 'chapter' ? 'Delete chapter' : 'Delete lesson'} />
           </MenuItem>
         )}
       </Menu>

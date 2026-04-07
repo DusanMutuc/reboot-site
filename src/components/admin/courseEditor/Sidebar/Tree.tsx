@@ -163,7 +163,6 @@ export type TreeProps = {
   onReorderChildren?: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
   onRequestCreateChild?: (parentId: number, type: NodeType) => void;
   onRequestDeleteNode?: (nodeId: number) => void;
-  onRequestDetachChild?: (parentId: number, childId: number) => void;
   onRequestHeroImage?: (nodeId: number) => void;
   onQuickAddLesson: () => void;
   onQuickAddChapter: () => void;
@@ -792,7 +791,6 @@ function OutlineHeader({
  *  Chapter card + Lesson row – artifact look
  *  ----------------------------- */
 function ChapterCard({
-  parentId,
   subtree,
   expanded,
   onToggle,
@@ -808,9 +806,8 @@ function ChapterCard({
   onReorderSibling,
   onReorderChildren,
   onRequestCreateChild,
-  onRequestDetachChild,
+  onRequestDeleteNode,
 }: {
-  parentId: number;
   subtree: NodeSubtree;
   expanded: Set<number>;
   onToggle: (id: number) => void;
@@ -826,7 +823,7 @@ function ChapterCard({
   onReorderSibling?: (direction: 'up' | 'down') => void;
   onReorderChildren?: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
   onRequestCreateChild?: (parentId: number, type: NodeType) => void;
-  onRequestDetachChild?: (parentId: number, childId: number) => void;
+  onRequestDeleteNode?: (nodeId: number) => void;
 }) {
   const orderedChildren = useMemo(
     () => [...subtree.children].sort((a, b) => a.edge.position - b.edge.position),
@@ -871,7 +868,7 @@ function ChapterCard({
   const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
   const showActions =
     !previewMode &&
-    Boolean(onReorderSibling || onRequestCreateChild || onRequestDetachChild);
+    Boolean(onReorderSibling || onRequestCreateChild || onRequestDeleteNode);
   const handleChildDragEnd = (event: DragEndEvent) => {
     if (!reorderEnabled || !onReorderChildren) return;
     const { active, over } = event;
@@ -1016,14 +1013,14 @@ function ChapterCard({
                 onMove={onReorderSibling}
               />
             ) : null}
-            {onRequestDetachChild ? (
-              <Tooltip title="Remove from course">
+            {onRequestDeleteNode ? (
+              <Tooltip title="Delete lesson">
                 <IconButton
                   size="small"
                   color="error"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onRequestDetachChild(parentId, subtree.node.id);
+                    onRequestDeleteNode(subtree.node.id);
                   }}
                 >
                   <DeleteIcon fontSize="small" />
@@ -1046,7 +1043,6 @@ function ChapterCard({
               orderedChildren.map((child, idx) => (
                 <LessonRow
                   key={child.subtree.node.id}
-                  parentId={subtree.node.id}
                   subtree={child.subtree}
                   onSelect={onSelect}
                   selected={selectedId === child.subtree.node.id}
@@ -1069,7 +1065,7 @@ function ChapterCard({
                         }
                       : undefined
                   }
-                  onRequestDetachChild={onRequestDetachChild}
+                  onRequestDeleteNode={onRequestDeleteNode}
                 />
               ))
             ) : (
@@ -1089,7 +1085,6 @@ function ChapterCard({
 }
 
 function LessonRow({
-  parentId,
   subtree,
   onSelect,
   selected,
@@ -1101,9 +1096,8 @@ function LessonRow({
   siblingIndex,
   siblingCount,
   onReorderSibling,
-  onRequestDetachChild,
+  onRequestDeleteNode,
 }: {
-  parentId: number;
   subtree: NodeSubtree;
   onSelect: (id: number) => void;
   selected: boolean;
@@ -1115,13 +1109,13 @@ function LessonRow({
   siblingIndex: number;
   siblingCount: number;
   onReorderSibling?: (direction: 'up' | 'down') => void;
-  onRequestDetachChild?: (parentId: number, childId: number) => void;
+  onRequestDeleteNode?: (nodeId: number) => void;
 }) {
   const isLocked = !!(previewMode && lockStatus?.locked);
   const lockReason = lockStatus?.reason ?? null;
   const iconColor = isLocked ? 'text.disabled' : 'text.secondary';
   const textColor = isLocked ? 'text.disabled' : 'text.primary';
-  const showActions = !previewMode && Boolean(onReorderSibling || onRequestDetachChild);
+  const showActions = !previewMode && Boolean(onReorderSibling || onRequestDeleteNode);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: String(subtree.node.id),
     disabled: !reorderEnabled,
@@ -1219,14 +1213,14 @@ function LessonRow({
               onMove={onReorderSibling}
             />
           ) : null}
-          {onRequestDetachChild ? (
-            <Tooltip title="Remove from lesson">
+          {onRequestDeleteNode ? (
+            <Tooltip title="Delete chapter">
               <IconButton
                 size="small"
                 color="error"
                 onClick={(event) => {
                   event.stopPropagation();
-                  onRequestDetachChild(parentId, subtree.node.id);
+                  onRequestDeleteNode(subtree.node.id);
                 }}
               >
                 <DeleteIcon fontSize="small" />
@@ -1267,7 +1261,7 @@ function OutlinePanel({
   unlockStatuses,
   onReorderChildren,
   onRequestCreateChild,
-  onRequestDetachChild,
+  onRequestDeleteNode,
   onToggleSequential,
   sequentialLoading,
 }: {
@@ -1294,7 +1288,7 @@ function OutlinePanel({
   unlockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
   onReorderChildren?: (parentId: number, orderedChildIds: number[]) => Promise<void> | void;
   onRequestCreateChild?: (parentId: number, type: NodeType) => void;
-  onRequestDetachChild?: (parentId: number, childId: number) => void;
+  onRequestDeleteNode?: (nodeId: number) => void;
   onToggleSequential: (courseId: number, on: boolean) => void;
   sequentialLoading: boolean;
 }) {
@@ -1446,7 +1440,6 @@ function OutlinePanel({
                   {filteredChildren.map((child, index) => (
                     <ChapterCard
                       key={child.subtree.node.id}
-                      parentId={course.node.id}
                       subtree={child.subtree}
                       expanded={expanded}
                       onToggle={onToggle}
@@ -1473,7 +1466,7 @@ function OutlinePanel({
                       }
                       onReorderChildren={onReorderChildren}
                       onRequestCreateChild={onRequestCreateChild}
-                      onRequestDetachChild={onRequestDetachChild}
+                      onRequestDeleteNode={onRequestDeleteNode}
                     />
                   ))}
                 </Stack>
@@ -1522,7 +1515,6 @@ export default function Tree({
   onReorderChildren,
   onRequestCreateChild,
   onRequestDeleteNode,
-  onRequestDetachChild,
   onRequestHeroImage,
   onQuickAddLesson,
   onQuickAddChapter,
@@ -1664,7 +1656,7 @@ export default function Tree({
           unlockStatuses={unlockStatuses}
           onReorderChildren={onReorderChildren}
           onRequestCreateChild={onRequestCreateChild}
-          onRequestDetachChild={onRequestDetachChild}
+          onRequestDeleteNode={onRequestDeleteNode}
           onToggleSequential={onToggleSequential}
           sequentialLoading={sequentialLoading}
         />

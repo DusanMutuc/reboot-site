@@ -26,7 +26,6 @@ import {
   createNode,
   deleteBlock,
   deleteNode,
-  detachChild,
   duplicateNode,
   fetchCourseTrees,
   fetchEdgeRules,
@@ -157,6 +156,21 @@ function removeSubtree(list: NodeSubtree[], nodeId: number) {
     }
   }
   return next;
+}
+
+function collectSubtreeIds(subtree: NodeSubtree | null) {
+  const ids = new Set<number>();
+
+  const walk = (node: NodeSubtree) => {
+    ids.add(node.node.id);
+    node.children.forEach((child) => walk(child.subtree));
+  };
+
+  if (subtree) {
+    walk(subtree);
+  }
+
+  return ids;
 }
 
 function isNodeSubtree(value: unknown): value is NodeSubtree {
@@ -1078,20 +1092,21 @@ function CourseEditorInner() {
 
   const handleDeleteNode = useCallback(
     async (nodeId: number) => {
+      const deletedIds = collectSubtreeIds(findSubtree(trees, nodeId));
       await runMutation(
         async () => {
-          await deleteNode(nodeId);
-          return {};
+          return deleteNode(nodeId);
         },
         { message: 'Node deleted' },
       );
       setTrees((prev) => removeSubtree(prev, nodeId));
-      if (selectedNodeId === nodeId) {
+      if (deletedIds.has(selectedNodeId ?? -1)) {
         setSelectedNodeId(null);
         setSelectedBlockId(null);
+        setEditingBlockId(null);
       }
     },
-    [runMutation, selectedNodeId, setSelectedNodeId, setSelectedBlockId],
+    [runMutation, selectedNodeId, setEditingBlockId, setSelectedNodeId, setSelectedBlockId, trees],
   );
 
   const handleAddChild = useCallback(
@@ -1128,19 +1143,6 @@ function CourseEditorInner() {
           return { subtree };
         },
         { silent: true },
-      );
-    },
-    [runMutation],
-  );
-
-  const handleDetachChild = useCallback(
-    async (parentId: number, childId: number) => {
-      await runMutation(
-        async () => {
-          const subtree = await detachChild(parentId, childId);
-          return { subtree };
-        },
-        { message: 'Child detached' },
       );
     },
     [runMutation],
@@ -1380,13 +1382,6 @@ function CourseEditorInner() {
                   ? (nodeId) => setDeleteDialog({ open: true, nodeId })
                   : undefined
               }
-              onRequestDetachChild={
-                editorMode === 'edit'
-                  ? (parentId, childId) => {
-                      void handleDetachChild(parentId, childId);
-                    }
-                  : undefined
-              }
               onRequestHeroImage={
                 editorMode === 'edit'
                   ? (nodeId) => setHeroDialog({ open: true, nodeId })
@@ -1443,7 +1438,7 @@ function CourseEditorInner() {
     selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)
   }
   onRemoveChild={(childId) =>
-    selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)
+    setDeleteDialog({ open: true, nodeId: childId })
   }
   selectedBlock={selectedBlock}
   onClearBlockSelection={() => {

@@ -27,16 +27,16 @@ import Canvas from '@/components/admin/courseEditor/Canvas/Canvas'; // NOTE: kee
 import Properties, { type NodeDraft } from '@/components/admin/courseEditor/Sidebar/Properties';
 import ResourcePickerDialog from '@/components/admin/courseEditor/Canvas/ResourcePickerDialog';
 import HeroImageManagerDialog from '@/components/admin/courseEditor/HeroImageManagerDialog';
+import DeleteDialog from '@/components/admin/courseEditor/Sidebar/DeleteDialog';
 import { EditorStoreProvider, useEditorStore } from '@/components/admin/courseEditor/state/editorStore';
 
 import LibraryList from './libraryList';
 
 import {
-  attachChild,
   createBlock,
   createNode,
   deleteBlock,
-  detachChild,
+  deleteNode,
   duplicateNode,
   fetchCourseTrees,
   fetchEdgeRules,
@@ -107,6 +107,52 @@ function updateNodeDraft(subtree: NodeSubtree, nodeId: number, updates: Partial<
     blocks: subtree.blocks.map((b) => ({ ...b })),
     children: subtree.children.map((c) => ({ edge: { ...c.edge }, subtree: updateNodeDraft(c.subtree, nodeId, updates) })),
   };
+}
+function pruneTree(tree: NodeSubtree, nodeId: number): { next: NodeSubtree; removed: boolean } {
+  let removed = false;
+  const children = tree.children
+    .map((child) => {
+      if (child.subtree.node.id === nodeId) {
+        removed = true;
+        return null;
+      }
+      const result = pruneTree(child.subtree, nodeId);
+      if (result.removed) {
+        removed = true;
+        return { edge: { ...child.edge }, subtree: result.next };
+      }
+      return child;
+    })
+    .filter(Boolean) as NodeSubtree['children'];
+
+  if (!removed) return { next: tree, removed: false };
+
+  return {
+    next: {
+      node: { ...tree.node },
+      blocks: tree.blocks.map((b) => ({ ...b })),
+      children,
+    },
+    removed: true,
+  };
+}
+function removeSubtree(list: NodeSubtree[], nodeId: number) {
+  const next: NodeSubtree[] = [];
+  for (const tree of list) {
+    if (tree.node.id === nodeId) continue;
+    const result = pruneTree(tree, nodeId);
+    next.push(result.removed ? result.next : tree);
+  }
+  return next;
+}
+function collectSubtreeIds(subtree: NodeSubtree | null) {
+  const ids = new Set<number>();
+  const walk = (node: NodeSubtree) => {
+    ids.add(node.node.id);
+    node.children.forEach((child) => walk(child.subtree));
+  };
+  if (subtree) walk(subtree);
+  return ids;
 }
 function sortBlocks(blocks: ContentBlock[]) {
   return [...blocks].sort((a, b) => a.position - b.position);
@@ -212,6 +258,9 @@ function LibraryEditorInner() {
   const heroNode = heroDialog.nodeId ? findSubtree(trees, heroDialog.nodeId) : null;
   const heroCourseId = heroNode?.node.id ?? null;
   const heroCurrentPath = heroNode?.node.hero_image ?? null;
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; nodeId: number | null }>(
+    { open: false, nodeId: null },
+  );
 
   // optimistic queues copied from CourseEditor (but trimmed to blocks & nodes we use)
   const blockUpdateQueue = useRef<Map<number, Partial<ContentBlock>>>(new Map());
@@ -518,19 +567,18 @@ function LibraryEditorInner() {
     await handleReorderChildren(parentId, nextOrder.map((c) => c.edge.child_id));
   }, [handleReorderChildren, trees]);
 
-  const handleAttachChild = useCallback(async (parentId: number, childId: number) => {
+  const handleDeleteNode = useCallback(async (nodeId: number) => {
+    const deletedIds = collectSubtreeIds(findSubtree(trees, nodeId));
     await runMutation(async () => {
-      const subtree = await attachChild(parentId, childId);
-      return { subtree };
-    }, { message: 'Child attached' });
-  }, [runMutation]);
-
-  const handleDetachChild = useCallback(async (parentId: number, childId: number) => {
-    await runMutation(async () => {
-      const subtree = await detachChild(parentId, childId);
-      return { subtree };
-    }, { message: 'Child detached' });
-  }, [runMutation]);
+      return deleteNode(nodeId);
+    }, { message: 'Node deleted' });
+    setTrees((prev) => removeSubtree(prev, nodeId));
+    if (deletedIds.has(selectedNodeId ?? -1)) {
+      setSelectedNodeId(null);
+      setSelectedBlockId(null);
+      setEditingBlockId(null);
+    }
+  }, [runMutation, selectedNodeId, setEditingBlockId, setSelectedBlockId, setSelectedNodeId, trees]);
 
   const handleDuplicateNode = useCallback(async (nodeId: number) => {
     // find parent edge (optional)
@@ -718,7 +766,7 @@ function LibraryEditorInner() {
               selectedNodeId={selectedNodeId}
               onSelectNode={handleSelectNode}
               onCreateNode={handleAddChild}
-              onDetachChild={handleDetachChild}
+              onRequestDeleteNode={(nodeId) => setDeleteDialog({ open: true, nodeId })}
               onDuplicateNode={handleDuplicateNode}
               onReorderChild={handleReorderChild}
               onReorderChildren={handleReorderChildren}
@@ -770,7 +818,7 @@ function LibraryEditorInner() {
                 onUpdateChild={(childId, updates) =>
                   selectedSubtree && void handleUpdateChild(selectedSubtree.node.id, childId, updates)}
                 onRemoveChild={(childId) =>
-                  selectedSubtree && void handleDetachChild(selectedSubtree.node.id, childId)}
+                  setDeleteDialog({ open: true, nodeId: childId })}
                 selectedBlock={sortedBlocks.find((b) => b.id === selectedBlockId) ?? null}
                 onClearBlockSelection={() => { setSelectedBlockId(null); setEditingBlockId(null); }}
                 onUpdateBlock={(blockId, updates, opts) => queueBlockUpdate(blockId, updates, opts)}
@@ -815,6 +863,16 @@ function LibraryEditorInner() {
         currentPath={heroCurrentPath}
         onClose={() => setHeroDialog({ open: false, nodeId: null })}
         onChangePath={handleHeroPathChange}
+      />
+
+      <DeleteDialog
+        open={deleteDialog.open}
+        subtree={deleteDialog.nodeId ? findSubtree(trees, deleteDialog.nodeId) : null}
+        onClose={() => setDeleteDialog({ open: false, nodeId: null })}
+        onConfirm={(nodeId) => {
+          void handleDeleteNode(nodeId);
+          setDeleteDialog({ open: false, nodeId: null });
+        }}
       />
 
       <Snackbar open={!!snack} autoHideDuration={4000} onClose={() => setSnack(null)}>
