@@ -18,7 +18,7 @@ import LessonContent from './LessonContent';
 
 type CourseViewerProps = {
   courseSlug: string;
-  lessonSlug?: string;
+  slugParts?: string[];
 };
 
 type EverUnlockedMap = Record<number, Set<number>>;
@@ -88,6 +88,45 @@ function collectParentPath(nodeId: number, parentById: Map<number, number | null
   return path;
 }
 
+function sameSlugPath(left: string[], right: string[]) {
+  return left.length === right.length && left.every((part, index) => part === right[index]);
+}
+
+function buildContentSlugPath(
+  nodeId: number,
+  nodeById: Map<number, NodeSubtree>,
+  parentById: Map<number, number | null>,
+) {
+  const path: string[] = [];
+  let current: number | null | undefined = nodeId;
+
+  while (current != null) {
+    const subtree = nodeById.get(current);
+    if (!subtree) return null;
+
+    if (subtree.node.node_type !== 'course') {
+      if (!subtree.node.slug) return null;
+      path.push(subtree.node.slug);
+    }
+
+    current = parentById.get(current) ?? null;
+  }
+
+  return path.reverse();
+}
+
+function buildCourseContentHref(
+  courseSlug: string,
+  nodeId: number,
+  nodeById: Map<number, NodeSubtree>,
+  parentById: Map<number, number | null>,
+) {
+  const path = buildContentSlugPath(nodeId, nodeById, parentById);
+  if (!path || path.length === 0) return null;
+  const encodedPath = path.map((part) => encodeURIComponent(part)).join('/');
+  return `/courses/${encodeURIComponent(courseSlug)}/${encodedPath}`;
+}
+
 function findContentNodeBySlug(course: NodeSubtree, slug: string) {
   let matchId: number | null = null;
   let matchCount = 0;
@@ -103,6 +142,25 @@ function findContentNodeBySlug(course: NodeSubtree, slug: string) {
   };
 
   visit(course);
+  return { matchId, matchCount };
+}
+
+function findContentNodeBySlugPath(
+  slugParts: string[],
+  nodeById: Map<number, NodeSubtree>,
+  parentById: Map<number, number | null>,
+) {
+  let matchId: number | null = null;
+  let matchCount = 0;
+
+  nodeById.forEach((subtree) => {
+    if (!isContentNodeType(subtree.node.node_type)) return;
+    const path = buildContentSlugPath(subtree.node.id, nodeById, parentById);
+    if (!path || !sameSlugPath(path, slugParts)) return;
+    matchId = subtree.node.id;
+    matchCount += 1;
+  });
+
   return { matchId, matchCount };
 }
 
@@ -228,12 +286,12 @@ function debugLogUnlockStatuses(
   }
 }
 
-/** ---------- NEW: find first unlocked content slug ---------- */
-function findFirstUnlockedContentSlug(
+/** ---------- NEW: find first unlocked content path ---------- */
+function findFirstUnlockedContentPath(
   course: NodeSubtree,
   lockMap: Record<number, Record<number, ChildUnlockStatus>>,
-): string | null {
-  const walk = (parent: NodeSubtree): string | null => {
+): string[] | null {
+  const walk = (parent: NodeSubtree, parentPath: string[]): string[] | null => {
     const parentId = parent.node.id;
     const locks = lockMap[parentId] ?? {};
 
@@ -244,27 +302,28 @@ function findFirstUnlockedContentSlug(
       if (locked) continue;
 
       const isContent = isContentNodeType(subtree.node.node_type);
+      const childPath = subtree.node.slug ? [...parentPath, subtree.node.slug] : parentPath;
 
       // Prefer deeper unlocked lessons if present
       if (subtree.children.length > 0) {
-        const deeper = walk(subtree);
+        const deeper = walk(subtree, childPath);
         if (deeper) return deeper;
       }
 
       if (isContent && subtree.node.slug) {
-        return subtree.node.slug;
+        return childPath;
       }
 
-      const deeperAnyway = walk(subtree);
+      const deeperAnyway = walk(subtree, childPath);
       if (deeperAnyway) return deeperAnyway;
     }
     return null;
   };
 
-  return walk(course);
+  return walk(course, []);
 }
 
-export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerProps) {
+export default function CourseViewer({ courseSlug, slugParts = [] }: CourseViewerProps) {
   const router = useRouter();
   const [state, setState] = useState<CourseState>({ status: 'loading' });
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -305,11 +364,8 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
         // AFTER
         // prefer existing everUnlocked (from cache or current state) so unlocks are truly monotonic across reloads
-        const priorEver =
-          (courseCache.get(courseSlug)?.everUnlocked &&
-            cloneEverUnlocked(courseCache.get(courseSlug)!.everUnlocked)) ||
-          (state.status === 'ready' && cloneEverUnlocked(state.everUnlocked)) ||
-          null;
+        const cachedCourse = courseCache.get(courseSlug);
+        const priorEver = cachedCourse?.everUnlocked ? cloneEverUnlocked(cachedCourse.everUnlocked) : null;
 
         const everUnlocked = priorEver ?? seedEverUnlocked(data.unlockStatuses);
         const lockStatuses = applyMonotonicUnlocks(data.unlockStatuses, everUnlocked);
@@ -349,9 +405,22 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
   const nodeById = maps?.nodeById ?? null;
   const parentById = maps?.parentById ?? null;
 
+  const requestedSlugParts = slugParts.filter(Boolean);
+  const fullPathLookup =
+    requestedSlugParts.length > 0 && nodeById && parentById
+      ? findContentNodeBySlugPath(requestedSlugParts, nodeById, parentById)
+      : null;
+  const flatFallbackLookup =
+    requestedSlugParts.length === 1 && fullPathLookup?.matchCount === 0 && state.status === 'ready'
+      ? findContentNodeBySlug(state.course, requestedSlugParts[0])
+      : null;
   const requestedContentLookup =
-    lessonSlug && state.status === 'ready' ? findContentNodeBySlug(state.course, lessonSlug) : null;
+    fullPathLookup && fullPathLookup.matchCount > 0 ? fullPathLookup : (flatFallbackLookup ?? fullPathLookup);
   const requestedContentId = requestedContentLookup?.matchId ?? null;
+  const requestedIsFlatFallback =
+    requestedSlugParts.length === 1 &&
+    (fullPathLookup?.matchCount ?? 0) === 0 &&
+    (flatFallbackLookup?.matchCount ?? 0) === 1;
   let selectedContent: NodeSubtree | null = null;
   let contentError: string | null = null;
 
@@ -372,7 +441,7 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     }
   }
 
-  if (!selectedContent && lessonSlug && !contentError) {
+  if (!selectedContent && requestedSlugParts.length > 0 && !contentError) {
     contentError = 'We couldn’t find this item.';
   }
 
@@ -397,21 +466,22 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
       return;
     }
 
-    if (!parentById) {
+    if (!nodeById || !parentById) {
       setSnackbar('Course outline is still loading. Try again in a moment.');
       return;
     }
 
     const navigateToNode = (target: NodeSubtree) => {
       const targetLabel = formatContentLabel(target.node.node_type).toLowerCase();
-      if (!target.node.slug) {
+      const href = buildCourseContentHref(courseSlug, target.node.id, nodeById, parentById);
+      if (!href) {
         setSnackbar(`This ${targetLabel} is missing a slug and cannot be opened.`);
         return;
       }
 
       const pathParents = collectParentPath(target.node.id, parentById);
       setExpanded((prev) => new Set([...prev, ...pathParents]));
-      router.push(`/courses/${courseSlug}/${target.node.slug}`);
+      router.push(href);
     };
 
     if (node.node.node_type === 'lesson' && node.children.length > 0) {
@@ -446,16 +516,25 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
     setExpanded((prev) => new Set([...prev, ...pathParents]));
   }, [contentError, parentById, requestedContentId]);
 
+  useEffect(() => {
+    if (!requestedIsFlatFallback || !selectedContent || !nodeById || !parentById) return;
+    const href = buildCourseContentHref(courseSlug, selectedContent.node.id, nodeById, parentById);
+    if (href) {
+      router.replace(href);
+    }
+  }, [courseSlug, nodeById, parentById, requestedIsFlatFallback, router, selectedContent]);
+
   /** ------- NEW: Auto-redirect to first unlocked node when opening course root ------- */
   useEffect(() => {
     if (state.status !== 'ready') return;
-    if (lessonSlug) return; // user explicitly asked for a specific item
+    if (requestedSlugParts.length > 0) return; // user explicitly asked for a specific item
 
-    const firstSlug = findFirstUnlockedContentSlug(state.course, lockMap);
-    if (firstSlug) {
-      router.replace(`/courses/${courseSlug}/${firstSlug}`);
+    const firstPath = findFirstUnlockedContentPath(state.course, lockMap);
+    if (firstPath) {
+      const encodedPath = firstPath.map((part) => encodeURIComponent(part)).join('/');
+      router.replace(`/courses/${encodeURIComponent(courseSlug)}/${encodedPath}`);
     }
-  }, [state, lessonSlug, lockMap, router, courseSlug]);
+  }, [state, requestedSlugParts.length, lockMap, router, courseSlug]);
 
   /** ------- Unlock refresh after completion -------- */
   const refreshUnlocks = async (parentIds: number[]) => {
@@ -624,7 +703,7 @@ export default function CourseViewer({ courseSlug, lessonSlug }: CourseViewerPro
 
         {/* content column */}
         <Box sx={{ flex: 1, minWidth: 0, bgcolor: 'background.default' }}>
-          {lessonSlug ? null : (
+          {requestedSlugParts.length > 0 ? null : (
             <Box sx={{ px: { xs: 2, md: 4 }, py: 6 }}>
               <Typography variant="h3" sx={{ fontWeight: 700 }}>
                 {state.course.node.title ?? 'Course'}

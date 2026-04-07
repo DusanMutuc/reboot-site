@@ -27,7 +27,13 @@ import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 import { supabase } from '@/lib/supabaseClient';
-import { updateNode } from '@/components/admin/courseEditor/api/requests';
+import {
+  fetchCourseAudience,
+  searchAudienceUsers,
+  updateCourseAudience,
+  type CourseAudienceMode,
+  type CourseAudienceUser,
+} from '@/components/admin/courseEditor/api/requests';
 export type NodeDraft = {
   title: string;
   slug: string;
@@ -37,11 +43,7 @@ export type NodeDraft = {
   objectives: string;
   metadata: string;
 };
-type AllowedUser = {
-  id: string;
-  full_name: string | null;
-  email: string | null;
-};
+type AllowedUser = CourseAudienceUser;
 
 function getImageWidthPercent(settings: Record<string, unknown> | null | undefined): number {
   const raw = settings?.image_width_percent;
@@ -213,7 +215,6 @@ export type PropertiesProps = {
   savingMessage: string;
   availableChildTypes: NodeType[];
   // 👇 NEW
-  onCourseVisibilityChange?: (nodeId: number, isPublic: boolean) => void;
   
 };
 
@@ -237,7 +238,6 @@ export default function Properties({
   savingState,
   savingMessage,
   availableChildTypes,
-  onCourseVisibilityChange,
 
 }: PropertiesProps) {
   const [childType, setChildType] = useState<NodeType>('lesson');
@@ -255,192 +255,323 @@ export default function Properties({
   const nodeScopeKey = subtree?.node.id ?? null;
   const blockScopeKey = selectedBlock?.id ?? null;
   const isPendingBlock = (selectedBlock?.id ?? 0) < 0;
-// ===== Visibility state =====
-const courseId = subtree?.node.id ?? null;
-const isCourse = subtree?.node.node_type === 'course';
-
-type ContentNodesRow = { visibility: 'public' | 'limited' | null };
-type ProfilesRow = { id: string; first_name: string | null; last_name: string | null };
-type UCVRowMaybeArray = { user_id: string; profile: ProfilesRow | ProfilesRow[] | null };
-
-const [visibility, setVisibility] = useState<'public' | 'limited'>('public');
-const [visibilityLoading, setVisibilityLoading] = useState(false);
-const [visibilityError, setVisibilityError] = useState<string | null>(null);
-
-const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
-const [allowedLoading, setAllowedLoading] = useState(false);
-const [allowedError, setAllowedError] = useState<string | null>(null);
-
-const [searchQuery, setSearchQuery] = useState('');
-const [searchResults, setSearchResults] = useState<AllowedUser[]>([]);
-const [searchLoading, setSearchLoading] = useState(false);
-const [searchError, setSearchError] = useState<string | null>(null);
+  const courseId = subtree?.node.id ?? null;
+  const isCourse = subtree?.node.node_type === 'course';
+  const [audienceMode, setAudienceMode] = useState<CourseAudienceMode>('public');
+  const [audienceLoading, setAudienceLoading] = useState(false);
+  const [audienceSaving, setAudienceSaving] = useState(false);
+  const [audienceError, setAudienceError] = useState<string | null>(null);
+  const [allowedUsers, setAllowedUsers] = useState<AllowedUser[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<AllowedUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
 // Load current visibility + whitelist when a course is selected
-useEffect(() => {
-  let cancelled = false;
+  const applyAudienceState = useCallback((audience: { mode: CourseAudienceMode; allowedUsers: AllowedUser[] }) => {
+    setAudienceMode(audience.mode);
+    setAllowedUsers(audience.allowedUsers ?? []);
+  }, []);
 
-  const load = async () => {
-    if (!courseId || !isCourse) return;
+  useEffect(() => {
+    if (!courseId || !isCourse) {
+      setAudienceMode('public');
+      setAllowedUsers([]);
+      setAudienceError(null);
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchError(null);
+      setAudienceLoading(false);
+      return;
+    }
 
-    setVisibilityLoading(true);
-    setAllowedLoading(true);
-    setVisibilityError(null);
-    setAllowedError(null);
+    let cancelled = false;
 
-    try {
-      const { data, error } = await supabase
-        .from('content_nodes')
-        .select('visibility')
-        .eq('id', courseId)
-        .single<ContentNodesRow>();
+    const loadAudience = async () => {
+      setAudienceLoading(true);
+      setAudienceError(null);
+      setSearchQuery('');
+      setSearchResults([]);
+      setSearchError(null);
 
-      if (error) throw error;
-      if (!cancelled) {
-        const v = (data?.visibility ?? 'public') as 'public' | 'limited';
-        setVisibility(v);
+      try {
+        const audience = await fetchCourseAudience(courseId);
+        if (!cancelled) {
+          applyAudienceState(audience);
+        }
+      } catch (err: unknown) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load course audience';
+          setAudienceError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setAudienceLoading(false);
+        }
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load visibility';
-      if (!cancelled) setVisibilityError(message);
-    } finally {
-      if (!cancelled) setVisibilityLoading(false);
+    };
+
+    void loadAudience();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyAudienceState, courseId, isCourse]);
+
+  const saveAudience = useCallback(
+    async (mode: CourseAudienceMode, users: AllowedUser[]) => {
+      if (!courseId || !isCourse) {
+        return false;
+      }
+
+      setAudienceSaving(true);
+      setAudienceError(null);
+
+      try {
+        const audience = await updateCourseAudience(courseId, {
+          mode,
+          userIds: mode === 'specific_users' ? users.map((user) => user.id) : undefined,
+        });
+        applyAudienceState(audience);
+        return true;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to update course audience';
+        setAudienceError(message);
+        return false;
+      } finally {
+        setAudienceSaving(false);
+      }
+    },
+    [applyAudienceState, courseId, isCourse],
+  );
+
+  const handleAudienceModeChange = useCallback(
+    async (nextMode: CourseAudienceMode) => {
+      const nextUsers = nextMode === 'specific_users' ? allowedUsers : [];
+      await saveAudience(nextMode, nextUsers);
+    },
+    [allowedUsers, saveAudience],
+  );
+
+  const handleAudienceSearch = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
     }
+
+    setSearchLoading(true);
+    setSearchError(null);
 
     try {
-      const { data, error } = await supabase
-        .from('user_course_visibility')
-        .select(`
-          user_id,
-          profile:profiles (
-            id,
-            first_name,
-            last_name
-          )
-        `)
-        .eq('course_node_id', courseId);
-
-      if (error) throw error;
-
-      const raw = ((data ?? []) as unknown) as UCVRowMaybeArray[];
-
-      const rows: AllowedUser[] = raw.map((r) => {
-        const prof = Array.isArray(r.profile) ? (r.profile[0] ?? null) : r.profile;
-        const name = [prof?.first_name, prof?.last_name].filter(Boolean).join(' ').trim() || null;
-        return {
-          id: prof?.id ?? r.user_id,
-          full_name: name,
-          email: null,
-        };
-      });
-
-      if (!cancelled) setAllowedUsers(rows);
+      const results = await searchAudienceUsers(query);
+      setSearchResults(results);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load allowed users';
-      if (!cancelled) setAllowedError(message);
+      const message = err instanceof Error ? err.message : 'Failed to search users';
+      setSearchError(message);
     } finally {
-      if (!cancelled) setAllowedLoading(false);
+      setSearchLoading(false);
     }
+  }, [searchQuery]);
+
+  const handleGrantUserAccess = useCallback(
+    async (user: AllowedUser) => {
+      const nextUsers = allowedUsers.some((existing) => existing.id === user.id)
+        ? allowedUsers
+        : [...allowedUsers, user];
+      const saved = await saveAudience('specific_users', nextUsers);
+
+      if (saved) {
+        setSearchResults((prev) => prev.filter((result) => result.id !== user.id));
+      }
+    },
+    [allowedUsers, saveAudience],
+  );
+
+  const handleRevokeUserAccess = useCallback(
+    async (userId: string) => {
+      const nextUsers = allowedUsers.filter((user) => user.id !== userId);
+      await saveAudience('specific_users', nextUsers);
+    },
+    [allowedUsers, saveAudience],
+  );
+
+  const visibility = audienceMode === 'public' ? 'public' : 'limited';
+  const visibilityLoading = audienceLoading || audienceSaving;
+  const visibilityError = audienceError;
+  const allowedError = audienceError;
+  const allowedLoading = audienceLoading;
+  const handleChangeVisibility = useCallback(
+    async (makePublic: boolean) => {
+      await handleAudienceModeChange(makePublic ? 'public' : 'specific_users');
+    },
+    [handleAudienceModeChange],
+  );
+  const handleSearch = handleAudienceSearch;
+  const grantUserAccess = useCallback(
+    async (userId: string) => {
+      const user = searchResults.find((result) => result.id === userId);
+      if (!user) {
+        return;
+      }
+
+      await handleGrantUserAccess(user);
+    },
+    [handleGrantUserAccess, searchResults],
+  );
+  const revokeUserAccess = handleRevokeUserAccess;
+
+  const renderAudienceDescription = () => {
+    if (audienceMode === 'legend') {
+      return 'Only users with the legend role can see this course when it is published.';
+    }
+
+    if (audienceMode === 'specific_users') {
+      return 'Only the manually selected users below can see this course when it is published.';
+    }
+
+    return 'All signed-in users can see this course when it is published.';
   };
 
-  void load();
-  return () => {
-    cancelled = true;
+  const renderAudience = () => {
+    if (!courseId || !isCourse) return null;
+
+    return (
+      <Stack spacing={2}>
+        <Typography variant="adminSectionTitle">Audience</Typography>
+
+        {audienceError ? <Alert severity="error">{audienceError}</Alert> : null}
+
+        <TextField
+          select
+          label="Access mode"
+          value={audienceMode}
+          onChange={(event) => void handleAudienceModeChange(event.target.value as CourseAudienceMode)}
+          disabled={audienceLoading || audienceSaving}
+          helperText="Student-facing routes use this setting to decide who can open the course."
+        >
+          <MenuItem value="public">Public</MenuItem>
+          <MenuItem value="legend">Legend-only</MenuItem>
+          <MenuItem value="specific_users">Specific users</MenuItem>
+        </TextField>
+
+        <Typography variant="body2" color="text.secondary">
+          {renderAudienceDescription()}
+        </Typography>
+
+        {audienceLoading ? (
+          <Typography variant="body2" color="text.secondary">
+            Loading course audience...
+          </Typography>
+        ) : null}
+
+        {audienceMode === 'specific_users' && (
+          <Stack spacing={2} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                size="small"
+                placeholder="Search by name or email..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void handleAudienceSearch();
+                  }
+                }}
+                sx={{ minWidth: 280 }}
+                disabled={audienceSaving}
+              />
+              <Button
+                variant="outlined"
+                onClick={() => void handleAudienceSearch()}
+                disabled={searchLoading || audienceSaving}
+              >
+                {searchLoading ? 'Searching...' : 'Search'}
+              </Button>
+            </Stack>
+
+            {searchError ? <Alert severity="error">{searchError}</Alert> : null}
+
+            {searchResults.length > 0 && (
+              <Stack spacing={1}>
+                <Typography variant="caption" color="text.secondary">
+                  Search results
+                </Typography>
+                <Stack spacing={0.5}>
+                  {searchResults.map((user) => {
+                    const alreadyAllowed = allowedUsers.some((existing) => existing.id === user.id);
+                    return (
+                      <Stack
+                        key={user.id}
+                        direction="row"
+                        alignItems="center"
+                        justifyContent="space-between"
+                        sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 1 }}
+                      >
+                        <Typography variant="body2">
+                          {(user.full_name || user.email) ?? user.id}
+                          {user.full_name && user.email ? ` - ${user.email}` : ''}
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          disabled={alreadyAllowed || audienceSaving}
+                          onClick={() => void handleGrantUserAccess(user)}
+                        >
+                          {alreadyAllowed ? 'Added' : 'Grant access'}
+                        </Button>
+                      </Stack>
+                    );
+                  })}
+                </Stack>
+              </Stack>
+            )}
+
+            <Divider />
+
+            <Stack spacing={1}>
+              <Typography variant="caption" color="text.secondary">
+                Allowed users ({allowedUsers.length})
+              </Typography>
+
+              {allowedUsers.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No users have access yet.
+                </Typography>
+              ) : (
+                <Stack spacing={0.75}>
+                  {allowedUsers.map((user) => (
+                    <Stack
+                      key={user.id}
+                      direction="row"
+                      alignItems="center"
+                      justifyContent="space-between"
+                      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}
+                    >
+                      <Typography variant="body2">
+                        {(user.full_name || user.email) ?? user.id}
+                        {user.full_name && user.email ? ` - ${user.email}` : ''}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => void handleRevokeUserAccess(user.id)}
+                        disabled={audienceSaving}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          </Stack>
+        )}
+      </Stack>
+    );
   };
-}, [courseId, isCourse, subtree]);
-
-// Toggle visibility: 'public' <-> 'limited'
-const handleChangeVisibility = async (makePublic: boolean) => {
-  if (!courseId || !isCourse) return;
-  const next = makePublic ? 'public' : 'limited' as const;
-
-  setVisibility(next); // optimistic
-  setVisibilityError(null);
-  setVisibilityLoading(true);
-  try {
-    await updateNode(courseId, { visibility: next });
-    onCourseVisibilityChange?.(courseId, makePublic); // keep existing callback signature
-  } catch (err: unknown) {
-    setVisibility(makePublic ? 'limited' : 'public'); // revert
-    const message = err instanceof Error ? err.message : 'Failed to update visibility';
-    setVisibilityError(message);
-  } finally {
-    setVisibilityLoading(false);
-  }
-};
-
-// Search profiles to whitelist (name or email)
-const handleSearch = async () => {
-  const q = searchQuery.trim();
-  if (!q) { setSearchResults([]); return; }
-
-  setSearchLoading(true);
-  setSearchError(null);
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .or([`first_name.ilike.%${q}%`, `last_name.ilike.%${q}%`].join(','))
-      .order('last_name', { ascending: true })
-      .order('first_name', { ascending: true })
-      .limit(8);
-
-    if (error) throw error;
-
-    const rows = (data as ProfilesRow[] | null | undefined) ?? [];
-    const results: AllowedUser[] = rows.map((p) => ({
-      id: p.id,
-      email: null,
-      full_name: [p.first_name, p.last_name].filter(Boolean).join(' ').trim() || null,
-    }));
-    setSearchResults(results);
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Search failed';
-    setSearchError(message);
-  } finally {
-    setSearchLoading(false);
-  }
-};
-
-// Grant access
-const grantUserAccess = async (userId: string) => {
-  if (!courseId) return;
-  setAllowedError(null);
-  try {
-    const { error } = await supabase
-      .from('user_course_visibility')
-      .insert({ user_id: userId, course_node_id: courseId });
-    if (error) throw error;
-
-    const added = searchResults.find((u) => u.id === userId);
-    setAllowedUsers((prev) => {
-      if (prev.some((u) => u.id === userId)) return prev;
-      return added ? [...prev, added] : prev;
-    });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to grant access';
-    setAllowedError(message);
-  }
-};
-
-// Revoke access
-const revokeUserAccess = async (userId: string) => {
-  if (!courseId) return;
-  setAllowedError(null);
-  try {
-    const { error } = await supabase
-      .from('user_course_visibility')
-      .delete()
-      .eq('user_id', userId)
-      .eq('course_node_id', courseId);
-    if (error) throw error;
-
-    setAllowedUsers((prev) => prev.filter((u) => u.id !== userId));
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Failed to revoke access';
-    setAllowedError(message);
-  }
-};
 
 const renderVisibility = () => {
   if (!courseId || !isCourse) return null;
@@ -561,6 +692,8 @@ const renderVisibility = () => {
 };
 
 
+
+  void renderVisibility;
 
   const titleInput = useUndoRedoInput({
     value: nodeDraft?.title ?? '',
@@ -1743,7 +1876,7 @@ const renderVisibility = () => {
       ) : (
         <Stack spacing={3}>
           {renderNodeDetails()}
-          {renderVisibility()}
+          {renderAudience()}
           <Divider />
           {renderChildren()}
         </Stack>

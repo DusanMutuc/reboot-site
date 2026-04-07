@@ -8,6 +8,7 @@ import {
   handleCourseBuilderError,
   type NodeSubtree as BuilderNodeSubtree,
 } from '@/lib/courseBuilder';
+import { resolveAccessibleCourseBySlug } from '@/lib/courseAccess';
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 
 function sanitizeSubtree(subtree: BuilderNodeSubtree): NodeSubtree | null {
@@ -52,26 +53,12 @@ export async function GET(req: NextRequest, context: unknown) {
   const courseSlug = params.courseSlug;
 
   try {
-    // 1) load the course row
-    const { data: courseRow, error: courseError } = await adminClient
-      .from('content_nodes')
-      .select('id, node_type, state')
-      .eq('node_type', 'course')
-      .eq('slug', courseSlug)
-      .maybeSingle();
-
-    if (courseError) {
-      throw new CourseBuilderError('Failed to load course', 500, {
-        details: courseError.message,
-        slug: courseSlug,
-      });
-    }
-
-    if (!courseRow || courseRow.node_type !== 'course' || courseRow.state !== 'published') {
+    const courseRow = await resolveAccessibleCourseBySlug(guard.user.id, courseSlug ?? '');
+    if (!courseRow) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    // 2) build sanitized tree (published-only, no blocks)
+    // 1) build sanitized tree (published-only, no blocks)
     const rawTree = await fetchNodeSubtree(courseRow.id, {
       includeBlocks: false, // we lazy-load per selected node
       allowUnpublished: false, // students see only published content
@@ -82,7 +69,7 @@ export async function GET(req: NextRequest, context: unknown) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    // 3) collect all parent node IDs (nodes that have children)
+    // 2) collect all parent node IDs (nodes that have children)
     const parentIdsSet = new Set<number>();
     collectParentIds(sanitized, parentIdsSet);
     const parentIds = Array.from(parentIdsSet);
@@ -92,7 +79,7 @@ export async function GET(req: NextRequest, context: unknown) {
       return NextResponse.json({ course: sanitized, unlockStatuses: {} });
     }
 
-    // 4) bulk RPC to get unlock statuses for this user
+    // 3) bulk RPC to get unlock statuses for this user
     const { data: bulkRows, error: bulkError } = await adminClient.rpc('get_child_unlock_status_bulk', {
       _parent_ids: parentIds,
       _user_id: guard.user.id,
@@ -105,7 +92,7 @@ export async function GET(req: NextRequest, context: unknown) {
       });
     }
 
-    // 5) group rows by parent
+    // 4) group rows by parent
     const unlockStatuses: Record<number, ChildUnlockStatus[]> = {};
     for (const row of (bulkRows ?? []) as Array<{
       parent_id: number;

@@ -20,6 +20,7 @@ const IMPL_LABEL  = 'IMPLEMENTATION COACH \nBOOKING LINK';
 // New labels for coach mode additions
 const REFERRAL_PILL_LABEL = 'REFER AN AGENT TO OUR PROGRAM';
 const COACH_NOTES_LABEL   = 'COACHING NOTES';
+const REFERRAL_HUB_URL = 'https://rebootmembers.com/ambassadors/hub';
 
 const baseLinks: LinkItem[] = [
   { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://hub.rebootmembers.com/resources' },
@@ -340,7 +341,13 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
       {/* Referral pill remains ONLY in user mode (unchanged visual) */}
       {mode !== 'coach' && (
         <Box sx={{ mt: 4, mb: 3, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
-          <Box
+          <MuiLink
+            component={NextLink}
+            href={REFERRAL_HUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="none"
+            aria-label={`Open ${REFERRAL_PILL_LABEL}`}
             sx={{
               display: 'flex',
               flexDirection: 'row-reverse',
@@ -358,6 +365,11 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
               transition: 'transform .15s',
               maxWidth: '35rem',
               mx: 'auto',
+              color: '#000',
+              textDecoration: 'none',
+              '@media (hover: hover)': {
+                '&:hover': { transform: 'scale(1.03)' },
+              },
             }}
           >
             <Box
@@ -384,7 +396,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
             >
               {REFERRAL_PILL_LABEL}
             </Typography>
-          </Box>
+          </MuiLink>
         </Box>
       )}
     </section>

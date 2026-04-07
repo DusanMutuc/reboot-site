@@ -1462,10 +1462,6 @@ function CourseEditorInner() {
   savingState={savingState}
   savingMessage={savingMessage}
   availableChildTypes={getAvailableChildTypes(selectedSubtree?.node.id ?? null)}
-  // 👇 NEW: hook for is_public
-  onCourseVisibilityChange={(nodeId, isPublic) =>
-    queueNodeUpdate(nodeId, { is_public: isPublic }, { debounce: false })
-  }
 />
 
             </Box>

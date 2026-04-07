@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/requireUser';
 import { CourseBuilderError, adminClient, handleCourseBuilderError } from '@/lib/courseBuilder';
+import { canUserAccessNodeViaCourse } from '@/lib/courseAccess';
 
 export const revalidate = 0; // let the browser handle conditional caching
 
@@ -15,6 +16,11 @@ export async function GET(req: NextRequest, context: unknown) {
   }
 
   try {
+    const canAccess = await canUserAccessNodeViaCourse(guard.user.id, nodeIdNum);
+    if (!canAccess) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 });
+    }
+
     // Load blocks (include updated_at so we can build a stable version/ETag)
     const { data, error } = await adminClient
       .from('content_blocks')
@@ -54,7 +60,11 @@ export async function GET(req: NextRequest, context: unknown) {
     }
 
     // Strip updated_at from the payload we return
-    const payload = blocks.map(({ updated_at, ...rest }) => rest);
+    const payload = blocks.map((block) => {
+      const { updated_at: omittedUpdatedAt, ...rest } = block;
+      void omittedUpdatedAt;
+      return rest;
+    });
 
     return NextResponse.json(
       { blocks: payload },

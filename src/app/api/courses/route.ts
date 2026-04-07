@@ -2,6 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { requireUser } from '@/lib/requireUser';
 import { CourseBuilderError, adminClient, handleCourseBuilderError } from '@/lib/courseBuilder';
+import { getAvailableCourseIdsForUser } from '@/lib/courseAccess';
+
+type CourseSummaryRow = {
+  id: number;
+  title: string | null;
+  slug: string | null;
+  description: string | null;
+  hero_image: string | null;
+  icon: string | null;
+  objectives: string | null;
+  metadata: Record<string, unknown> | null;
+  sequential_unlock: boolean | null;
+};
 
 export async function GET(request: NextRequest) {
   const guard = await requireUser(request);
@@ -9,26 +22,25 @@ export async function GET(request: NextRequest) {
     return guard.res;
   }
 
-  // Adjust this line if requireUser exposes the user differently
-  const userId = guard.user.id; // or guard.session.user.id, etc.
+  const userId = guard.user.id;
 
   try {
-    const { data, error } = await adminClient.rpc(
-      'get_available_courses_for_user',
-      { _user_id: userId }
-    );
-
-    if (error) {
-      throw new CourseBuilderError('Failed to load courses', 500, { details: error.message });
+    const courseIds = await getAvailableCourseIdsForUser(userId);
+    if (courseIds.length === 0) {
+      return NextResponse.json({ courses: [] });
     }
 
-    const courses = (data ?? []) as Array<{ id: number; title?: string | null }>;
+    const { data: courseRows, error: courseError } = await adminClient
+      .from('content_nodes')
+      .select('id, title, slug, description, hero_image, icon, objectives, metadata, sequential_unlock')
+      .eq('node_type', 'course')
+      .in('id', courseIds);
 
-    if (courses.length === 0) {
-      return NextResponse.json({ courses });
+    if (courseError) {
+      throw new CourseBuilderError('Failed to load courses', 500, { details: courseError.message });
     }
 
-    const courseIds = courses.map((course) => course.id);
+    const courses = (courseRows ?? []) as CourseSummaryRow[];
     const { data: sortRows, error: sortError } = await adminClient
       .from('course_sort_orders')
       .select('course_node_id, sort_order')

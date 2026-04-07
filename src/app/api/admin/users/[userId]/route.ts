@@ -20,7 +20,11 @@ function isUuid(id: string) {
 async function fetchUserPayload(userId: string) {
   const supa = getAdminClient();
 
-  const [{ data: profile, error: profileErr }, { data: authData, error: authErr }] =
+  const [
+    { data: profile, error: profileErr },
+    { data: authData, error: authErr },
+    { data: legendRoleRow, error: legendRoleErr },
+  ] =
     await Promise.all([
       supa
         .from('profiles')
@@ -28,6 +32,12 @@ async function fetchUserPayload(userId: string) {
         .eq('id', userId)
         .maybeSingle(),
       supa.auth.admin.getUserById(userId),
+      supa
+        .from('user_roles')
+        .select('user_id, roles!inner(code)')
+        .eq('user_id', userId)
+        .eq('roles.code', 'legend')
+        .maybeSingle(),
     ]);
 
   if (profileErr) {
@@ -35,6 +45,9 @@ async function fetchUserPayload(userId: string) {
   }
   if (authErr) {
     return { error: authErr.message, status: 400 } as const;
+  }
+  if (legendRoleErr) {
+    return { error: legendRoleErr.message, status: 400 } as const;
   }
 
   const user = authData.user;
@@ -52,8 +65,24 @@ async function fetchUserPayload(userId: string) {
       looker_link: profile.looker_link?.trim() ?? '',
       ghl_user_id: profile.ghl_user_id?.trim() ?? '',
       introduced_at: profile.introduced_at ?? null,
+      is_legend: !!legendRoleRow,
     },
   } as const;
+}
+
+async function getRoleIdByCode(code: string) {
+  const supa = getAdminClient();
+  const { data, error } = await supa
+    .from('roles')
+    .select('id')
+    .eq('code', code)
+    .maybeSingle();
+
+  if (error) {
+    return { error: error.message, id: null } as const;
+  }
+
+  return { error: null, id: data?.id ?? null } as const;
 }
 
 export async function GET(request: NextRequest, context: Params) {
@@ -93,14 +122,16 @@ export async function PATCH(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
   }
 
-  const { first_name, last_name, looker_link, phone, ghl_user_id, introduced_at } = body as Partial<{
+  const payload = body as Partial<{
     first_name: string;
     last_name: string;
     looker_link: string | null;
     phone: string | null;
     ghl_user_id: string | null;
     introduced_at: string | null;
+    is_legend: boolean;
   }>;
+  const { first_name, last_name, looker_link, phone, ghl_user_id, introduced_at, is_legend } = payload;
 
   const profileUpdates: Record<string, string | null> = {};
 
@@ -147,6 +178,40 @@ export async function PATCH(request: NextRequest, context: Params) {
     });
     if (phoneErr) {
       return NextResponse.json({ error: phoneErr.message }, { status: 400 });
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, 'is_legend')) {
+    if (typeof is_legend !== 'boolean') {
+      return NextResponse.json({ error: 'is_legend must be a boolean' }, { status: 400 });
+    }
+
+    const { id: legendRoleId, error: roleError } = await getRoleIdByCode('legend');
+    if (roleError) {
+      return NextResponse.json({ error: roleError }, { status: 400 });
+    }
+    if (!legendRoleId) {
+      return NextResponse.json({ error: 'Legend role not found' }, { status: 400 });
+    }
+
+    if (is_legend) {
+      const { error: assignErr } = await supa
+        .from('user_roles')
+        .upsert({ user_id: userId, role_id: legendRoleId }, { onConflict: 'user_id,role_id', ignoreDuplicates: true });
+
+      if (assignErr) {
+        return NextResponse.json({ error: assignErr.message }, { status: 400 });
+      }
+    } else {
+      const { error: removeErr } = await supa
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId)
+        .eq('role_id', legendRoleId);
+
+      if (removeErr) {
+        return NextResponse.json({ error: removeErr.message }, { status: 400 });
+      }
     }
   }
 

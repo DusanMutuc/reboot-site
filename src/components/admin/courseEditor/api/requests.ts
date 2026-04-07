@@ -7,6 +7,14 @@ import type {
   NodeSubtree,
 } from '@/types/course';
 
+export type CourseAudienceMode = 'public' | 'legend' | 'specific_users';
+
+export type CourseAudienceUser = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
 async function parseJson<T>(res: Response, fallback: string): Promise<T> {
   const json = (await res.json().catch(() => ({}))) as T & { error?: string };
   if (!res.ok) {
@@ -73,6 +81,52 @@ export async function updateNode(nodeId: number, updates: Partial<ContentNode>) 
   });
   const data = await parseJson<{ subtree: NodeSubtree }>(res, 'Failed to update node');
   return data.subtree;
+}
+
+export async function fetchCourseAudience(nodeId: number) {
+  const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/audience`);
+  return parseJson<{ mode: CourseAudienceMode; allowedUsers: CourseAudienceUser[] }>(
+    res,
+    'Failed to load course audience',
+  );
+}
+
+export async function updateCourseAudience(
+  nodeId: number,
+  payload: { mode: CourseAudienceMode; userIds?: string[] },
+) {
+  const res = await fetch(`/api/admin/course-builder/nodes/${nodeId}/audience`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return parseJson<{ mode: CourseAudienceMode; allowedUsers: CourseAudienceUser[] }>(
+    res,
+    'Failed to update course audience',
+  );
+}
+
+export async function searchAudienceUsers(query: string, limit = 8) {
+  const params = new URLSearchParams();
+  params.set('query', query.trim());
+  params.set('page', '1');
+  params.set('limit', String(limit));
+
+  const res = await fetch(`/api/admin/users?${params.toString()}`);
+  const data = await parseJson<{
+    items: Array<{
+      id: string;
+      email: string;
+      first_name: string;
+      last_name: string;
+    }>;
+  }>(res, 'Failed to search users');
+
+  return (data.items ?? []).map<CourseAudienceUser>((item) => ({
+    id: item.id,
+    email: item.email || null,
+    full_name: `${item.first_name ?? ''} ${item.last_name ?? ''}`.trim() || null,
+  }));
 }
 
 export async function deleteNode(nodeId: number) {

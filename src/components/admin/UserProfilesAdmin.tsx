@@ -13,6 +13,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -44,6 +45,7 @@ type UserPayload = {
   last_name: string;
   looker_link: string;
   ghl_user_id: string;
+  is_legend: boolean;
 };
 
 type SnackbarState = {
@@ -60,6 +62,7 @@ type RowFromApi = {
   last_name: string;
   looker_link: string;
   ghl_user_id: string | null;
+  is_legend: boolean;
 };
 
 type UsersResponse = {
@@ -120,6 +123,7 @@ function toUserPayload(row: RowFromApi): UserPayload {
     last_name: row.last_name ?? '',
     looker_link: row.looker_link ?? '',
     ghl_user_id: row.ghl_user_id ?? '',
+    is_legend: !!row.is_legend,
   };
 }
 
@@ -174,6 +178,12 @@ const UserProfileTableRow = memo(function UserProfileTableRow({
           size="small"
           onChange={(event) => onCellChange(userId, 'ghl_user_id', event.target.value)}
           placeholder="Optional"
+        />
+      </TableCell>
+      <TableCell align="center">
+        <Checkbox
+          checked={!!row?.is_legend}
+          onChange={(event) => onCellChange(userId, 'is_legend', event.target.checked)}
         />
       </TableCell>
       <TableCell align="right">
@@ -315,6 +325,7 @@ export default function UserProfilesAdmin() {
             row.ghl_user_id && row.ghl_user_id.trim().length > 0
               ? row.ghl_user_id.trim()
               : null,
+          is_legend: !!row.is_legend,
         };
 
         const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
@@ -334,9 +345,10 @@ export default function UserProfilesAdmin() {
             first_name: data.first_name ?? '',
             last_name: data.last_name ?? '',
             looker_link: data.looker_link ?? '',
-            ghl_user_id: data.ghl_user_id ?? '',
-          },
-        }));
+              ghl_user_id: data.ghl_user_id ?? '',
+              is_legend: !!data.is_legend,
+            },
+          }));
 
         setSnack({ open: true, message: 'Saved.', severity: 'success' });
       } catch {
@@ -419,26 +431,29 @@ export default function UserProfilesAdmin() {
     <Box sx={{ width: '100%', overflowX: 'auto' }}>
       <Table size="small" stickyHeader>
         <TableHead>
-          <TableRow>
-            <TableCell sx={{ minWidth: 180 }}>Email</TableCell>
-            <TableCell sx={{ minWidth: 140 }}>First name</TableCell>
-            <TableCell sx={{ minWidth: 140 }}>Last name</TableCell>
-            <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
-            <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
-            <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
-            <TableCell align="right" sx={{ minWidth: 220 }}>
-              Actions
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {Array.from({ length: 8 }).map((_, rowIndex) => (
-            <TableRow key={rowIndex}>
-              {Array.from({ length: 7 }).map((__, cellIndex) => (
-                <TableCell key={cellIndex}>
-                  <Skeleton height={32} />
-                </TableCell>
-              ))}
+            <TableRow>
+              <TableCell sx={{ minWidth: 180 }}>Email</TableCell>
+              <TableCell sx={{ minWidth: 140 }}>First name</TableCell>
+              <TableCell sx={{ minWidth: 140 }}>Last name</TableCell>
+              <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
+              <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
+              <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
+              <TableCell align="center" sx={{ minWidth: 110 }}>
+                Legend
+              </TableCell>
+              <TableCell align="right" sx={{ minWidth: 220 }}>
+                Actions
+              </TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {Array.from({ length: 8 }).map((_, rowIndex) => (
+              <TableRow key={rowIndex}>
+                {Array.from({ length: 8 }).map((__, cellIndex) => (
+                  <TableCell key={cellIndex}>
+                    <Skeleton height={32} />
+                  </TableCell>
+                ))}
             </TableRow>
           ))}
         </TableBody>
@@ -486,6 +501,9 @@ export default function UserProfilesAdmin() {
                 <TableCell sx={{ minWidth: 140 }}>Phone</TableCell>
                 <TableCell sx={{ minWidth: 220 }}>Looker link</TableCell>
                 <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
+                <TableCell align="center" sx={{ minWidth: 110 }}>
+                  Legend
+                </TableCell>
                 <TableCell align="right" sx={{ minWidth: 220 }}>
                   Actions
                 </TableCell>

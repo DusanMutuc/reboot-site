@@ -8,6 +8,7 @@ export type AdminUserDirectoryRow = {
   last_name: string;
   looker_link: string;
   ghl_user_id: string | null;
+  is_legend: boolean;
 };
 
 type AdminUserDirectoryEntry = AdminUserDirectoryRow & {
@@ -36,6 +37,7 @@ function buildSearchText(row: AdminUserDirectoryRow) {
     row.last_name,
     row.looker_link,
     row.ghl_user_id ?? '',
+    row.is_legend ? 'legend' : '',
   ]
     .join(' ')
     .toLowerCase();
@@ -67,15 +69,16 @@ function toPublicDirectoryRow(row: AdminUserDirectoryEntry): AdminUserDirectoryR
     last_name: row.last_name,
     looker_link: row.looker_link,
     ghl_user_id: row.ghl_user_id,
+    is_legend: row.is_legend,
   };
 }
 
-async function fetchUserRoleId() {
+async function fetchRoleIdByCode(code: string) {
   const supa = getAdminClient();
   const { data: roleRow, error } = await supa
     .from('roles')
     .select('id')
-    .eq('code', 'user')
+    .eq('code', code)
     .maybeSingle();
 
   if (error) {
@@ -83,6 +86,24 @@ async function fetchUserRoleId() {
   }
 
   return roleRow?.id ?? null;
+}
+
+async function fetchUserIdsByRoleId(roleId: number | null) {
+  if (!roleId) {
+    return [] as string[];
+  }
+
+  const supa = getAdminClient();
+  const { data, error } = await supa
+    .from('user_roles')
+    .select('user_id')
+    .eq('role_id', roleId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return Array.from(new Set((data ?? []).map((row) => row.user_id)));
 }
 
 async function fetchAuthUsersMap() {
@@ -151,26 +172,24 @@ async function fetchProfilesByIds(ids: string[]) {
 }
 
 async function buildAdminUserDirectory() {
-  const userRoleId = await fetchUserRoleId();
+  const [userRoleId, legendRoleId] = await Promise.all([
+    fetchRoleIdByCode('user'),
+    fetchRoleIdByCode('legend'),
+  ]);
   if (!userRoleId) {
     return [];
   }
 
-  const supa = getAdminClient();
-  const [{ data: roleRows, error: roleRowsError }, authUsersMap] = await Promise.all([
-    supa.from('user_roles').select('user_id').eq('role_id', userRoleId),
+  const [userIds, legendUserIds, authUsersMap] = await Promise.all([
+    fetchUserIdsByRoleId(userRoleId),
+    fetchUserIdsByRoleId(legendRoleId),
     fetchAuthUsersMap(),
   ]);
-
-  if (roleRowsError) {
-    throw new Error(roleRowsError.message);
-  }
-
-  const userIds = Array.from(new Set((roleRows ?? []).map((row) => row.user_id)));
   if (userIds.length === 0) {
     return [];
   }
 
+  const legendUserIdSet = new Set(legendUserIds);
   const profiles = await fetchProfilesByIds(userIds);
 
   return profiles
@@ -185,6 +204,7 @@ async function buildAdminUserDirectory() {
         last_name: profile.last_name ?? '',
         looker_link: profile.looker_link?.trim() ?? '',
         ghl_user_id: profile.ghl_user_id?.trim() ?? null,
+        is_legend: legendUserIdSet.has(profile.id),
       });
     })
     .sort(compareDirectoryRows);

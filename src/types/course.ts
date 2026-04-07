@@ -1,6 +1,7 @@
 export type NodeType = 'course' | 'lesson' | 'chapter' | 'collection' | 'playlist';
 export type NodeState = 'draft' | 'published' | 'archived';
 export type BlockType = 'text' | 'asset' | 'divider' | 'smart_doc';
+export type CourseVisibility = 'public' | 'limited';
 
 export type ContentNode = {
   id: number;
@@ -14,7 +15,7 @@ export type ContentNode = {
   objectives: string | null;
   sequential_unlock: boolean;
   metadata: Record<string, unknown> | null;
-  is_public: boolean; // ← add this
+  visibility: CourseVisibility | null;
   [key: string]: unknown;
 };
 

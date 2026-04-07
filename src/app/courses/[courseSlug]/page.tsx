@@ -30,6 +30,9 @@ export default async function CourseRootPage({
   });
 
   if (!res.ok) {
+    if (res.status === 404) {
+      redirect('/courses');
+    }
     throw new Error('Failed to load course');
   }
 
@@ -39,10 +42,11 @@ export default async function CourseRootPage({
   };
 
   const lockMap = toNestedLockMap(data.unlockStatuses);
-  const lastSlug = findLastUnlockedContentSlug(data.course, lockMap);
+  const lastPath = findLastUnlockedContentPath(data.course, lockMap);
 
-  if (lastSlug) {
-    redirect(`/courses/${courseSlug}/${lastSlug}`);
+  if (lastPath) {
+    const encodedPath = lastPath.map((part) => encodeURIComponent(part)).join('/');
+    redirect(`/courses/${encodeURIComponent(courseSlug)}/${encodedPath}`);
   }
 
   return (
@@ -77,13 +81,13 @@ function isContentNodeType(nodeType: string) {
 /**
  * Find the LAST unlocked content slug in tree order.
  */
-function findLastUnlockedContentSlug(
+function findLastUnlockedContentPath(
   course: NodeSubtree,
   lockMap: Record<number, Record<number, ChildUnlockStatus>>,
-): string | null {
-  let last: string | null = null;
+): string[] | null {
+  let last: string[] | null = null;
 
-  const walk = (parent: NodeSubtree) => {
+  const walk = (parent: NodeSubtree, parentPath: string[]) => {
     const parentId = parent.node.id;
     const locks = lockMap[parentId] ?? {};
 
@@ -92,17 +96,18 @@ function findLastUnlockedContentSlug(
       const childId = subtree.node.id;
       const locked = locks[childId]?.locked ?? false;
       if (locked) continue;
+      const childPath = subtree.node.slug ? [...parentPath, subtree.node.slug] : parentPath;
 
       if (subtree.children.length > 0) {
-        walk(subtree);
+        walk(subtree, childPath);
       }
 
       if (isContentNodeType(subtree.node.node_type) && subtree.node.slug) {
-        last = subtree.node.slug;
+        last = childPath;
       }
     }
   };
 
-  walk(course);
+  walk(course, []);
   return last;
 }
