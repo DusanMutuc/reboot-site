@@ -51,11 +51,13 @@ import {
   type StudentOverviewMetric,
   type StudentOverviewRecencyKey,
 } from '@/lib/studentOverview';
+import LegendMemberIcon from '@/components/LegendMemberIcon';
 import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 
 type StudentOption = {
   id: string;
   full_name: string;
+  is_legend: boolean;
 };
 
 type AchievementOption = {
@@ -72,6 +74,7 @@ type ApiError = {
 type StudentOverviewNewProps = {
   userId?: string | null;
   embedded?: boolean;
+  isLegend?: boolean;
 };
 
 type CourseModuleState = {
@@ -327,7 +330,7 @@ function getStudentOverviewPrintRoot(): HTMLDivElement | null {
 async function loadStudentOptions(): Promise<StudentOption[]> {
   const res = await fetch('/api/admin/list-users');
   const body = (await res.json()) as
-    | { items?: Array<{ id: string; name: string; email: string }> }
+    | { items?: Array<{ id: string; name: string; email: string; is_legend?: boolean }> }
     | ApiError;
 
   if (!res.ok) {
@@ -339,9 +342,10 @@ async function loadStudentOptions(): Promise<StudentOption[]> {
       ? body.items
       : [];
   return items
-    .map((item: { id: string; name: string; email: string }) => ({
+    .map((item: { id: string; name: string; email: string; is_legend?: boolean }) => ({
       id: item.id,
       full_name: item.name || item.email || 'Unnamed student',
+      is_legend: !!item.is_legend,
     }))
     .sort((a: StudentOption, b: StudentOption) => a.full_name.localeCompare(b.full_name));
 }
@@ -363,6 +367,7 @@ async function loadAchievementOptions(): Promise<AchievementOption[]> {
 export default function StudentOverviewNew({
   userId = null,
   embedded = false,
+  isLegend,
 }: StudentOverviewNewProps) {
   const printableRef = useRef<HTMLDivElement | null>(null);
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
@@ -505,6 +510,7 @@ export default function StudentOverviewNew({
     studentOptions.find((option) => option.id === selectedStudentId) ?? null;
   const studentDisplayName =
     selectedStudent?.full_name ?? overviewData?.student.fullName ?? 'Student Overview';
+  const studentIsLegend = isLegend ?? selectedStudent?.is_legend ?? false;
 
   const attendanceSeries = useMemo(() => {
     const snapshot = overviewData?.attendance.snapshot ?? [];
@@ -704,6 +710,7 @@ export default function StudentOverviewNew({
               }}
             >
               {embedded ? 'Executive Overview' : 'Student Tracking'} / {studentDisplayName}
+              {studentIsLegend ? <LegendMemberIcon sx={{ ml: 0.75 }} /> : null}
             </Typography>
 
             <Stack
@@ -761,6 +768,22 @@ export default function StudentOverviewNew({
                   onChange={(_event, nextValue) => setInternalSelectedStudentId(nextValue?.id ?? '')}
                   isOptionEqualToValue={(option, value) => option.id === value.id}
                   getOptionLabel={(option) => option.full_name}
+                  renderOption={(props, option) => (
+                    <Box
+                      component="li"
+                      {...props}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ flex: 1 }}>
+                        {option.full_name}
+                      </Typography>
+                      {option.is_legend ? <LegendMemberIcon /> : null}
+                    </Box>
+                  )}
                   renderInput={(params) => (
                     <TextField
                       {...params}
@@ -852,6 +875,7 @@ export default function StudentOverviewNew({
                     }}
                   >
                     {overviewData.student.fullName}
+                    {studentIsLegend ? <LegendMemberIcon sx={{ ml: 0.75 }} /> : null}
                   </Typography>
                   <Box>
                     <Chip

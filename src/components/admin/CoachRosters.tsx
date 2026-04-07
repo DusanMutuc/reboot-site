@@ -19,13 +19,16 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SearchIcon from '@mui/icons-material/Search';
+import StarIcon from '@mui/icons-material/Star';
+import LegendMemberIcon, { LEGEND_MEMBER_TOOLTIP } from '@/components/LegendMemberIcon';
 
 type Roster = {
   coach_id: string;
   coach_name: string;
   coach_email: string;
   effective_count: number;
-  users: { user_id: string; name: string; email: string }[];
+  legend_count: number;
+  users: { user_id: string; name: string; email: string; is_legend: boolean }[];
 };
 
 export default function CoachRosters() {
@@ -99,6 +102,18 @@ export default function CoachRosters() {
                 <Typography variant="body1" fontWeight={600}>{group.coach_name}</Typography>
                 <Typography variant="body2" color="text.secondary">{`- ${group.coach_email}`}</Typography>
                 <Chip label={`${group.effective_count}`} size="small" sx={{ ml: 'auto' }} />
+                <Tooltip title={LEGEND_MEMBER_TOOLTIP}>
+                  <Chip
+                    icon={<StarIcon fontSize="small" />}
+                    label={`${group.legend_count}`}
+                    size="small"
+                    sx={{
+                      '& .MuiChip-icon': {
+                        color: '#d97706',
+                      },
+                    }}
+                  />
+                </Tooltip>
                 <Tooltip title="Copy coach email">
                   <IconButton
                     size="small"
@@ -130,7 +145,10 @@ export default function CoachRosters() {
                   {group.users.map((user, index) => (
                     <Fragment key={`${group.coach_id}-${user.user_id}`}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.75 }}>
-                        <Typography variant="body1" sx={{ minWidth: 220 }}>{user.name}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 220 }}>
+                          <Typography variant="body1">{user.name}</Typography>
+                          {user.is_legend ? <LegendMemberIcon /> : null}
+                        </Box>
                         <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>{user.email}</Typography>
                         <Tooltip title="Copy user email">
                           <IconButton size="small" onClick={() => copy(user.email)}>

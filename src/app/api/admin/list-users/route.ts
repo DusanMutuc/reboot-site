@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchLegendUserIdSet } from '@/lib/legendMembers';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -19,6 +20,7 @@ export async function GET(request: NextRequest) {
 
   const ids = Array.from(new Set((roleRows ?? []).map((r) => r.user_id)));
   if (!ids.length) return NextResponse.json({ items: [] });
+  const legendUserIdSet = await fetchLegendUserIdSet(supa, ids);
 
   // Step 2: profiles
   const { data: profs, error: pErr } = await supa
@@ -26,7 +28,7 @@ export async function GET(request: NextRequest) {
     .select('id, first_name, last_name, introduced_at')
     .in('id', ids);
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
-  const profMap = new Map(profs.map((p) => [p.id, p]));
+  const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
 
   // Step 3: emails via Admin API
   const emailMap = new Map<string, string>();
@@ -49,6 +51,7 @@ export async function GET(request: NextRequest) {
       name,
       email: emailMap.get(id) || '',
       introduced_at: p?.introduced_at ?? null,
+      is_legend: legendUserIdSet.has(id),
     };
   });
 

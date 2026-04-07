@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
+import { fetchLegendUserIdSet } from '@/lib/legendMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
 const COURSE_ID = 2;
 
-type RosterUser = { user_id: string; name: string; email: string };
+type RosterUser = { user_id: string; name: string; email: string; is_legend: boolean };
 type Roster = {
   coach_id: string;
   coach_name: string;
   coach_email: string;
   users: RosterUser[];
   effective_count: number;
+  legend_count: number;
 };
 
 export async function GET() {
@@ -27,9 +29,15 @@ export async function GET() {
     .eq('is_active', true);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const coachIds = Array.from(new Set(rows.map((r) => r.coach_id)));
-  const userIds  = Array.from(new Set(rows.map((r) => r.user_id)));
+  const assignments = rows ?? [];
+  if (assignments.length === 0) {
+    return NextResponse.json({ items: [] });
+  }
+
+  const coachIds = Array.from(new Set(assignments.map((r) => r.coach_id)));
+  const userIds  = Array.from(new Set(assignments.map((r) => r.user_id)));
   const allIds   = Array.from(new Set([...coachIds, ...userIds]));
+  const legendUserIdSet = await fetchLegendUserIdSet(supa, userIds);
 
   // active partnerships by user (for roster effective counts)
   const { data: partnershipRows, error: partnershipErr } = await supa
@@ -42,7 +50,7 @@ export async function GET() {
   }
 
   const partnershipByUserId = new Map<string, string>();
-  for (const row of partnershipRows) {
+  for (const row of partnershipRows ?? []) {
     // uniqueness is enforced by trg_enforce_single_active_partnership_per_domain
     partnershipByUserId.set(row.user_id, row.partnership_id);
   }
@@ -51,7 +59,7 @@ export async function GET() {
   const { data: profs, error: pErr } = await supa
     .from('profiles').select('id, first_name, last_name').in('id', allIds);
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
-  const profById = new Map(profs.map((p) => [p.id, p]));
+  const profById = new Map((profs ?? []).map((p) => [p.id, p]));
 
   // emails
   const emailMap = new Map<string, string>();
@@ -68,7 +76,7 @@ export async function GET() {
 
   const group: Map<string, Roster> = new Map();
 
-  for (const r of rows) {
+  for (const r of assignments) {
     const cp = profById.get(r.coach_id);
     const up = profById.get(r.user_id);
     const coach_name  = `${cp?.first_name ?? ''} ${cp?.last_name ?? ''}`.trim();
@@ -78,10 +86,22 @@ export async function GET() {
 
     let g = group.get(r.coach_id);
     if (!g) {
-      g = { coach_id: r.coach_id, coach_name, coach_email, users: [], effective_count: 0 };
+      g = {
+        coach_id: r.coach_id,
+        coach_name,
+        coach_email,
+        users: [],
+        effective_count: 0,
+        legend_count: 0,
+      };
       group.set(r.coach_id, g);
     }
-    g.users.push({ user_id: r.user_id, name: user_name, email: user_email });
+    g.users.push({
+      user_id: r.user_id,
+      name: user_name,
+      email: user_email,
+      is_legend: legendUserIdSet.has(r.user_id),
+    });
   }
 
   for (const roster of group.values()) {
@@ -97,6 +117,7 @@ export async function GET() {
       uniqueUnits.add(partnershipId ? `p:${partnershipId}` : `u:${user.user_id}`);
     }
     roster.effective_count = uniqueUnits.size;
+    roster.legend_count = roster.users.filter((user) => user.is_legend).length;
   }
 
   return NextResponse.json({ items: Array.from(group.values()) });

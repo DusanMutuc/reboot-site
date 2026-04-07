@@ -20,6 +20,7 @@ import {
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
 import NotesIcon from '@mui/icons-material/StickyNote2';
 import CloseIcon from '@mui/icons-material/Close';
+import LegendMemberIcon from '@/components/LegendMemberIcon';
 import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 import KpiTab from '@/components/student/workspace/KpiTab';
 import NotesTab from '@/components/student/workspace/NotesTab';
@@ -137,6 +138,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
             mode={mode}
             userId={selectedStudentId}
             refreshSignal={kpiRefreshSignal}
+            isLegend={selectedStudent?.is_legend ?? false}
           />
         );
       case 'notes':
@@ -266,6 +268,30 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
                     }}
                     getOptionLabel={(option) => option.full_name}
                     isOptionEqualToValue={(option, value) => option.id === value.id}
+                    renderOption={(props, option) => (
+                      <Box
+                        component="li"
+                        {...props}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {option.full_name}
+                          </Typography>
+                          {option.email ? (
+                            <Typography variant="caption" color="text.secondary">
+                              {option.email}
+                            </Typography>
+                          ) : null}
+                        </Box>
+                        {option.is_legend ? <LegendMemberIcon /> : null}
+                      </Box>
+                    )}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -280,12 +306,15 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
 
                 {selectedStudent ? (
                   <Box sx={{ minWidth: { xs: '100%', md: 240 } }}>
-                    <Typography
-                      variant={mode === 'admin' ? 'adminSectionTitle' : 'body1'}
-                      sx={{ fontWeight: 700 }}
-                    >
-                      {selectedStudent.full_name}
-                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={0.75}>
+                      <Typography
+                        variant={mode === 'admin' ? 'adminSectionTitle' : 'body1'}
+                        sx={{ fontWeight: 700 }}
+                      >
+                        {selectedStudent.full_name}
+                      </Typography>
+                      {selectedStudent.is_legend ? <LegendMemberIcon /> : null}
+                    </Stack>
                     <Typography variant="body2" color="text.secondary">
                       {selectedStudent.email ||
                         (mode === 'coach' ? 'Roster student' : 'Email unavailable')}

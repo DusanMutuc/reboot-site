@@ -7,6 +7,7 @@ export type StudentOption = {
   id: string;
   full_name: string;
   email: string | null;
+  is_legend: boolean;
 };
 
 export type WorkspaceQueryPatch = Record<string, string | number | null | undefined>;

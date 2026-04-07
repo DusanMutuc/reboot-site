@@ -12,15 +12,22 @@ import type {
 } from './types';
 
 type CoachRosterRow = {
-  user_id: string;
+  id: string;
   full_name: string;
   email?: string | null;
+  is_legend?: boolean | null;
 };
 
 type AdminListUserRow = {
   id: string;
   name?: string | null;
   email?: string | null;
+  is_legend?: boolean | null;
+};
+
+type CoachWorkspaceStudentsResponse = {
+  items?: CoachRosterRow[];
+  error?: string;
 };
 
 type UseStudentWorkspaceStateArgs = {
@@ -44,21 +51,25 @@ async function loadAdminStudents(): Promise<StudentOption[]> {
       id: item.id,
       full_name: item.name?.trim() || item.email?.trim() || 'Unnamed student',
       email: item.email?.trim() || null,
+      is_legend: !!item.is_legend,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 }
 
 async function loadCoachStudents(): Promise<StudentOption[]> {
-  const { data, error } = await supabase.rpc('get_my_users_with_status');
-  if (error) {
-    throw error;
+  const response = await fetch('/api/coach/workspace-students', { cache: 'no-store' });
+  const body = (await response.json()) as CoachWorkspaceStudentsResponse;
+
+  if (!response.ok) {
+    throw new Error(body.error || 'Failed to load students.');
   }
 
-  return ((data ?? []) as CoachRosterRow[])
+  return (body.items ?? [])
     .map((row) => ({
-      id: row.user_id,
+      id: row.id,
       full_name: row.full_name || row.email || 'Unnamed student',
       email: row.email ?? null,
+      is_legend: !!row.is_legend,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 }

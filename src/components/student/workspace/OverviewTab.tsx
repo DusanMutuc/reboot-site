@@ -8,11 +8,12 @@ type OverviewTabProps = {
   mode: StudentWorkspaceMode;
   userId: string;
   refreshSignal: number;
+  isLegend?: boolean;
 };
 
-export default function OverviewTab({ mode, userId, refreshSignal }: OverviewTabProps) {
+export default function OverviewTab({ mode, userId, refreshSignal, isLegend }: OverviewTabProps) {
   if (mode === 'admin') {
-    return <StudentOverviewNew userId={userId} embedded />;
+    return <StudentOverviewNew userId={userId} embedded isLegend={isLegend} />;
   }
 
   return (
