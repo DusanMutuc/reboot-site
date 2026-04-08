@@ -20,7 +20,6 @@ const IMPL_LABEL  = 'IMPLEMENTATION COACH \nBOOKING LINK';
 // New labels for coach mode additions
 const REFERRAL_PILL_LABEL = 'REFER AN AGENT TO OUR PROGRAM';
 const COACH_NOTES_LABEL   = 'COACHING NOTES';
-const REFERRAL_HUB_URL = 'https://rebootmembers.com/ambassadors/hub';
 
 const baseLinks: LinkItem[] = [
   { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://hub.rebootmembers.com/resources' },
@@ -50,6 +49,25 @@ function normalizeUrl(raw?: string | null): string | null {
   return t;
 }
 
+async function fetchAmbassadorHubUrl(): Promise<string | null> {
+  try {
+    const response = await fetch('/api/user/ambassador-hub', {
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      console.warn('Ambassador hub link unavailable.');
+      return null;
+    }
+
+    const payload = (await response.json()) as { url?: unknown };
+    return typeof payload.url === 'string' ? normalizeUrl(payload.url) : null;
+  } catch (error) {
+    console.error('Ambassador hub link fetch error:', error);
+    return null;
+  }
+}
+
 type Props = {
   /** 'coach' on /coach page to pull the logged-in coach's links; default 'user' uses get_my_coach + get_my_implementation_coach */
   mode?: 'user' | 'coach';
@@ -61,6 +79,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
   const [m2Url, setM2Url] = useState<string | null>(null);
   const [implUrl, setImplUrl] = useState<string | null>(null);
   const [coachNotesUrl, setCoachNotesUrl] = useState<string | null>(null);
+  const [ambassadorHubUrl, setAmbassadorHubUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -127,6 +146,28 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
     };
   }, [mode, courseId]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    if (mode === 'coach') {
+      setAmbassadorHubUrl(null);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setAmbassadorHubUrl(null);
+    (async () => {
+      const nextAmbassadorHubUrl = await fetchAmbassadorHubUrl();
+      if (!mounted) return;
+      setAmbassadorHubUrl(nextAmbassadorHubUrl);
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [mode]);
+
   const { resolvedLinks, icons } = useMemo(() => {
     const items = baseLinks.map((item) => ({ ...item }));
 
@@ -152,6 +193,57 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
 
   // Utility to pick the correct icon number per index (guards if arrays drift)
   const iconForIndex = (i: number) => icons[i] ?? icons[icons.length - 1];
+  const referralPillContent = (
+    <>
+      <Box
+        component="img"
+        src="/14.svg"
+        alt=""
+        sx={{
+          width: '8rem',
+          height: '8rem',
+          position: 'absolute',
+          right: '-4.5rem',
+          top: '-1rem',
+          borderRadius: '50%',
+        }}
+      />
+      <Typography
+        sx={{
+          fontWeight: 'bolder',
+          px: 5,
+          flex: 1,
+          textAlign: 'center',
+          fontSize: '1.4rem',
+        }}
+      >
+        {REFERRAL_PILL_LABEL}
+      </Typography>
+    </>
+  );
+  const referralPillSx = {
+    display: 'flex',
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 2,
+    bgcolor: '#fff',
+    borderRadius: '2.5rem',
+    border: '.75rem solid #d7d7d7',
+    boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
+    p: 1,
+    pl: 2,
+    pr: 6,
+    minHeight: '6.875rem',
+    position: 'relative',
+    transition: 'transform .15s',
+    maxWidth: '35rem',
+    mx: 'auto',
+    color: '#000',
+    textDecoration: 'none',
+    '@media (hover: hover)': {
+      '&:hover': { transform: ambassadorHubUrl ? 'scale(1.03)' : 'none' },
+    },
+  } as const;
 
   return (
     <section
@@ -341,62 +433,31 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
       {/* Referral pill remains ONLY in user mode (unchanged visual) */}
       {mode !== 'coach' && (
         <Box sx={{ mt: 4, mb: 3, textAlign: 'center', display: { xs: 'none', md: 'block' } }}>
-          <MuiLink
-            component={NextLink}
-            href={REFERRAL_HUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            underline="none"
-            aria-label={`Open ${REFERRAL_PILL_LABEL}`}
-            sx={{
-              display: 'flex',
-              flexDirection: 'row-reverse',
-              alignItems: 'center',
-              gap: 2,
-              bgcolor: '#fff',
-              borderRadius: '2.5rem',
-              border: '.75rem solid #d7d7d7',
-              boxShadow: '0 .25rem .625rem rgba(0,0,0,.25)',
-              p: 1,
-              pl: 2,
-              pr: 6,
-              minHeight: '6.875rem',
-              position: 'relative',
-              transition: 'transform .15s',
-              maxWidth: '35rem',
-              mx: 'auto',
-              color: '#000',
-              textDecoration: 'none',
-              '@media (hover: hover)': {
-                '&:hover': { transform: 'scale(1.03)' },
-              },
-            }}
-          >
+          {ambassadorHubUrl ? (
+            <MuiLink
+              component={NextLink}
+              href={ambassadorHubUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="none"
+              aria-label={`Open ${REFERRAL_PILL_LABEL}`}
+              sx={referralPillSx}
+            >
+              {referralPillContent}
+            </MuiLink>
+          ) : (
             <Box
-              component="img"
-              src="/14.svg"
-              alt=""
+              aria-disabled
               sx={{
-                width: '8rem',
-                height: '8rem',
-                position: 'absolute',
-                right: '-4.5rem',
-                top: '-1rem',
-                borderRadius: '50%',
-              }}
-            />
-            <Typography
-              sx={{
-                fontWeight: 'bolder',
-                px: 5,
-                flex: 1,
-                textAlign: 'center',
-                fontSize: '1.4rem',
+                ...referralPillSx,
+                bgcolor: '#f3f3f3',
+                boxShadow: 'none',
+                opacity: 0.75,
               }}
             >
-              {REFERRAL_PILL_LABEL}
-            </Typography>
-          </MuiLink>
+              {referralPillContent}
+            </Box>
+          )}
         </Box>
       )}
     </section>
