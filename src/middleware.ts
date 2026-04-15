@@ -8,6 +8,7 @@ const PUBLIC_PREFIXES = [
   '/signup',
   RESET_PATH,
   '/api/auth',        // allow clear-first-login-flag
+  '/api/mobile',      // allow bearer-token mobile endpoints to handle auth internally
   '/api/ghl',         // allow GHL webhooks to bypass auth
   '/auth',            // oauth callbacks if you have them
   '/_next',
