@@ -1,23 +1,26 @@
-// app/page.tsx
-import { cookies } from 'next/headers'
-import { redirect } from 'next/navigation'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { redirect } from 'next/navigation';
+import { getSupabaseServer } from '@/lib/supabaseServer';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export default async function Home() {
-  const supabase = createServerComponentClient({ cookies })
+  const supabase = getSupabaseServer();
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser();
 
-  if (!user) redirect('/login')
+  if (!user) {
+    redirect('/login');
+  }
 
   const { data: rolesRows, error } = await supabase
     .from('user_roles')
     .select('roles ( code )')
-    .eq('user_id', user.id)
+    .eq('user_id', user.id);
 
   if (error) {
-    redirect('/dashboard') // safe fallback
+    redirect('/dashboard');
   }
 
   const codes = (rolesRows ?? [])
@@ -28,8 +31,8 @@ export default async function Home() {
     .map((roleRow) => roleRow?.code)
     .filter((code): code is string => typeof code === 'string');
 
-  if (codes.includes('admin')) redirect('/admin')
-  if (codes.includes('coach')) redirect('/coach')
-  if (codes.includes('assistant')) redirect('/assistant-library')
-  redirect('/dashboard')
+  if (codes.includes('admin')) redirect('/admin');
+  if (codes.includes('coach')) redirect('/coach');
+  if (codes.includes('assistant')) redirect('/assistant-library');
+  redirect('/dashboard');
 }
