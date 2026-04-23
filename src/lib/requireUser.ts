@@ -19,7 +19,14 @@ export type RequireUserFailure = {
 
 export type RequireUserResult = RequireUserSuccess | RequireUserFailure;
 
-export async function requireUser(request?: NextRequest): Promise<RequireUserResult> {
+type RequireUserOptions = {
+  allowPastMember?: boolean;
+};
+
+export async function requireUser(
+  request?: NextRequest,
+  options?: RequireUserOptions,
+): Promise<RequireUserResult> {
   try {
     let supabase: SupabaseClient;
     const accessToken = request ? readBearerToken(request) : null;
@@ -59,7 +66,7 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
       }
 
       const roleCodes = await fetchUserRoleCodes(getAdminClient(), user.id);
-      if (isPastMemberRole(roleCodes)) {
+      if (isPastMemberRole(roleCodes) && !options?.allowPastMember) {
         return {
           ok: false,
           res: NextResponse.json({ error: 'Access removed' }, { status: 403 }),
@@ -109,7 +116,7 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
     }
 
     const roleCodes = await fetchUserRoleCodes(getAdminClient(), user.id);
-    if (isPastMemberRole(roleCodes)) {
+    if (isPastMemberRole(roleCodes) && !options?.allowPastMember) {
       return {
         ok: false,
         res: NextResponse.json({ error: 'Access removed' }, { status: 403 }),

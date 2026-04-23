@@ -2,6 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const ACCESS_REMOVED_PATH = '/access-removed';
 export const PAST_MEMBER_ROLE_CODE = 'past_member';
+const PAST_MEMBER_ALLOWED_API_PATHS = new Set([
+  '/api/mobile/ambassador-hub',
+  '/api/user/ambassador-hub',
+]);
 
 type RoleRelation = {
   code?: string | null;
@@ -52,6 +56,10 @@ export function hasRoleCode(codes: readonly string[], roleCode: string): boolean
 
 export function isPastMemberRole(codes: readonly string[]): boolean {
   return hasRoleCode(codes, PAST_MEMBER_ROLE_CODE);
+}
+
+export function isPastMemberAllowedApiPath(pathname: string): boolean {
+  return PAST_MEMBER_ALLOWED_API_PATHS.has(pathname);
 }
 
 export function resolveHomePathForRoleCodes(codes: readonly string[]): AppHomePath {

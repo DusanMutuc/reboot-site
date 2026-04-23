@@ -5,7 +5,7 @@ import { requireUser } from '@/lib/requireUser';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const guard = await requireUser(request);
+  const guard = await requireUser(request, { allowPastMember: true });
   if (!guard.ok) return guard.res;
 
   const result = await resolveAmbassadorHubUrl(guard.user);

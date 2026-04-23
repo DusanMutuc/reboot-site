@@ -5,6 +5,7 @@ import {
   ACCESS_REMOVED_PATH,
   fetchUserRoleCodes,
   hasRoleCode,
+  isPastMemberAllowedApiPath,
   isPastMemberRole,
   resolveHomePathForRoleCodes,
 } from '@/lib/userRoles';
@@ -86,6 +87,10 @@ export async function middleware(req: NextRequest) {
 
   if (isPastMember) {
     if (isApiRequest) {
+      if (isPastMemberAllowedApiPath(pathname)) {
+        return res;
+      }
+
       return NextResponse.json({ error: 'Access removed' }, { status: 403 });
     }
 
