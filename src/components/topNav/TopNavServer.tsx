@@ -2,6 +2,7 @@
 import { cookies } from 'next/headers';
 import { createServerClient } from '@supabase/ssr';
 import TopNav from './topNav'; // keep casing consistent with your other imports
+import { extractRoleCodes } from '@/lib/userRoles';
 
 type Role = 'user' | 'coach' | 'admin' | 'assistant';
 
@@ -36,13 +37,7 @@ export default async function TopNavServer({
       .eq('user_id', user.id);
 
     if (rolesRows?.length) {
-      const codes = (rolesRows ?? [])
-        .flatMap((row) => {
-          const r = row.roles;
-          return Array.isArray(r) ? r : r ? [r] : [];
-        })
-        .map((roleRow) => roleRow?.code)
-        .filter((code): code is string => typeof code === 'string');
+      const codes = extractRoleCodes(rolesRows);
 
       if (codes.includes('admin')) role = 'admin';
       else if (codes.includes('coach')) role = 'coach';

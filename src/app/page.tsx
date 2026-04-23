@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { fetchUserRoleCodes, resolveHomePathForRoleCodes } from '@/lib/userRoles';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -14,25 +15,12 @@ export default async function Home() {
     redirect('/login');
   }
 
-  const { data: rolesRows, error } = await supabase
-    .from('user_roles')
-    .select('roles ( code )')
-    .eq('user_id', user.id);
-
-  if (error) {
+  let codes: string[];
+  try {
+    codes = await fetchUserRoleCodes(supabase, user.id);
+  } catch {
     redirect('/dashboard');
   }
 
-  const codes = (rolesRows ?? [])
-    .flatMap((row) => {
-      const r = row.roles;
-      return Array.isArray(r) ? r : r ? [r] : [];
-    })
-    .map((roleRow) => roleRow?.code)
-    .filter((code): code is string => typeof code === 'string');
-
-  if (codes.includes('admin')) redirect('/admin');
-  if (codes.includes('coach')) redirect('/coach');
-  if (codes.includes('assistant')) redirect('/assistant-library');
-  redirect('/dashboard');
+  redirect(resolveHomePathForRoleCodes(codes));
 }

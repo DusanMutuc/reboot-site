@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import { supabase } from '@/lib/supabaseClient';
+import { extractRoleCodes } from '@/lib/userRoles';
 import type { Theme } from '@mui/material/styles';
 import type { SystemStyleObject } from '@mui/system';
 
@@ -54,13 +55,7 @@ export default function TopNav({
       if (!mounted) return;
       if (rolesErr || !rolesRows?.length) { setRole('user'); return; }
 
-      const codes = (rolesRows ?? [])
-        .flatMap((row) => {
-          const r = row.roles;
-          return Array.isArray(r) ? r : r ? [r] : [];
-        })
-        .map((role) => role?.code)
-        .filter((code): code is string => typeof code === 'string');
+      const codes = extractRoleCodes(rolesRows);
 
       if (codes.includes('admin')) setRole('admin');
       else if (codes.includes('coach')) setRole('coach');

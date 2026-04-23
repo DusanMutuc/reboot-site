@@ -1,16 +1,23 @@
-// src/middleware.ts
-import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from 'next/server';
+
+import {
+  ACCESS_REMOVED_PATH,
+  fetchUserRoleCodes,
+  hasRoleCode,
+  isPastMemberRole,
+  resolveHomePathForRoleCodes,
+} from '@/lib/userRoles';
 
 const RESET_PATH = '/reset-password';
 const PUBLIC_PREFIXES = [
   '/login',
   '/signup',
   RESET_PATH,
-  '/api/auth',        // allow clear-first-login-flag
-  '/api/mobile',      // allow bearer-token mobile endpoints to handle auth internally
-  '/api/ghl',         // allow GHL webhooks to bypass auth
-  '/auth',            // oauth callbacks if you have them
+  '/api/auth',
+  '/api/mobile',
+  '/api/ghl',
+  '/auth',
   '/_next',
   '/favicon.ico',
   '/robots.txt',
@@ -21,16 +28,14 @@ const PUBLIC_PREFIXES = [
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const isApiRequest = pathname.startsWith('/api');
 
-  // Allow public routes & assets
-  if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(p))) {
+  if (PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))) {
     return NextResponse.next();
   }
 
-  // Create a response we can mutate cookies on
   const res = NextResponse.next({ request: { headers: req.headers } });
 
-  // ✅ Type the cookie adapter (no `any`)
   type CookiesAdapter = {
     get(name: string): string | undefined;
     set(name: string, value: string, options: CookieOptions): void;
@@ -52,14 +57,13 @@ export async function middleware(req: NextRequest) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: cookieAdapter }
+    { cookies: cookieAdapter },
   );
 
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // Not logged in → redirect to login
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = '/login';
@@ -67,7 +71,29 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Must reset → force to reset page
+  const roleCodes = await fetchUserRoleCodes(supabase, session.user.id);
+  const isPastMember = isPastMemberRole(roleCodes);
+
+  if (pathname === ACCESS_REMOVED_PATH) {
+    if (isPastMember) {
+      return res;
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = resolveHomePathForRoleCodes(roleCodes);
+    return NextResponse.redirect(url);
+  }
+
+  if (isPastMember) {
+    if (isApiRequest) {
+      return NextResponse.json({ error: 'Access removed' }, { status: 403 });
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = ACCESS_REMOVED_PATH;
+    return NextResponse.redirect(url);
+  }
+
   if (session.user.app_metadata?.must_reset_password === true && pathname !== RESET_PATH) {
     const url = req.nextUrl.clone();
     url.pathname = RESET_PATH;
@@ -78,36 +104,23 @@ export async function middleware(req: NextRequest) {
     pathname === '/assistant-library' ||
     pathname.startsWith('/assistant-library/') ||
     pathname.startsWith('/r/') ||
-    pathname.startsWith('/api');
+    isApiRequest;
 
   const assistantPath =
-    pathname === '/assistant-library' ||
-    pathname.startsWith('/assistant-library/');
+    pathname === '/assistant-library' || pathname.startsWith('/assistant-library/');
 
-  let assistantStatus: boolean | null = null;
-  const isAssistantUser = async () => {
-    if (assistantStatus != null) return assistantStatus;
-    const { data: isAssistant, error: assistantErr } = await supabase.rpc('is_assistant');
-    assistantStatus = !assistantErr && !!isAssistant;
-    return assistantStatus;
-  };
+  const isAssistant = hasRoleCode(roleCodes, 'assistant');
 
-  if (assistantPath) {
-    const isAssistant = await isAssistantUser();
-    if (!isAssistant) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/library';
-      return NextResponse.redirect(url);
-    }
+  if (assistantPath && !isAssistant) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/library';
+    return NextResponse.redirect(url);
   }
 
-  if (!assistantAllowed) {
-    const isAssistant = await isAssistantUser();
-    if (isAssistant) {
-      const url = req.nextUrl.clone();
-      url.pathname = '/assistant-library';
-      return NextResponse.redirect(url);
-    }
+  if (!assistantAllowed && isAssistant) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/assistant-library';
+    return NextResponse.redirect(url);
   }
 
   return res;

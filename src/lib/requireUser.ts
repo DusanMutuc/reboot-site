@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
+import { getAdminClient } from './supabaseAdmin';
+import { fetchUserRoleCodes, isPastMemberRole } from './userRoles';
+
 export type RequireUserSuccess = {
   ok: true;
+  roleCodes: string[];
   user: User;
   supabase: SupabaseClient;
 };
@@ -54,7 +58,15 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
         };
       }
 
-      return { ok: true, user, supabase };
+      const roleCodes = await fetchUserRoleCodes(getAdminClient(), user.id);
+      if (isPastMemberRole(roleCodes)) {
+        return {
+          ok: false,
+          res: NextResponse.json({ error: 'Access removed' }, { status: 403 }),
+        };
+      }
+
+      return { ok: true, roleCodes, user, supabase };
     }
 
     if (request) {
@@ -64,15 +76,12 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
         {
           cookies: {
             get: (name: string) => request.cookies.get(name)?.value,
-            // we don't set cookies here because in this helper
-            // we just want to *read* the session from the incoming req
             set: () => {},
             remove: () => {},
           },
         },
       );
     } else {
-      // fallback for calling this helper from server-only code without a NextRequest
       const { getServerAnonClient } = await import('./supabaseServer');
       supabase = await getServerAnonClient();
     }
@@ -99,7 +108,15 @@ export async function requireUser(request?: NextRequest): Promise<RequireUserRes
       };
     }
 
-    return { ok: true, user, supabase };
+    const roleCodes = await fetchUserRoleCodes(getAdminClient(), user.id);
+    if (isPastMemberRole(roleCodes)) {
+      return {
+        ok: false,
+        res: NextResponse.json({ error: 'Access removed' }, { status: 403 }),
+      };
+    }
+
+    return { ok: true, roleCodes, user, supabase };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return {

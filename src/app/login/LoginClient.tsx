@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import { extractRoleCodes, resolveHomePathForRoleCodes } from '@/lib/userRoles';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
@@ -80,23 +81,8 @@ export default function LoginClient() {
         return;
       }
 
-      const codes = (rolesRows ?? [])
-        .flatMap((row) => {
-          const r = row.roles;
-          return Array.isArray(r) ? r : r ? [r] : [];
-        })
-        .map((roleRow) => roleRow?.code)
-        .filter((code): code is string => typeof code === 'string');
-
-      if (codes.includes('admin')) {
-        router.push('/admin');
-      } else if (codes.includes('coach')) {
-        router.push('/coach');
-      } else if (codes.includes('assistant')) {
-        router.push('/assistant-library');
-      } else {
-        router.push('/dashboard');
-      }
+      const codes = extractRoleCodes(rolesRows);
+      router.replace(resolveHomePathForRoleCodes(codes));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setError(`Role check failed: ${message}`);

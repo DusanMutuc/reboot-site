@@ -46,6 +46,7 @@ type UserPayload = {
   looker_link: string;
   ghl_user_id: string;
   is_legend: boolean;
+  is_past_member: boolean;
 };
 
 type SnackbarState = {
@@ -63,6 +64,7 @@ type RowFromApi = {
   looker_link: string;
   ghl_user_id: string | null;
   is_legend: boolean;
+  is_past_member: boolean;
 };
 
 type UsersResponse = {
@@ -124,6 +126,7 @@ function toUserPayload(row: RowFromApi): UserPayload {
     looker_link: row.looker_link ?? '',
     ghl_user_id: row.ghl_user_id ?? '',
     is_legend: !!row.is_legend,
+    is_past_member: !!row.is_past_member,
   };
 }
 
@@ -184,6 +187,12 @@ const UserProfileTableRow = memo(function UserProfileTableRow({
         <Checkbox
           checked={!!row?.is_legend}
           onChange={(event) => onCellChange(userId, 'is_legend', event.target.checked)}
+        />
+      </TableCell>
+      <TableCell align="center">
+        <Checkbox
+          checked={!!row?.is_past_member}
+          onChange={(event) => onCellChange(userId, 'is_past_member', event.target.checked)}
         />
       </TableCell>
       <TableCell align="right">
@@ -326,6 +335,7 @@ export default function UserProfilesAdmin() {
               ? row.ghl_user_id.trim()
               : null,
           is_legend: !!row.is_legend,
+          is_past_member: !!row.is_past_member,
         };
 
         const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, {
@@ -345,10 +355,11 @@ export default function UserProfilesAdmin() {
             first_name: data.first_name ?? '',
             last_name: data.last_name ?? '',
             looker_link: data.looker_link ?? '',
-              ghl_user_id: data.ghl_user_id ?? '',
-              is_legend: !!data.is_legend,
-            },
-          }));
+            ghl_user_id: data.ghl_user_id ?? '',
+            is_legend: !!data.is_legend,
+            is_past_member: !!data.is_past_member,
+          },
+        }));
 
         setSnack({ open: true, message: 'Saved.', severity: 'success' });
       } catch {
@@ -441,6 +452,9 @@ export default function UserProfilesAdmin() {
               <TableCell align="center" sx={{ minWidth: 110 }}>
                 Legend
               </TableCell>
+              <TableCell align="center" sx={{ minWidth: 130 }}>
+                Past member
+              </TableCell>
               <TableCell align="right" sx={{ minWidth: 220 }}>
                 Actions
               </TableCell>
@@ -449,7 +463,7 @@ export default function UserProfilesAdmin() {
           <TableBody>
             {Array.from({ length: 8 }).map((_, rowIndex) => (
               <TableRow key={rowIndex}>
-                {Array.from({ length: 8 }).map((__, cellIndex) => (
+                {Array.from({ length: 9 }).map((__, cellIndex) => (
                   <TableCell key={cellIndex}>
                     <Skeleton height={32} />
                   </TableCell>
@@ -503,6 +517,9 @@ export default function UserProfilesAdmin() {
                 <TableCell sx={{ minWidth: 160 }}>GHL user ID</TableCell>
                 <TableCell align="center" sx={{ minWidth: 110 }}>
                   Legend
+                </TableCell>
+                <TableCell align="center" sx={{ minWidth: 130 }}>
+                  Past member
                 </TableCell>
                 <TableCell align="right" sx={{ minWidth: 220 }}>
                   Actions

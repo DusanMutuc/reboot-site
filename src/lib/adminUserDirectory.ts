@@ -9,6 +9,7 @@ export type AdminUserDirectoryRow = {
   looker_link: string;
   ghl_user_id: string | null;
   is_legend: boolean;
+  is_past_member: boolean;
 };
 
 type AdminUserDirectoryEntry = AdminUserDirectoryRow & {
@@ -38,6 +39,7 @@ function buildSearchText(row: AdminUserDirectoryRow) {
     row.looker_link,
     row.ghl_user_id ?? '',
     row.is_legend ? 'legend' : '',
+    row.is_past_member ? 'past member' : '',
   ]
     .join(' ')
     .toLowerCase();
@@ -70,6 +72,7 @@ function toPublicDirectoryRow(row: AdminUserDirectoryEntry): AdminUserDirectoryR
     looker_link: row.looker_link,
     ghl_user_id: row.ghl_user_id,
     is_legend: row.is_legend,
+    is_past_member: row.is_past_member,
   };
 }
 
@@ -172,17 +175,19 @@ async function fetchProfilesByIds(ids: string[]) {
 }
 
 async function buildAdminUserDirectory() {
-  const [userRoleId, legendRoleId] = await Promise.all([
+  const [userRoleId, legendRoleId, pastMemberRoleId] = await Promise.all([
     fetchRoleIdByCode('user'),
     fetchRoleIdByCode('legend'),
+    fetchRoleIdByCode('past_member'),
   ]);
   if (!userRoleId) {
     return [];
   }
 
-  const [userIds, legendUserIds, authUsersMap] = await Promise.all([
+  const [userIds, legendUserIds, pastMemberUserIds, authUsersMap] = await Promise.all([
     fetchUserIdsByRoleId(userRoleId),
     fetchUserIdsByRoleId(legendRoleId),
+    fetchUserIdsByRoleId(pastMemberRoleId),
     fetchAuthUsersMap(),
   ]);
   if (userIds.length === 0) {
@@ -190,6 +195,7 @@ async function buildAdminUserDirectory() {
   }
 
   const legendUserIdSet = new Set(legendUserIds);
+  const pastMemberUserIdSet = new Set(pastMemberUserIds);
   const profiles = await fetchProfilesByIds(userIds);
 
   return profiles
@@ -205,6 +211,7 @@ async function buildAdminUserDirectory() {
         looker_link: profile.looker_link?.trim() ?? '',
         ghl_user_id: profile.ghl_user_id?.trim() ?? null,
         is_legend: legendUserIdSet.has(profile.id),
+        is_past_member: pastMemberUserIdSet.has(profile.id),
       });
     })
     .sort(compareDirectoryRows);
