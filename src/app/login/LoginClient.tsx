@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabaseClient';
 import { extractRoleCodes, resolveHomePathForRoleCodes } from '@/lib/userRoles';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import {
   Box,
   Button,
@@ -276,6 +277,25 @@ export default function LoginClient() {
                 {error}
               </Typography>
             )}
+
+            <Box sx={{ mt: 2.5, textAlign: 'center' }}>
+              <Button
+                component={Link}
+                href="/privacy-policy"
+                prefetch={false}
+                variant="text"
+                sx={{
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  p: 0,
+                  textDecoration: 'underline',
+                  textTransform: 'none',
+                  textUnderlineOffset: '0.2em',
+                }}
+              >
+                Privacy Policy
+              </Button>
+            </Box>
           </Box>
         </Box>
 
@@ -474,6 +494,25 @@ export default function LoginClient() {
               {error}
             </Typography>
           )}
+
+          <Box sx={{ mt: '2rem', textAlign: 'center' }}>
+            <Button
+              component={Link}
+              href="/privacy-policy"
+              prefetch={false}
+              variant="text"
+              sx={{
+                color: '#fff !important',
+                fontSize: '1.25rem',
+                p: 0,
+                textDecoration: 'underline',
+                textTransform: 'none',
+                textUnderlineOffset: '0.2em',
+              }}
+            >
+              Privacy Policy
+            </Button>
+          </Box>
         </Box>
       </Box>
 

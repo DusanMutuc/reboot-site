@@ -13,6 +13,7 @@ import {
 const RESET_PATH = '/reset-password';
 const PUBLIC_PREFIXES = [
   '/login',
+  '/privacy-policy',
   '/signup',
   RESET_PATH,
   '/api/auth',
