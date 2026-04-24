@@ -278,7 +278,23 @@ export default function LoginClient() {
               </Typography>
             )}
 
-            <Box sx={{ mt: 2.5, textAlign: 'center' }}>
+            <Box sx={{ mt: 2.5, display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
+              <Button
+                component={Link}
+                href="/support"
+                prefetch={false}
+                variant="text"
+                sx={{
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  p: 0,
+                  textDecoration: 'underline',
+                  textTransform: 'none',
+                  textUnderlineOffset: '0.2em',
+                }}
+              >
+                Support
+              </Button>
               <Button
                 component={Link}
                 href="/privacy-policy"
@@ -495,7 +511,23 @@ export default function LoginClient() {
             </Typography>
           )}
 
-          <Box sx={{ mt: '2rem', textAlign: 'center' }}>
+          <Box sx={{ mt: '2rem', display: 'flex', justifyContent: 'center', gap: 3, flexWrap: 'wrap' }}>
+            <Button
+              component={Link}
+              href="/support"
+              prefetch={false}
+              variant="text"
+              sx={{
+                color: '#fff !important',
+                fontSize: '1.25rem',
+                p: 0,
+                textDecoration: 'underline',
+                textTransform: 'none',
+                textUnderlineOffset: '0.2em',
+              }}
+            >
+              Support
+            </Button>
             <Button
               component={Link}
               href="/privacy-policy"

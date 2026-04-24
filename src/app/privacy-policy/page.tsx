@@ -74,7 +74,7 @@ const sections = [
   {
     title: 'Contact Us',
     body: [
-      'If you have questions about this Privacy Policy or how your information is handled, please contact Real Estate Reboot Coaching through your normal support or account contact channels.',
+      'If you have questions about this Privacy Policy or how your information is handled, please contact Real Estate Reboot Coaching at admin@rebootmembers.com.',
     ],
   },
 ];
@@ -97,20 +97,34 @@ export default function PrivacyPolicyPage() {
         }}
       >
         <div style={{ maxWidth: 920, margin: '0 auto' }}>
-          <Link
-            href="/login"
-            style={{
-              color: '#9ee0d1',
-              display: 'inline-block',
-              fontSize: 14,
-              fontWeight: 600,
-              marginBottom: 24,
-              textDecoration: 'underline',
-              textUnderlineOffset: 4,
-            }}
-          >
-            Back to login
-          </Link>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, marginBottom: 24 }}>
+            <Link
+              href="/login"
+              style={{
+                color: '#9ee0d1',
+                display: 'inline-block',
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'underline',
+                textUnderlineOffset: 4,
+              }}
+            >
+              Back to login
+            </Link>
+            <Link
+              href="/support"
+              style={{
+                color: '#9ee0d1',
+                display: 'inline-block',
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'underline',
+                textUnderlineOffset: 4,
+              }}
+            >
+              Support
+            </Link>
+          </div>
           <p
             style={{
               color: '#9ee0d1',

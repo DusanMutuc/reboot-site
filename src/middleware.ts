@@ -14,6 +14,7 @@ const RESET_PATH = '/reset-password';
 const PUBLIC_PREFIXES = [
   '/login',
   '/privacy-policy',
+  '/support',
   '/signup',
   RESET_PATH,
   '/api/auth',
