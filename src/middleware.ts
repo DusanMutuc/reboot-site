@@ -12,6 +12,7 @@ import {
 
 const RESET_PATH = '/reset-password';
 const PUBLIC_PREFIXES = [
+  '/delete-account',
   '/login',
   '/privacy-policy',
   '/support',

@@ -297,6 +297,22 @@ export default function LoginClient() {
               </Button>
               <Button
                 component={Link}
+                href="/delete-account"
+                prefetch={false}
+                variant="text"
+                sx={{
+                  color: '#fff',
+                  fontSize: '0.95rem',
+                  p: 0,
+                  textDecoration: 'underline',
+                  textTransform: 'none',
+                  textUnderlineOffset: '0.2em',
+                }}
+              >
+                Delete Account
+              </Button>
+              <Button
+                component={Link}
                 href="/privacy-policy"
                 prefetch={false}
                 variant="text"
@@ -527,6 +543,22 @@ export default function LoginClient() {
               }}
             >
               Support
+            </Button>
+            <Button
+              component={Link}
+              href="/delete-account"
+              prefetch={false}
+              variant="text"
+              sx={{
+                color: '#fff !important',
+                fontSize: '1.25rem',
+                p: 0,
+                textDecoration: 'underline',
+                textTransform: 'none',
+                textUnderlineOffset: '0.2em',
+              }}
+            >
+              Delete Account
             </Button>
             <Button
               component={Link}

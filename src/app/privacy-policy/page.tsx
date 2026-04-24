@@ -124,6 +124,19 @@ export default function PrivacyPolicyPage() {
             >
               Support
             </Link>
+            <Link
+              href="/delete-account"
+              style={{
+                color: '#9ee0d1',
+                display: 'inline-block',
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'underline',
+                textUnderlineOffset: 4,
+              }}
+            >
+              Delete Account
+            </Link>
           </div>
           <p
             style={{

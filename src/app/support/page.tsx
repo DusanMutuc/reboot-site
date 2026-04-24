@@ -35,6 +35,7 @@ const sections = [
     body: [
       'If you cannot sign in, try using the password reset option on the login page first.',
       'If you still cannot access your account, email support with your account email and a short description of what you tried.',
+      'If you want your account deleted, follow the instructions on the Delete Account page or email admin@rebootmembers.com with the subject line "Delete Account Request".',
     ],
   },
   {
@@ -90,6 +91,19 @@ export default function SupportPage() {
               }}
             >
               Privacy Policy
+            </Link>
+            <Link
+              href="/delete-account"
+              style={{
+                color: '#9ee0d1',
+                display: 'inline-block',
+                fontSize: 14,
+                fontWeight: 600,
+                textDecoration: 'underline',
+                textUnderlineOffset: 4,
+              }}
+            >
+              Delete Account
             </Link>
           </div>
           <p
