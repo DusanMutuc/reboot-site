@@ -138,7 +138,7 @@ export default function DeleteAccountPage() {
                 >
                   {supportEmail}
                 </a>{' '}
-                with the subject line "Delete Account Request".
+                with the subject line <strong>Delete Account Request</strong>.
               </li>
               <li>
                 Include your full name and the email address connected to your Member Hub account.
