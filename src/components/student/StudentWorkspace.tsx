@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -36,6 +36,7 @@ import { useStudentWorkspaceState } from '@/components/student/workspace/useStud
 const TABS: StudentWorkspaceTab[] = ['overview', 'notes', 'progress', 'kpi'];
 const NOTES_SIDEBAR_WIDTH = 360;
 const COACH_WORKSPACE_SHELL_MAX_WIDTH = 1200;
+const PRIVATE_NOTES_OFFSET_BREAKPOINT = 1200;
 
 function normalizeTab(value: string | null): StudentWorkspaceTab {
   if (value === 'dashboard') {
@@ -70,6 +71,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const workspaceRootRef = useRef<HTMLDivElement | null>(null);
 
   const tab = normalizeTab(searchParams.get('tab'));
   const selectedStudentId = searchParams.get('userId');
@@ -77,6 +79,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   const selectedCourseId = courseIdFromQuery ? Number(courseIdFromQuery) : null;
 
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
+  const [privateNotesOffset, setPrivateNotesOffset] = useState(0);
   const [kpiRefreshSignal, setKpiRefreshSignal] = useState(0);
 
   const setQuery = useCallback(
@@ -115,8 +118,97 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   });
 
   useEffect(() => {
-    setPrivateNotesOpen(false);
-  }, [selectedStudentId]);
+    if (!selectedStudentId) {
+      setPrivateNotesOpen(false);
+      return;
+    }
+
+    if (tab === 'notes') {
+      setPrivateNotesOpen(true);
+    }
+  }, [selectedStudentId, tab]);
+
+  // Measure the unshifted workspace so wide screens keep the main content centered.
+  const updatePrivateNotesOffset = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!privateNotesOpen || window.innerWidth < PRIVATE_NOTES_OFFSET_BREAKPOINT) {
+      setPrivateNotesOffset(0);
+      return;
+    }
+
+    const parent = workspaceRootRef.current?.parentElement;
+
+    if (!parent) {
+      setPrivateNotesOffset(NOTES_SIDEBAR_WIDTH);
+      return;
+    }
+
+    const parentRect = parent.getBoundingClientRect();
+    const parentStyles = window.getComputedStyle(parent);
+    const paddingLeft = Number.parseFloat(parentStyles.paddingLeft) || 0;
+    const paddingRight = Number.parseFloat(parentStyles.paddingRight) || 0;
+    const availableLeft = parentRect.left + paddingLeft;
+    const availableWidth = Math.max(0, parentRect.width - paddingLeft - paddingRight);
+    const drawerLeft = window.innerWidth - NOTES_SIDEBAR_WIDTH;
+
+    const getWorkspaceRight = (offset: number) => {
+      const widthAfterOffset = Math.max(0, availableWidth - offset);
+
+      if (mode === 'coach') {
+        const shellWidth = Math.min(COACH_WORKSPACE_SHELL_MAX_WIDTH, widthAfterOffset);
+        return availableLeft + (widthAfterOffset + shellWidth) / 2;
+      }
+
+      return availableLeft + widthAfterOffset;
+    };
+
+    if (getWorkspaceRight(0) <= drawerLeft + 1) {
+      setPrivateNotesOffset(0);
+      return;
+    }
+
+    if (getWorkspaceRight(NOTES_SIDEBAR_WIDTH) > drawerLeft + 1) {
+      setPrivateNotesOffset(NOTES_SIDEBAR_WIDTH);
+      return;
+    }
+
+    let low = 0;
+    let high = NOTES_SIDEBAR_WIDTH;
+
+    for (let i = 0; i < 10; i += 1) {
+      const mid = (low + high) / 2;
+
+      if (getWorkspaceRight(mid) > drawerLeft + 1) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+
+    setPrivateNotesOffset(Math.ceil(high));
+  }, [mode, privateNotesOpen]);
+
+  useEffect(() => {
+    updatePrivateNotesOffset();
+
+    if (typeof window === 'undefined') return undefined;
+
+    window.addEventListener('resize', updatePrivateNotesOffset);
+
+    const parent = workspaceRootRef.current?.parentElement;
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePrivateNotesOffset);
+
+    if (parent && resizeObserver) {
+      resizeObserver.observe(parent);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updatePrivateNotesOffset);
+      resizeObserver?.disconnect();
+    };
+  }, [updatePrivateNotesOffset]);
 
   const backHref = mode === 'admin' ? '/admin/status-overview' : '/coach';
   const backLabel = mode === 'admin' ? 'Back to Student Status' : 'Back to Coach Home';
@@ -173,11 +265,12 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
 
   return (
     <Box
+      ref={workspaceRootRef}
       sx={{
         minHeight: '100vh',
         bgcolor: 'background.default',
         transition: 'margin-right 0.35s cubic-bezier(0.4,0,0.2,1)',
-        mr: { xs: 0, lg: privateNotesOpen ? `${NOTES_SIDEBAR_WIDTH}px` : 0 },
+        mr: { xs: 0, lg: privateNotesOpen ? `${privateNotesOffset}px` : 0 },
       }}
     >
       <Box
