@@ -60,7 +60,7 @@ type ResourceRow = {
   created_at: string;
   tags: ResourceTag[] | null;
   score: number | null;
-  page_slug?: string | null;  // 👈 NEW
+  page_slug?: string | null;
   open_path?: string | null;
 
 };
@@ -123,7 +123,7 @@ const MAX_RECENT_SEARCHES = 5;
 const EMPTY_SUGGESTIONS = ['Templates', 'Replays', 'Assistant'];
 const DURATION_OPTIONS: { label: string; value: NonNullable<DurationFilter> }[] = [
   { label: '<10m', value: 'short' },
-  { label: '10–30m', value: 'medium' },
+  { label: '10-30m', value: 'medium' },
   { label: '>30m', value: 'long' },
 ];
 const DATE_RANGE_OPTIONS: { label: string; value: NonNullable<DateFilter> }[] = [
@@ -234,7 +234,7 @@ function SearchBar({
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const shortcutLabel = isMac ? '⌘K' : 'Ctrl+K';
+  const shortcutLabel = isMac ? 'Cmd+K' : 'Ctrl+K';
   const showDropdown = dropdownOpen && (recentSearches.length > 0 || popularTags.length > 0);
 
   return (
@@ -244,8 +244,7 @@ function SearchBar({
           ref={containerRef}
           elevation={dropdownOpen ? 6 : 2}
           sx={{
-            position: 'sticky',
-            top: 0,
+            position: 'relative',
             zIndex: 20,
             borderRadius: 999,
             px: { xs: 2, md: 3 },
@@ -254,7 +253,7 @@ function SearchBar({
             alignItems: 'center',
             gap: 1.25,
             width: '100%',
-            boxShadow: dropdownOpen ? theme.shadows[6] : theme.shadows[2],
+            boxShadow: dropdownOpen ? theme.shadows[6] : '0 6px 16px rgba(9, 35, 30, 0.22)',
             bgcolor: '#fff',
           }}
         >
@@ -280,7 +279,7 @@ function SearchBar({
               }
             }}
             onFocus={() => setDropdownOpen(true)}
-            placeholder="Search resources, tags, creators…"
+            placeholder="Search resources, tags, creators..."
             inputProps={{ 'aria-label': 'Search', role: 'searchbox' }}
             sx={{
               flex: 1,
@@ -631,7 +630,7 @@ function FilterChips({
               value={selectedTags}
               onChange={(_, newValue) => onUpdateTags(newValue.map((tag) => tag.id))}
               getOptionLabel={(option) => option.name}
-              renderInput={(params) => <TextField {...params} label="Select tags" placeholder="Start typing…" />}
+              renderInput={(params) => <TextField {...params} label="Select tags" placeholder="Start typing..." />}
             />
           </Box>
         </Stack>
@@ -746,7 +745,7 @@ function ResultRow({ row, onOpenResource, onSelectTag, selectedTagIds, isMobile 
               onOpenResource(row);
             }}
           >
-            Open ↗
+            Open
           </Button>
         )}
         <IconButton
@@ -774,7 +773,7 @@ function ResultRow({ row, onOpenResource, onSelectTag, selectedTagIds, isMobile 
                 onOpenResource(row);
               }}
             >
-              Open ↗
+              Open
             </MenuItem>
           )}
           <MenuItem
@@ -883,7 +882,7 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
         '&:hover': {
           boxShadow: theme.shadows[4],
           transform: 'translateY(-2px)',
-          backgroundColor: 'alpha(theme.palette.primary.main, 0.05)',
+          backgroundColor: alpha(theme.palette.primary.main, 0.05),
         },
       }}
       onClick={() => onOpenResource(row)}
@@ -958,7 +957,7 @@ function ResultGridCard({ row, onOpenResource, onSelectTag, selectedTagIds }: Re
               onOpenResource(row);
             }}
           >
-            Open ↗
+            Open
           </Button>
           <IconButton
             size="small"
@@ -1186,7 +1185,7 @@ export default function Search() {
                 .from('search_analytics')
                 .insert({
                   query: debouncedQ,
-                  results_count: (data as any[])?.length ?? 0,
+                  results_count: Array.isArray(data) ? data.length : 0,
                   user_id: userId,
                 })
                 .then(() => undefined);
@@ -1263,7 +1262,7 @@ export default function Search() {
     (dateRange !== null && dateRange !== 'all');
 
   const resultCountText = useMemo(() => {
-    if (loading && !results.length) return 'Searching…';
+    if (loading && !results.length) return 'Searching...';
     if (!selectionActive && !results.length) return 'Browse recent';
     const n = totalGuess ?? page * PAGE + results.length;
     return `${n} result${n === 1 ? '' : 's'}`;
@@ -1302,8 +1301,69 @@ export default function Search() {
   };
 
   return (
-    <Box sx={{ bgcolor: '#5cbca8', minHeight: '100vh', py: { xs: 2, md: 4 } }}>
-      <Stack spacing={3} sx={{ maxWidth: 1080, mx: 'auto', px: { xs: 2, md: 4 } }}>
+    <Box
+      sx={{
+        position: 'relative',
+        overflow: 'hidden',
+        bgcolor: '#82bfad',
+        minHeight: '100vh',
+        py: { xs: 6, md: 10 },
+        px: { xs: 2, md: 4 },
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          width: { xs: 220, md: 360 },
+          height: { xs: 420, md: 680 },
+          right: { xs: -182, md: -235 },
+          bottom: { xs: -160, md: -220 },
+          border: '3px solid rgba(0,0,0,0.86)',
+          borderRadius: '50%',
+          transform: 'rotate(-6deg)',
+        },
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          width: { xs: 164, md: 276 },
+          height: { xs: 340, md: 560 },
+          right: { xs: -142, md: -190 },
+          bottom: { xs: -118, md: -164 },
+          border: '3px solid rgba(0,0,0,0.86)',
+          borderRadius: '50%',
+          transform: 'rotate(-6deg)',
+        },
+      }}
+    >
+      <Stack spacing={3} sx={{ position: 'relative', zIndex: 1, maxWidth: 1360, mx: 'auto' }}>
+        <Box sx={{ textAlign: 'center', mb: { xs: 1.5, md: 2.5 } }}>
+          <Typography
+            variant="h2"
+            sx={{
+              color: '#050505',
+              fontWeight: 900,
+              textTransform: 'uppercase',
+              letterSpacing: { xs: 0, md: 8 },
+              lineHeight: 0.95,
+              fontSize: { xs: 'clamp(3.1rem, 12vw, 5.2rem)', md: 'clamp(5.5rem, 6vw, 10rem)' },
+              mb: { xs: 2, md: 2.5 },
+            }}
+          >
+            Reboot Program Search Engine
+          </Typography>
+          <Typography
+            sx={{
+              color: '#fff',
+              fontWeight: 500,
+              textTransform: 'uppercase',
+              letterSpacing: { xs: 1.5, md: 5 },
+              lineHeight: 1.24,
+              maxWidth: 980,
+              mx: 'auto',
+              fontSize: { xs: '1.35rem', md: '2.4rem' },
+            }}
+          >
+            Find all Reboot training, PDFs, replays, expert guest interviews and live coaching podcast clips at your fingertips.
+          </Typography>
+        </Box>
         <SearchBar
           value={q}
           onChange={(value) => {
@@ -1365,7 +1425,7 @@ export default function Search() {
             <Stack direction="row" spacing={1} alignItems="center">
               {broadening && (
                 <Typography color="text.secondary" sx={{ fontStyle: 'italic', fontSize: '0.875rem' }}>
-                  Including broader matches…
+                  Including broader matches...
                 </Typography>
               )}
               {!isMobile && (

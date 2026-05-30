@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import TopNav from '@/components/topNav/topNav';
 import ImportantLinks from '@/components/importantLinks';
+import MoreProgramLinks from '@/components/moreProgramLinks';
 import PodcastSection from '@/components/podcastSection';
 import Search from '@/components/search';
 import HelpSteps from '@/components/helpSteps';
@@ -14,6 +15,7 @@ import UserDashboardBanner from '@/components/user/dashboard/UserDashboardBanner
 import AssistantInfoPanel from '@/components/user/dashboard/AssistantInfo';
 import AnnouncementBanner from '@/components/AnnouncementBanner';
 import { supabase } from '@/lib/supabaseClient';
+import { useProgramLinkUrls } from '@/hooks/useProgramLinkUrls';
 
 type AnnouncementData = {
   message: string;
@@ -24,12 +26,22 @@ type AnnouncementData = {
   button_color: string | null;
 };
 
+const DASHBOARD_SECTIONS = [
+  { id: 'links', label: 'COACHING LINKS' },
+  { id: 'library', label: 'SEARCH ENGINE' },
+  { id: 'program-links', label: 'PROGRAM LINKS' },
+  { id: 'podcast', label: 'PRIVATE PODCAST' },
+  { id: 'dashboard', label: 'TRACKER' },
+  { id: 'help', label: 'HOW TO GET HELP' },
+];
+
 export default function DashboardPage() {
   const [navH, setNavH] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [userLoading, setUserLoading] = useState(true);
   const [userError, setUserError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState<AnnouncementData | null>(null);
+  const programLinkUrls = useProgramLinkUrls({ mode: 'user' });
 
   // Measure nav height once when #appbar exists
   useEffect(() => {
@@ -115,7 +127,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <TopNav />
+      <TopNav sections={DASHBOARD_SECTIONS} />
 
       {/* Push content (announcement + sections) below the fixed TopNav */}
       <div style={{ marginTop: navH }}>
@@ -129,15 +141,19 @@ export default function DashboardPage() {
         />
 
         <section id="links" style={sectionOffsetStyle}>
-          <ImportantLinks mode="user" />
-        </section>
-
-        <section id="podcast" style={sectionOffsetStyle}>
-          <PodcastSection />
+          <ImportantLinks mode="user" linkUrls={programLinkUrls} modalVariant="live-only" />
         </section>
 
         <section id="library" style={sectionOffsetStyle}>
           <Search />
+        </section>
+
+        <section id="program-links" style={sectionOffsetStyle}>
+          <MoreProgramLinks linkUrls={programLinkUrls} />
+        </section>
+
+        <section id="podcast" style={sectionOffsetStyle}>
+          <PodcastSection />
         </section>
 
         <section id="dashboard" style={sectionOffsetStyle}>

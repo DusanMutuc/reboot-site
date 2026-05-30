@@ -101,56 +101,119 @@ export default function PodcastSection() {
       style={{
         width: '100%',
         backgroundColor: '#000',
-        paddingBottom: '3.125rem',
+        paddingBottom: '5rem',
         textAlign: 'center',
       }}
     >
       <Box
         sx={{
           width: '100%',
-          minHeight: { xs: '14rem', md: '25rem' },
-          backgroundImage: "url('/podcast-hero.png')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center top',
           backgroundColor: '#000',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          px: 2,
+          px: { xs: 2, md: 6 },
+          pt: { xs: 4, md: 5 },
+          pb: { xs: 5, md: 7 },
         }}
       >
-        <Typography
-          variant="h2"
+        <Box
           sx={{
-            fontWeight: 800,
-            color: '#fff',
-            mb: 0.5,
-            fontSize: {
-              xs: 'clamp(2rem, 7.5vw, 2.75rem)',
-              md: 'clamp(3.25rem, 5.5vw, 6rem)',
-            },
-          }}
-        >
-          PRIVATE PODCAST
-        </Typography>
-
-        <Typography
-          variant="subtitle1"
-          sx={{
-            color: '#fff',
-            fontSize: { xs: '1rem', md: '1.8rem' },
-            fontWeight: 700,
-            maxWidth: { xs: '48ch', md: 'unset' },
+            maxWidth: 1370,
             mx: 'auto',
-            textAlign: 'center',
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(260px, 380px) minmax(0, 1fr)' },
+            gap: { xs: 3, md: 6 },
+            alignItems: 'center',
+            textAlign: { xs: 'center', md: 'left' },
           }}
         >
-          Listen to Coaching Replays, Masterclasses&nbsp;&amp;&nbsp;Powerful Live Coaching Moments
-        </Typography>
+          <Box
+            aria-label="Private Tribe Podcast"
+            sx={{
+              minHeight: { xs: 250, sm: 320, md: 360 },
+              width: '100%',
+              maxWidth: { xs: 380, md: 'none' },
+              mx: 'auto',
+              backgroundImage:
+                "url('/podcast-private-tribe.png'), url('/podcast-hero.png'), linear-gradient(145deg, #303030 0%, #0b0b0b 100%)",
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              border: '1px solid rgba(255,255,255,0.14)',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.58)',
+            }}
+          />
+
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              variant="h1"
+              sx={{
+                fontWeight: 900,
+                color: '#fff',
+                textTransform: 'uppercase',
+                letterSpacing: 0,
+                lineHeight: 0.92,
+                fontSize: {
+                  xs: 'clamp(4rem, 15vw, 6rem)',
+                  md: 'clamp(6.4rem, 6.4vw, 11.5rem)',
+                },
+                maxWidth: 980,
+                mx: { xs: 'auto', md: 0 },
+                mb: { xs: 2.5, md: 3 },
+              }}
+            >
+              Miss a coaching call? You still get the best parts.
+            </Typography>
+
+            <Typography
+              sx={{
+                color: '#fff',
+                fontSize: { xs: '1.6rem', md: '2.9rem' },
+                fontWeight: 500,
+                lineHeight: 1.18,
+                letterSpacing: { xs: 1.2, md: 4 },
+                textTransform: 'uppercase',
+                maxWidth: 900,
+                mx: { xs: 'auto', md: 0 },
+                mb: { xs: 3, md: 4.5 },
+              }}
+            >
+              Weekly replay podcast with the best key moments, guest experts, and masterclasses.
+            </Typography>
+
+            <Button
+              component="a"
+              href={SUBSCRIBE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="contained"
+              sx={{
+                px: { xs: 2.5, md: 3.5 },
+                py: { xs: 1.25, md: 1.6 },
+                minHeight: { xs: 48, md: 64 },
+                borderRadius: 1.5,
+                border: '1px solid rgba(255,255,255,0.22)',
+                fontSize: { xs: '2rem', md: '3.2rem' },
+                fontWeight: 900,
+                lineHeight: 1,
+                textTransform: 'uppercase',
+                backgroundColor: '#d93025 !important',
+                boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.14), 0 10px 0 rgba(118,15,10,0.75)',
+                '&:hover': {
+                  backgroundColor: '#ef3d31 !important',
+                  transform: 'translateY(-2px)',
+                  boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.18), 0 12px 0 rgba(118,15,10,0.75)',
+                },
+                '&:focus-visible': {
+                  outline: '4px solid rgba(239,61,49,0.45)',
+                  outlineOffset: 5,
+                },
+              }}
+            >
+              Download Now
+            </Button>
+          </Box>
+        </Box>
       </Box>
 
-      <Box sx={{ maxWidth: '90rem', mx: 'auto', mt: 4, mb: 4, px: 2 }}>
+      <Box sx={{ maxWidth: 1160, mx: 'auto', mt: { xs: 2, md: 4 }, mb: 4, px: 2 }}>
         {state.status === 'loading' && state.episodes.length === 0 ? (
           <Stack
             spacing={2}
@@ -176,7 +239,7 @@ export default function PodcastSection() {
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.45fr) minmax(20rem, .85fr)' },
+              gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1.45fr) minmax(280px, .85fr)' },
               gap: { xs: 2.5, md: 3 },
               alignItems: 'start',
               textAlign: 'left',
@@ -197,43 +260,6 @@ export default function PodcastSection() {
           </Box>
         )}
       </Box>
-
-      <Button
-        component="a"
-        href={SUBSCRIBE_URL}
-        target="_blank"
-        rel="noopener noreferrer"
-        variant="contained"
-        sx={{
-          mt: '1.5rem',
-          px: { xs: '1.25rem', md: '2.5rem' },
-          py: { xs: '.65rem', md: '.9rem' },
-          minHeight: 44,
-          borderRadius: '.5rem',
-          fontSize: { xs: '1.05rem', md: '1.75rem' },
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          boxShadow: '0 .25rem .75rem rgba(0,0,0,0.25)',
-          backgroundColor: '#e70e17 !important',
-          '&:hover': {
-            backgroundColor: '#ff5555',
-            transform: 'translateY(-2px) scale(1.03)',
-          },
-        }}
-      >
-        SUBSCRIBE
-      </Button>
-
-      <Typography
-        sx={{
-          color: '#ffffff',
-          fontWeight: 700,
-          mt: 4,
-          fontSize: { xs: '1.1rem', md: '1.75rem' },
-        }}
-      >
-        NEVER MISS OUT AGAIN!
-      </Typography>
     </section>
   );
 }
@@ -251,28 +277,13 @@ function SelectedEpisodePanel({
     <Stack
       spacing={2.5}
       sx={{
-        bgcolor: '#111',
+        bgcolor: '#070707',
         border: '1px solid rgba(255,255,255,0.14)',
         borderRadius: 1,
-        p: { xs: 2, md: 3 },
+        p: { xs: 1.75, md: 2.25 },
         color: '#fff',
       }}
     >
-      {episode.imageUrl ? (
-        <Box
-          component="img"
-          src={episode.imageUrl}
-          alt=""
-          sx={{
-            width: '100%',
-            maxHeight: { xs: 220, md: 320 },
-            objectFit: 'cover',
-            borderRadius: 1,
-            border: '1px solid rgba(255,255,255,0.1)',
-          }}
-        />
-      ) : null}
-
       {episode.mediaUrl ? (
         <AudioPlayer
           key={episode.id}
@@ -316,8 +327,18 @@ function SelectedEpisodePanel({
       )}
 
       {sanitizedDescription ? (
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.5 }}>
+        <Box
+          sx={{
+            maxHeight: { xs: 220, md: 180 },
+            overflowY: 'auto',
+            pr: 1,
+            pt: 2,
+            borderTop: '1px solid rgba(255,255,255,0.1)',
+            scrollbarWidth: 'thin',
+            scrollbarColor: '#e70e17 #111',
+          }}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 800, mb: 1.25 }}>
             Episode Notes
           </Typography>
           <Box
