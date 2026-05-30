@@ -79,7 +79,7 @@ export default function AnnouncementBanner({
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
         <CampaignIcon sx={{ fontSize: 20, opacity: 0.9, flexShrink: 0 }} />
         <Typography
-          variant="body2"
+          variant="h5"
           sx={{
             fontWeight: 500,
             letterSpacing: 0.01,
