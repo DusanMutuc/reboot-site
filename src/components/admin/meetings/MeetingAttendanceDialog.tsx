@@ -106,7 +106,7 @@ function normalizeText(s: string) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[.,()"'`]/g, ' ')
+    .replace(/[.,()"'`‘’“”]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -138,6 +138,7 @@ function candidateKeysFromRawName(raw: string): string[] {
 
 function buildNameIndex(users: SimpleUser[]) {
   const byName = new Map<string, SimpleUser[]>();
+  const byWord = new Map<string, SimpleUser[]>();
 
   for (const u of users) {
     const keys: string[] = [];
@@ -163,9 +164,82 @@ function buildNameIndex(users: SimpleUser[]) {
       if (!byName.has(k)) byName.set(k, []);
       byName.get(k)!.push(u);
     }
+
+    const wordKeys = tokens.filter((token) => token.length >= 2);
+    if (tokens.length >= 2) {
+      // Also handle Zoom names such as "matthewharrison".
+      wordKeys.push(tokens.join(''));
+    }
+
+    for (const word of new Set(wordKeys)) {
+      if (!byWord.has(word)) byWord.set(word, []);
+      byWord.get(word)!.push(u);
+    }
   }
 
-  return { byName };
+  return { byName, byWord };
+}
+
+function findNameSubsetCandidates(
+  raw: string,
+  byName: Map<string, SimpleUser[]>,
+): SimpleUser[] {
+  const rawTokens = normalizeText(raw).split(' ').filter(Boolean);
+
+  // A subset match is only useful when Zoom added at least one extra word.
+  // Requiring at least two profile-name tokens avoids unsafe first-name-only matches.
+  if (rawTokens.length < 3) return [];
+
+  const rawTokenCounts = new Map<string, number>();
+  for (const token of rawTokens) {
+    rawTokenCounts.set(token, (rawTokenCounts.get(token) ?? 0) + 1);
+  }
+
+  const candidates = new Map<string, SimpleUser>();
+
+  for (const [nameKey, users] of byName) {
+    const nameTokens = nameKey.split(' ').filter(Boolean);
+    if (nameTokens.length < 2 || nameTokens.length >= rawTokens.length) continue;
+
+    const requiredCounts = new Map<string, number>();
+    for (const token of nameTokens) {
+      requiredCounts.set(token, (requiredCounts.get(token) ?? 0) + 1);
+    }
+
+    const isSubset = [...requiredCounts].every(
+      ([token, count]) => (rawTokenCounts.get(token) ?? 0) >= count,
+    );
+
+    if (isSubset) {
+      for (const user of users) candidates.set(user.id, user);
+    }
+  }
+
+  return [...candidates.values()];
+}
+
+function findSingleWordCandidates(
+  raw: string,
+  byWord: Map<string, SimpleUser[]>,
+): SimpleUser[] {
+  const rawWords = normalizeText(raw)
+    .split(' ')
+    .filter((word) => word.length >= 2);
+  const candidates = new Map<string, SimpleUser>();
+
+  for (const word of new Set(rawWords)) {
+    const users = byWord.get(word) ?? [];
+    const uniqueUsers = new Map(users.map((user) => [user.id, user]));
+
+    // Common words are ignored. Only a word that identifies one account can
+    // contribute a candidate to this deliberately loose final fallback.
+    if (uniqueUsers.size === 1) {
+      const user = [...uniqueUsers.values()][0];
+      candidates.set(user.id, user);
+    }
+  }
+
+  return [...candidates.values()];
 }
 
 function detectNameColumn(headers: string[]) {
@@ -402,8 +476,8 @@ const addedUsers = useMemo(() => {
 
 const unmatchedList = useMemo(() => {
   if (!importSummary) return [];
-  // keep original order but de-dupe exact duplicates
-  return Array.from(new Set(importSummary.unmatched));
+  // Preserve every unmatched CSV entry, including duplicates, in source order.
+  return importSummary.unmatched;
 }, [importSummary]);
 
   const sortedMembers = useMemo(() => {
@@ -688,7 +762,10 @@ const unmatchedList = useMemo(() => {
 
       for (const raw of names) {
         const keys = candidateKeysFromRawName(raw);
-        if (!keys.length) continue;
+        if (!keys.length) {
+          unmatched.push(raw);
+          continue;
+        }
 
         const candMap = new Map<string, SimpleUser>();
         for (const k of keys) {
@@ -696,7 +773,20 @@ const unmatchedList = useMemo(() => {
           for (const u of list) candMap.set(u.id, u);
         }
 
-        const candidates = [...candMap.values()];
+        let candidates = [...candMap.values()];
+
+        // If the normal exact/reversed-name keys find nothing, allow the
+        // person's name words to be a subset of a longer Zoom display name,
+        // such as "John Smith RealEstate" -> "John Smith".
+        if (candidates.length === 0) {
+          candidates = findNameSubsetCandidates(raw, allPeopleIndex.byName);
+        }
+
+        // Last fallback: use words that individually identify one account. If
+        // those unique words point to different users, the row stays ambiguous.
+        if (candidates.length === 0) {
+          candidates = findSingleWordCandidates(raw, allPeopleIndex.byWord);
+        }
 
         if (candidates.length === 1) {
           matchedUserIds.push(candidates[0].id);
@@ -904,19 +994,51 @@ const unmatchedList = useMemo(() => {
           <Chip label={`Unmatched: ${importSummary.unmatched.length}`} color="default" />
         </Stack>
 
-        {(importSummary.ambiguous.length > 0 || importSummary.unmatched.length > 0) && (
+        {importSummary.ambiguous.length > 0 && (
           <Box mt={2}>
-            {importSummary.ambiguous.length > 0 && (
-              <Alert severity="warning" sx={{ mb: 1 }}>
-                Some names matched multiple people. (Optional next step: add a picker UI for these.)
-              </Alert>
-            )}
-            {importSummary.unmatched.length > 0 && (
-              <Alert severity="info">
-                Unmatched examples: {unmatchedList.slice(0, 5).join(', ')}
-                {unmatchedList.length > 5 ? ' …' : ''}
-              </Alert>
-            )}
+            <Alert severity="warning">
+              Some names matched multiple people. (Optional next step: add a picker UI for these.)
+            </Alert>
+          </Box>
+        )}
+
+        {unmatchedList.length > 0 && (
+          <Box mt={2}>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+              justifyContent="space-between"
+              sx={{ mb: 1 }}
+            >
+              <Box>
+                <Typography variant="adminSectionTitle">
+                  Unmatched CSV report
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  No real user was found for these entries.
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(unmatchedList.join('\n'));
+                }}
+              >
+                Copy report
+              </Button>
+            </Stack>
+
+            <Paper variant="outlined" sx={{ maxHeight: 240, overflow: 'auto' }}>
+              <List dense>
+                {unmatchedList.map((name, idx) => (
+                  <ListItem key={`${name}-${idx}`} disableGutters sx={{ px: 2 }}>
+                    <ListItemText primary={`${idx + 1}. ${name}`} />
+                  </ListItem>
+                ))}
+              </List>
+            </Paper>
           </Box>
         )}
       </>
