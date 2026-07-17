@@ -118,6 +118,7 @@ type Props = {
   courseId?: number | null;
   linkUrls?: ProgramLinkUrls;
   modalVariant?: 'all' | 'live-only';
+  compact?: boolean;
 };
 
 export default function ImportantLinks({
@@ -125,6 +126,7 @@ export default function ImportantLinks({
   courseId = null,
   linkUrls,
   modalVariant = 'all',
+  compact = false,
 }: Props) {
   const fallbackLinkUrls = useProgramLinkUrls({ mode, courseId, enabled: !linkUrls });
   const resolvedLinkUrls = linkUrls ?? fallbackLinkUrls;
@@ -172,11 +174,11 @@ export default function ImportantLinks({
         width: '100%',
         overflow: 'hidden',
         bgcolor: '#82bfad',
-        px: { xs: 2, md: 5 },
-        py: { xs: 7, md: 11 },
+        px: { xs: 2, md: compact ? 4 : 5 },
+        py: compact ? { xs: 4, md: 5 } : { xs: 7, md: 11 },
       }}
     >
-      <DecorativeArc side="left" />
+      <DecorativeArc side="left" compact={compact} />
 
       <Typography
         variant="h2"
@@ -185,12 +187,15 @@ export default function ImportantLinks({
           position: 'relative',
           zIndex: 1,
           color: '#050505',
+          fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
           fontWeight: 900,
           lineHeight: 0.95,
-          letterSpacing: { xs: 0, md: 7 },
+          letterSpacing: compact ? { xs: 0, md: 1.4 } : { xs: 0, md: 7 },
           textTransform: 'uppercase',
-          fontSize: { xs: 'clamp(2.8rem, 13vw, 4.8rem)', md: 'clamp(5rem, 6vw, 9rem)' },
-          mb: { xs: 5, md: 7 },
+          fontSize: compact
+            ? { xs: 'clamp(1.75rem, 7.5vw, 2.5rem)', md: 'clamp(3rem, 4.5vw, 6rem)' }
+            : { xs: 'clamp(2.8rem, 13vw, 4.8rem)', md: 'clamp(5rem, 6vw, 9rem)' },
+          mb: compact ? { xs: 3, md: 3.5 } : { xs: 5, md: 7 },
         }}
       >
         Important Program Links
@@ -202,8 +207,8 @@ export default function ImportantLinks({
           zIndex: 1,
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
-          gap: { xs: 4, md: 5.5 },
-          maxWidth: '156rem',
+          gap: compact ? { xs: 2.5, md: 3 } : { xs: 4, md: 5.5 },
+          maxWidth: compact ? 1200 : '156rem',
           mx: 'auto',
         }}
       >
@@ -214,6 +219,7 @@ export default function ImportantLinks({
           fallback="linear-gradient(135deg, rgba(221,244,235,0.9), rgba(37,71,63,0.86)), url('/graph.png')"
           actionLabel="Click Here"
           onClick={() => setModalOpen(true)}
+          compact={compact}
         />
         <LinkCard
           title="Progress Tracker"
@@ -222,6 +228,7 @@ export default function ImportantLinks({
           fallback="linear-gradient(135deg, rgba(218,240,232,0.9), rgba(31,64,58,0.86)), url('/graph.png')"
           actionLabel="Click Here"
           href="/tracker"
+          compact={compact}
         />
         <LinkCard
           title="Systems Library & Training"
@@ -230,6 +237,7 @@ export default function ImportantLinks({
           fallback="linear-gradient(135deg, rgba(220,243,235,0.9), rgba(28,65,58,0.86)), url('/search-hero.png')"
           actionLabel="Click Here"
           href="/resources"
+          compact={compact}
         />
       </Box>
 
@@ -238,6 +246,7 @@ export default function ImportantLinks({
         onClose={() => setModalOpen(false)}
         title={modalVariant === 'live-only' ? 'Live Coaching Links' : 'Member Links'}
         links={modalLinks}
+        compact={compact}
       />
     </Box>
   );
@@ -251,6 +260,7 @@ function LinkCard({
   actionLabel,
   href,
   onClick,
+  compact = false,
 }: {
   title: string;
   caption: string;
@@ -259,6 +269,7 @@ function LinkCard({
   actionLabel: string;
   href?: string;
   onClick?: () => void;
+  compact?: boolean;
 }) {
   const cardContent = (
     <>
@@ -266,7 +277,7 @@ function LinkCard({
         sx={{
           position: 'relative',
           aspectRatio: { xs: '1.65 / 1', md: '2.08 / 1' },
-          border: '5px solid #27433d',
+          border: compact ? '2px solid #27433d' : '5px solid #27433d',
           overflow: 'hidden',
           backgroundColor: '#24463f',
           backgroundImage: `linear-gradient(rgba(116,164,151,0.18), rgba(14,36,32,0.42)), url('${image}'), ${fallback}`,
@@ -281,7 +292,7 @@ function LinkCard({
             inset: 0,
             display: 'grid',
             placeItems: 'center',
-            px: 3,
+            px: compact ? 2 : 3,
             bgcolor: 'rgba(5,20,17,0.18)',
           }}
         >
@@ -293,10 +304,12 @@ function LinkCard({
               textAlign: 'center',
               textTransform: 'uppercase',
               textShadow: '0 3px 0 rgba(0,0,0,0.4)',
-              letterSpacing: { xs: 1.5, md: 3 },
+              letterSpacing: compact ? { xs: 0.6, md: 1.2 } : { xs: 1.5, md: 3 },
               lineHeight: 0.96,
-              fontSize: { xs: 'clamp(3rem, 11vw, 5.2rem)', md: 'clamp(3.6rem, 3.3vw, 6rem)' },
-              maxWidth: '12ch',
+              fontSize: compact
+                ? { xs: 'clamp(1.8rem, 8vw, 2.7rem)', md: 'clamp(1.9rem, 2.2vw, 2.8rem)' }
+                : { xs: 'clamp(3rem, 11vw, 5.2rem)', md: 'clamp(3.6rem, 3.3vw, 6rem)' },
+              maxWidth: compact ? '14ch' : '12ch',
             }}
           >
             {title}
@@ -306,12 +319,12 @@ function LinkCard({
 
       <Box
         sx={{
-          minHeight: { xs: 84, md: 104 },
+          minHeight: compact ? { xs: 74, md: 82 } : { xs: 84, md: 104 },
           display: 'grid',
           placeItems: 'center',
           bgcolor: '#050505',
-          px: { xs: 2, md: 4 },
-          py: 2.25,
+          px: compact ? { xs: 1.5, md: 2 } : { xs: 2, md: 4 },
+          py: compact ? 1.25 : 2.25,
         }}
       >
         <Typography
@@ -320,33 +333,35 @@ function LinkCard({
             fontWeight: 600,
             textAlign: 'center',
             textTransform: 'uppercase',
-            letterSpacing: { xs: 1.5, md: 3.5 },
-            lineHeight: 1.06,
-            fontSize: { xs: '1.45rem', md: 'clamp(1.45rem, 1.2vw, 2.1rem)' },
+            letterSpacing: compact ? { xs: 0.4, md: 0.8 } : { xs: 1.5, md: 3.5 },
+            lineHeight: compact ? 1.18 : 1.06,
+            fontSize: compact
+              ? { xs: '1.15rem', md: '1.28rem' }
+              : { xs: '1.45rem', md: 'clamp(1.45rem, 1.2vw, 2.1rem)' },
           }}
         >
           {caption}
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2.2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: compact ? 1.25 : 2.2 }}>
         <Box
           component="span"
           sx={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: 42,
-            px: 2,
+            minHeight: compact ? 34 : 42,
+            px: compact ? 1.5 : 2,
             borderRadius: 999,
-            border: '2px solid rgba(255,255,255,0.92)',
+            border: compact ? '1px solid rgba(255,255,255,0.92)' : '2px solid rgba(255,255,255,0.92)',
             bgcolor: '#ffb700',
             color: '#050505',
             fontWeight: 900,
             textTransform: 'uppercase',
-            fontSize: { xs: '1.35rem', md: '1.55rem' },
+            fontSize: compact ? { xs: '1.05rem', md: '1.15rem' } : { xs: '1.35rem', md: '1.55rem' },
             lineHeight: 1,
-            boxShadow: '0 5px 0 rgba(0,0,0,0.16)',
+            boxShadow: compact ? '0 3px 0 rgba(0,0,0,0.16)' : '0 5px 0 rgba(0,0,0,0.16)',
             transition: 'transform 160ms ease, box-shadow 160ms ease',
           }}
         >
@@ -367,10 +382,10 @@ function LinkCard({
     cursor: 'pointer',
     transition: 'transform 180ms ease',
     '&:hover': {
-      transform: 'translateY(-5px)',
+      transform: compact ? 'translateY(-2px)' : 'translateY(-5px)',
       '& span': {
         transform: 'translateY(-1px)',
-        boxShadow: '0 7px 0 rgba(0,0,0,0.18)',
+        boxShadow: compact ? '0 4px 0 rgba(0,0,0,0.18)' : '0 7px 0 rgba(0,0,0,0.18)',
       },
     },
     '&:focus-visible': {
@@ -399,11 +414,13 @@ function CoachingLinksModal({
   onClose,
   title,
   links,
+  compact = false,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   links: LinkItem[];
+  compact?: boolean;
 }) {
   const groupedLinks = useMemo(() => {
     const map = new Map<LinkGroup, LinkItem[]>();
@@ -440,8 +457,8 @@ function CoachingLinksModal({
           gap: 2,
           bgcolor: '#000',
           borderBottom: '1px solid rgba(130,191,173,0.35)',
-          px: { xs: 2.25, md: 4 },
-          py: { xs: 2, md: 3 },
+          px: compact ? { xs: 2, md: 3 } : { xs: 2.25, md: 4 },
+          py: compact ? { xs: 1.75, md: 2.25 } : { xs: 2, md: 3 },
         }}
       >
         <Box>
@@ -453,7 +470,7 @@ function CoachingLinksModal({
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: 2,
-              fontSize: '1rem',
+              fontSize: compact ? '0.82rem' : '1rem',
               mb: 0.75,
             }}
           >
@@ -467,7 +484,7 @@ function CoachingLinksModal({
               fontWeight: 900,
               textTransform: 'uppercase',
               lineHeight: 0.96,
-              fontSize: { xs: '2.8rem', md: '4.8rem' },
+              fontSize: compact ? { xs: '2rem', md: '3rem' } : { xs: '2.8rem', md: '4.8rem' },
             }}
           >
             {title}
@@ -487,12 +504,12 @@ function CoachingLinksModal({
         </IconButton>
       </DialogTitle>
 
-      <DialogContent sx={{ p: { xs: 2.25, md: 4 } }}>
+      <DialogContent sx={{ p: compact ? { xs: 2, md: 3 } : { xs: 2.25, md: 4 } }}>
         <Box
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-            gap: { xs: 2.5, md: 3 },
+            gap: compact ? { xs: 2, md: 2.5 } : { xs: 2.5, md: 3 },
           }}
         >
           {LINK_GROUPS.map((group) => {
@@ -503,7 +520,7 @@ function CoachingLinksModal({
               <Box
                 key={group.id}
                 sx={{
-                  p: { xs: 2, md: 2.5 },
+                  p: compact ? { xs: 1.5, md: 2 } : { xs: 2, md: 2.5 },
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: 1,
                   bgcolor: 'rgba(255,255,255,0.035)',
@@ -627,7 +644,7 @@ function ModalLink({ link }: { link: LinkItem }) {
   );
 }
 
-function DecorativeArc({ side }: { side: 'left' | 'right' }) {
+function DecorativeArc({ side, compact = false }: { side: 'left' | 'right'; compact?: boolean }) {
   const isLeft = side === 'left';
 
   return (
@@ -635,26 +652,26 @@ function DecorativeArc({ side }: { side: 'left' | 'right' }) {
       aria-hidden
       sx={{
         position: 'absolute',
-        width: { xs: 220, md: 360 },
-        height: { xs: 420, md: 680 },
-        top: { xs: -70, md: -130 },
-        left: isLeft ? { xs: -180, md: -245 } : 'auto',
-        right: isLeft ? 'auto' : { xs: -180, md: -245 },
-        border: '3px solid rgba(0,0,0,0.86)',
+        width: compact ? { xs: 160, md: 220 } : { xs: 220, md: 360 },
+        height: compact ? { xs: 300, md: 420 } : { xs: 420, md: 680 },
+        top: compact ? { xs: -70, md: -110 } : { xs: -70, md: -130 },
+        left: isLeft ? (compact ? { xs: -136, md: -170 } : { xs: -180, md: -245 }) : 'auto',
+        right: isLeft ? 'auto' : compact ? { xs: -136, md: -170 } : { xs: -180, md: -245 },
+        border: compact ? '2px solid rgba(0,0,0,0.55)' : '3px solid rgba(0,0,0,0.86)',
         borderRadius: '50%',
         transform: isLeft ? 'rotate(5deg)' : 'rotate(-5deg)',
         '&::before': {
           content: '""',
           position: 'absolute',
           inset: { xs: 28, md: 42 },
-          border: '3px solid rgba(0,0,0,0.86)',
+          border: compact ? '2px solid rgba(0,0,0,0.55)' : '3px solid rgba(0,0,0,0.86)',
           borderRadius: '50%',
         },
         '&::after': {
           content: '""',
           position: 'absolute',
           inset: { xs: 56, md: 84 },
-          border: '3px solid rgba(0,0,0,0.86)',
+          border: compact ? '2px solid rgba(0,0,0,0.55)' : '3px solid rgba(0,0,0,0.86)',
           borderRadius: '50%',
         },
       }}

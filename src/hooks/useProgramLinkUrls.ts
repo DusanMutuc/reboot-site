@@ -69,19 +69,22 @@ export function useProgramLinkUrls({
   enabled = true,
 }: UseProgramLinkUrlsOptions = {}): ProgramLinkUrls {
   const [urls, setUrls] = useState(EMPTY_URLS);
-  const [loading, setLoading] = useState(enabled);
+  const [coachLinksLoading, setCoachLinksLoading] = useState(enabled);
+  const [ambassadorLinkLoading, setAmbassadorLinkLoading] = useState(
+    enabled && mode === 'user'
+  );
 
   useEffect(() => {
     let mounted = true;
 
     if (!enabled) {
-      setLoading(false);
+      setCoachLinksLoading(false);
       return () => {
         mounted = false;
       };
     }
 
-    setLoading(true);
+    setCoachLinksLoading(true);
 
     (async () => {
       try {
@@ -99,45 +102,52 @@ export function useProgramLinkUrls({
           if (error) throw error;
 
           if (!mounted) return;
-          setUrls({
+          setUrls((current) => ({
+            ...current,
             m2Url: normalizeProgramUrl(data?.m2_booking_url ?? null),
             implUrl: normalizeProgramUrl(data?.impl_booking_url ?? data?.call15_url ?? null),
             coachNotesUrl: normalizeProgramUrl(data?.coaching_notes_url ?? null),
             ambassadorHubUrl: null,
-          });
+          }));
           return;
         }
 
-        const [{ data: primaryData, error: primaryErr }, { data: implData, error: implErr }, ambassadorHubUrl] =
-          await Promise.all([
-            supabase.rpc('get_my_coach', {
-              _course_id: courseId ?? null,
-            }),
-            supabase.rpc('get_my_implementation_coach', {
-              _course_id: courseId ?? null,
-            }),
-            fetchAmbassadorHubUrl(),
-          ]);
+        const params = new URLSearchParams();
+        if (courseId !== null) params.set('courseId', String(courseId));
+        const query = params.size > 0 ? `?${params.toString()}` : '';
+        const response = await fetch(`/api/user/program-links${query}`, {
+          cache: 'no-store',
+        });
 
-        if (primaryErr) throw primaryErr;
-        if (implErr) throw implErr;
+        if (!response.ok) {
+          throw new Error(`Program links request failed with status ${response.status}`);
+        }
 
-        const primaryRow = Array.isArray(primaryData) ? primaryData[0] : primaryData;
-        const implRow = Array.isArray(implData) ? implData[0] : implData;
+        const payload = (await response.json()) as {
+          m2Url?: unknown;
+          implUrl?: unknown;
+        };
 
         if (!mounted) return;
-        setUrls({
-          m2Url: normalizeProgramUrl(primaryRow?.m2_booking_url ?? null),
-          implUrl: normalizeProgramUrl(implRow?.impl_booking_url ?? null),
+        setUrls((current) => ({
+          ...current,
+          m2Url:
+            typeof payload.m2Url === 'string' ? normalizeProgramUrl(payload.m2Url) : null,
+          implUrl:
+            typeof payload.implUrl === 'string' ? normalizeProgramUrl(payload.implUrl) : null,
           coachNotesUrl: null,
-          ambassadorHubUrl,
-        });
+        }));
       } catch (error) {
         if (!mounted) return;
-        console.error('Program link fetch error:', error);
-        setUrls(EMPTY_URLS);
+        console.error('Coach link fetch error:', error);
+        setUrls((current) => ({
+          ...current,
+          m2Url: null,
+          implUrl: null,
+          coachNotesUrl: null,
+        }));
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) setCoachLinksLoading(false);
       }
     })();
 
@@ -146,5 +156,30 @@ export function useProgramLinkUrls({
     };
   }, [mode, courseId, enabled]);
 
-  return { ...urls, loading };
+  useEffect(() => {
+    let mounted = true;
+
+    if (!enabled || mode === 'coach') {
+      setUrls((current) => ({ ...current, ambassadorHubUrl: null }));
+      setAmbassadorLinkLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    setAmbassadorLinkLoading(true);
+
+    (async () => {
+      const ambassadorHubUrl = await fetchAmbassadorHubUrl();
+      if (!mounted) return;
+      setUrls((current) => ({ ...current, ambassadorHubUrl }));
+      setAmbassadorLinkLoading(false);
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [mode, enabled]);
+
+  return { ...urls, loading: coachLinksLoading || ambassadorLinkLoading };
 }

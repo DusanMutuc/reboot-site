@@ -1040,7 +1040,11 @@ const EmptyState = ({ onSuggest }: { onSuggest: (value: string) => void }) => (
   </Box>
 );
 
-export default function Search() {
+type SearchProps = {
+  compact?: boolean;
+};
+
+export default function Search({ compact = false }: SearchProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -1306,45 +1310,48 @@ export default function Search() {
         position: 'relative',
         overflow: 'hidden',
         bgcolor: '#82bfad',
-        minHeight: '100vh',
-        py: { xs: 6, md: 10 },
+        minHeight: compact ? 'auto' : '100vh',
+        py: compact ? { xs: 4, md: 5 } : { xs: 6, md: 10 },
         px: { xs: 2, md: 4 },
         '&::before': {
           content: '""',
           position: 'absolute',
-          width: { xs: 220, md: 360 },
-          height: { xs: 420, md: 680 },
-          right: { xs: -182, md: -235 },
-          bottom: { xs: -160, md: -220 },
-          border: '3px solid rgba(0,0,0,0.86)',
+          width: compact ? { xs: 150, md: 220 } : { xs: 220, md: 360 },
+          height: compact ? { xs: 280, md: 410 } : { xs: 420, md: 680 },
+          right: compact ? { xs: -132, md: -160 } : { xs: -182, md: -235 },
+          bottom: compact ? { xs: -134, md: -160 } : { xs: -160, md: -220 },
+          border: compact ? '2px solid rgba(0,0,0,0.5)' : '3px solid rgba(0,0,0,0.86)',
           borderRadius: '50%',
           transform: 'rotate(-6deg)',
         },
         '&::after': {
           content: '""',
           position: 'absolute',
-          width: { xs: 164, md: 276 },
-          height: { xs: 340, md: 560 },
-          right: { xs: -142, md: -190 },
-          bottom: { xs: -118, md: -164 },
-          border: '3px solid rgba(0,0,0,0.86)',
+          width: compact ? { xs: 112, md: 166 } : { xs: 164, md: 276 },
+          height: compact ? { xs: 220, md: 320 } : { xs: 340, md: 560 },
+          right: compact ? { xs: -98, md: -120 } : { xs: -142, md: -190 },
+          bottom: compact ? { xs: -98, md: -118 } : { xs: -118, md: -164 },
+          border: compact ? '2px solid rgba(0,0,0,0.5)' : '3px solid rgba(0,0,0,0.86)',
           borderRadius: '50%',
           transform: 'rotate(-6deg)',
         },
       }}
     >
-      <Stack spacing={3} sx={{ position: 'relative', zIndex: 1, maxWidth: 1360, mx: 'auto' }}>
-        <Box sx={{ textAlign: 'center', mb: { xs: 1.5, md: 2.5 } }}>
+      <Stack spacing={compact ? 2.5 : 3} sx={{ position: 'relative', zIndex: 1, maxWidth: compact ? 1200 : 1360, mx: 'auto' }}>
+        <Box sx={{ textAlign: 'center', mb: compact ? { xs: 0.5, md: 1 } : { xs: 1.5, md: 2.5 } }}>
           <Typography
             variant="h2"
             sx={{
               color: '#050505',
+              fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
               fontWeight: 900,
               textTransform: 'uppercase',
-              letterSpacing: { xs: 0, md: 8 },
-              lineHeight: 0.95,
-              fontSize: { xs: 'clamp(3.1rem, 12vw, 5.2rem)', md: 'clamp(5.5rem, 6vw, 10rem)' },
-              mb: { xs: 2, md: 2.5 },
+              letterSpacing: compact ? { xs: 0, md: 1.4 } : { xs: 0, md: 8 },
+              lineHeight: compact ? 1.05 : 0.95,
+              fontSize: compact
+                ? { xs: 'clamp(1.75rem, 7.5vw, 2.5rem)', md: 'clamp(3rem, 4.5vw, 6rem)' }
+                : { xs: 'clamp(3.1rem, 12vw, 5.2rem)', md: 'clamp(5.5rem, 6vw, 10rem)' },
+              mb: compact ? { xs: 1, md: 1.25 } : { xs: 2, md: 2.5 },
             }}
           >
             Reboot Program Search Engine
@@ -1354,11 +1361,11 @@ export default function Search() {
               color: '#fff',
               fontWeight: 500,
               textTransform: 'uppercase',
-              letterSpacing: { xs: 1.5, md: 5 },
-              lineHeight: 1.24,
-              maxWidth: 980,
+              letterSpacing: compact ? { xs: 0.4, md: 1 } : { xs: 1.5, md: 5 },
+              lineHeight: compact ? 1.4 : 1.24,
+              maxWidth: compact ? 760 : 980,
               mx: 'auto',
-              fontSize: { xs: '1.35rem', md: '2.4rem' },
+              fontSize: compact ? { xs: '1.15rem', md: '1.35rem' } : { xs: '1.35rem', md: '2.4rem' },
             }}
           >
             Find all Reboot training, PDFs, replays, expert guest interviews and live coaching podcast clips at your fingertips.
@@ -1413,9 +1420,9 @@ export default function Search() {
           elevation={0}
           sx={{
             p: { xs: 2, md: 3 },
-            borderRadius: 3,
+            borderRadius: compact ? 2 : 3,
             bgcolor: '#fff',
-            boxShadow: '0px 24px 48px rgba(15, 40, 34, 0.08)',
+            boxShadow: compact ? '0px 10px 24px rgba(15, 40, 34, 0.08)' : '0px 24px 48px rgba(15, 40, 34, 0.08)',
           }}
         >
           <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mb: 2 }}>

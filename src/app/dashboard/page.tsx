@@ -141,11 +141,11 @@ export default function DashboardPage() {
         />
 
         <section id="links" style={sectionOffsetStyle}>
-          <ImportantLinks mode="user" linkUrls={programLinkUrls} modalVariant="live-only" />
+          <ImportantLinks mode="user" linkUrls={programLinkUrls} modalVariant="live-only" compact />
         </section>
 
         <section id="library" style={sectionOffsetStyle}>
-          <Search />
+          <Search compact />
         </section>
 
         <section id="program-links" style={sectionOffsetStyle}>
@@ -153,7 +153,7 @@ export default function DashboardPage() {
         </section>
 
         <section id="podcast" style={sectionOffsetStyle}>
-          <PodcastSection />
+          <PodcastSection compact />
         </section>
 
         <section id="dashboard" style={sectionOffsetStyle}>

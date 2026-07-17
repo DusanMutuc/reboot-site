@@ -27,7 +27,11 @@ type PodcastState =
 const SUBSCRIBE_URL =
   'https://subscribe.transistor.fm/shared_invite/CogGHmkX0IYZZ6DRM9EiMHplXXx6YebwAqBR';
 
-export default function PodcastSection() {
+type PodcastSectionProps = {
+  compact?: boolean;
+};
+
+export default function PodcastSection({ compact = false }: PodcastSectionProps) {
   const [state, setState] = useState<PodcastState>({
     status: 'loading',
     episodes: [],
@@ -101,7 +105,7 @@ export default function PodcastSection() {
       style={{
         width: '100%',
         backgroundColor: '#000',
-        paddingBottom: '5rem',
+        paddingBottom: compact ? '2.5rem' : '5rem',
         textAlign: 'center',
       }}
     >
@@ -109,18 +113,20 @@ export default function PodcastSection() {
         sx={{
           width: '100%',
           backgroundColor: '#000',
-          px: { xs: 2, md: 6 },
-          pt: { xs: 4, md: 5 },
-          pb: { xs: 5, md: 7 },
+          px: { xs: 2, md: compact ? 4 : 6 },
+          pt: compact ? { xs: 3.5, md: 4.5 } : { xs: 4, md: 5 },
+          pb: compact ? { xs: 3.5, md: 4.5 } : { xs: 5, md: 7 },
         }}
       >
         <Box
           sx={{
-            maxWidth: 1370,
+            maxWidth: compact ? 1200 : 1370,
             mx: 'auto',
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', md: 'minmax(260px, 380px) minmax(0, 1fr)' },
-            gap: { xs: 3, md: 6 },
+            gridTemplateColumns: compact
+              ? { xs: '1fr', md: 'minmax(180px, 260px) minmax(0, 1fr)' }
+              : { xs: '1fr', md: 'minmax(260px, 380px) minmax(0, 1fr)' },
+            gap: compact ? { xs: 2.5, md: 3.5 } : { xs: 3, md: 6 },
             alignItems: 'center',
             textAlign: { xs: 'center', md: 'left' },
           }}
@@ -128,16 +134,17 @@ export default function PodcastSection() {
           <Box
             aria-label="Private Tribe Podcast"
             sx={{
-              minHeight: { xs: 250, sm: 320, md: 360 },
+              minHeight: compact ? { xs: 180, sm: 220, md: 230 } : { xs: 250, sm: 320, md: 360 },
               width: '100%',
-              maxWidth: { xs: 380, md: 'none' },
+              maxWidth: compact ? { xs: 300, md: 'none' } : { xs: 380, md: 'none' },
               mx: 'auto',
               backgroundImage:
-                "url('/podcast-private-tribe.png'), url('/podcast-hero.png'), linear-gradient(145deg, #303030 0%, #0b0b0b 100%)",
-              backgroundSize: 'cover',
+                "url('/podcast%20image.png'), url('/podcast-hero.png'), linear-gradient(145deg, #303030 0%, #0b0b0b 100%)",
+              backgroundSize: 'contain, cover, cover',
               backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
               border: '1px solid rgba(255,255,255,0.14)',
-              boxShadow: '0 24px 60px rgba(0,0,0,0.58)',
+              boxShadow: compact ? '0 14px 32px rgba(0,0,0,0.48)' : '0 24px 60px rgba(0,0,0,0.58)',
             }}
           />
 
@@ -147,16 +154,19 @@ export default function PodcastSection() {
               sx={{
                 fontWeight: 900,
                 color: '#fff',
+                fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
                 textTransform: 'uppercase',
                 letterSpacing: 0,
-                lineHeight: 0.92,
-                fontSize: {
-                  xs: 'clamp(4rem, 15vw, 6rem)',
-                  md: 'clamp(6.4rem, 6.4vw, 11.5rem)',
-                },
-                maxWidth: 980,
+                lineHeight: compact ? 1.02 : 0.92,
+                fontSize: compact
+                  ? { xs: 'clamp(1.75rem, 7.5vw, 2.5rem)', md: 'clamp(3rem, 4.5vw, 6rem)' }
+                  : {
+                      xs: 'clamp(4rem, 15vw, 6rem)',
+                      md: 'clamp(6.4rem, 6.4vw, 11.5rem)',
+                    },
+                maxWidth: compact ? 760 : 980,
                 mx: { xs: 'auto', md: 0 },
-                mb: { xs: 2.5, md: 3 },
+                mb: compact ? { xs: 1.25, md: 1.5 } : { xs: 2.5, md: 3 },
               }}
             >
               Miss a coaching call? You still get the best parts.
@@ -165,14 +175,14 @@ export default function PodcastSection() {
             <Typography
               sx={{
                 color: '#fff',
-                fontSize: { xs: '1.6rem', md: '2.9rem' },
+                fontSize: compact ? { xs: '0.98rem', md: '1.1rem' } : { xs: '1.6rem', md: '2.9rem' },
                 fontWeight: 500,
-                lineHeight: 1.18,
-                letterSpacing: { xs: 1.2, md: 4 },
+                lineHeight: compact ? 1.45 : 1.18,
+                letterSpacing: compact ? { xs: 0.4, md: 1 } : { xs: 1.2, md: 4 },
                 textTransform: 'uppercase',
-                maxWidth: 900,
+                maxWidth: compact ? 720 : 900,
                 mx: { xs: 'auto', md: 0 },
-                mb: { xs: 3, md: 4.5 },
+                mb: compact ? { xs: 2, md: 2.25 } : { xs: 3, md: 4.5 },
               }}
             >
               Weekly replay podcast with the best key moments, guest experts, and masterclasses.
@@ -185,21 +195,25 @@ export default function PodcastSection() {
               rel="noopener noreferrer"
               variant="contained"
               sx={{
-                px: { xs: 2.5, md: 3.5 },
-                py: { xs: 1.25, md: 1.6 },
-                minHeight: { xs: 48, md: 64 },
-                borderRadius: 1.5,
+                px: compact ? { xs: 1.8, md: 2.5 } : { xs: 2.5, md: 3.5 },
+                py: compact ? { xs: 0.9, md: 1.1 } : { xs: 1.25, md: 1.6 },
+                minHeight: compact ? { xs: 38, md: 44 } : { xs: 48, md: 64 },
+                borderRadius: compact ? 1 : 1.5,
                 border: '1px solid rgba(255,255,255,0.22)',
-                fontSize: { xs: '2rem', md: '3.2rem' },
+                fontSize: compact ? { xs: '1rem', md: '1.15rem' } : { xs: '2rem', md: '3.2rem' },
                 fontWeight: 900,
                 lineHeight: 1,
                 textTransform: 'uppercase',
                 backgroundColor: '#d93025 !important',
-                boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.14), 0 10px 0 rgba(118,15,10,0.75)',
+                boxShadow: compact
+                  ? 'inset 0 0 0 1px rgba(255,255,255,0.14), 0 4px 0 rgba(118,15,10,0.75)'
+                  : 'inset 0 0 0 2px rgba(255,255,255,0.14), 0 10px 0 rgba(118,15,10,0.75)',
                 '&:hover': {
                   backgroundColor: '#ef3d31 !important',
                   transform: 'translateY(-2px)',
-                  boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.18), 0 12px 0 rgba(118,15,10,0.75)',
+                  boxShadow: compact
+                    ? 'inset 0 0 0 1px rgba(255,255,255,0.18), 0 5px 0 rgba(118,15,10,0.75)'
+                    : 'inset 0 0 0 2px rgba(255,255,255,0.18), 0 12px 0 rgba(118,15,10,0.75)',
                 },
                 '&:focus-visible': {
                   outline: '4px solid rgba(239,61,49,0.45)',
@@ -213,7 +227,7 @@ export default function PodcastSection() {
         </Box>
       </Box>
 
-      <Box sx={{ maxWidth: 1160, mx: 'auto', mt: { xs: 2, md: 4 }, mb: 4, px: 2 }}>
+      <Box sx={{ maxWidth: compact ? 1200 : 1160, mx: 'auto', mt: compact ? { xs: 2, md: 3 } : { xs: 2, md: 4 }, mb: compact ? 2.5 : 4, px: { xs: 2, md: compact ? 4 : 2 } }}>
         {state.status === 'loading' && state.episodes.length === 0 ? (
           <Stack
             spacing={2}

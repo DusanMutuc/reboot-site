@@ -30,21 +30,22 @@ export default function MoreProgramLinks({ linkUrls }: MoreProgramLinksProps) {
         sx={{
           bgcolor: '#000',
           color: '#fff',
-          px: { xs: 2, md: 5 },
-          pt: { xs: 4, md: 4.5 },
-          pb: { xs: 4, md: 3.2 },
+          px: { xs: 2, md: 4 },
+          pt: { xs: 3.5, md: 4.5 },
+          pb: { xs: 3.5, md: 4.5 },
         }}
       >
         <Typography
           variant="h2"
           align="center"
           sx={{
+            fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
             fontWeight: 900,
             textTransform: 'uppercase',
-            letterSpacing: { xs: 1, md: 4 },
-            lineHeight: 0.95,
-            mb: { xs: 3, md: 3.5 },
-            fontSize: { xs: 'clamp(2.8rem, 12vw, 4.8rem)', md: 'clamp(4.6rem, 4.2vw, 7rem)' },
+            letterSpacing: { xs: 0.4, md: 1.4 },
+            lineHeight: 1.05,
+            mb: { xs: 2.5, md: 3 },
+            fontSize: { xs: 'clamp(2rem, 8.5vw, 3rem)', md: 'clamp(4rem, 6vw, 8rem)' },
           }}
         >
           More... Reboot Program Links
@@ -54,8 +55,8 @@ export default function MoreProgramLinks({ linkUrls }: MoreProgramLinksProps) {
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
-            gap: { xs: 3, md: 3.5 },
-            maxWidth: 1120,
+            gap: { xs: 2.5, md: 3 },
+            maxWidth: 1200,
             mx: 'auto',
           }}
         >
@@ -90,8 +91,8 @@ export default function MoreProgramLinks({ linkUrls }: MoreProgramLinksProps) {
           position: 'relative',
           bgcolor: '#82bfad',
           color: '#fff',
-          px: { xs: 2, md: 5 },
-          py: { xs: 6, md: 8 },
+          px: { xs: 2, md: 4 },
+          py: { xs: 4, md: 5 },
         }}
       >
         <ReferralArcs side="left" />
@@ -103,12 +104,13 @@ export default function MoreProgramLinks({ linkUrls }: MoreProgramLinksProps) {
           sx={{
             position: 'relative',
             zIndex: 1,
+            fontFamily: '"League Spartan", "Roboto", "Helvetica", "Arial", sans-serif',
             fontWeight: 900,
             textTransform: 'uppercase',
-            letterSpacing: { xs: 1, md: 7 },
-            lineHeight: 0.95,
-            mb: { xs: 4, md: 5 },
-            fontSize: { xs: 'clamp(4.4rem, 18vw, 7rem)', md: 'clamp(7rem, 8vw, 12rem)' },
+            letterSpacing: { xs: 0.4, md: 1.4 },
+            lineHeight: 1.05,
+            mb: { xs: 2.5, md: 3 },
+            fontSize: { xs: 'clamp(2rem, 8.5vw, 3rem)', md: 'clamp(4rem, 6vw, 8rem)' },
           }}
         >
           Reboot Referrals
@@ -120,8 +122,8 @@ export default function MoreProgramLinks({ linkUrls }: MoreProgramLinksProps) {
             zIndex: 1,
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-            gap: { xs: 4, md: 5 },
-            maxWidth: 1220,
+            gap: { xs: 2.5, md: 3 },
+            maxWidth: 900,
             mx: 'auto',
           }}
         >
@@ -164,8 +166,8 @@ function ProgramCard({
       <Box
         sx={{
           width: '100%',
-          aspectRatio: isReferral ? '2 / 1' : '2.1 / 1',
-          borderRadius: isReferral ? 0 : 4,
+          aspectRatio: isReferral ? '2.25 / 1' : '2.1 / 1',
+          borderRadius: isReferral ? 1 : 2,
           overflow: 'hidden',
           backgroundColor: isReferral ? '#101010' : '#f2f2f2',
           backgroundImage: `linear-gradient(rgba(0,0,0,0.02), rgba(0,0,0,0.14)), url('${image}'), ${fallback}`,
@@ -183,9 +185,9 @@ function ProgramCard({
             textTransform: 'uppercase',
             letterSpacing: { xs: 1.5, md: 2.2 },
             fontWeight: 500,
-            fontSize: { xs: '1.6rem', md: '2rem' },
+            fontSize: { xs: '1.15rem', md: '1.28rem' },
             lineHeight: 1.1,
-            mt: 2,
+            mt: 1.25,
           }}
         >
           {title}
@@ -193,13 +195,13 @@ function ProgramCard({
       ) : (
         <Box
           sx={{
-            minHeight: 60,
+            minHeight: 58,
             display: 'grid',
             placeItems: 'center',
             bgcolor: '#82bfad',
             color: '#050505',
-            borderRadius: 999,
-            px: 2,
+            borderRadius: 2,
+            px: 1.5,
             mt: 0.8,
           }}
         >
@@ -207,10 +209,10 @@ function ProgramCard({
             sx={{
               textAlign: 'center',
               textTransform: 'uppercase',
-              letterSpacing: 2,
+              letterSpacing: 0.8,
               fontWeight: 900,
-              fontSize: { xs: '1.05rem', md: '1.18rem' },
-              lineHeight: 1.35,
+              fontSize: { xs: '1.15rem', md: '1.28rem' },
+              lineHeight: 1.25,
             }}
           >
             {eyebrow ? (
@@ -229,15 +231,15 @@ function ProgramCard({
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: isReferral ? 1.8 : 1.4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', mt: isReferral ? 1.25 : 1 }}>
         <Box
           component="span"
           sx={{
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            minHeight: isReferral ? 40 : 28,
-            px: isReferral ? 2 : 1.25,
+            minHeight: 34,
+            px: isReferral ? 1.6 : 1.25,
             borderRadius: 999,
             border: isReferral ? 0 : '1px solid rgba(255,255,255,0.78)',
             bgcolor: isReferral ? '#050505' : '#ffb700',
@@ -245,7 +247,7 @@ function ProgramCard({
             fontWeight: 900,
             textTransform: 'uppercase',
             letterSpacing: isReferral ? 1.2 : 0,
-            fontSize: isReferral ? { xs: '1.45rem', md: '1.75rem' } : { xs: '1rem', md: '1.08rem' },
+            fontSize: { xs: '1.05rem', md: '1.15rem' },
             lineHeight: 1,
             opacity: disabled ? 0.66 : 1,
           }}
@@ -298,26 +300,26 @@ function ReferralArcs({ side }: { side: 'left' | 'right' }) {
       aria-hidden
       sx={{
         position: 'absolute',
-        width: { xs: 190, md: 300 },
-        height: { xs: 160, md: 230 },
-        top: { xs: -76, md: -96 },
-        left: isLeft ? { xs: -122, md: -145 } : 'auto',
-        right: isLeft ? 'auto' : { xs: -122, md: -145 },
-        border: '2px solid #050505',
+        width: { xs: 140, md: 200 },
+        height: { xs: 118, md: 152 },
+        top: { xs: -64, md: -76 },
+        left: isLeft ? { xs: -104, md: -118 } : 'auto',
+        right: isLeft ? 'auto' : { xs: -104, md: -118 },
+        border: '2px solid rgba(5,5,5,0.58)',
         borderRadius: '0 0 999px 999px',
         transform: isLeft ? 'rotate(0deg)' : 'rotate(0deg)',
         '&::before': {
           content: '""',
           position: 'absolute',
-          inset: { xs: 24, md: 34 },
-          border: '2px solid #050505',
+          inset: { xs: 20, md: 28 },
+          border: '2px solid rgba(5,5,5,0.58)',
           borderRadius: '0 0 999px 999px',
         },
         '&::after': {
           content: '""',
           position: 'absolute',
-          inset: { xs: 48, md: 68 },
-          border: '2px solid #050505',
+          inset: { xs: 40, md: 56 },
+          border: '2px solid rgba(5,5,5,0.58)',
           borderRadius: '0 0 999px 999px',
         },
       }}
