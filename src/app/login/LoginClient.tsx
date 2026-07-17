@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { extractRoleCodes, resolveHomePathForRoleCodes } from '@/lib/userRoles';
 import { useRouter } from 'next/navigation';
@@ -90,6 +90,11 @@ export default function LoginClient() {
       router.push('/dashboard');
     }
   };
+
+  const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void handleLogin();
+  };
   
 
   // Prevent hydration mismatch by not rendering responsive content until mounted
@@ -167,7 +172,11 @@ export default function LoginClient() {
             WebkitOverflowScrolling: 'touch',
           }}
         >
-          <Box sx={{ maxWidth: 480, mx: 'auto' }}>
+          <Box
+            component="form"
+            onSubmit={handleLoginSubmit}
+            sx={{ maxWidth: 480, mx: 'auto' }}
+          >
             <Typography
               variant="h6"
               sx={{
@@ -255,9 +264,9 @@ export default function LoginClient() {
             </Box>
 
             <Button
+              type="submit"
               variant="contained"
               color="secondary"
-              onClick={handleLogin}
               fullWidth
               sx={{
                 textTransform: 'none',
@@ -427,7 +436,11 @@ export default function LoginClient() {
           p: { xs: '1.5rem', md: '2.5rem' },
         }}
       >
-        <Box sx={{ width: '100%', maxWidth: '40rem', color: '#fff' }}>
+        <Box
+          component="form"
+          onSubmit={handleLoginSubmit}
+          sx={{ width: '100%', maxWidth: '40rem', color: '#fff' }}
+        >
           <Typography
             variant="h6"
             sx={{ mb: '2rem', fontWeight: 700, color: '#fff', fontSize: '2.5rem' }}
@@ -502,9 +515,9 @@ export default function LoginClient() {
           </Box>
 
           <Button
+            type="submit"
             variant="contained"
             color="secondary"
-            onClick={handleLogin}
             fullWidth
             sx={{
               textTransform: 'none',

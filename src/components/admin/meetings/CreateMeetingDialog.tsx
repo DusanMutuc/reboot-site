@@ -32,17 +32,27 @@ type Props = {
 
 type ApiListResponse<T> = { items: T[] };
 type UnknownUser = Record<string, unknown>;
+type AutoPopulateUser = {
+  id: string;
+  isLegend: boolean;
+};
+
+const LEGENDS_MEETING_CODE = 'LEGENDS_MEETING';
 
 function isApiListResponse<T>(v: unknown): v is ApiListResponse<T> {
   return typeof v === 'object' && v !== null && Array.isArray((v as ApiListResponse<T>).items);
 }
 
-function toIdString(u: unknown): string | null {
+function toAutoPopulateUser(u: unknown): AutoPopulateUser | null {
   if (typeof u !== 'object' || u === null) return null;
-  const id = (u as UnknownUser).id;
-  if (typeof id === 'string') return id;
-  if (typeof id === 'number') return String(id);
-  return null;
+  const obj = u as UnknownUser;
+  const id = obj.id;
+  if (typeof id !== 'string' && typeof id !== 'number') return null;
+
+  return {
+    id: String(id),
+    isLegend: obj.is_legend === true,
+  };
 }
 
 export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: Props) {
@@ -51,6 +61,7 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
   const [date, setDate] = useState<string>('');
   const [title, setTitle] = useState<string>('');
   const [autoPopulate, setAutoPopulate] = useState<boolean>(false);
+  const [autoPopulateLegends, setAutoPopulateLegends] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,7 +90,7 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
     try {
       let attendeeIds: string[] | null = null;
 
-      if (autoPopulate) {
+      if (autoPopulate || autoPopulateLegends) {
         const res = await fetch('/api/admin/list-users');
         if (!res.ok) {
           throw new Error('Failed to fetch users for auto-populate');
@@ -88,12 +99,19 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
         const json: unknown = await res.json();
         const items = isApiListResponse<unknown>(json) ? json.items : [];
 
-        const ids = items
-          .map(toIdString)
-          .filter((v): v is string => typeof v === 'string' && v.length > 0);
+        const users = items
+          .map(toAutoPopulateUser)
+          .filter((user): user is AutoPopulateUser => user !== null);
+
+        const ids = (autoPopulate ? users : users.filter((user) => user.isLegend))
+          .map((user) => user.id);
 
         if (ids.length === 0) {
-          throw new Error('No user IDs found from /api/admin/list-users');
+          throw new Error(
+            autoPopulateLegends
+              ? 'No legend members found for auto-populate'
+              : 'No user IDs found from /api/admin/list-users',
+          );
         }
 
         attendeeIds = ids;
@@ -113,6 +131,7 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
       setDate('');
       setTitle('');
       setAutoPopulate(false);
+      setAutoPopulateLegends(false);
       setError(null);
     } catch (err: unknown) {
       console.error(err);
@@ -138,7 +157,14 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
               value={meetingTypeId ?? ''}
               onChange={(e) => {
                 const val = e.target.value;
-                setMeetingTypeId(val === '' || val == null ? null : String(val));
+                const nextMeetingTypeId = val === '' || val == null ? null : String(val);
+                const nextMeetingType = meetingTypes.find(
+                  (meetingType) => String(meetingType.id) === nextMeetingTypeId,
+                );
+
+                setMeetingTypeId(nextMeetingTypeId);
+                setAutoPopulate(false);
+                setAutoPopulateLegends(nextMeetingType?.code === LEGENDS_MEETING_CODE);
               }}
               size="small"
             >
@@ -169,15 +195,32 @@ export function CreateMeetingDialog({ open, onClose, meetingTypes, onCreated }: 
             fullWidth
           />
 
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={autoPopulate}
-                onChange={(e) => setAutoPopulate(e.target.checked)}
-              />
-            }
-            label="Auto-populate with all active members"
-          />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 0, sm: 2 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoPopulate}
+                  onChange={(e) => {
+                    setAutoPopulate(e.target.checked);
+                    if (e.target.checked) setAutoPopulateLegends(false);
+                  }}
+                />
+              }
+              label="Auto-populate with all active members"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={autoPopulateLegends}
+                  onChange={(e) => {
+                    setAutoPopulateLegends(e.target.checked);
+                    if (e.target.checked) setAutoPopulate(false);
+                  }}
+                />
+              }
+              label="Auto-populate legends"
+            />
+          </Stack>
         </Stack>
       </DialogContent>
       <DialogActions>
