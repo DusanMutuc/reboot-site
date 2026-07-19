@@ -14,7 +14,6 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ToggleOnIcon from '@mui/icons-material/ToggleOn';
 import ToggleOffIcon from '@mui/icons-material/ToggleOff';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import OndemandVideoIcon from '@mui/icons-material/OndemandVideo';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -23,6 +22,10 @@ import ImageIcon from '@mui/icons-material/Image';
 import HeadphonesIcon from '@mui/icons-material/Headphones';
 import LinkIcon from '@mui/icons-material/Link';
 import ClearIcon from '@mui/icons-material/Clear';
+import SearchIcon from '@mui/icons-material/Search';
+import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { supabase } from '@/lib/supabaseClient';
 import { adminCompactLabelSx } from '@/lib/theme';
 
@@ -35,8 +38,17 @@ type SortValue =
   | 'alpha_asc'
   | 'alpha_desc'
   | 'duration_asc'
-  | 'duration_desc';
+  | 'duration_desc'
+  | 'placement_library'
+  | 'placement_course'
+  | 'placement_search_only';
 type ResourceTag = { id: number; name: string; category: string | null };
+type ResourcePlacement = {
+  inLibrary: boolean;
+  inCourse: boolean;
+  librarySources: string[];
+  courseSources: string[];
+};
 type ResourceRow = {
   id: number;
   title: string;
@@ -63,10 +75,156 @@ const TYPE_ICONS: Record<ResourceType, ReactElement> = {
 
 const ALL_TYPES: ResourceType[] = ['video','podcast','pdf','document','audio','image','link'];
 const SUPPORTED_RPC_SORTS: ReadonlySet<SortValue> = new Set(['relevance', 'date_desc', 'date_asc']);
+const PLACEMENT_SORTS: ReadonlySet<SortValue> = new Set([
+  'placement_library',
+  'placement_course',
+  'placement_search_only',
+]);
 
 const resourceTagChipSx = {
   '& .MuiChip-label': adminCompactLabelSx,
 } as const;
+
+const resourceCardTagChipSx = {
+  height: 22,
+  borderRadius: 1,
+  bgcolor: 'grey.100',
+  color: 'text.secondary',
+  '& .MuiChip-label': {
+    px: 1,
+    ...adminCompactLabelSx,
+  },
+} as const;
+
+const placementItemSx = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 0.5,
+  color: 'text.secondary',
+  minWidth: 0,
+} as const;
+
+const metadataLabelSx = {
+  fontSize: '0.8125rem',
+  lineHeight: 1.35,
+} as const;
+
+function StatusIndicator({ state }: { state: ResourceState }) {
+  const dotColor =
+    state === 'published' ? 'success.main' : state === 'archived' ? 'error.main' : 'text.disabled';
+
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.625, flexShrink: 0 }}>
+      <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: dotColor }} />
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        fontWeight={600}
+        sx={{ ...metadataLabelSx, textTransform: 'capitalize' }}
+      >
+        {state}
+      </Typography>
+    </Box>
+  );
+}
+
+function PlacementTooltip({
+  heading,
+  sources,
+  children,
+}: {
+  heading: string;
+  sources: string[];
+  children: ReactElement;
+}) {
+  return (
+    <Tooltip
+      title={
+        <Stack spacing={0.75}>
+          <Typography variant="caption" fontWeight={700} color="inherit">
+            {heading}
+          </Typography>
+          {sources.length > 0 ? (
+            sources.map((source) => (
+              <Typography key={source} variant="caption" color="inherit" sx={{ display: 'block' }}>
+                {source}
+              </Typography>
+            ))
+          ) : (
+            <Typography variant="caption" color="inherit">
+              Location details unavailable
+            </Typography>
+          )}
+        </Stack>
+      }
+      slotProps={{ tooltip: { sx: { maxWidth: 480 } } }}
+    >
+      {children}
+    </Tooltip>
+  );
+}
+
+function PlacementInfo({
+  placement,
+  loading,
+  unavailable,
+}: {
+  placement?: ResourcePlacement;
+  loading: boolean;
+  unavailable: boolean;
+}) {
+  if (loading && !placement) {
+    return (
+      <Box sx={placementItemSx}>
+        <CircularProgress size={12} color="inherit" />
+        <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Checking visibility</Typography>
+      </Box>
+    );
+  }
+
+  if (unavailable && !placement) {
+    return (
+      <Tooltip title="Placement information could not be loaded.">
+        <Box sx={placementItemSx}>
+          <HelpOutlineIcon sx={{ fontSize: 15 }} />
+          <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Visibility unavailable</Typography>
+        </Box>
+      </Tooltip>
+    );
+  }
+
+  if (!placement?.inLibrary && !placement?.inCourse) {
+    return (
+      <Tooltip title="Not placed in the Library or a course; available through search only.">
+        <Box sx={placementItemSx}>
+          <SearchIcon sx={{ fontSize: 15 }} />
+          <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Search only</Typography>
+        </Box>
+      </Tooltip>
+    );
+  }
+
+  return (
+    <>
+      {placement.inLibrary ? (
+        <PlacementTooltip heading="Library locations" sources={placement.librarySources}>
+          <Box sx={placementItemSx}>
+            <LibraryBooksOutlinedIcon sx={{ fontSize: 15 }} />
+            <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Library</Typography>
+          </Box>
+        </PlacementTooltip>
+      ) : null}
+      {placement.inCourse ? (
+        <PlacementTooltip heading="Course locations" sources={placement.courseSources}>
+          <Box sx={placementItemSx}>
+            <SchoolOutlinedIcon sx={{ fontSize: 15 }} />
+            <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Course</Typography>
+          </Box>
+        </PlacementTooltip>
+      ) : null}
+    </>
+  );
+}
 
 function useDebounced<T>(value: T, delay = 250) {
   const [debounced, setDebounced] = useState(value);
@@ -86,6 +244,9 @@ export default function ResourceLibraryAdmin() {
   const [rows, setRows] = useState<ResourceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string|null>(null);
+  const [placements, setPlacements] = useState<Record<number, ResourcePlacement>>({});
+  const [placementsLoading, setPlacementsLoading] = useState(false);
+  const [placementsUnavailable, setPlacementsUnavailable] = useState(false);
 
   // tags (for selector)
   const [allTags, setAllTags] = useState<ResourceTag[]>([]);
@@ -256,6 +417,65 @@ export default function ResourceLibraryAdmin() {
     return () => { cancelled = true; };
   }, [debouncedQ, _typesArg, sort, mode, sortPlain]);
 
+  const resourceIdsKey = useMemo(
+    () => rows.map((row) => row.id).sort((a, b) => a - b).join(','),
+    [rows],
+  );
+
+  useEffect(() => {
+    const resourceIds = resourceIdsKey ? resourceIdsKey.split(',').map(Number) : [];
+    if (resourceIds.length === 0) {
+      setPlacements({});
+      setPlacementsLoading(false);
+      setPlacementsUnavailable(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setPlacementsLoading(true);
+    setPlacementsUnavailable(false);
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/admin/resources/placements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resourceIds }),
+          signal: controller.signal,
+        });
+        const json = (await response.json()) as {
+          placements?: Record<number, ResourcePlacement>;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(json.error || 'Failed to load resource placements');
+        setPlacements(json.placements ?? {});
+      } catch (placementError: unknown) {
+        if (controller.signal.aborted) return;
+        console.error('Failed to load resource placements:', placementError);
+        setPlacements({});
+        setPlacementsUnavailable(true);
+      } finally {
+        if (!controller.signal.aborted) setPlacementsLoading(false);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [resourceIdsKey]);
+
+  const sortedRows = useMemo(() => {
+    if (!PLACEMENT_SORTS.has(sort)) return rows;
+
+    const matchesPlacement = (row: ResourceRow) => {
+      const placement = placements[row.id];
+      if (!placement) return false;
+      if (sort === 'placement_library') return placement.inLibrary;
+      if (sort === 'placement_course') return placement.inCourse;
+      return !placement.inLibrary && !placement.inCourse;
+    };
+
+    return [...rows].sort((a, b) => Number(matchesPlacement(b)) - Number(matchesPlacement(a)));
+  }, [placements, rows, sort]);
+
   // open dialog
   const onCreate = () => { setEditing(null); setOpen(true); };
   const onEdit = async (row: ResourceRow) => {
@@ -349,6 +569,9 @@ export default function ResourceLibraryAdmin() {
               <MenuItem value="alpha_desc">Z–A</MenuItem>
               <MenuItem value="duration_asc">Shortest</MenuItem>
               <MenuItem value="duration_desc">Longest</MenuItem>
+              <MenuItem value="placement_library">Placement: Library first</MenuItem>
+              <MenuItem value="placement_course">Placement: Course first</MenuItem>
+              <MenuItem value="placement_search_only">Placement: Search only first</MenuItem>
             </Select>
           </FormControl>
 
@@ -379,7 +602,7 @@ export default function ResourceLibraryAdmin() {
           <Typography variant="body2" color="text.secondary">No resources yet.</Typography>
         ) : (
           <Grid container spacing={2}>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <Grid key={r.id} size={{ xs: 12, sm: 6, md: 4 }}>
                 <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 1 }}>
                   <Stack direction="row" spacing={1} alignItems="center">
@@ -407,25 +630,42 @@ export default function ResourceLibraryAdmin() {
                     </Box>
                   </Stack>
 
-                  <Typography variant="h6">{r.title}</Typography>
-                  {r.description && <Typography variant="body2" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.description}</Typography>}
-
-                  <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', mt: .5 }}>
-                    <Chip label={r.state} size="small" color={r.state === 'published' ? 'success' : r.state === 'archived' ? 'error' : 'default'} />
-                    {r.tags?.map(t => <Chip key={t.id} label={`#${t.name}`} size="small" sx={resourceTagChipSx} />)}
-                  </Stack>
-
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 'auto' }}>
-                    {r.duration ? (
-                      <Stack direction="row" spacing={0.5} alignItems="center">
-                        <AccessTimeIcon fontSize="inherit" />
-                        <Typography variant="caption">{formatDuration(r.duration)}</Typography>
-                      </Stack>
-                    ) : <span />}
-                    <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    columnGap={1.25}
+                    rowGap={0.5}
+                    sx={{ flexWrap: 'wrap', minHeight: 22 }}
+                  >
+                    <StatusIndicator state={r.state} />
+                    <PlacementInfo
+                      placement={placements[r.id]}
+                      loading={placementsLoading}
+                      unavailable={placementsUnavailable}
+                    />
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ ml: 'auto', whiteSpace: 'nowrap', textAlign: 'right' }}
+                    >
+                      {r.duration ? `${formatDuration(r.duration)} · ` : ''}
                       {new Date(r.created_at).toLocaleDateString()}
                     </Typography>
                   </Stack>
+
+                  <Typography variant="h6">{r.title}</Typography>
+                  {r.description && <Typography variant="body2" color="text.secondary" sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.description}</Typography>}
+
+                  {r.tags?.length > 0 ? (
+                    <Box sx={{ mt: 'auto', pt: 0.75 }}>
+                      <Box sx={{ borderTop: '1px solid', borderColor: 'divider', mb: 1 }} />
+                      <Stack direction="row" gap={0.75} sx={{ flexWrap: 'wrap' }}>
+                        {r.tags.map((tag) => (
+                          <Chip key={tag.id} label={tag.name} size="small" sx={resourceCardTagChipSx} />
+                        ))}
+                      </Stack>
+                    </Box>
+                  ) : null}
                 </Box>
               </Grid>
             ))}
