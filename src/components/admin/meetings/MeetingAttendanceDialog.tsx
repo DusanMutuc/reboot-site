@@ -16,6 +16,7 @@ import {
   TableRow,
   TableCell,
   TableBody,
+  TableSortLabel,
   Checkbox,
   CircularProgress,
   Alert,
@@ -32,12 +33,6 @@ import {
   Paper,
   Divider,
   Chip,
-  Collapse,
-  List,
-  ListItem,
-  ListItemText,
-  Tabs,
-  Tab,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -48,6 +43,13 @@ import {
   upsertMeetingAttendance,
   removeMeetingAttendance,
 } from '@/lib/meetings';
+import {
+  analyzeZoomAttendanceNames,
+  normalizeZoomName,
+  type ZoomAttendanceAlias,
+  type ZoomAttendanceAnalysis,
+  type ZoomMatchPerson,
+} from '@/lib/zoomAttendanceMatching';
 import type { MeetingAttendanceWithProfile } from '@/types/meetings';
 
 type Props = {
@@ -57,14 +59,13 @@ type Props = {
   onClose: () => void;
 };
 
-type SimpleUser = {
-  id: string;
-  name: string;
-  email: string;
+type SimpleUser = ZoomMatchPerson & {
   introduced_at: string | null;
 };
 
 type Source = 'members' | 'coaches';
+type AttendanceSortKey = 'name' | 'attended' | 'introduced';
+type SortDirection = 'asc' | 'desc';
 
 /** API helpers */
 type ApiListResponse<T> = { items: T[] };
@@ -89,161 +90,40 @@ function toSimpleUser(u: unknown): SimpleUser | null {
   };
 }
 
+function toZoomAttendanceAlias(value: unknown): ZoomAttendanceAlias | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const row = value as Record<string, unknown>;
+  if (
+    typeof row.alias_key !== 'string' ||
+    typeof row.alias !== 'string' ||
+    typeof row.user_id !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    alias_key: row.alias_key,
+    alias: row.alias,
+    user_id: row.user_id,
+  };
+}
+
 /** ========= CSV import helpers ========= */
 
 type ImportSummary = {
   totalNames: number;
+  automaticMatches: number;
+  manualMatches: number;
   matchedUserIds: string[];
   addedUserIds: string[];
-  ambiguous: Array<{ raw: string; candidates: SimpleUser[] }>;
-  unmatched: string[];
+  skipped: Array<{ raw: string; occurrences: number }>;
+  failed: Array<{ userId: string; message: string }>;
+  savedAliases: ZoomAttendanceAlias[];
+  aliasFailures: Array<{ raw: string; message: string }>;
 };
 
-function normalizeText(s: string) {
-  // trim, lowercase, remove diacritics, remove some punctuation, collapse whitespace
-  return (s ?? '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[.,()"'`‘’“”]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function candidateKeysFromRawName(raw: string): string[] {
-  const n = normalizeText(raw);
-  if (!n) return [];
-
-  // handle "Last, First"
-  const commaSplit = n.split(',').map((x) => x.trim()).filter(Boolean);
-  if (commaSplit.length === 2) {
-    const [last, first] = commaSplit;
-    const firstLast = `${first} ${last}`.trim();
-    const lastFirst = `${last} ${first}`.trim();
-    return Array.from(new Set([n, firstLast, lastFirst].filter(Boolean)));
-  }
-
-  const tokens = n.split(' ').filter(Boolean);
-  if (tokens.length === 1) return [n];
-
-  const first = tokens[0];
-  const last = tokens[tokens.length - 1];
-
-  // - full normalized
-  // - first + last (handles middle names)
-  // - last + first (handles reversed)
-  return Array.from(new Set([n, `${first} ${last}`, `${last} ${first}`].filter(Boolean)));
-}
-
-function buildNameIndex(users: SimpleUser[]) {
-  const byName = new Map<string, SimpleUser[]>();
-  const byWord = new Map<string, SimpleUser[]>();
-
-  for (const u of users) {
-    const keys: string[] = [];
-
-    // from u.name (which is "First Last" typically)
-    const n = normalizeText(u.name);
-    if (n) keys.push(n);
-
-    // also try first+last token if name contains middle names
-    const tokens = n.split(' ').filter(Boolean);
-    if (tokens.length >= 2) {
-      const first = tokens[0];
-      const last = tokens[tokens.length - 1];
-      keys.push(`${first} ${last}`);
-      keys.push(`${last} ${first}`);
-    }
-
-    // optionally: index email local-part? (not requested, but sometimes zoom name == email)
-    // leaving out for now to keep behavior predictable
-
-    const unique = Array.from(new Set(keys.filter(Boolean)));
-    for (const k of unique) {
-      if (!byName.has(k)) byName.set(k, []);
-      byName.get(k)!.push(u);
-    }
-
-    const wordKeys = tokens.filter((token) => token.length >= 2);
-    if (tokens.length >= 2) {
-      // Also handle Zoom names such as "matthewharrison".
-      wordKeys.push(tokens.join(''));
-    }
-
-    for (const word of new Set(wordKeys)) {
-      if (!byWord.has(word)) byWord.set(word, []);
-      byWord.get(word)!.push(u);
-    }
-  }
-
-  return { byName, byWord };
-}
-
-function findNameSubsetCandidates(
-  raw: string,
-  byName: Map<string, SimpleUser[]>,
-): SimpleUser[] {
-  const rawTokens = normalizeText(raw).split(' ').filter(Boolean);
-
-  // A subset match is only useful when Zoom added at least one extra word.
-  // Requiring at least two profile-name tokens avoids unsafe first-name-only matches.
-  if (rawTokens.length < 3) return [];
-
-  const rawTokenCounts = new Map<string, number>();
-  for (const token of rawTokens) {
-    rawTokenCounts.set(token, (rawTokenCounts.get(token) ?? 0) + 1);
-  }
-
-  const candidates = new Map<string, SimpleUser>();
-
-  for (const [nameKey, users] of byName) {
-    const nameTokens = nameKey.split(' ').filter(Boolean);
-    if (nameTokens.length < 2 || nameTokens.length >= rawTokens.length) continue;
-
-    const requiredCounts = new Map<string, number>();
-    for (const token of nameTokens) {
-      requiredCounts.set(token, (requiredCounts.get(token) ?? 0) + 1);
-    }
-
-    const isSubset = [...requiredCounts].every(
-      ([token, count]) => (rawTokenCounts.get(token) ?? 0) >= count,
-    );
-
-    if (isSubset) {
-      for (const user of users) candidates.set(user.id, user);
-    }
-  }
-
-  return [...candidates.values()];
-}
-
-function findSingleWordCandidates(
-  raw: string,
-  byWord: Map<string, SimpleUser[]>,
-): SimpleUser[] {
-  const rawWords = normalizeText(raw)
-    .split(' ')
-    .filter((word) => word.length >= 2);
-  const candidates = new Map<string, SimpleUser>();
-
-  for (const word of new Set(rawWords)) {
-    const users = byWord.get(word) ?? [];
-    const uniqueUsers = new Map(users.map((user) => [user.id, user]));
-
-    // Common words are ignored. Only a word that identifies one account can
-    // contribute a candidate to this deliberately loose final fallback.
-    if (uniqueUsers.size === 1) {
-      const user = [...uniqueUsers.values()][0];
-      candidates.set(user.id, user);
-    }
-  }
-
-  return [...candidates.values()];
-}
-
 function detectNameColumn(headers: string[]) {
-  const normalized = headers.map((h) => ({ raw: h, n: normalizeText(h) }));
+  const normalized = headers.map((h) => ({ raw: h, n: normalizeZoomName(h) }));
 
   // Common Zoom export / variants across locales/versions
   const candidates = [
@@ -256,7 +136,7 @@ function detectNameColumn(headers: string[]) {
     'display name',
     'attendee',
     'attendee name',
-  ].map(normalizeText);
+  ].map(normalizeZoomName);
 
   // exact-ish match first
   for (const c of candidates) {
@@ -305,6 +185,32 @@ async function parseCsvNames(file: File): Promise<{ names: string[]; detectedCol
     .filter(Boolean);
 
   return { names, detectedColumn: nameCol };
+}
+
+async function saveZoomAttendanceAlias(
+  alias: string,
+  userId: string,
+): Promise<ZoomAttendanceAlias> {
+  const response = await fetch('/api/admin/zoom-attendance-aliases', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ alias, user_id: userId }),
+  });
+
+  const payload = (await response.json().catch(() => null)) as unknown;
+  if (!response.ok) {
+    const message =
+      payload &&
+      typeof payload === 'object' &&
+      typeof (payload as { error?: unknown }).error === 'string'
+        ? (payload as { error: string }).error
+        : 'Failed to save Zoom attendance alias';
+    throw new Error(message);
+  }
+
+  const saved = toZoomAttendanceAlias(payload);
+  if (!saved) throw new Error('The alias API returned an invalid response');
+  return saved;
 }
 
 function buildIntroducedTimestamp(meetingDate: string | null): string | null {
@@ -357,6 +263,10 @@ async function patchIntroducedAt(userId: string, introducedAt: string): Promise<
 
 export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose }: Props) {
   const [rows, setRows] = useState<MeetingAttendanceWithProfile[]>([]);
+  const [attendanceSort, setAttendanceSort] = useState<{
+    key: AttendanceSortKey;
+    direction: SortDirection;
+  }>({ key: 'name', direction: 'asc' });
   const [loading, setLoading] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [introducingId, setIntroducingId] = useState<string | null>(null);
@@ -369,6 +279,10 @@ export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose 
   // Coaches list
   const [allCoaches, setAllCoaches] = useState<SimpleUser[]>([]);
   const [loadingCoaches, setLoadingCoaches] = useState(false);
+
+  // Administrator-approved Zoom display-name aliases
+  const [approvedAliases, setApprovedAliases] = useState<ZoomAttendanceAlias[]>([]);
+  const [loadingAliases, setLoadingAliases] = useState(false);
 
   // Which list we are adding from right now
   const [source, setSource] = useState<Source>('members');
@@ -387,6 +301,8 @@ export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importPreview, setImportPreview] = useState<ZoomAttendanceAnalysis | null>(null);
+  const [reviewSelections, setReviewSelections] = useState<Record<string, string>>({});
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [importInfo, setImportInfo] = useState<string | null>(null); // e.g. detected column
 
@@ -457,6 +373,38 @@ export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose 
     void loadCoaches();
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const loadAliases = async () => {
+      setLoadingAliases(true);
+      try {
+        const response = await fetch('/api/admin/zoom-attendance-aliases');
+        if (!response.ok) throw new Error('Failed to load saved Zoom attendance aliases');
+
+        const payload: unknown = await response.json();
+        const items = isApiListResponse<unknown>(payload) ? payload.items : [];
+        setApprovedAliases(
+          items
+            .map(toZoomAttendanceAlias)
+            .filter((item): item is ZoomAttendanceAlias => item !== null),
+        );
+      } catch (err: unknown) {
+        console.error(err);
+        setError((current) =>
+          current ??
+          (err instanceof Error
+            ? err.message
+            : 'Failed to load saved Zoom attendance aliases'),
+        );
+      } finally {
+        setLoadingAliases(false);
+      }
+    };
+
+    void loadAliases();
+  }, [open]);
+
   // Fast lookup across both lists
   const lookup = useMemo(() => {
     const map = new Map<string, SimpleUser>();
@@ -464,21 +412,20 @@ export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose 
     for (const c of allCoaches) map.set(c.id, c);
     return map;
   }, [allUsers, allCoaches]);
-const [importDetailsOpen, setImportDetailsOpen] = useState(false);
-const [importTab, setImportTab] = useState<'summary' | 'details'>('summary');
 
+  const allPeople = useMemo(
+    () =>
+      [...lookup.values()].sort((left, right) =>
+        (left.name || left.email).localeCompare(right.name || right.email),
+      ),
+    [lookup],
+  );
 const addedUsers = useMemo(() => {
   if (!importSummary) return [];
   return importSummary.addedUserIds
     .map((id) => lookup.get(id))
     .filter((u): u is SimpleUser => Boolean(u));
 }, [importSummary, lookup]);
-
-const unmatchedList = useMemo(() => {
-  if (!importSummary) return [];
-  // Preserve every unmatched CSV entry, including duplicates, in source order.
-  return importSummary.unmatched;
-}, [importSummary]);
 
   const sortedMembers = useMemo(() => {
     const getFirstName = (u: SimpleUser) => {
@@ -667,10 +614,11 @@ const unmatchedList = useMemo(() => {
   const handleClose = () => {
     if (savingId || introducingId || adding || removingId || importing) return;
     setError(null);
+    setImportPreview(null);
+    setReviewSelections({});
     setImportSummary(null);
     setImportInfo(null);
-    setImportDetailsOpen(false);
-    setImportTab('summary');
+    setAttendanceSort({ key: 'name', direction: 'asc' });
 
     onClose();
   };
@@ -685,7 +633,7 @@ const unmatchedList = useMemo(() => {
     return row.user_id;
   };
 
-  const sortedRows = useMemo(() => {
+  const nameSortedRows = useMemo(() => {
     const collator = new Intl.Collator('en', { sensitivity: 'base' });
 
     return [...rows].sort((a, b) => {
@@ -696,7 +644,45 @@ const unmatchedList = useMemo(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, lookup]);
 
-  const anyLoading = loadingUsers || loadingCoaches;
+  const sortedRows = useMemo(() => {
+    const collator = new Intl.Collator('en', { sensitivity: 'base' });
+    const displayName = (row: MeetingAttendanceWithProfile) => {
+      const profileName =
+        `${row.profiles?.first_name ?? ''} ${row.profiles?.last_name ?? ''}`.trim();
+      const person = lookup.get(row.user_id);
+      return profileName || person?.name || person?.email || row.user_id;
+    };
+    const introduced = (row: MeetingAttendanceWithProfile) =>
+      Boolean(row.profiles?.introduced_at ?? lookup.get(row.user_id)?.introduced_at);
+
+    return [...rows].sort((left, right) => {
+      let comparison = 0;
+
+      if (attendanceSort.key === 'name') {
+        comparison = collator.compare(displayName(left), displayName(right));
+      } else if (attendanceSort.key === 'attended') {
+        comparison = Number(Boolean(left.attended)) - Number(Boolean(right.attended));
+      } else {
+        comparison = Number(introduced(left)) - Number(introduced(right));
+      }
+
+      if (comparison !== 0) {
+        return attendanceSort.direction === 'asc' ? comparison : -comparison;
+      }
+
+      return collator.compare(displayName(left), displayName(right));
+    });
+  }, [attendanceSort, lookup, rows]);
+
+  const handleAttendanceSort = (key: AttendanceSortKey) => {
+    setAttendanceSort((current) => ({
+      key,
+      direction:
+        current.key === key && current.direction === 'asc' ? 'desc' : 'asc',
+    }));
+  };
+
+  const anyLoading = loadingUsers || loadingCoaches || loadingAliases;
 
   const quickSelectedRow = useMemo(() => {
     if (!quickSelectedUserId) return null;
@@ -715,25 +701,20 @@ const unmatchedList = useMemo(() => {
 
   /** ========= CSV import logic ========= */
 
-  const allPeopleIndex = useMemo(() => {
-    // We match against BOTH members+coaches, because zoom could include either
-    const combined = [...allUsers, ...allCoaches];
-    return buildNameIndex(combined);
-  }, [allUsers, allCoaches]);
-
   const existingAttendance = useMemo(() => {
     const map = new Map<string, MeetingAttendanceWithProfile>();
     for (const r of rows) map.set(r.user_id, r);
     return map;
   }, [rows]);
 
-  const applyImport = async (file: File) => {
+  const analyzeImport = async (file: File) => {
     if (!meetingId) return;
     setError(null);
+    setImportPreview(null);
+    setReviewSelections({});
     setImportSummary(null);
     setImportInfo(null);
 
-    // guard: wait until lists loaded
     if (anyLoading) {
       setError('Please wait for users/coaches to finish loading, then try importing again.');
       return;
@@ -755,113 +736,130 @@ const unmatchedList = useMemo(() => {
       }
 
       setImportInfo(`Detected column: ${detectedColumn}`);
-
-      const matchedUserIds: string[] = [];
-      const ambiguous: ImportSummary['ambiguous'] = [];
-      const unmatched: string[] = [];
-
-      for (const raw of names) {
-        const keys = candidateKeysFromRawName(raw);
-        if (!keys.length) {
-          unmatched.push(raw);
-          continue;
-        }
-
-        const candMap = new Map<string, SimpleUser>();
-        for (const k of keys) {
-          const list = allPeopleIndex.byName.get(k) ?? [];
-          for (const u of list) candMap.set(u.id, u);
-        }
-
-        let candidates = [...candMap.values()];
-
-        // If the normal exact/reversed-name keys find nothing, allow the
-        // person's name words to be a subset of a longer Zoom display name,
-        // such as "John Smith RealEstate" -> "John Smith".
-        if (candidates.length === 0) {
-          candidates = findNameSubsetCandidates(raw, allPeopleIndex.byName);
-        }
-
-        // Last fallback: use words that individually identify one account. If
-        // those unique words point to different users, the row stays ambiguous.
-        if (candidates.length === 0) {
-          candidates = findSingleWordCandidates(raw, allPeopleIndex.byWord);
-        }
-
-        if (candidates.length === 1) {
-          matchedUserIds.push(candidates[0].id);
-        } else if (candidates.length > 1) {
-          ambiguous.push({ raw, candidates });
-        } else {
-          unmatched.push(raw);
-        }
-      }
-
-      // Apply matches:
-      // - If user already in attendance list: set attended=true
-      // - If not in attendance list: create row attended=true
-      const uniqueMatched = Array.from(new Set(matchedUserIds));
-      const addedUserIds: string[] = [];
-
-      // optimistic UI update first
-      setRows((prev) => {
-        const prevMap = new Map(prev.map((r) => [r.user_id, r]));
-        const next = [...prev];
-
-        for (const userId of uniqueMatched) {
-          const existing = prevMap.get(userId);
-          if (existing) {
-            if (!existing.attended) {
-              const idx = next.findIndex((r) => r.user_id === userId);
-              if (idx >= 0) next[idx] = { ...next[idx], attended: true };
-            }
-          } else {
-            const u = lookup.get(userId);
-            const parts = (u?.name ?? '').trim().split(/\s+/).filter(Boolean);
-            const firstName = parts[0] ?? '';
-            const lastName = parts.slice(1).join(' ') || '';
-
-            next.push({
-              meeting_id: meetingId,
-              user_id: userId,
-              attended: true,
-              profiles: {
-                first_name: firstName || null,
-                last_name: lastName || null,
-                introduced_at: u?.introduced_at ?? null,
-              },
-            } as MeetingAttendanceWithProfile);
-          }
-        }
-
-        return next;
-      });
-
-      // Persist changes sequentially (simple + safe)
-      for (const userId of uniqueMatched) {
-        const existed = existingAttendance.has(userId);
-
-        // if it did not exist before, count as "added"
-        if (!existed) addedUserIds.push(userId);
-
-        await upsertMeetingAttendance({ meetingId, userId, attended: true });
-      }
-
-      setImportSummary({
-        totalNames: names.length,
-        matchedUserIds: uniqueMatched,
-        addedUserIds,
-        ambiguous,
-        unmatched,
-      });
+      setImportPreview(
+        analyzeZoomAttendanceNames(names, allPeople, approvedAliases),
+      );
     } catch (err: unknown) {
       console.error(err);
-      setError(err instanceof Error ? err.message : 'Failed to import CSV');
+      setError(err instanceof Error ? err.message : 'Failed to analyze CSV');
     } finally {
       setImporting(false);
       setDragOver(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  const handleApplyImport = async () => {
+    if (!meetingId || !importPreview) return;
+
+    const automaticUserIds = importPreview.automatic.map((match) => match.person.id);
+    const selectedReviewRows = importPreview.review.filter(
+      (match) => Boolean(reviewSelections[match.key]),
+    );
+    const manualUserIds = selectedReviewRows.map((match) => reviewSelections[match.key]);
+    const userIds = [...new Set([...automaticUserIds, ...manualUserIds])];
+
+    if (!userIds.length) {
+      setError('There are no selected attendees to apply.');
+      return;
+    }
+
+    setImporting(true);
+    setError(null);
+    setImportSummary(null);
+
+    const successfulUserIds: string[] = [];
+    const failed: ImportSummary['failed'] = [];
+
+    for (const userId of userIds) {
+      try {
+        await upsertMeetingAttendance({ meetingId, userId, attended: true });
+        successfulUserIds.push(userId);
+      } catch (err: unknown) {
+        failed.push({
+          userId,
+          message: err instanceof Error ? err.message : 'Unknown attendance update error',
+        });
+      }
+    }
+
+    let reloadedRows = rows;
+    try {
+      // Reload the RPC-backed result instead of guessing how partnership rows
+      // were represented by the database.
+      reloadedRows = await getMeetingAttendance(meetingId);
+      setRows(reloadedRows);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Attendance was saved but could not be reloaded.');
+    }
+
+    const successfulSet = new Set(successfulUserIds);
+    const savedAliases: ZoomAttendanceAlias[] = [];
+    const aliasFailures: ImportSummary['aliasFailures'] = [];
+
+    for (const match of selectedReviewRows) {
+      const userId = reviewSelections[match.key];
+      if (!successfulSet.has(userId)) continue;
+
+      try {
+        savedAliases.push(await saveZoomAttendanceAlias(match.raw, userId));
+      } catch (err: unknown) {
+        aliasFailures.push({
+          raw: match.raw,
+          message: err instanceof Error ? err.message : 'Unknown alias update error',
+        });
+      }
+    }
+
+    if (savedAliases.length > 0) {
+      setApprovedAliases((current) => {
+        const next = new Map(current.map((alias) => [alias.alias_key, alias]));
+        for (const alias of savedAliases) next.set(alias.alias_key, alias);
+        return [...next.values()];
+      });
+    }
+
+    const addedUserIds = reloadedRows
+      .filter((row) => !existingAttendance.has(row.user_id))
+      .map((row) => row.user_id);
+    const skipped = importPreview.review
+      .filter((match) => !reviewSelections[match.key])
+      .map(({ raw, occurrences }) => ({ raw, occurrences }));
+
+    setImportSummary({
+      totalNames: importPreview.totalRows,
+      automaticMatches: importPreview.automatic.filter((match) =>
+        successfulSet.has(match.person.id),
+      ).length,
+      manualMatches: selectedReviewRows.filter((match) =>
+        successfulSet.has(reviewSelections[match.key]),
+      ).length,
+      matchedUserIds: successfulUserIds,
+      addedUserIds,
+      skipped,
+      failed,
+      savedAliases,
+      aliasFailures,
+    });
+
+    if (failed.length > 0 || aliasFailures.length > 0) {
+      const problems = [
+        failed.length
+          ? `${failed.length} attendance update${failed.length === 1 ? '' : 's'}`
+          : '',
+        aliasFailures.length
+          ? `${aliasFailures.length} alias save${aliasFailures.length === 1 ? '' : 's'}`
+          : '',
+      ].filter(Boolean);
+      setError(
+        `${problems.join(' and ')} failed. Successful changes are listed below; you can safely retry.`,
+      );
+    } else {
+      setImportPreview(null);
+      setReviewSelections({});
+    }
+
+    setImporting(false);
   };
 
   const onPickFile = () => {
@@ -871,7 +869,7 @@ const unmatchedList = useMemo(() => {
   const onFileSelected: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    void applyImport(file);
+    void analyzeImport(file);
   };
 
   const onDrop: React.DragEventHandler<HTMLDivElement> = (e) => {
@@ -889,7 +887,7 @@ const unmatchedList = useMemo(() => {
       return;
     }
 
-    void applyImport(file);
+    void analyzeImport(file);
   };
 
   return (
@@ -942,7 +940,7 @@ const unmatchedList = useMemo(() => {
                 Import from Zoom CSV
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Drop a CSV here (or choose a file). We&apos;ll auto-check matched attendees.
+                Drop a CSV here (or choose a file) to preview matches before saving.
               </Typography>
               {importInfo && (
                 <Typography variant="caption" color="text.secondary">
@@ -971,204 +969,268 @@ const unmatchedList = useMemo(() => {
             </Stack>
           </Stack>
 
+          {importPreview && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Stack spacing={2}>
+                <Box>
+                  <Typography variant="adminSectionTitle">Review before applying</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Nothing has been saved yet. Reliable full-name matches are ready to apply;
+                    one-word, ambiguous, and unmatched entries are skipped unless you choose a person.
+                    Chosen reviewed names are automatically saved as aliases for future imports.
+                  </Typography>
+                </Box>
+
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip label={`CSV rows: ${importPreview.totalRows}`} />
+                  <Chip label={`Unique names: ${importPreview.uniqueNames}`} />
+                  <Chip
+                    label={`Automatic: ${importPreview.automatic.length}`}
+                    color="success"
+                    variant="outlined"
+                  />
+                  <Chip
+                    label={`Needs review: ${importPreview.review.length}`}
+                    color={importPreview.review.length ? 'warning' : 'default'}
+                  />
+                </Stack>
+
+                {importPreview.automatic.length > 0 && (
+                  <Box component="details">
+                    <Typography
+                      component="summary"
+                      variant="body2"
+                      sx={{ cursor: 'pointer', fontWeight: 700 }}
+                    >
+                      Show {importPreview.automatic.length} automatic name matches
+                    </Typography>
+                    <Stack
+                      spacing={0.5}
+                      sx={{ mt: 1, maxHeight: 220, overflowY: 'auto', pl: 1 }}
+                    >
+                      {importPreview.automatic.map((match) => (
+                        <Typography key={match.key} variant="body2" color="text.secondary">
+                          {match.raw}
+                          {match.occurrences > 1 ? ` (${match.occurrences} rows)` : ''}
+                          {' → '}
+                          {match.person.name || match.person.email}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                {importPreview.review.length > 0 && (
+                  <Box>
+                    <Typography variant="adminSectionTitle" sx={{ mb: 1 }}>
+                      Names needing review
+                    </Typography>
+                    <Stack spacing={1.5} sx={{ maxHeight: 440, overflowY: 'auto', pr: 0.5 }}>
+                      {importPreview.review.map((match) => {
+                        const selected = lookup.get(reviewSelections[match.key]) ?? null;
+                        const suggestions = match.candidates
+                          .map((candidate) => candidate.name || candidate.email)
+                          .join(' · ');
+
+                        return (
+                          <Paper key={match.key} variant="outlined" sx={{ p: 1.5 }}>
+                            <Stack
+                              direction={{ xs: 'column', sm: 'row' }}
+                              spacing={1.5}
+                              alignItems={{ xs: 'stretch', sm: 'center' }}
+                            >
+                              <Box sx={{ flex: 1, minWidth: 0 }}>
+                                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                                  {match.raw}
+                                  {match.occurrences > 1 ? ` (${match.occurrences} rows)` : ''}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {match.reason}
+                                  {suggestions ? ` Suggested: ${suggestions}` : ''}
+                                </Typography>
+                                {match.candidates.length === 1 && !selected && (
+                                  <Box>
+                                    <Button
+                                      size="small"
+                                      sx={{ px: 0, minWidth: 0, textTransform: 'none' }}
+                                      onClick={() => {
+                                        setReviewSelections((current) => ({
+                                          ...current,
+                                          [match.key]: match.candidates[0].id,
+                                        }));
+                                      }}
+                                    >
+                                      Use suggested match
+                                    </Button>
+                                  </Box>
+                                )}
+                              </Box>
+                              <Autocomplete
+                                size="small"
+                                options={allPeople}
+                                value={selected}
+                                onChange={(_event, value) => {
+                                  setReviewSelections((current) => {
+                                    const next = { ...current };
+                                    if (value) next[match.key] = value.id;
+                                    else delete next[match.key];
+                                    return next;
+                                  });
+                                }}
+                                getOptionLabel={(option) =>
+                                  option.name || option.email || option.id
+                                }
+                                isOptionEqualToValue={(option, value) => option.id === value.id}
+                                renderInput={(params) => (
+                                  <TextField
+                                    {...params}
+                                    label="Choose person or leave skipped"
+                                  />
+                                )}
+                                sx={{ width: { xs: '100%', sm: 320 } }}
+                              />
+                            </Stack>
+                          </Paper>
+                        );
+                      })}
+                    </Stack>
+                  </Box>
+                )}
+
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                  <Button
+                    variant="contained"
+                    onClick={() => void handleApplyImport()}
+                    disabled={
+                      importing ||
+                      importPreview.automatic.length +
+                        Object.keys(reviewSelections).length ===
+                        0
+                    }
+                  >
+                    Apply selected attendees
+                  </Button>
+                  <Button
+                    variant="text"
+                    onClick={() => {
+                      setImportPreview(null);
+                      setReviewSelections({});
+                      setImportInfo(null);
+                    }}
+                    disabled={importing}
+                  >
+                    Cancel preview
+                  </Button>
+                </Stack>
+              </Stack>
+            </>
+          )}
+
           {importSummary && (
-  <>
-    <Divider sx={{ my: 2 }} />
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Stack spacing={1.5}>
+                <Alert
+                  severity={
+                    importSummary.failed.length || importSummary.aliasFailures.length
+                      ? 'warning'
+                      : 'success'
+                  }
+                >
+                  {importSummary.failed.length || importSummary.aliasFailures.length
+                    ? 'Import completed with some failed updates.'
+                    : 'Import applied successfully.'}
+                </Alert>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip label={`CSV rows: ${importSummary.totalNames}`} />
+                  <Chip
+                    label={`People updated: ${importSummary.matchedUserIds.length}`}
+                    color="success"
+                  />
+                  <Chip label={`Automatic names: ${importSummary.automaticMatches}`} />
+                  <Chip label={`Reviewed names: ${importSummary.manualMatches}`} />
+                  <Chip label={`Aliases saved: ${importSummary.savedAliases.length}`} />
+                  <Chip
+                    label={`Added: ${importSummary.addedUserIds.length}`}
+                    color="success"
+                    variant="outlined"
+                  />
+                  <Chip
+                    label={`Skipped: ${importSummary.skipped.length}`}
+                    color={importSummary.skipped.length ? 'warning' : 'default'}
+                  />
+                </Stack>
 
-    <Tabs
-      value={importTab}
-      onChange={(_e, v) => setImportTab(v)}
-      sx={{ mb: 1 }}
-    >
-      <Tab value="summary" label="Summary" />
-      <Tab value="details" label="Details" />
-    </Tabs>
+                {addedUsers.length > 0 && (
+                  <Typography variant="body2" color="text.secondary">
+                    Added: {addedUsers.map((user) => user.name || user.email).join(', ')}
+                  </Typography>
+                )}
 
-    {importTab === 'summary' && (
-      <>
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-          <Chip label={`Rows: ${importSummary.totalNames}`} />
-          <Chip label={`Matched: ${importSummary.matchedUserIds.length}`} color="success" />
-          <Chip label={`Added: ${importSummary.addedUserIds.length}`} color="success" variant="outlined" />
-          <Chip label={`Ambiguous: ${importSummary.ambiguous.length}`} color="warning" />
-          <Chip label={`Unmatched: ${importSummary.unmatched.length}`} color="default" />
-        </Stack>
+                {importSummary.skipped.length > 0 && (
+                  <Box>
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        Skipped names
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={() =>
+                          void navigator.clipboard.writeText(
+                            importSummary.skipped
+                              .map((item) =>
+                                item.occurrences > 1
+                                  ? `${item.raw} (${item.occurrences} rows)`
+                                  : item.raw,
+                              )
+                              .join('\n'),
+                          )
+                        }
+                      >
+                        Copy
+                      </Button>
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {importSummary.skipped
+                        .map((item) =>
+                          item.occurrences > 1
+                            ? `${item.raw} (${item.occurrences})`
+                            : item.raw,
+                        )
+                        .join(', ')}
+                    </Typography>
+                  </Box>
+                )}
 
-        {importSummary.ambiguous.length > 0 && (
-          <Box mt={2}>
-            <Alert severity="warning">
-              Some names matched multiple people. (Optional next step: add a picker UI for these.)
-            </Alert>
-          </Box>
-        )}
+                {importSummary.failed.length > 0 && (
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      Failed updates
+                    </Typography>
+                    {importSummary.failed.map((item) => (
+                      <Typography key={item.userId} variant="body2" color="error">
+                        {lookup.get(item.userId)?.name || item.userId}: {item.message}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
 
-        {unmatchedList.length > 0 && (
-          <Box mt={2}>
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={1}
-              alignItems={{ xs: 'flex-start', sm: 'center' }}
-              justifyContent="space-between"
-              sx={{ mb: 1 }}
-            >
-              <Box>
-                <Typography variant="adminSectionTitle">
-                  Unmatched CSV report
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  No real user was found for these entries.
-                </Typography>
-              </Box>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(unmatchedList.join('\n'));
-                }}
-              >
-                Copy report
-              </Button>
-            </Stack>
-
-            <Paper variant="outlined" sx={{ maxHeight: 240, overflow: 'auto' }}>
-              <List dense>
-                {unmatchedList.map((name, idx) => (
-                  <ListItem key={`${name}-${idx}`} disableGutters sx={{ px: 2 }}>
-                    <ListItemText primary={`${idx + 1}. ${name}`} />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          </Box>
-        )}
-      </>
-    )}
-
-    {importTab === 'details' && (
-      <Box>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-          <Button
-            variant="text"
-            onClick={() => setImportDetailsOpen((v) => !v)}
-            sx={{ textTransform: 'none' }}
-          >
-            {importDetailsOpen ? 'Hide details' : 'Show details'}
-          </Button>
-
-          {unmatchedList.length > 0 && (
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={async () => {
-                await navigator.clipboard.writeText(unmatchedList.join('\n'));
-              }}
-            >
-              Copy unmatched
-            </Button>
+                {importSummary.aliasFailures.length > 0 && (
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      Failed alias saves
+                    </Typography>
+                    {importSummary.aliasFailures.map((item) => (
+                      <Typography key={item.raw} variant="body2" color="error">
+                        {item.raw}: {item.message}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </Stack>
+            </>
           )}
-
-          {addedUsers.length > 0 && (
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={async () => {
-                const txt = addedUsers
-                  .map((u) => `${u.name || '(no name)'}${u.email ? ` <${u.email}>` : ''}`)
-                  .join('\n');
-                await navigator.clipboard.writeText(txt);
-              }}
-            >
-              Copy added
-            </Button>
-          )}
-        </Stack>
-
-        <Collapse in={importDetailsOpen}>
-          <Stack spacing={2}>
-            {/* Added */}
-            <Box>
-              <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
-                Added (wasn&apos;t on the attendance list)
-              </Typography>
-
-              {addedUsers.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  None
-                </Typography>
-              ) : (
-                <Paper variant="outlined" sx={{ maxHeight: 180, overflow: 'auto' }}>
-                  <List dense>
-                    {addedUsers.map((u) => (
-                      <ListItem key={u.id} disableGutters sx={{ px: 2 }}>
-                        <ListItemText
-                          primary={u.name || u.email || u.id}
-                          secondary={u.email ? u.email : undefined}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              )}
-            </Box>
-
-            {/* Unmatched */}
-            <Box>
-              <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
-                Unmatched names (from CSV)
-              </Typography>
-
-              {unmatchedList.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  None
-                </Typography>
-              ) : (
-                <Paper variant="outlined" sx={{ maxHeight: 220, overflow: 'auto' }}>
-                  <List dense>
-                    {unmatchedList.map((name, idx) => (
-                      <ListItem key={`${name}-${idx}`} disableGutters sx={{ px: 2 }}>
-                        <ListItemText primary={name} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              )}
-            </Box>
-
-            {/* Ambiguous (optional list) */}
-            {importSummary.ambiguous.length > 0 && (
-              <Box>
-                <Typography variant="adminSectionTitle" sx={{ mb: 0.5 }}>
-                  Ambiguous matches
-                </Typography>
-
-                <Paper variant="outlined" sx={{ maxHeight: 220, overflow: 'auto' }}>
-                  <List dense>
-                    {importSummary.ambiguous.map((a, idx) => (
-                      <ListItem key={`${a.raw}-${idx}`} disableGutters sx={{ px: 2 }}>
-                        <ListItemText
-                          primary={a.raw}
-                          secondary={a.candidates
-                            .map((c) => c.name || c.email || c.id)
-                            .join(' | ')}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Paper>
-              </Box>
-            )}
-          </Stack>
-        </Collapse>
-
-        {!importDetailsOpen && (
-          <Typography variant="body2" color="text.secondary">
-            Expand to see the full added + unmatched lists.
-          </Typography>
-        )}
-      </Box>
-    )}
-  </>
-)}
 
         </Paper>
 
@@ -1183,7 +1245,7 @@ const unmatchedList = useMemo(() => {
           >
             <Autocomplete
               size="small"
-              options={sortedRows}
+              options={nameSortedRows}
               value={quickSelectedRow}
               onChange={(_event, value) => setQuickSelectedUserId(value?.user_id ?? null)}
               getOptionLabel={(option) => getDisplayName(option)}
@@ -1304,9 +1366,57 @@ const unmatchedList = useMemo(() => {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Attendee</TableCell>
-                <TableCell align="center">Attended</TableCell>
-                <TableCell align="center">Introduce</TableCell>
+                <TableCell
+                  sortDirection={
+                    attendanceSort.key === 'name' ? attendanceSort.direction : false
+                  }
+                >
+                  <TableSortLabel
+                    active={attendanceSort.key === 'name'}
+                    direction={
+                      attendanceSort.key === 'name' ? attendanceSort.direction : 'asc'
+                    }
+                    onClick={() => handleAttendanceSort('name')}
+                  >
+                    Name
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell
+                  align="center"
+                  sortDirection={
+                    attendanceSort.key === 'attended' ? attendanceSort.direction : false
+                  }
+                >
+                  <TableSortLabel
+                    active={attendanceSort.key === 'attended'}
+                    direction={
+                      attendanceSort.key === 'attended'
+                        ? attendanceSort.direction
+                        : 'asc'
+                    }
+                    onClick={() => handleAttendanceSort('attended')}
+                  >
+                    Attended
+                  </TableSortLabel>
+                </TableCell>
+                <TableCell
+                  align="center"
+                  sortDirection={
+                    attendanceSort.key === 'introduced' ? attendanceSort.direction : false
+                  }
+                >
+                  <TableSortLabel
+                    active={attendanceSort.key === 'introduced'}
+                    direction={
+                      attendanceSort.key === 'introduced'
+                        ? attendanceSort.direction
+                        : 'asc'
+                    }
+                    onClick={() => handleAttendanceSort('introduced')}
+                  >
+                    Introduced
+                  </TableSortLabel>
+                </TableCell>
                 <TableCell align="center">Remove</TableCell>
               </TableRow>
             </TableHead>
@@ -1316,7 +1426,11 @@ const unmatchedList = useMemo(() => {
 
                 return (
                   <TableRow key={row.user_id}>
-                    <TableCell>{getDisplayName(row)}</TableCell>
+                    <TableCell>
+                      <Typography variant="body1" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                        {getDisplayName(row)}
+                      </Typography>
+                    </TableCell>
                     <TableCell align="center">
                       <Checkbox
                         checked={!!row.attended}

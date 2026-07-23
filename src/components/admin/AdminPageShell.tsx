@@ -21,6 +21,7 @@ import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
 import StudentWorkspace from '@/components/student/StudentWorkspace';
 import UserDataTransfer from '@/components/admin/UserDataTransfer';
+import BookingFollowUpPanel from '@/components/bookingFollowUp/BookingFollowUpPanel';
 import { SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import {
@@ -50,6 +51,7 @@ import {
   ExpandMore,
   Campaign as CampaignIcon,
   GroupAdd,
+  PendingActions as PendingActionsIcon,
 } from '@mui/icons-material';
 
 type AdminNavChild = {
@@ -89,6 +91,7 @@ const navigationStructure: AdminNavSection[] = [
       { id: 'assign-coach', label: 'Assign/Change Coach', icon: AssignmentIndIcon, component: 'AssignCoachPanel' },
       { id: 'coach-profiles', label: 'Coach Profiles', icon: PeopleIcon, component: 'CoachProfilesAdmin' },
       { id: 'coach-rosters', label: 'Coach Rosters', icon: PeopleIcon, component: 'CoachRosters' },
+      { id: 'booking-follow-up', label: 'Booking Follow-up', icon: PendingActionsIcon, component: 'BookingFollowUpPanel' },
     ],
   },
   {
@@ -285,6 +288,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         return <CoachProfilesAdmin />;
       case 'coach-rosters':
         return <CoachRosters />;
+      case 'booking-follow-up':
+        return <BookingFollowUpPanel mode="admin" />;
       case 'course-builder':
         return <CourseEditor />;
       case 'resource-library':

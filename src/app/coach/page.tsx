@@ -9,6 +9,7 @@ import Search from '@/components/search';
 import CoachSchedule from '@/components/coach/CoachSchedule';
 import HelperContacts from '@/components/coach/HelperContacts';
 import StudentStatusOverview from '@/components/StudentStatusOverview';
+import BookingFollowUpPanel from '@/components/bookingFollowUp/BookingFollowUpPanel';
 
 export default function CoachPage() {
   const [navH, setNavH] = useState(0);
@@ -38,6 +39,7 @@ export default function CoachPage() {
           { id: 'podcast',   label: 'PRIVATE PODCAST' },
           { id: 'library',   label: 'RESOURCE LIBRARY' },
           { id: 'dashboard', label: 'STUDENT STATUS' },
+          { id: 'booking-follow-up', label: 'BOOKING FOLLOW-UP' },
           { id: 'calendar',  label: 'CALENDAR' },
           { id: 'help',      label: 'HELP' },
         ]}
@@ -59,6 +61,10 @@ export default function CoachPage() {
 
       <section id="dashboard" style={sectionOffsetStyle}>
         <StudentStatusOverview courseId={2} workspaceMode="coach" />
+      </section>
+
+      <section id="booking-follow-up" style={sectionOffsetStyle}>
+        <BookingFollowUpPanel mode="coach" />
       </section>
 
       <section id="calendar" style={sectionOffsetStyle}>

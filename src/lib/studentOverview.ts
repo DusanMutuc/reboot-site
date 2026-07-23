@@ -20,6 +20,11 @@ type UserMeetingRow = {
   counts_toward_engagement: boolean;
 };
 
+const GROUP_SESSION_MEETING_TYPE_CODES = new Set([
+  'WEDNESDAY_SESSION',
+  'FRIDAY_DROPIN',
+]);
+
 type KpiHistoryRow = {
   period_start_date: string;
   last_updated_at: string | null;
@@ -202,13 +207,6 @@ function getMonthLabel(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
-function isWednesdayOrFriday(dateValue: string): boolean {
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return false;
-  const day = date.getDay();
-  return day === 3 || day === 5;
-}
-
 function getMonthWindow(monthCount: number): Date[] {
   const now = new Date();
   const first = new Date(now.getFullYear(), now.getMonth() - (monthCount - 1), 1);
@@ -256,7 +254,7 @@ function buildAttendanceSnapshot(meetings: UserMeetingRow[]): StudentOverviewAtt
       return;
     }
 
-    if (meeting.counts_toward_engagement && isWednesdayOrFriday(meeting.meeting_date)) {
+    if (GROUP_SESSION_MEETING_TYPE_CODES.has(meeting.meeting_type_code)) {
       bucket.group += 1;
     }
   });
