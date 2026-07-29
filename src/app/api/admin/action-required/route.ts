@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchCurrentMemberUserIds } from '@/lib/currentMembers';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -50,41 +51,13 @@ export async function GET(request: NextRequest) {
     ? requestedCourseId
     : defaultCourseId;
 
-  const { data: roleRow, error: roleErr } = await supa
-    .from('roles')
-    .select('id')
-    .eq('code', 'user')
-    .maybeSingle();
-
-  if (roleErr) {
-    return NextResponse.json({ error: roleErr.message }, { status: 400 });
+  let userIds: string[];
+  try {
+    userIds = await fetchCurrentMemberUserIds(supa);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to load current members';
+    return NextResponse.json({ error: message }, { status: 400 });
   }
-
-  const roleId = roleRow?.id;
-
-  if (!roleId) {
-    return NextResponse.json({
-      courses,
-      defaultCourseId,
-      selectedCourseId: courseId,
-      missingCoachUsers: [],
-      missingLookerUsers: [],
-      missingPhoneUsers: [],
-    });
-  }
-
-  const { data: userRoleRows, error: userRoleErr } = await supa
-    .from('user_roles')
-    .select('user_id')
-    .eq('role_id', roleId);
-
-  if (userRoleErr) {
-    return NextResponse.json({ error: userRoleErr.message }, { status: 400 });
-  }
-
-  const userIds = (userRoleRows ?? [])
-    .map((row) => row.user_id)
-    .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
   if (userIds.length === 0) {
     return NextResponse.json({

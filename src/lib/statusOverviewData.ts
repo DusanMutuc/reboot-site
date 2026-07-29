@@ -1,10 +1,10 @@
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import {
+  fetchCurrentMemberUserIds,
+  fetchCurrentMemberUserIdSet,
+} from '@/lib/currentMembers';
 import type { StatusOverviewRow } from '@/lib/statusOverviewTypes';
 import type { UserStatus } from '@/types/coaching';
-
-type UserRoleRow = {
-  user_id: string;
-};
 
 type CoachAssignmentRow = {
   user_id: string;
@@ -475,36 +475,15 @@ export async function getCoachStatusOverviewRows(params: {
     throw new Error(error.message);
   }
 
-  const userIds = ((data ?? []) as CoachAssignmentRow[]).map((row) => row.user_id);
+  const currentMemberUserIdSet = await fetchCurrentMemberUserIdSet(supa);
+  const userIds = ((data ?? []) as CoachAssignmentRow[])
+    .map((row) => row.user_id)
+    .filter((userId) => currentMemberUserIdSet.has(userId));
   return buildStatusOverviewRows(userIds);
 }
 
 export async function getAdminStatusOverviewRows(): Promise<StatusOverviewRow[]> {
   const supa = getAdminClient();
-
-  const { data: roleRow, error: roleError } = await supa
-    .from('roles')
-    .select('id')
-    .eq('code', 'user')
-    .maybeSingle();
-
-  if (roleError) {
-    throw new Error(roleError.message);
-  }
-
-  if (!roleRow?.id) {
-    return [];
-  }
-
-  const { data, error } = await supa
-    .from('user_roles')
-    .select('user_id')
-    .eq('role_id', roleRow.id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  const userIds = ((data ?? []) as UserRoleRow[]).map((row) => row.user_id);
+  const userIds = await fetchCurrentMemberUserIds(supa);
   return buildStatusOverviewRows(userIds);
 }

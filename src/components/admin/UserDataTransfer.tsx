@@ -70,7 +70,7 @@ export default function UserDataTransfer() {
     (async () => {
       try {
         setLoadingUsers(true);
-        const res = await fetch('/api/admin/list-users', { cache: 'no-store' });
+        const res = await fetch('/api/admin/list-users?membership=all', { cache: 'no-store' });
         const json = (await res.json()) as { items?: ApiUserItem[]; error?: string };
         if (!res.ok) throw new Error(json?.error || 'Failed to load users');
         if (!mounted) return;

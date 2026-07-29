@@ -103,6 +103,7 @@ async function fetchIndex(
   if (query) url.searchParams.set('query', query);
   url.searchParams.set('page', String(page));
   url.searchParams.set('limit', String(limit));
+  url.searchParams.set('membership', 'all');
 
   const response = await fetch(url.toString(), { signal });
   if (!response.ok) {

@@ -331,7 +331,7 @@ export function MeetingAttendanceDialog({ open, meetingId, meetingDate, onClose 
     const loadUsers = async () => {
       setLoadingUsers(true);
       try {
-        const res = await fetch('/api/admin/list-users');
+        const res = await fetch('/api/admin/list-users?membership=all');
         if (!res.ok) throw new Error('Failed to load users for attendance');
         const json: unknown = await res.json();
         const items = isApiListResponse<unknown>(json) ? json.items : [];

@@ -1,4 +1,5 @@
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { fetchCurrentMemberUserIdSet } from '@/lib/currentMembers';
 
 export type AdminUserDirectoryRow = {
   id: string;
@@ -13,6 +14,7 @@ export type AdminUserDirectoryRow = {
 };
 
 type AdminUserDirectoryEntry = AdminUserDirectoryRow & {
+  is_current_member: boolean;
   searchText: string;
 };
 
@@ -55,9 +57,13 @@ function compareDirectoryRows(a: AdminUserDirectoryRow, b: AdminUserDirectoryRow
   return collator.compare(a.email, b.email);
 }
 
-function toDirectoryEntry(row: AdminUserDirectoryRow): AdminUserDirectoryEntry {
+function toDirectoryEntry(
+  row: AdminUserDirectoryRow,
+  isCurrentMember: boolean,
+): AdminUserDirectoryEntry {
   return {
     ...row,
+    is_current_member: isCurrentMember,
     searchText: buildSearchText(row),
   };
 }
@@ -175,6 +181,7 @@ async function fetchProfilesByIds(ids: string[]) {
 }
 
 async function buildAdminUserDirectory() {
+  const supa = getAdminClient();
   const [userRoleId, legendRoleId, pastMemberRoleId] = await Promise.all([
     fetchRoleIdByCode('user'),
     fetchRoleIdByCode('legend'),
@@ -184,12 +191,14 @@ async function buildAdminUserDirectory() {
     return [];
   }
 
-  const [userIds, legendUserIds, pastMemberUserIds, authUsersMap] = await Promise.all([
-    fetchUserIdsByRoleId(userRoleId),
-    fetchUserIdsByRoleId(legendRoleId),
-    fetchUserIdsByRoleId(pastMemberRoleId),
-    fetchAuthUsersMap(),
-  ]);
+  const [userIds, legendUserIds, pastMemberUserIds, currentMemberUserIdSet, authUsersMap] =
+    await Promise.all([
+      fetchUserIdsByRoleId(userRoleId),
+      fetchUserIdsByRoleId(legendRoleId),
+      fetchUserIdsByRoleId(pastMemberRoleId),
+      fetchCurrentMemberUserIdSet(supa),
+      fetchAuthUsersMap(),
+    ]);
   if (userIds.length === 0) {
     return [];
   }
@@ -202,17 +211,20 @@ async function buildAdminUserDirectory() {
     .map((profile) => {
       const auth = authUsersMap.get(profile.id);
 
-      return toDirectoryEntry({
-        id: profile.id,
-        email: auth?.email ?? '',
-        phone: auth?.phone ?? null,
-        first_name: profile.first_name ?? '',
-        last_name: profile.last_name ?? '',
-        looker_link: profile.looker_link?.trim() ?? '',
-        ghl_user_id: profile.ghl_user_id?.trim() ?? null,
-        is_legend: legendUserIdSet.has(profile.id),
-        is_past_member: pastMemberUserIdSet.has(profile.id),
-      });
+      return toDirectoryEntry(
+        {
+          id: profile.id,
+          email: auth?.email ?? '',
+          phone: auth?.phone ?? null,
+          first_name: profile.first_name ?? '',
+          last_name: profile.last_name ?? '',
+          looker_link: profile.looker_link?.trim() ?? '',
+          ghl_user_id: profile.ghl_user_id?.trim() ?? null,
+          is_legend: legendUserIdSet.has(profile.id),
+          is_past_member: pastMemberUserIdSet.has(profile.id),
+        },
+        currentMemberUserIdSet.has(profile.id),
+      );
     })
     .sort(compareDirectoryRows);
 }
@@ -243,13 +255,18 @@ async function getCachedDirectory() {
 export async function getAdminUserDirectoryPage(
   query: string,
   page: number,
-  limit: number
+  limit: number,
+  membership: 'all' | 'current' = 'all',
 ): Promise<AdminUserDirectoryPage> {
   const normalizedQuery = query.trim().toLowerCase();
   const directory = await getCachedDirectory();
+  const membershipFiltered =
+    membership === 'current'
+      ? directory.filter((row) => row.is_current_member)
+      : directory;
   const filtered = normalizedQuery
-    ? directory.filter((row) => row.searchText.includes(normalizedQuery))
-    : directory;
+    ? membershipFiltered.filter((row) => row.searchText.includes(normalizedQuery))
+    : membershipFiltered;
 
   const from = Math.max(0, (page - 1) * limit);
   const to = from + limit;

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { fetchCurrentMemberUserIdSet } from '@/lib/currentMembers';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
@@ -29,7 +30,8 @@ export async function GET() {
     .eq('is_active', true);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-  const assignments = rows ?? [];
+  const currentMemberUserIdSet = await fetchCurrentMemberUserIdSet(supa);
+  const assignments = (rows ?? []).filter((row) => currentMemberUserIdSet.has(row.user_id));
   if (assignments.length === 0) {
     return NextResponse.json({ items: [] });
   }

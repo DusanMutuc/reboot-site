@@ -109,6 +109,7 @@ async function searchUsersForPartnership(query: string): Promise<Person[]> {
   if (query) u.searchParams.set('query', query);
   u.searchParams.set('page', '1');
   u.searchParams.set('limit', '20');
+  u.searchParams.set('membership', 'current');
   const r = await fetch(u.toString());
   if (!r.ok) {
     let msg = r.statusText;

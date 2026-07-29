@@ -111,6 +111,7 @@ export async function searchAudienceUsers(query: string, limit = 8) {
   params.set('query', query.trim());
   params.set('page', '1');
   params.set('limit', String(limit));
+  params.set('membership', 'current');
 
   const res = await fetch(`/api/admin/users?${params.toString()}`);
   const data = await parseJson<{

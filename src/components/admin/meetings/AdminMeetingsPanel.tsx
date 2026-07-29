@@ -126,7 +126,7 @@ export default function AdminMeetingsPanel() {
     setLoadingMembers(true);
 
     try {
-      const response = await fetch('/api/admin/list-users');
+      const response = await fetch('/api/admin/list-users?membership=all');
       if (!response.ok) {
         throw new Error('Failed to load members');
       }

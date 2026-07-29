@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { fetchCurrentMemberUserIds } from '@/lib/currentMembers';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
@@ -10,15 +11,27 @@ export async function GET(request: NextRequest) {
   if (!guard.ok) return guard.res;
 
   const supa = getAdminClient();
+  const includePastMembers = request.nextUrl.searchParams.get('membership') === 'all';
 
-  // Step 1: get ids for role 'user'
-  const { data: roleRows, error: roleErr } = await supa
-    .from('user_roles')
-    .select('user_id, roles!inner(code)')
-    .eq('roles.code', 'user');
-  if (roleErr) return NextResponse.json({ error: roleErr.message }, { status: 400 });
+  let ids: string[];
 
-  const ids = Array.from(new Set((roleRows ?? []).map((r) => r.user_id)));
+  if (includePastMembers) {
+    const { data: roleRows, error: roleErr } = await supa
+      .from('user_roles')
+      .select('user_id, roles!inner(code)')
+      .eq('roles.code', 'user');
+    if (roleErr) return NextResponse.json({ error: roleErr.message }, { status: 400 });
+
+    ids = Array.from(new Set((roleRows ?? []).map((row) => row.user_id)));
+  } else {
+    try {
+      ids = await fetchCurrentMemberUserIds(supa);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to load current members';
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+  }
+
   if (!ids.length) return NextResponse.json({ items: [] });
   const legendUserIdSet = await fetchLegendUserIdSet(supa, ids);
 
