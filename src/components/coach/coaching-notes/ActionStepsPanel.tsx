@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Box, Button, CircularProgress, MenuItem, Select, Stack, TextField, Typography, Paper } from '@mui/material';
+import { Box, Button, Chip, CircularProgress, MenuItem, Select, Stack, TextField, Typography, Paper } from '@mui/material';
 import {
   CheckCircleOutline as CheckCircleIcon,
   EditOutlined as EditIcon,
@@ -17,6 +17,7 @@ type ActionStepsPanelProps = {
   editingStepLabel: string;
   libraryItems: Record<number, ContentNodeInfo>;
   newStepLabel: string;
+  priorityActionStepPositions?: Record<number, number>;
   savingStep: boolean;
   steps: CoachingNoteActionStep[];
   stepsLoading: boolean;
@@ -36,6 +37,7 @@ export default function ActionStepsPanel({
   editingStepLabel,
   libraryItems,
   newStepLabel,
+  priorityActionStepPositions = {},
   savingStep,
   steps,
   stepsLoading,
@@ -72,6 +74,9 @@ export default function ActionStepsPanel({
                   })
                 : null;
             const isEditing = editingStepId === step.id;
+            const priorityPosition = priorityActionStepPositions[step.id];
+            const completedPriority =
+              Boolean(priorityPosition) && step.status === 'complete';
 
             return (
               <Paper
@@ -79,9 +84,9 @@ export default function ActionStepsPanel({
                 elevation={0}
                 sx={{
                   p: 2,
-                  bgcolor: 'grey.50',
+                  bgcolor: completedPriority ? 'success.50' : 'grey.50',
                   border: '1px solid',
-                  borderColor: 'grey.200',
+                  borderColor: completedPriority ? 'success.200' : 'grey.200',
                   borderRadius: 1.5,
                   transition: 'all 0.2s',
                   '&:hover': {
@@ -130,9 +135,20 @@ export default function ActionStepsPanel({
                       </Stack>
                     ) : (
                       <>
-                        <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-                          {step.label}
-                        </Typography>
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {step.label}
+                          </Typography>
+                          {priorityPosition ? (
+                            <Chip
+                              label={`Priority ${priorityPosition}`}
+                              color={completedPriority ? 'success' : 'warning'}
+                              size="small"
+                              variant={completedPriority ? 'filled' : 'outlined'}
+                              sx={{ height: 22, fontWeight: 800, fontSize: 11 }}
+                            />
+                          ) : null}
+                        </Stack>
 
                         {linked ? (
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5, flexWrap: 'wrap' }}>

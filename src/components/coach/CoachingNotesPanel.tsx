@@ -44,6 +44,11 @@ import { formatDistanceFromNow, formatShortDate } from './coaching-notes/utils';
 
 type Props = {
   userId: string | null;
+  fixedNoteId?: number | null;
+  businessAuditReviewDate?: string | null;
+  priorityActionStepPositions?: Record<number, number>;
+  onActionStepsChanged?: (steps: CoachingNoteActionStep[]) => void;
+  onPriorityActionStepDeleted?: (actionStepId: number) => void;
 };
 
 type ProfileNameRow = {
@@ -102,8 +107,16 @@ function mapCommentRow(row: CoachingNoteCommentRow): CoachingNoteComment {
   };
 }
 
-export default function CoachingNotesPanel({ userId }: Props) {
+export default function CoachingNotesPanel({
+  userId,
+  fixedNoteId = null,
+  businessAuditReviewDate = null,
+  priorityActionStepPositions = {},
+  onActionStepsChanged,
+  onPriorityActionStepDeleted,
+}: Props) {
   const isNarrow = useMediaQuery('(max-width:900px)');
+  const businessAuditMode = fixedNoteId != null && businessAuditReviewDate != null;
   const [notes, setNotes] = useState<CoachingNoteWithM2[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
@@ -144,6 +157,10 @@ export default function CoachingNotesPanel({ userId }: Props) {
   const [meetingSlotsVersion, setMeetingSlotsVersion] = useState(0);
 
   const [userDisplayName, setUserDisplayName] = useState('');
+
+  useEffect(() => {
+    onActionStepsChanged?.(steps);
+  }, [onActionStepsChanged, steps]);
 
   useEffect(() => {
     setNotes([]);
@@ -195,11 +212,18 @@ export default function CoachingNotesPanel({ userId }: Props) {
     const loadNotes = async () => {
       setNotesLoading(true);
 
-      const { data, error: err } = await supabase
+      let notesQuery = supabase
         .from('coaching_notes')
         .select('*, m2_meeting:meetings(date)')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .eq('user_id', userId);
+
+      if (fixedNoteId != null) {
+        notesQuery = notesQuery.eq('id', fixedNoteId);
+      }
+
+      const { data, error: err } = await notesQuery.order('created_at', {
+        ascending: false,
+      });
 
       if (cancelled) return;
 
@@ -232,7 +256,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [fixedNoteId, userId]);
 
   useEffect(() => {
     setSteps([]);
@@ -346,7 +370,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     }
 
     const m2MeetingId = note.m2_meeting_id ?? null;
-    if (!m2MeetingId) {
+    if (!m2MeetingId && !businessAuditMode) {
       setMeetingSlots(makeEmptyMeetingSlots());
       setNewMeetingDates(makeEmptyMeetingDateInputs());
       return;
@@ -362,6 +386,37 @@ export default function CoachingNotesPanel({ userId }: Props) {
         if (cancelled) return;
 
         const all = (userMeetings ?? []) as UserMeetingRow[];
+
+        if (businessAuditMode) {
+          const implCandidates = all
+            .filter(
+              (meeting) =>
+                meeting.meeting_type_code === 'IMPLEMENTATION_MEETING' &&
+                meeting.meeting_date >= businessAuditReviewDate,
+            )
+            .sort((a, b) =>
+              a.meeting_date === b.meeting_date
+                ? a.meeting_id - b.meeting_id
+                : a.meeting_date.localeCompare(b.meeting_date),
+            );
+          const nextSlots = makeEmptyMeetingSlots();
+          const implKeys: MeetingSlotKey[] = ['impl1', 'impl2', 'impl3'];
+
+          implKeys.forEach((key, index) => {
+            const record = implCandidates[index];
+            if (!record) return;
+
+            nextSlots[key] = {
+              meetingId: record.meeting_id,
+              date: record.meeting_date,
+              attended: Boolean(record.attended ?? false),
+            };
+          });
+
+          setMeetingSlots(nextSlots);
+          return;
+        }
+
         const m2Record = all.find((meeting) => meeting.meeting_id === m2MeetingId);
 
         if (!m2Record) {
@@ -397,7 +452,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
 
         const nextSlots = makeEmptyMeetingSlots();
         nextSlots.m2 = {
-          meetingId: m2MeetingId,
+          meetingId: m2MeetingId!,
           date: m2Date,
           attended: Boolean(m2Record.attended ?? false),
         };
@@ -431,7 +486,14 @@ export default function CoachingNotesPanel({ userId }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [meetingSlotsVersion, notes, selectedNoteId, userId]);
+  }, [
+    businessAuditMode,
+    businessAuditReviewDate,
+    meetingSlotsVersion,
+    notes,
+    selectedNoteId,
+    userId,
+  ]);
 
   const handleCreateNote = async () => {
     if (!userId) return;
@@ -611,21 +673,25 @@ export default function CoachingNotesPanel({ userId }: Props) {
   const handleDeleteStep = async () => {
     if (!pendingDeleteStepId) return;
 
+    const deletedStepId = pendingDeleteStepId;
     setError(null);
 
     const { error: err } = await supabase
       .from('coaching_note_action_steps')
       .delete()
-      .eq('id', pendingDeleteStepId);
+      .eq('id', deletedStepId);
 
     if (err) {
       setError(err.message);
       return;
     }
 
-    setSteps((prev) => prev.filter((step) => step.id !== pendingDeleteStepId));
-    if (editingStepId === pendingDeleteStepId) {
+    setSteps((prev) => prev.filter((step) => step.id !== deletedStepId));
+    if (editingStepId === deletedStepId) {
       cancelEditStep();
+    }
+    if (priorityActionStepPositions[deletedStepId]) {
+      onPriorityActionStepDeleted?.(deletedStepId);
     }
     setPendingDeleteStepId(null);
   };
@@ -792,7 +858,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
     if (!note || !userId) return;
 
     const m2MeetingId = note.m2_meeting_id ?? null;
-    if (!m2MeetingId) {
+    if (!m2MeetingId && !businessAuditMode) {
       setError('Create the M2 meeting first.');
       return;
     }
@@ -1088,6 +1154,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
         >
           <MeetingSlotsPanel
             attendanceSavingKey={attendanceSavingKey}
+            businessAuditMode={businessAuditMode}
             m2Exists={Boolean(selectedNote?.m2_meeting_id)}
             meetingSlots={meetingSlots}
             meetingSlotsLoading={meetingSlotsLoading}
@@ -1116,15 +1183,17 @@ export default function CoachingNotesPanel({ userId }: Props) {
         </Paper>
 
         <Box sx={{ flexGrow: 1, width: '100%', minWidth: 0 }}>
-          <NoteSelector
-            notes={notes}
-            notesLoading={notesLoading}
-            selectedNoteId={selectedNoteId}
-            selectedNote={selectedNote}
-            onCreateNote={handleRequestCreateNote}
-            onDeleteNote={handleRequestDeleteNote}
-            onSelectNote={setSelectedNoteId}
-          />
+          {!businessAuditMode ? (
+            <NoteSelector
+              notes={notes}
+              notesLoading={notesLoading}
+              selectedNoteId={selectedNoteId}
+              selectedNote={selectedNote}
+              onCreateNote={handleRequestCreateNote}
+              onDeleteNote={handleRequestDeleteNote}
+              onSelectNote={setSelectedNoteId}
+            />
+          ) : null}
 
           {notesLoading && !selectedNote ? (
             <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
@@ -1159,6 +1228,7 @@ export default function CoachingNotesPanel({ userId }: Props) {
                 editingStepLabel={editingStepLabel}
                 libraryItems={libraryItems}
                 newStepLabel={newStepLabel}
+                priorityActionStepPositions={priorityActionStepPositions}
                 savingStep={savingStep}
                 steps={steps}
                 stepsLoading={stepsLoading}
@@ -1188,7 +1258,9 @@ export default function CoachingNotesPanel({ userId }: Props) {
               }}
             >
               <Typography variant="body2" color="text.secondary">
-                Create a coaching note to start capturing notes, action steps, and meetings.
+                {businessAuditMode
+                  ? 'The active Business Audit implementation record could not be loaded.'
+                  : 'Create a coaching note to start capturing notes, action steps, and meetings.'}
               </Typography>
             </Paper>
           )}

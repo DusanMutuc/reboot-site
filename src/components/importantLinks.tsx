@@ -19,7 +19,7 @@ const IMPL_LABEL  = 'IMPLEMENTATION COACH \nBOOKING LINK';
 
 // New labels for coach mode additions
 const REFERRAL_PILL_LABEL = 'REFER AN AGENT TO OUR PROGRAM';
-const COACH_NOTES_LABEL   = 'COACHING NOTES';
+const COACH_NOTES_LABEL   = 'IMPLEMENTATION';
 
 const baseLinks: LinkItem[] = [
   { label: 'REBOOT TRAINING,\nTOOLS & COURSE', href: 'https://hub.rebootmembers.com/resources' },
@@ -181,7 +181,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
       // 1) Columnize the "Refer an agent..." pill: add it as a regular button
       items.push({ label: REFERRAL_PILL_LABEL }); // no href provided (same behavior as before)
 
-      // 2) Add the Coaching Notes button
+      // 2) Add the active Business Audit implementation workspace
       items.push({ label: COACH_NOTES_LABEL, href: coachNotesUrl ?? undefined });
     }
 

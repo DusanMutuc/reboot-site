@@ -125,7 +125,9 @@ export function useStudentWorkspaceState({
   }, [mode, selectedStudentId, setQuery]);
 
   useEffect(() => {
-    if (tab !== 'progress' || !selectedStudentId) {
+    const needsProgress = tab === 'progress' || tab === 'audit';
+
+    if (!needsProgress || !selectedStudentId) {
       setCoachProgressCourses([]);
       setCoachProgressError(null);
       setCoachProgressLoading(false);
@@ -142,6 +144,8 @@ export function useStudentWorkspaceState({
         if (!active) return;
 
         setCoachProgressCourses(progressCourses);
+
+        if (tab !== 'progress') return;
 
         if (!progressCourses.length) {
           if (selectedCourseId != null) {

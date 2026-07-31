@@ -1,36 +1,37 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Reboot website
 
-## Getting Started
+Reboot is a Next.js 15 portal backed by Supabase Auth, Postgres, PostgREST RPCs, and Supabase Storage. It contains member dashboards, KPI and attendance tracking, coaching workspaces, course and library content, smart documents, partnerships, achievements, admin tools, and external integrations.
 
-First, run the development server:
+## Documentation
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- [Agent database guide](docs/AGENT_GUIDE.md) — start here when writing maintenance or migration scripts.
+- [Database architecture](docs/DATABASE.md) — identity model, domain relationships, lookups, storage, and mutation rules.
+- [Generated public schema](docs/generated/supabase-public-schema.md) — live public relations, columns, keys, and RPC signatures.
+- [Website architecture and API](docs/WEBSITE.md) — routes, authentication, authorization, handlers, and integrations.
+
+The generated schema is a snapshot, not a migration history. Refresh it after database changes:
+
+```powershell
+npm.cmd run docs:db
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The generator reads PostgREST schema metadata only. It does not export table rows.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Copy `.env.example` to `.env.local`.
+2. Fill the values using the project’s approved secret-sharing process.
+3. Install and run:
 
-## Learn More
+```powershell
+npm.cmd install
+npm.cmd run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Open `http://localhost:3000`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Important security boundary
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security. It is server-only and must never be committed, logged, embedded in client code, or sent to a browser. Browser and user-session code uses `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Database structure is split between the live Supabase project and the small migration tail in `sql/`. The three checked-in SQL files are not a complete reconstruction of the database.

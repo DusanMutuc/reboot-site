@@ -22,8 +22,9 @@ import NotesIcon from '@mui/icons-material/StickyNote2';
 import CloseIcon from '@mui/icons-material/Close';
 import LegendMemberIcon from '@/components/LegendMemberIcon';
 import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
+import BusinessAuditTab from '@/components/student/workspace/BusinessAuditTab';
+import ImplementationTab from '@/components/student/workspace/ImplementationTab';
 import KpiTab from '@/components/student/workspace/KpiTab';
-import NotesTab from '@/components/student/workspace/NotesTab';
 import OverviewTab from '@/components/student/workspace/OverviewTab';
 import ProgressTab from '@/components/student/workspace/ProgressTab';
 import type {
@@ -33,7 +34,7 @@ import type {
 } from '@/components/student/workspace/types';
 import { useStudentWorkspaceState } from '@/components/student/workspace/useStudentWorkspaceState';
 
-const TABS: StudentWorkspaceTab[] = ['overview', 'notes', 'progress', 'kpi'];
+const TABS: StudentWorkspaceTab[] = ['overview', 'audit', 'notes', 'progress', 'kpi'];
 const NOTES_SIDEBAR_WIDTH = 360;
 const COACH_WORKSPACE_SHELL_MAX_WIDTH = 1200;
 const PRIVATE_NOTES_OFFSET_BREAKPOINT = 1200;
@@ -235,8 +236,20 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
         );
       case 'notes':
         return (
-          <NotesTab
+          <ImplementationTab
             selectedStudentId={selectedStudentId}
+            studentName={selectedStudent?.full_name}
+          />
+        );
+      case 'audit':
+        return (
+          <BusinessAuditTab
+            selectedStudentId={selectedStudentId}
+            studentName={selectedStudent?.full_name}
+            foundationsCompleted={
+              coachProgressCourses.filter((course) => course.progressPercent === 100).length
+            }
+            foundationsLoading={coachProgressLoading}
           />
         );
       case 'progress':
@@ -440,7 +453,8 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
               }}
             >
               <Tab value="overview" label="Overview" />
-              <Tab value="notes" label="Coaching Notes" />
+              <Tab value="audit" label="Business Audit" />
+              <Tab value="notes" label="Implementation" />
               <Tab value="progress" label="Progress" />
               <Tab value="kpi" label="KPI Tracker" />
             </Tabs>

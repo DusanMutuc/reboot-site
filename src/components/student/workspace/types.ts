@@ -1,7 +1,7 @@
 import type { StudentOverviewCourse } from '@/lib/studentOverview';
 
 export type StudentWorkspaceMode = 'coach' | 'admin';
-export type StudentWorkspaceTab = 'overview' | 'notes' | 'progress' | 'kpi';
+export type StudentWorkspaceTab = 'overview' | 'audit' | 'notes' | 'progress' | 'kpi';
 
 export type StudentOption = {
   id: string;

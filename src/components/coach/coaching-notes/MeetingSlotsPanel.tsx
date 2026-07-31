@@ -19,6 +19,7 @@ import {
 
 type MeetingSlotsPanelProps = {
   attendanceSavingKey: MeetingSlotKey | null;
+  businessAuditMode?: boolean;
   m2Exists: boolean;
   meetingSlots: MeetingSlotsState;
   meetingSlotsLoading: boolean;
@@ -34,6 +35,7 @@ type MeetingSlotsPanelProps = {
 
 export default function MeetingSlotsPanel({
   attendanceSavingKey,
+  businessAuditMode = false,
   m2Exists,
   meetingSlots,
   meetingSlotsLoading,
@@ -46,6 +48,8 @@ export default function MeetingSlotsPanel({
   onCreateM2Meeting,
   onToggleAttendance,
 }: MeetingSlotsPanelProps) {
+  const implementationUnlocked = businessAuditMode || m2Exists;
+
   const renderStatusChip = (
     slotKey: MeetingSlotKey,
     hasMeeting: boolean,
@@ -81,7 +85,7 @@ export default function MeetingSlotsPanel({
       );
     }
 
-    if (!noteSelected || (!m2Exists && slotKey !== 'm2')) {
+    if (!noteSelected || (!implementationUnlocked && slotKey !== 'm2')) {
       return (
         <Chip
           size="small"
@@ -118,11 +122,11 @@ export default function MeetingSlotsPanel({
     const busy =
       meetingSlotsLoading || slotSavingKey === slotKey || attendanceSavingKey === slotKey;
     const dateValue = hasMeeting ? slot?.date ?? '' : newMeetingDates[slotKey];
-    const locked = !noteSelected || (!m2Exists && !isM2 && !hasMeeting);
+    const locked = !noteSelected || (!implementationUnlocked && !isM2 && !hasMeeting);
     const disableInputs = busy || locked;
     const helperText = !noteSelected
       ? 'Create or select a note first.'
-      : !isM2 && !m2Exists && !hasMeeting
+      : !isM2 && !implementationUnlocked && !hasMeeting
         ? 'Create M2 first before scheduling implementations.'
         : hasMeeting
           ? 'Meeting created for this student.'
@@ -242,18 +246,22 @@ export default function MeetingSlotsPanel({
         </Box>
       ) : (
         <Stack spacing={2}>
-          {renderSlot('m2', 'M2 meeting')}
+          {!businessAuditMode ? (
+            <>
+              {renderSlot('m2', 'M2 meeting')}
 
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Divider sx={{ flex: 1 }} />
-            <Typography
-              variant="overline"
-              sx={{ fontWeight: 700, letterSpacing: 1, color: 'text.secondary' }}
-            >
-              Implementations
-            </Typography>
-            <Divider sx={{ flex: 1 }} />
-          </Stack>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Divider sx={{ flex: 1 }} />
+                <Typography
+                  variant="overline"
+                  sx={{ fontWeight: 700, letterSpacing: 1, color: 'text.secondary' }}
+                >
+                  Implementations
+                </Typography>
+                <Divider sx={{ flex: 1 }} />
+              </Stack>
+            </>
+          ) : null}
 
           {renderSlot('impl1', 'Impl 1')}
           {renderSlot('impl2', 'Impl 2')}
