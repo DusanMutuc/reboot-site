@@ -710,7 +710,11 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' },
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              lg: 'repeat(4, minmax(0, 1fr))',
+            },
             gap: 2,
             mb: 3,
           }}
