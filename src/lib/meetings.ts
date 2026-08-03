@@ -300,6 +300,30 @@ export async function getUserMeetings(input?: {
   return (data ?? []) as unknown as UserMeeting[];
 }
 
+export async function getMeetingSyncSources(
+  meetingIds: number[],
+): Promise<Map<number, 'ghl' | 'manual'>> {
+  const uniqueIds = Array.from(new Set(meetingIds));
+  if (uniqueIds.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from('meetings')
+    .select('id, ghl_appointment_id')
+    .in('id', uniqueIds);
+
+  if (error) {
+    console.error('getMeetingSyncSources error', error);
+    throw error;
+  }
+
+  return new Map(
+    (data ?? []).map((row) => [
+      Number(row.id),
+      row.ghl_appointment_id ? ('ghl' as const) : ('manual' as const),
+    ]),
+  );
+}
+
 // ---------- Engagement summary ----------
 
 export async function getUserEngagementSummary(input: {

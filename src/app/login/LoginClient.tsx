@@ -17,7 +17,12 @@ import {
   Typography,
 } from '@mui/material';
 import rebootLogo from '/public/Reboot Logo - Color.png'; // Add this import
-export default function LoginClient() {
+
+type LoginClientProps = {
+  redirectTo?: string | null;
+};
+
+export default function LoginClient({ redirectTo = null }: LoginClientProps) {
   const router = useRouter();
   
   // Use useState and useEffect for hydration-safe responsive detection
@@ -78,16 +83,16 @@ export default function LoginClient() {
         .eq('user_id', user.id);
 
       if (error) {
-        router.push('/dashboard');
+        router.push(redirectTo || '/dashboard');
         return;
       }
 
       const codes = extractRoleCodes(rolesRows);
-      router.replace(resolveHomePathForRoleCodes(codes));
+      router.replace(redirectTo || resolveHomePathForRoleCodes(codes));
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setError(`Role check failed: ${message}`);
-      router.push('/dashboard');
+      router.push(redirectTo || '/dashboard');
     }
   };
 

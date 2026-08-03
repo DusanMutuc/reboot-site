@@ -51,6 +51,10 @@ export type KpiTrackerProps = {
    * - If omitted, the tracker uses the currently logged-in user.
    */
   userIdOverride?: string | null;
+  /** Optional date whose calendar month should be selected. */
+  fixedPeriodDate?: string | null;
+  /** Keeps the tracker on fixedPeriodDate instead of showing period selectors. */
+  lockPeriod?: boolean;
 };
 
 const isMoneyMetric = (key: string) =>
@@ -82,6 +86,17 @@ const MONTH_NAMES = [
 const getPeriodStart = (year: number, month: number) =>
   `${year}-${String(month).padStart(2, '0')}-01`;
 
+const parsePeriodDate = (value?: string | null) => {
+  const match = /^(\d{4})-(\d{2})/.exec(value ?? '');
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || month < 1 || month > 12) return null;
+
+  return { year, month };
+};
+
 const getYearCacheKey = (userId: string, year: number) => `${userId}:${year}`;
 
 const upsertHistoryRow = (rows: HistoryRow[], nextRow: HistoryRow) => {
@@ -94,17 +109,29 @@ const upsertHistoryRow = (rows: HistoryRow[], nextRow: HistoryRow) => {
   );
 };
 
-export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps) {
+export default function KpiTracker({
+  onSaved,
+  userIdOverride,
+  fixedPeriodDate = null,
+  lockPeriod = false,
+}: KpiTrackerProps) {
   const currentDate = useMemo(() => new Date(), []);
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth() + 1;
+  const fixedPeriod = useMemo(
+    () => parsePeriodDate(fixedPeriodDate),
+    [fixedPeriodDate],
+  );
+  const initialYear = fixedPeriod?.year ?? currentYear;
+  const initialMonth = fixedPeriod?.month ?? currentMonth;
+  const periodIsLocked = lockPeriod && fixedPeriod != null;
 
   // This is always the *target* user (student) whose KPIs we're editing.
   const [userId, setUserId] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<KpiMetricType[]>([]);
   const [history, setHistory] = useState<HistoryRow[]>([]);
-  const [selectedYear, setSelectedYear] = useState(currentYear);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedYear, setSelectedYear] = useState(initialYear);
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth);
   const [values, setValues] = useState<Record<string, string>>({});
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
 
@@ -197,8 +224,8 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
       setSuccess(null);
       setUserId(null);
       setHistory([]);
-      setSelectedYear(currentYear);
-      setSelectedMonth(currentMonth);
+      setSelectedYear(initialYear);
+      setSelectedMonth(initialMonth);
       setValues({});
       setLastUpdatedAt(null);
       setYearLoading(true);
@@ -262,7 +289,7 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
     return () => {
       cancelled = true;
     };
-  }, [currentMonth, currentYear, userIdOverride]);
+  }, [initialMonth, initialYear, userIdOverride]);
 
   useEffect(() => {
     if (!userId) return;
@@ -586,75 +613,88 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
             </Typography>
           </Box>
 
-          <FormControl
-            size="small"
-            sx={{
-              minWidth: 130,
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'background.paper',
-                '&:hover': {
-                  borderColor: 'primary.main',
-                },
-              },
-            }}
-            disabled={yearLoading || saving}
-          >
-            <InputLabel id="year-select-label" sx={{ fontSize: '1.25rem' }}>
-              Year
-            </InputLabel>
-            <Select
-              labelId="year-select-label"
-              label="Year"
-              value={String(selectedYear)}
-              onChange={handleChangeYear}
-              sx={{ fontSize: '1.25rem' }}
-            >
-              {yearOptions.map((year) => (
-                <MenuItem
-                  key={year}
-                  value={String(year)}
+          {periodIsLocked ? (
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+                {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Set by the Business Audit date
+              </Typography>
+            </Box>
+          ) : (
+            <>
+              <FormControl
+                size="small"
+                sx={{
+                  minWidth: 130,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'background.paper',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                    },
+                  },
+                }}
+                disabled={yearLoading || saving}
+              >
+                <InputLabel id="year-select-label" sx={{ fontSize: '1.25rem' }}>
+                  Year
+                </InputLabel>
+                <Select
+                  labelId="year-select-label"
+                  label="Year"
+                  value={String(selectedYear)}
+                  onChange={handleChangeYear}
                   sx={{ fontSize: '1.25rem' }}
                 >
-                  {year}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+                  {yearOptions.map((year) => (
+                    <MenuItem
+                      key={year}
+                      value={String(year)}
+                      sx={{ fontSize: '1.25rem' }}
+                    >
+                      {year}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
 
-          <FormControl
-            size="small"
-            sx={{
-              minWidth: 180,
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'background.paper',
-                '&:hover': {
-                  borderColor: 'primary.main',
-                },
-              },
-            }}
-            disabled={yearLoading || saving}
-          >
-            <InputLabel id="month-select-label" sx={{ fontSize: '1.25rem' }}>
-              Month
-            </InputLabel>
-            <Select
-              labelId="month-select-label"
-              label="Month"
-              value={String(selectedMonth)}
-              onChange={handleChangeMonth}
-              sx={{ fontSize: '1.25rem' }}
-            >
-              {monthOptions.map((month) => (
-                <MenuItem
-                  key={month.value}
-                  value={String(month.value)}
+              <FormControl
+                size="small"
+                sx={{
+                  minWidth: 180,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: 'background.paper',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                    },
+                  },
+                }}
+                disabled={yearLoading || saving}
+              >
+                <InputLabel id="month-select-label" sx={{ fontSize: '1.25rem' }}>
+                  Month
+                </InputLabel>
+                <Select
+                  labelId="month-select-label"
+                  label="Month"
+                  value={String(selectedMonth)}
+                  onChange={handleChangeMonth}
                   sx={{ fontSize: '1.25rem' }}
                 >
-                  {month.name}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+                  {monthOptions.map((month) => (
+                    <MenuItem
+                      key={month.value}
+                      value={String(month.value)}
+                      sx={{ fontSize: '1.25rem' }}
+                    >
+                      {month.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </>
+          )}
 
           {yearLoading ? (
             <Stack
@@ -710,7 +750,11 @@ export default function KpiTracker({ onSaved, userIdOverride }: KpiTrackerProps)
         <Box
           sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' },
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              lg: 'repeat(4, minmax(0, 1fr))',
+            },
             gap: 2,
             mb: 3,
           }}

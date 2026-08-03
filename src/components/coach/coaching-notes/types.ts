@@ -24,6 +24,7 @@ export type MeetingSlotState = {
   meetingId: number;
   date: string;
   attended: boolean;
+  source: 'ghl' | 'manual';
 };
 
 export type MeetingSlotsState = Record<MeetingSlotKey, MeetingSlotState | null>;

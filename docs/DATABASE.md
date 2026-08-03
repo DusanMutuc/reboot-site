@@ -149,6 +149,7 @@ meeting_types
 
 - `meeting_types.code` is the stable identifier.
 - `meetings.date` is a Postgres date, not a timestamp.
+- Future GHL-backed Business Audit and Implementation meetings retain `date` for compatibility and also store `starts_at`, `ends_at`, `meeting_timezone`, GHL status, and the unique `ghl_appointment_id`.
 - `meeting_attendance_base` has a composite key of meeting and user.
 - `meeting_attendance` is a view; use the base table or attendance RPC.
 - `counts_toward_engagement` controls engagement calculations.
@@ -167,6 +168,8 @@ meeting_types
 | `LEGENDS_MEETING` | Legends Meeting | yes | yes |
 
 Preferred write functions are `create_meeting_with_attendees` and `upsert_meeting_attendance`.
+
+Scheduled GHL reconciliation uses service-role-only RPCs. `sync_business_audit_appointment` atomically upserts the `M2_MEETING`, student attendance row, connected `business_reviews` row, and coaching-note meeting link. `sync_implementation_appointment_v2` safely adopts one unambiguous same-day manual Implementation meeting before delegating to the base synchronization RPC, preventing a later hourly run from creating a duplicate. The `meetings_remove_cancelled_ghl_attendance` trigger retains canceled meetings for history while removing their attendance-backed member association, so they disappear from feeds, engagement, and Implementation slots. Existing meetings are not backfilled; eligibility starts at Calgary midnight on August 6, 2026.
 
 ### Zoom aliases
 
@@ -208,6 +211,10 @@ Dashboard-only aliases `total_closed` and `fifteen_thirty` are presentation keys
 - `wins` — user wins added by staff.
 
 Use the coaching and win RPCs listed in the generated reference for normal mutations.
+
+### Business Audit preparation
+
+`business_review_preparation_responses` is a one-to-one child of `business_reviews`; its `business_review_id` is both the primary key and cascading foreign key. It stores the six required written answers and two required 1-10 ratings, with 5 and 7 excluded by database constraints. Students access it only through the authenticated website API, which verifies `business_reviews.user_id` and rejects canceled appointments; direct browser policies are intentionally absent. Resubmission updates the same row and refreshes `submitted_at` and `updated_at`. Coaches with access to the student receive these answers in the Business Audit payload and can review them in the audit tab.
 
 ### Attention status
 

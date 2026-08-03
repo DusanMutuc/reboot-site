@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import type { BusinessAuditPreparationAnswers } from '@/lib/businessAuditPreparationShared';
 import { hasRoleCode } from '@/lib/userRoles';
 
 export const FOCUS_FINDER_TEMPLATE_KEY = 'focus_finder_v1';
@@ -77,6 +78,9 @@ export type BusinessReview = {
   id: number;
   userId: string;
   coachId: string | null;
+  meetingId: number | null;
+  meetingStatus: string | null;
+  meetingCancelled: boolean;
   coachingNoteId: number;
   templateKey: string;
   systemScorecardTemplateKey: string | null;
@@ -87,6 +91,7 @@ export type BusinessReview = {
   updatedAt: string;
   focusValues: BusinessReviewFocusValue[];
   systemScorecard: BusinessReviewSystemScorecard | null;
+  preparation: BusinessAuditPreparationAnswers | null;
 };
 
 export type BusinessReviewsPayload = {
@@ -108,6 +113,7 @@ type BusinessReviewRow = {
   id: number;
   user_id: string;
   coach_id: string | null;
+  meeting_id: number | null;
   coaching_note_id: number;
   focus_finder_template_key: string;
   system_scorecard_template_key: string | null;
@@ -177,6 +183,31 @@ type BusinessReviewFocusValueRow = {
   value: number;
   updated_at: string;
 };
+
+type BusinessReviewMeetingRow = {
+  id: number;
+  ghl_status: string | null;
+};
+
+type BusinessReviewPreparationRow = {
+  business_review_id: number;
+  business_forward_wins: string;
+  personal_forward_wins: string;
+  greatest_business_challenge: string;
+  greatest_personal_challenge: string;
+  desired_call_outcome: string;
+  topics_to_discuss: string;
+  business_rating: number;
+  personal_rating: number;
+  submitted_at: string;
+  updated_at: string;
+};
+
+export function isCancelledGhlStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  const normalized = status.toLowerCase().replace(/[\s_-]+/g, '');
+  return ['cancelled', 'canceled', 'deleted', 'invalid', 'noshow'].includes(normalized);
+}
 
 export function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -250,7 +281,7 @@ export async function loadBusinessReviews(
     client
       .from('business_reviews')
       .select(
-        'id, user_id, coach_id, coaching_note_id, focus_finder_template_key, system_scorecard_template_key, review_date, status, completed_at, created_at, updated_at',
+        'id, user_id, coach_id, meeting_id, coaching_note_id, focus_finder_template_key, system_scorecard_template_key, review_date, status, completed_at, created_at, updated_at',
       )
       .eq('user_id', studentId)
       .order('review_date', { ascending: false })
@@ -291,9 +322,15 @@ export async function loadBusinessReviews(
   let categoryRows: SystemScorecardCategoryRow[] = [];
   let systemRows: SystemScorecardSystemRow[] = [];
   let lastReviewRows: UserSystemScorecardLastReviewRow[] = [];
+  let meetingRows: BusinessReviewMeetingRow[] = [];
+  let preparationRows: BusinessReviewPreparationRow[] = [];
 
   if (reviewIds.length > 0) {
-    const [focusResult, ratingResult, priorityResult] = await Promise.all([
+    const meetingIds = rows
+      .map((row) => row.meeting_id)
+      .filter((meetingId): meetingId is number => meetingId !== null);
+    const [focusResult, ratingResult, priorityResult, preparationResult, meetingResult] =
+      await Promise.all([
       client
         .from('business_review_focus_values')
         .select('business_review_id, dimension_id, value, updated_at')
@@ -310,6 +347,15 @@ export async function loadBusinessReviews(
           'business_review_id, system_id, position, action_step_id, starting_status, selected_at, selected_by',
         )
         .in('business_review_id', reviewIds),
+      client
+        .from('business_review_preparation_responses')
+        .select(
+          'business_review_id, business_forward_wins, personal_forward_wins, greatest_business_challenge, greatest_personal_challenge, desired_call_outcome, topics_to_discuss, business_rating, personal_rating, submitted_at, updated_at',
+        )
+        .in('business_review_id', reviewIds),
+      meetingIds.length > 0
+        ? client.from('meetings').select('id, ghl_status').in('id', meetingIds)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (focusResult.error) {
@@ -324,9 +370,19 @@ export async function loadBusinessReviews(
       throw new Error(priorityResult.error.message);
     }
 
+    if (preparationResult.error) {
+      throw new Error(preparationResult.error.message);
+    }
+
+    if (meetingResult.error) {
+      throw new Error(meetingResult.error.message);
+    }
+
     focusValueRows = (focusResult.data ?? []) as BusinessReviewFocusValueRow[];
     ratingRows = (ratingResult.data ?? []) as BusinessReviewSystemRatingRow[];
     priorityRows = (priorityResult.data ?? []) as BusinessReviewSystemPriorityRow[];
+    preparationRows = (preparationResult.data ?? []) as BusinessReviewPreparationRow[];
+    meetingRows = (meetingResult.data ?? []) as BusinessReviewMeetingRow[];
   }
 
   if (scorecardTemplateKeys.length > 0) {
@@ -406,6 +462,12 @@ export async function loadBusinessReviews(
   const lastReviewsByAudienceAndSystem = new Map(
     lastReviewRows.map((row) => [`${row.audience}:${row.system_key}`, row]),
   );
+  const meetingStatusById = new Map(
+    meetingRows.map((row) => [Number(row.id), row.ghl_status]),
+  );
+  const preparationByReviewId = new Map(
+    preparationRows.map((row) => [Number(row.business_review_id), row]),
+  );
 
   const reviews = rows.map((row) => ({
     ...mapBusinessReviewRow(
@@ -417,6 +479,8 @@ export async function loadBusinessReviews(
       ratingsByReviewAndSystem,
       prioritiesByReviewAndSystem,
       lastReviewsByAudienceAndSystem,
+      meetingStatusById,
+      preparationByReviewId,
     ),
   }));
 
@@ -432,8 +496,13 @@ function mapBusinessReviewRow(
   ratingsByReviewAndSystem: Map<string, BusinessReviewSystemRatingRow>,
   prioritiesByReviewAndSystem: Map<string, BusinessReviewSystemPriorityRow>,
   lastReviewsByAudienceAndSystem: Map<string, UserSystemScorecardLastReviewRow>,
+  meetingStatusById: Map<number, string | null>,
+  preparationByReviewId: Map<number, BusinessReviewPreparationRow>,
 ): BusinessReview {
   const reviewId = Number(row.id);
+  const meetingId = row.meeting_id == null ? null : Number(row.meeting_id);
+  const meetingStatus = meetingId == null ? null : (meetingStatusById.get(meetingId) ?? null);
+  const preparation = preparationByReviewId.get(reviewId);
   const scorecardTemplate = row.system_scorecard_template_key
     ? templatesByKey.get(row.system_scorecard_template_key)
     : null;
@@ -501,6 +570,9 @@ function mapBusinessReviewRow(
     id: reviewId,
     userId: row.user_id,
     coachId: row.coach_id,
+    meetingId,
+    meetingStatus,
+    meetingCancelled: isCancelledGhlStatus(meetingStatus),
     coachingNoteId: Number(row.coaching_note_id),
     templateKey: row.focus_finder_template_key,
     systemScorecardTemplateKey: row.system_scorecard_template_key,
@@ -511,5 +583,19 @@ function mapBusinessReviewRow(
     updatedAt: row.updated_at,
     focusValues: focusValuesByReviewId.get(reviewId) ?? [],
     systemScorecard,
+    preparation: preparation
+      ? {
+          businessForwardWins: preparation.business_forward_wins,
+          personalForwardWins: preparation.personal_forward_wins,
+          greatestBusinessChallenge: preparation.greatest_business_challenge,
+          greatestPersonalChallenge: preparation.greatest_personal_challenge,
+          desiredCallOutcome: preparation.desired_call_outcome,
+          topicsToDiscuss: preparation.topics_to_discuss,
+          businessRating: Number(preparation.business_rating),
+          personalRating: Number(preparation.personal_rating),
+          submittedAt: preparation.submitted_at,
+          updatedAt: preparation.updated_at,
+        }
+      : null,
   };
 }

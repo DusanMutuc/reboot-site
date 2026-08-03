@@ -124,10 +124,14 @@ export default function MeetingSlotsPanel({
     const dateValue = hasMeeting ? slot?.date ?? '' : newMeetingDates[slotKey];
     const locked = !noteSelected || (!implementationUnlocked && !isM2 && !hasMeeting);
     const disableInputs = busy || locked;
+    const ghlManaged = slot?.source === 'ghl';
+    const disableDateInput = disableInputs || ghlManaged;
     const helperText = !noteSelected
       ? 'Create or select a note first.'
       : !isM2 && !implementationUnlocked && !hasMeeting
         ? 'Create M2 first before scheduling implementations.'
+        : ghlManaged
+          ? 'Managed in GHL. Reschedule it there to change the date.'
         : hasMeeting
           ? 'Meeting created for this student.'
           : 'Pick a date to create this meeting.';
@@ -149,7 +153,18 @@ export default function MeetingSlotsPanel({
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
               {label}
             </Typography>
-            {renderStatusChip(slotKey, hasMeeting, attended)}
+            <Stack direction="row" spacing={0.75} alignItems="center">
+              {ghlManaged ? (
+                <Chip
+                  size="small"
+                  label="GHL synced"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 700 }}
+                />
+              ) : null}
+              {renderStatusChip(slotKey, hasMeeting, attended)}
+            </Stack>
           </Stack>
 
           <TextField
@@ -166,7 +181,7 @@ export default function MeetingSlotsPanel({
               onChangeNewDate(slotKey, event.target.value);
             }}
             InputLabelProps={{ shrink: true }}
-            disabled={disableInputs}
+            disabled={disableDateInput}
             sx={{
               '& .MuiOutlinedInput-root': {
                 borderRadius: 1.5,

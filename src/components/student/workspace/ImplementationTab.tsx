@@ -20,6 +20,7 @@ import type {
   BusinessReviewsPayload,
   SystemScorecardSystem,
 } from '@/lib/businessReviews';
+import { getBusinessAuditLocalDate } from '@/lib/businessAuditConfig';
 import type { ActionStepStatus, CoachingNoteActionStep } from '@/types/coaching';
 
 const COACH_CONTENT_MAX_WIDTH = 1180;
@@ -43,6 +44,28 @@ function formatReviewDate(value: string) {
   return dateFormatter.format(new Date(`${value}T00:00:00`));
 }
 
+function selectImplementationCycle(reviews: BusinessReview[]): {
+  activeReview: BusinessReview | null;
+  nextReviewDate: string | null;
+} {
+  const today = getBusinessAuditLocalDate();
+  const activeReview = reviews
+    .filter((review) => !review.meetingCancelled && review.reviewDate <= today)
+    .sort(
+      (left, right) =>
+        right.reviewDate.localeCompare(left.reviewDate) || right.id - left.id,
+    )[0] ?? null;
+  const boundaryDate = activeReview?.reviewDate ?? today;
+  const nextReviewDate = reviews
+    .filter((review) => !review.meetingCancelled && review.reviewDate > boundaryDate)
+    .sort(
+      (left, right) =>
+        left.reviewDate.localeCompare(right.reviewDate) || left.id - right.id,
+    )[0]?.reviewDate ?? null;
+
+  return { activeReview, nextReviewDate };
+}
+
 function getPrioritySystems(review: BusinessReview | null): SystemScorecardSystem[] {
   if (!review?.systemScorecard) return [];
 
@@ -60,6 +83,7 @@ export default function ImplementationTab({
   studentName,
 }: ImplementationTabProps) {
   const [activeReview, setActiveReview] = useState<BusinessReview | null>(null);
+  const [nextReviewDate, setNextReviewDate] = useState<string | null>(null);
   const [actionStepStatuses, setActionStepStatuses] = useState<
     Record<number, ActionStepStatus>
   >({});
@@ -72,6 +96,7 @@ export default function ImplementationTab({
     setLoading(true);
     setError(null);
     setActiveReview(null);
+    setNextReviewDate(null);
     setActionStepStatuses({});
 
     const loadActiveReview = async () => {
@@ -89,7 +114,9 @@ export default function ImplementationTab({
           throw new Error(body.error || 'Failed to load the active Business Audit.');
         }
 
-        setActiveReview(body.reviews?.[0] ?? null);
+        const cycle = selectImplementationCycle(body.reviews ?? []);
+        setActiveReview(cycle.activeReview);
+        setNextReviewDate(cycle.nextReviewDate);
       } catch (loadError) {
         if (controller.signal.aborted) return;
 
@@ -182,7 +209,9 @@ export default function ImplementationTab({
 
       {!error && !activeReview ? (
         <Alert severity="info">
-          Create a Business Audit before starting an implementation cycle.
+          {nextReviewDate
+            ? `The next implementation cycle begins with the Business Audit on ${formatReviewDate(nextReviewDate)}.`
+            : 'Create a Business Audit before starting an implementation cycle.'}
         </Alert>
       ) : null}
 
@@ -297,6 +326,7 @@ export default function ImplementationTab({
             userId={selectedStudentId}
             fixedNoteId={activeReview.coachingNoteId}
             businessAuditReviewDate={activeReview.reviewDate}
+            businessAuditNextReviewDate={nextReviewDate}
             priorityActionStepPositions={priorityActionStepPositions}
             onActionStepsChanged={handleActionStepsChanged}
             onPriorityActionStepDeleted={removePriorityByActionStep}

@@ -25,6 +25,7 @@ import type {
 import LibraryItemPickerDialog, { type LibraryItemLite } from './LibraryItemPickerDialog';
 import {
   createMeetingWithAttendees,
+  getMeetingSyncSources,
   getUserMeetings,
   upsertMeetingAttendance,
 } from '@/lib/meetings';
@@ -46,6 +47,8 @@ type Props = {
   userId: string | null;
   fixedNoteId?: number | null;
   businessAuditReviewDate?: string | null;
+  businessAuditNextReviewDate?: string | null;
+  contentMode?: 'full' | 'notes-only';
   priorityActionStepPositions?: Record<number, number>;
   onActionStepsChanged?: (steps: CoachingNoteActionStep[]) => void;
   onPriorityActionStepDeleted?: (actionStepId: number) => void;
@@ -111,6 +114,8 @@ export default function CoachingNotesPanel({
   userId,
   fixedNoteId = null,
   businessAuditReviewDate = null,
+  businessAuditNextReviewDate = null,
+  contentMode = 'full',
   priorityActionStepPositions = {},
   onActionStepsChanged,
   onPriorityActionStepDeleted,
@@ -386,13 +391,19 @@ export default function CoachingNotesPanel({
         if (cancelled) return;
 
         const all = (userMeetings ?? []) as UserMeetingRow[];
+        const syncSources = await getMeetingSyncSources(
+          all.map((meeting) => meeting.meeting_id),
+        );
+        if (cancelled) return;
 
         if (businessAuditMode) {
           const implCandidates = all
             .filter(
               (meeting) =>
                 meeting.meeting_type_code === 'IMPLEMENTATION_MEETING' &&
-                meeting.meeting_date >= businessAuditReviewDate,
+                meeting.meeting_date >= businessAuditReviewDate &&
+                (!businessAuditNextReviewDate ||
+                  meeting.meeting_date < businessAuditNextReviewDate),
             )
             .sort((a, b) =>
               a.meeting_date === b.meeting_date
@@ -410,6 +421,7 @@ export default function CoachingNotesPanel({
               meetingId: record.meeting_id,
               date: record.meeting_date,
               attended: Boolean(record.attended ?? false),
+              source: syncSources.get(record.meeting_id) ?? 'manual',
             };
           });
 
@@ -455,6 +467,7 @@ export default function CoachingNotesPanel({
           meetingId: m2MeetingId!,
           date: m2Date,
           attended: Boolean(m2Record.attended ?? false),
+          source: syncSources.get(m2MeetingId!) ?? 'manual',
         };
 
         const implKeys: MeetingSlotKey[] = ['impl1', 'impl2', 'impl3'];
@@ -466,6 +479,7 @@ export default function CoachingNotesPanel({
             meetingId: record.meeting_id,
             date: record.meeting_date,
             attended: Boolean(record.attended ?? false),
+            source: syncSources.get(record.meeting_id) ?? 'manual',
           };
         });
 
@@ -488,6 +502,7 @@ export default function CoachingNotesPanel({
     };
   }, [
     businessAuditMode,
+    businessAuditNextReviewDate,
     businessAuditReviewDate,
     meetingSlotsVersion,
     notes,
@@ -898,6 +913,11 @@ export default function CoachingNotesPanel({
     const slot = meetingSlots[slotKey];
     if (!slot) return;
 
+    if (slot.source === 'ghl') {
+      setError('This meeting is managed in GHL. Reschedule it there and the date will sync automatically.');
+      return;
+    }
+
     const prevDate = slot.date;
     setSlotSavingKey(slotKey);
     setError(null);
@@ -1132,68 +1152,110 @@ export default function CoachingNotesPanel({
         </DialogActions>
       </Dialog>
 
-      <LibraryItemPickerDialog
-        open={libraryDialogOpen}
-        onClose={() => setLibraryDialogOpen(false)}
-        onSelect={handleAddStepFromLibrary}
-      />
-
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="flex-start">
-        <Paper
-          elevation={0}
-          sx={{
-            flexBasis: isNarrow ? '100%' : 320,
-            flexShrink: 0,
-            width: '100%',
-            border: '1px solid',
-            borderColor: 'grey.200',
-            borderRadius: 3,
-            p: 2.5,
-            bgcolor: 'background.paper',
-          }}
-        >
-          <MeetingSlotsPanel
-            attendanceSavingKey={attendanceSavingKey}
-            businessAuditMode={businessAuditMode}
-            m2Exists={Boolean(selectedNote?.m2_meeting_id)}
-            meetingSlots={meetingSlots}
-            meetingSlotsLoading={meetingSlotsLoading}
-            newMeetingDates={newMeetingDates}
-            noteSelected={Boolean(selectedNote)}
-            slotSavingKey={slotSavingKey}
-            onChangeExistingDate={(slotKey, value) => {
-              void handleChangeSlotDate(slotKey, value);
+      {contentMode === 'notes-only' ? (
+        notesLoading && !selectedNote ? (
+          <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : selectedNote ? (
+          <CommentsPanel
+            comments={comments}
+            commentsLoading={commentsLoading}
+            editingCommentBody={editingCommentBody}
+            editingCommentId={editingCommentId}
+            newCommentBody={newCommentBody}
+            savingComment={savingComment}
+            onAddComment={() => {
+              void handleAddComment();
             }}
-            onChangeNewDate={(slotKey, value) => {
-              setNewMeetingDates((prev) => ({
-                ...prev,
-                [slotKey]: value,
-              }));
+            onCancelEditComment={cancelEditComment}
+            onChangeEditingCommentBody={setEditingCommentBody}
+            onChangeNewCommentBody={setNewCommentBody}
+            onRequestDeleteComment={handleRequestDeleteComment}
+            onSaveEditComment={() => {
+              void saveEditComment();
             }}
-            onCreateImplementationMeeting={(slotKey) => {
-              void handleCreateImplementationMeeting(slotKey);
-            }}
-            onCreateM2Meeting={() => {
-              void handleCreateM2Meeting();
-            }}
-            onToggleAttendance={(slotKey) => {
-              void handleToggleSlotAttendance(slotKey);
-            }}
+            onStartEditComment={startEditComment}
           />
-        </Paper>
+        ) : (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              border: '1px solid',
+              borderColor: 'grey.200',
+              borderRadius: 2,
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              The coaching note connected to this Business Audit could not be loaded.
+            </Typography>
+          </Paper>
+        )
+      ) : (
+        <>
+          <LibraryItemPickerDialog
+            open={libraryDialogOpen}
+            onClose={() => setLibraryDialogOpen(false)}
+            onSelect={handleAddStepFromLibrary}
+          />
 
-        <Box sx={{ flexGrow: 1, width: '100%', minWidth: 0 }}>
-          {!businessAuditMode ? (
-            <NoteSelector
-              notes={notes}
-              notesLoading={notesLoading}
-              selectedNoteId={selectedNoteId}
-              selectedNote={selectedNote}
-              onCreateNote={handleRequestCreateNote}
-              onDeleteNote={handleRequestDeleteNote}
-              onSelectNote={setSelectedNoteId}
-            />
-          ) : null}
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} alignItems="flex-start">
+            <Paper
+              elevation={0}
+              sx={{
+                flexBasis: isNarrow ? '100%' : 320,
+                flexShrink: 0,
+                width: '100%',
+                border: '1px solid',
+                borderColor: 'grey.200',
+                borderRadius: 3,
+                p: 2.5,
+                bgcolor: 'background.paper',
+              }}
+            >
+              <MeetingSlotsPanel
+                attendanceSavingKey={attendanceSavingKey}
+                businessAuditMode={businessAuditMode}
+                m2Exists={Boolean(selectedNote?.m2_meeting_id)}
+                meetingSlots={meetingSlots}
+                meetingSlotsLoading={meetingSlotsLoading}
+                newMeetingDates={newMeetingDates}
+                noteSelected={Boolean(selectedNote)}
+                slotSavingKey={slotSavingKey}
+                onChangeExistingDate={(slotKey, value) => {
+                  void handleChangeSlotDate(slotKey, value);
+                }}
+                onChangeNewDate={(slotKey, value) => {
+                  setNewMeetingDates((prev) => ({
+                    ...prev,
+                    [slotKey]: value,
+                  }));
+                }}
+                onCreateImplementationMeeting={(slotKey) => {
+                  void handleCreateImplementationMeeting(slotKey);
+                }}
+                onCreateM2Meeting={() => {
+                  void handleCreateM2Meeting();
+                }}
+                onToggleAttendance={(slotKey) => {
+                  void handleToggleSlotAttendance(slotKey);
+                }}
+              />
+            </Paper>
+
+            <Box sx={{ flexGrow: 1, width: '100%', minWidth: 0 }}>
+              {!businessAuditMode ? (
+                <NoteSelector
+                  notes={notes}
+                  notesLoading={notesLoading}
+                  selectedNoteId={selectedNoteId}
+                  selectedNote={selectedNote}
+                  onCreateNote={handleRequestCreateNote}
+                  onDeleteNote={handleRequestDeleteNote}
+                  onSelectNote={setSelectedNoteId}
+                />
+              ) : null}
 
           {notesLoading && !selectedNote ? (
             <Box sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
@@ -1264,8 +1326,10 @@ export default function CoachingNotesPanel({
               </Typography>
             </Paper>
           )}
-        </Box>
-      </Stack>
+            </Box>
+          </Stack>
+        </>
+      )}
     </Box>
   );
 }

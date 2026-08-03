@@ -7,7 +7,7 @@
 - Supabase Auth for sessions.
 - Supabase Postgres/PostgREST for data and functions.
 - Supabase Storage for images and uploaded resources.
-- Vercel deployment with a daily podcast-sync cron expression of `0 6 * * *`.
+- Vercel deployment with a daily podcast sync (`0 6 * * *`) and hourly Business Audit/Implementation meeting sync (`0 * * * *`).
 
 ## Supabase clients
 
@@ -55,7 +55,7 @@ API handlers still need their own guards. A middleware-public API prefix does no
 | Area | Routes | Purpose |
 |---|---|---|
 | Entry/auth | `/`, `/login`, `/reset-password`, `/auth/mobile-handoff`, `/access-removed` | Role routing and session flows |
-| Member | `/dashboard`, `/tracker`, `/resources`, `/courses/**`, `/library/**`, `/support` | Dashboard, KPI, courses, content, resources |
+| Member | `/dashboard`, `/tracker`, `/business-audit-prep`, `/resources`, `/courses/**`, `/library/**`, `/support` | Dashboard, KPI, Business Audit preparation, courses, content, resources |
 | Assistant | `/assistant-library/**` | Assistant-scoped library |
 | Coach | `/coach`, `/coach/notes`, `/coach/progress`, `/coach/students-overview`, `/coach/student-dashboard/[userId]`, `/coach/kpi-tracker/[userId]` | Assigned-member coaching workspace |
 | Admin | `/admin`, `/admin/[view]` | User, content, meeting, resource, achievement, and assignment administration |
@@ -126,6 +126,8 @@ The partnership handlers call `await requireAdmin()` but do not inspect the retu
 
 | Route | Methods | Auth | Purpose |
 |---|---|---|---|
+| `/api/business-audit-preparation` | GET, PUT | User | Load or update the signed-in student's preparation form for one Business Audit |
+| `/api/business-reviews/[reviewId]/status` | PUT | Coach/admin | Mark a Business Audit complete or reopen it without making its content read-only |
 | `/api/coach/booking-follow-up` | GET | User | Booking follow-up scoped to coach |
 | `/api/coach/status-overview` | GET | Session/coach logic | Status overview for assigned members |
 | `/api/coach/workspace-students` | GET | User | Coach’s current assigned members |
@@ -164,6 +166,7 @@ All use `requireUser`.
 |---|---|---|---|
 | `/api/auth/is-admin` | GET | Session | Admin-role check |
 | `/api/auth/clear-first-login-flag` | POST | Session | Clear `must_reset_password` Auth metadata |
+| `/api/cron/sync-business-audit-meetings` | GET | Bearer `CRON_SECRET` | Reconcile future GHL Business Audit and Implementation appointments with site meetings and audits |
 | `/api/cron/sync-podcasts` | GET | Bearer `CRON_SECRET` | Sync Transistor episodes into `resources` |
 | `/api/ghl/create-assistant` | POST | `x-reboot-webhook-secret` | Create/update assistant account from GHL tags |
 
@@ -178,14 +181,19 @@ Environment:
 - `GHL_PRIVATE_TOKEN`
 - `GHL_LOCATION_ID`
 - `GHL_ASSISTANT_WEBHOOK_SECRET`
+- `GHL_MEETING_SYNC_LOOKBACK_DAYS` (optional)
+- `GHL_MEETING_SYNC_FUTURE_DAYS` (optional)
 
 Uses:
 
 - assistant provisioning webhook;
 - coach calendars and booking follow-up;
+- forward-only hourly Business Audit and Implementation meeting reconciliation;
 - ambassador-hub contact/link resolution.
 
 `GHL_LOCATION_ID` has a hardcoded fallback in `src/lib/config.ts`; deployments and scripts should set it explicitly.
+
+The forward-only cutoff (`2026-08-06T00:00:00-06:00`) and Calgary timezone (`America/Edmonton`) are fixed Business Audit rules in `src/lib/businessAuditMeetingSync.ts`. The job never scans before that cutoff. Repeated runs are safe because `meetings.ghl_appointment_id` is unique. An unambiguous same-day manual Implementation meeting is adopted by the GHL appointment rather than duplicated. Existing GHL appointments that disappear from valid scan matches are reported as an incomplete reconciliation, and incomplete cron runs return a non-success status instead of silently appearing healthy.
 
 The GHL and admin provisioning routes currently create accounts with a shared bootstrap password and set `must_reset_password`. This is security debt and should not be reproduced in external scripts.
 
@@ -212,6 +220,10 @@ Auth user → `profiles` → KPI RPCs + meeting RPCs + coaching-note relations +
 ### Coach workspace
 
 Coach profile → active `user_coaches` → current-member filter → profiles, status summary, course progress, KPI history, attendance, notes, smart-doc answers, and wins.
+
+### Business Audit preparation
+
+Authenticated `/business-audit-prep` uses the signed-in student's ID to resolve their nearest upcoming, non-cancelled, meeting-connected Business Audit. When no future audit exists, it falls back to the latest non-cancelled audit so submitted answers remain editable after the meeting. The GHL reminder link is therefore static and does not need appointment-specific merge data. All eight answers are required; the two ratings allow 1-10 except 5 and 7. Preparation wins remain form answers and do not write to `wins`. Coaches see the saved responses at the top of the matching Business Audit.
 
 ### Course render
 
@@ -241,8 +253,10 @@ Admin guard → Auth admin API → `profiles` → `user_roles` → optional coac
 | `GHL_PRIVATE_TOKEN` | Server secret | GHL API authentication |
 | `GHL_LOCATION_ID` | Server config | GHL location |
 | `GHL_ASSISTANT_WEBHOOK_SECRET` | Server secret | Provisioning webhook |
+| `GHL_MEETING_SYNC_LOOKBACK_DAYS` | Server config | Optional reconciliation lookback; defaults to 7 days |
+| `GHL_MEETING_SYNC_FUTURE_DAYS` | Server config | Optional future scan window; defaults to 180 days |
 | `TRANSISTOR_SHOW_ID` | Server config | Podcast show |
 | `TRANSISTOR_API_KEY` | Server secret | Podcast API |
-| `CRON_SECRET` | Server secret | Podcast cron authentication |
+| `CRON_SECRET` | Server secret | Scheduled-job authentication |
 
 `.env.local` is ignored by Git. `.env.example` contains names only.

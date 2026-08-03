@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AddIcon from '@mui/icons-material/Add';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import {
   Alert,
   Box,
@@ -15,10 +16,13 @@ import {
   Typography,
 } from '@mui/material';
 
-import BusinessSnapshot from '@/components/coach/business-audit/BusinessSnapshot';
+import KpiTracker from '@/components/KpiTracker';
+import CoachingNotesPanel from '@/components/coach/CoachingNotesPanel';
+import UserWinsPanel from '@/components/coach/UserWinsPanel';
 import FocusFinderChart from '@/components/coach/business-audit/FocusFinderChart';
 import type { FocusFinderSaveStatus } from '@/components/coach/business-audit/FocusFinderChart';
 import SystemsScorecard from '@/components/coach/business-audit/SystemsScorecard';
+import { getBusinessAuditLocalDate } from '@/lib/businessAuditConfig';
 import type {
   BusinessReview,
   BusinessReviewFocusValue,
@@ -57,6 +61,12 @@ type SaveSystemPriorityResponse = ApiErrorBody & {
   priority?: BusinessReviewSystemPriority | null;
 };
 
+type SaveReviewStatusResponse = ApiErrorBody & {
+  status?: 'draft' | 'completed';
+  completedAt?: string | null;
+  updatedAt?: string;
+};
+
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
   month: 'short',
@@ -76,12 +86,45 @@ function formatCreatedTime(value: string) {
   return timeFormatter.format(new Date(value));
 }
 
-function getLocalIsoDate() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+function formatSavedAt(value: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function formatFoundationsCompleted(value: number | null | undefined) {
+  if (value == null) return '— / 6 completed';
+  return `${Math.min(Math.max(value, 0), 6)} / 6 completed`;
+}
+
+function selectDefaultReviewId(reviews: BusinessReview[]): number | null {
+  const today = getBusinessAuditLocalDate();
+  const available = reviews.filter((review) => !review.meetingCancelled);
+  const todayReview = available
+    .filter((review) => review.reviewDate === today)
+    .sort((left, right) => right.id - left.id)[0];
+  if (todayReview) return todayReview.id;
+
+  const nearestUpcoming = available
+    .filter((review) => review.reviewDate > today)
+    .sort(
+      (left, right) =>
+        left.reviewDate.localeCompare(right.reviewDate) || left.id - right.id,
+    )[0];
+  if (nearestUpcoming) return nearestUpcoming.id;
+
+  const latestPast = available
+    .filter((review) => review.reviewDate < today)
+    .sort(
+      (left, right) =>
+        right.reviewDate.localeCompare(left.reviewDate) || right.id - left.id,
+    )[0];
+
+  return latestPast?.id ?? reviews[0]?.id ?? null;
 }
 
 function valuesToRecord(review: BusinessReview | null): Record<number, number> {
@@ -234,6 +277,7 @@ export default function BusinessAuditTab({
   const [selectedReviewId, setSelectedReviewId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [systemSaveError, setSystemSaveError] = useState<string | null>(null);
@@ -284,7 +328,7 @@ export default function BusinessAuditTab({
 
         setDimensions(body.dimensions ?? []);
         setReviews(body.reviews ?? []);
-        setSelectedReviewId(body.reviews?.[0]?.id ?? null);
+        setSelectedReviewId(selectDefaultReviewId(body.reviews ?? []));
       } catch (error) {
         if (controller.signal.aborted) return;
 
@@ -512,7 +556,7 @@ export default function BusinessAuditTab({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: selectedStudentId,
-          reviewDate: getLocalIsoDate(),
+          reviewDate: getBusinessAuditLocalDate(),
         }),
       });
       const body = (await response.json()) as CreateBusinessReviewResponse;
@@ -532,6 +576,42 @@ export default function BusinessAuditTab({
       setLoadError(message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const toggleReviewCompletion = async () => {
+    if (!selectedReview || selectedReview.meetingCancelled) return;
+    const completed = selectedReview.status !== 'completed';
+    setSavingReviewStatus(true);
+    setLoadError(null);
+
+    try {
+      const response = await fetch(`/api/business-reviews/${selectedReview.id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ completed }),
+      });
+      const body = (await response.json()) as SaveReviewStatusResponse;
+      if (!response.ok || !body.status || !body.updatedAt) {
+        throw new Error(body.error || 'Could not update the audit status.');
+      }
+
+      setReviews((current) =>
+        current.map((review) =>
+          review.id === selectedReview.id
+            ? {
+                ...review,
+                status: body.status!,
+                completedAt: body.completedAt ?? null,
+                updatedAt: body.updatedAt!,
+              }
+            : review,
+        ),
+      );
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not update the audit status.');
+    } finally {
+      setSavingReviewStatus(false);
     }
   };
 
@@ -560,8 +640,20 @@ export default function BusinessAuditTab({
         <Stack direction="row" spacing={1} alignItems="center">
           {selectedReview ? (
             <Chip
-              label={selectedReview.status === 'completed' ? 'Completed · editable' : 'Draft'}
-              color={selectedReview.status === 'completed' ? 'success' : 'default'}
+              label={
+                selectedReview.meetingCancelled
+                  ? 'Cancelled'
+                  : selectedReview.status === 'completed'
+                    ? 'Completed · editable'
+                    : 'Draft'
+              }
+              color={
+                selectedReview.meetingCancelled
+                  ? 'error'
+                  : selectedReview.status === 'completed'
+                    ? 'success'
+                    : 'default'
+              }
               variant="outlined"
               sx={{ fontWeight: 700, textTransform: 'capitalize' }}
             />
@@ -671,7 +763,12 @@ export default function BusinessAuditTab({
                           variant="caption"
                           sx={{ opacity: selected ? 0.84 : 0.7, lineHeight: 1.2 }}
                         >
-                          {review.status === 'completed' ? 'Completed' : 'Draft'} ·{' '}
+                          {review.meetingCancelled
+                            ? 'Cancelled'
+                            : review.status === 'completed'
+                              ? 'Completed'
+                              : 'Draft'}{' '}
+                          ·{' '}
                           {formatCreatedTime(review.createdAt)}
                         </Typography>
                       </Box>
@@ -684,24 +781,158 @@ export default function BusinessAuditTab({
 
           {selectedReview ? (
             <>
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1}
-                alignItems={{ xs: 'flex-start', sm: 'center' }}
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 2,
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                }}
               >
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <CalendarMonthIcon fontSize="small" color="action" />
-                  <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                    Audit date: {formatReviewDate(selectedReview.reviewDate)}
-                  </Typography>
-                </Stack>
-              </Stack>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.5}
+                  alignItems={{ xs: 'flex-start', sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <CalendarMonthIcon fontSize="small" color="action" />
+                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      Audit date: {formatReviewDate(selectedReview.reviewDate)}
+                    </Typography>
+                  </Stack>
 
-              <BusinessSnapshot
-                key={selectedReview.id}
-                foundationsCompleted={foundationsCompleted}
-                foundationsLoading={foundationsLoading}
-              />
+                  {foundationsLoading ? (
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <CircularProgress size={18} />
+                      <Typography variant="body2" color="text.secondary">
+                        Loading Foundations progress…
+                      </Typography>
+                    </Stack>
+                  ) : (
+                    <Chip
+                      icon={<SchoolOutlinedIcon />}
+                      label={`Foundations videos: ${formatFoundationsCompleted(foundationsCompleted)}`}
+                      color={(foundationsCompleted ?? 0) >= 6 ? 'success' : 'primary'}
+                      variant="outlined"
+                      sx={{ fontWeight: 800 }}
+                    />
+                  )}
+                </Stack>
+              </Paper>
+
+              {selectedReview.meetingCancelled ? (
+                <Alert severity="warning">
+                  This appointment was cancelled in GHL. It remains in audit history, but it will
+                  not start an Implementation cycle or count as a scheduled meeting.
+                </Alert>
+              ) : null}
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 2, md: 3 },
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                }}
+              >
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.5}
+                  alignItems={{ xs: 'flex-start', sm: 'center' }}
+                  justifyContent="space-between"
+                >
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      Student preparation
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                      Pre-audit responses
+                    </Typography>
+                  </Box>
+                  {selectedReview.preparation ? (
+                    <Chip
+                      label={`Submitted · ${formatSavedAt(selectedReview.preparation.updatedAt)}`}
+                      color="success"
+                      variant="outlined"
+                      sx={{ fontWeight: 800 }}
+                    />
+                  ) : (
+                    <Chip label="Not submitted" color="warning" sx={{ fontWeight: 800 }} />
+                  )}
+                </Stack>
+
+                {selectedReview.preparation ? (
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+                      gap: 2,
+                      mt: 2.5,
+                    }}
+                  >
+                    {[
+                      ['Business wins & movement', selectedReview.preparation.businessForwardWins],
+                      ['Personal wins & movement', selectedReview.preparation.personalForwardWins],
+                      ['Greatest business challenge', selectedReview.preparation.greatestBusinessChallenge],
+                      ['Greatest personal challenge', selectedReview.preparation.greatestPersonalChallenge],
+                      ['Desired outcome from this call', selectedReview.preparation.desiredCallOutcome],
+                      ['Topics or situations to discuss', selectedReview.preparation.topicsToDiscuss],
+                    ].map(([label, answer]) => (
+                      <Box
+                        key={label}
+                        sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, minWidth: 0 }}
+                      >
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                          {label}
+                        </Typography>
+                        <Typography variant="body2" sx={{ mt: 0.75, whiteSpace: 'pre-wrap' }}>
+                          {answer}
+                        </Typography>
+                      </Box>
+                    ))}
+                    <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                        Business rating
+                      </Typography>
+                      <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 900 }}>
+                        {selectedReview.preparation.businessRating}/10
+                      </Typography>
+                    </Box>
+                    <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                        Personal rating
+                      </Typography>
+                      <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 900 }}>
+                        {selectedReview.preparation.personalRating}/10
+                      </Typography>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    The student has not submitted the preparation form for this audit yet.
+                  </Alert>
+                )}
+              </Paper>
+
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 2, md: 3 },
+                  border: '1px solid',
+                  borderColor: 'grey.200',
+                  borderRadius: 3,
+                }}
+              >
+                <KpiTracker
+                  key={`business-audit-kpis-${selectedReview.id}`}
+                  userIdOverride={selectedStudentId}
+                  fixedPeriodDate={selectedReview.reviewDate}
+                  lockPeriod
+                />
+              </Paper>
 
               <FocusFinderChart
                 dimensions={dimensions}
@@ -728,7 +959,60 @@ export default function BusinessAuditTab({
                   This audit does not have a systems scorecard attached.
                 </Alert>
               )}
+
+              <Box sx={{ pt: 1 }}>
+                <Typography variant="overline" color="text.secondary">
+                  Meeting wrap-up
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                  Notes & wins
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Capture any final context or progress worth celebrating before ending the audit.
+                </Typography>
+              </Box>
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'minmax(0, 1fr)',
+                    md: 'repeat(2, minmax(0, 1fr))',
+                  },
+                  gap: 3,
+                  alignItems: 'start',
+                }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <CoachingNotesPanel
+                    key={`business-audit-notes-${selectedReview.id}`}
+                    userId={selectedStudentId}
+                    fixedNoteId={selectedReview.coachingNoteId}
+                    businessAuditReviewDate={selectedReview.reviewDate}
+                    contentMode="notes-only"
+                  />
+                </Box>
+
+                <Box sx={{ minWidth: 0 }}>
+                  <UserWinsPanel userId={selectedStudentId} />
+                </Box>
+              </Box>
             </>
+          ) : null}
+          {selectedReview && !selectedReview.meetingCancelled ? (
+            <Button
+              variant="outlined"
+              color={selectedReview.status === 'completed' ? 'inherit' : 'success'}
+              disabled={savingReviewStatus}
+              onClick={() => void toggleReviewCompletion()}
+              sx={{ fontWeight: 800 }}
+            >
+              {savingReviewStatus
+                ? 'Saving…'
+                : selectedReview.status === 'completed'
+                  ? 'Reopen audit'
+                  : 'Mark complete'}
+            </Button>
           ) : null}
         </>
       )}

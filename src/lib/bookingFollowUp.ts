@@ -43,6 +43,7 @@ type PartnershipMembershipRow = {
 type RawGhlEvent = {
   id?: string | number;
   _id?: string | number;
+  calendarId?: string | number | null;
   title?: string | null;
   name?: string | null;
   appointmentStatus?: string | null;
@@ -53,6 +54,9 @@ type RawGhlEvent = {
   endTime?: number | string;
   end?: number | string;
   to?: number | string;
+  timezone?: string | null;
+  selectedTimezone?: string | null;
+  appointmentTimezone?: string | null;
   contactId?: string | null;
   contact?: {
     id?: string | null;
@@ -64,10 +68,15 @@ type RawGhlEvent = {
 
 type NormalizedGhlEvent = {
   id: string;
+  hasStableId: boolean;
+  calendarId: string | null;
   title: string;
   status: string | null;
   start: string;
   startMs: number;
+  end: string | null;
+  timezone: string | null;
+  deleted: boolean;
   contactId: string | null;
   contactName: string | null;
   contactEmail: string | null;
@@ -94,6 +103,27 @@ type CoachScan = {
 
 type BuildOptions = {
   coachId?: string;
+};
+
+export type GhlCoachingAppointment = {
+  id: string;
+  hasStableId: boolean;
+  calendarId: string | null;
+  title: string;
+  status: string | null;
+  start: string;
+  end: string | null;
+  timezone: string | null;
+  deleted: boolean;
+  coachId: string;
+  studentId: string;
+};
+
+export type GhlCoachingAppointmentScanResult = {
+  appointments: GhlCoachingAppointment[];
+  coachScanWarnings: Array<{ coachId: string; message: string }>;
+  unmatchedAppointmentIds: string[];
+  appointmentsMissingStableId: number;
 };
 
 export async function buildBookingFollowUp(
@@ -179,6 +209,129 @@ export async function buildBookingFollowUp(
     .sort((a, b) => a.coachName.localeCompare(b.coachName, undefined, { sensitivity: 'base' }));
 
   return { generatedAt: new Date().toISOString(), groups };
+}
+
+export async function findBusinessAuditAppointmentsForSync(input: {
+  startMs: number;
+  endMs: number;
+}): Promise<GhlCoachingAppointmentScanResult> {
+  return findAppointmentsForSync(input, 'm2', 'primary');
+}
+
+export async function findImplementationAppointmentsForSync(input: {
+  startMs: number;
+  endMs: number;
+}): Promise<GhlCoachingAppointmentScanResult> {
+  return findAppointmentsForSync(input, 'implementation', 'implementation');
+}
+
+async function findAppointmentsForSync(
+  input: { startMs: number; endMs: number },
+  meetingType: ParsedMeetingTitle['type'],
+  relationshipType: CoachingRelationship,
+): Promise<GhlCoachingAppointmentScanResult> {
+  const supabase = getAdminClient();
+  const assignments = (await fetchAssignments(supabase)).filter(
+    (assignment) => normalizeRelationship(assignment.relationship_type) === relationshipType,
+  );
+
+  if (assignments.length === 0) {
+    return {
+      appointments: [],
+      coachScanWarnings: [],
+      unmatchedAppointmentIds: [],
+      appointmentsMissingStableId: 0,
+    };
+  }
+
+  const coachIds = unique(assignments.map((assignment) => assignment.coach_id));
+  const studentIds = unique(assignments.map((assignment) => assignment.user_id));
+  const allIds = unique([...coachIds, ...studentIds]);
+  const [{ data: profileRows, error: profileError }, emailById] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('id, first_name, last_name, ghl_user_id')
+      .in('id', allIds),
+    fetchEmails(supabase, new Set(allIds)),
+  ]);
+
+  if (profileError) {
+    throw new Error(`Could not load coach and member profiles: ${profileError.message}`);
+  }
+
+  const profileById = new Map(
+    ((profileRows ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
+  );
+  const coachScans = await mapWithConcurrency(
+    coachIds,
+    GHL_FETCH_CONCURRENCY,
+    async (coachId) => scanCoachCalendar(
+      coachId,
+      profileById.get(coachId)?.ghl_user_id ?? null,
+      input.startMs,
+      input.endMs,
+    ),
+  );
+  const meetingsByStudentId = matchMeetingsToStudents({
+    coachScans,
+    assignmentsByCoachId: groupBy(assignments, (assignment) => assignment.coach_id),
+    profileById,
+    emailById,
+    includeExcluded: true,
+  });
+  const relevantAppointmentIds = new Set<string>();
+  let appointmentsMissingStableId = 0;
+  for (const scan of coachScans) {
+    for (const event of scan.events) {
+      if (parseMeetingTitle(event.title)?.type === meetingType) {
+        if (event.hasStableId) relevantAppointmentIds.add(event.id);
+        else appointmentsMissingStableId += 1;
+      }
+    }
+  }
+
+  const appointmentMatchesById = new Map<string, GhlCoachingAppointment[]>();
+
+  for (const meetings of meetingsByStudentId.values()) {
+    for (const meeting of meetings) {
+      if (meeting.type !== meetingType || !meeting.hasStableId) continue;
+      const appointment: GhlCoachingAppointment = {
+        id: meeting.id,
+        hasStableId: meeting.hasStableId,
+        calendarId: meeting.calendarId,
+        title: meeting.title,
+        status: meeting.status,
+        start: meeting.start,
+        end: meeting.end,
+        timezone: meeting.timezone,
+        deleted: meeting.deleted,
+        coachId: meeting.coachId,
+        studentId: meeting.studentId,
+      };
+      appointmentMatchesById.set(meeting.id, [
+        ...(appointmentMatchesById.get(meeting.id) ?? []),
+        appointment,
+      ]);
+    }
+  }
+
+  const appointments: GhlCoachingAppointment[] = [];
+  for (const matches of appointmentMatchesById.values()) {
+    const studentIds = unique(matches.map((match) => match.studentId));
+    if (studentIds.length === 1) appointments.push(matches[0]);
+  }
+  const matchedAppointmentIds = new Set(appointments.map((appointment) => appointment.id));
+
+  return {
+    appointments: appointments.sort((left, right) => left.start.localeCompare(right.start)),
+    coachScanWarnings: coachScans.flatMap((scan) =>
+      scan.error ? [{ coachId: scan.coachId, message: scan.error }] : [],
+    ),
+    unmatchedAppointmentIds: Array.from(relevantAppointmentIds).filter(
+      (appointmentId) => !matchedAppointmentIds.has(appointmentId),
+    ),
+    appointmentsMissingStableId,
+  };
 }
 
 async function fetchAssignments(
@@ -398,18 +551,29 @@ function extractRawEvents(payload: unknown): RawGhlEvent[] {
 }
 
 function normalizeGhlEvent(event: RawGhlEvent): NormalizedGhlEvent | null {
-  if (event.deleted === true) return null;
   const start = toIsoUtc(event.startTime ?? event.start ?? event.from);
   if (!start) return null;
   const title = readString(event.title) ?? readString(event.name);
   if (!title) return null;
+  const stableId = readString(String(event.id ?? event._id ?? ''));
 
   return {
-    id: String(event.id ?? event._id ?? `${title}-${start}`),
+    id: stableId ?? `${title}-${start}`,
+    hasStableId: stableId !== null,
+    calendarId: readString(String(event.calendarId ?? '')),
     title,
-    status: readString(event.appointmentStatus) ?? readString(event.status),
+    status:
+      readString(event.appointmentStatus) ??
+      readString(event.status) ??
+      (event.deleted === true ? 'deleted' : null),
     start,
     startMs: DateTime.fromISO(start).toMillis(),
+    end: toIsoUtc(event.endTime ?? event.end ?? event.to),
+    timezone:
+      readString(event.timezone) ??
+      readString(event.selectedTimezone) ??
+      readString(event.appointmentTimezone),
+    deleted: event.deleted === true,
     contactId: readString(event.contactId) ?? readString(event.contact?.id),
     contactName: readString(event.contact?.name),
     contactEmail: readString(event.contact?.email)?.toLowerCase() ?? null,
@@ -421,11 +585,13 @@ function matchMeetingsToStudents({
   assignmentsByCoachId,
   profileById,
   emailById,
+  includeExcluded = false,
 }: {
   coachScans: CoachScan[];
   assignmentsByCoachId: Map<string, AssignmentRow[]>;
   profileById: Map<string, ProfileRow>;
   emailById: Map<string, string>;
+  includeExcluded?: boolean;
 }): Map<string, MatchedMeeting[]> {
   const meetingsByStudentId = new Map<string, MatchedMeeting[]>();
   const seen = new Map<string, MatchedMeeting>();
@@ -435,7 +601,7 @@ function matchMeetingsToStudents({
     const coachName = fullName(profileById.get(scan.coachId), emailById.get(scan.coachId));
 
     for (const event of scan.events) {
-      if (isExcludedStatus(event.status)) continue;
+      if (!includeExcluded && isExcludedStatus(event.status)) continue;
       const parsed = parseMeetingTitle(event.title);
       if (!parsed) continue;
 
@@ -714,13 +880,24 @@ function buildMemberRow({
 }
 
 function parseMeetingTitle(title: string): ParsedMeetingTitle | null {
-  const m2 = title.match(/^\s*(.+?)\s+m2\s+meeting\s+with\s+(.+?)\s*$/i);
+  const m2 = title.match(
+    /^\s*(.+?)\s+(?:m2\s+meeting|business\s+(?:audit|review)(?:\s+meeting)?)\s+with\s+(.+?)\s*$/i,
+  );
   if (m2) return { type: 'm2', memberName: m2[1] };
 
-  const implementation = title.match(
-    /^\s*implementation\s+meeting\s*\([^)]*\)\s+with\s+(.+?)\s*$/i,
+  const implementationMemberFirst = title.match(
+    /^\s*(.+?)\s+implementation\s+meeting\s+with\s+(.+?)\s*$/i,
   );
-  if (implementation) return { type: 'implementation', memberName: implementation[1] };
+  if (implementationMemberFirst) {
+    return { type: 'implementation', memberName: implementationMemberFirst[1] };
+  }
+
+  const implementationCoachFirst = title.match(
+    /^\s*implementation\s+meeting(?:\s*\([^)]*\))?\s+with\s+(.+?)\s*$/i,
+  );
+  if (implementationCoachFirst) {
+    return { type: 'implementation', memberName: implementationCoachFirst[1] };
+  }
   return null;
 }
 
@@ -761,7 +938,7 @@ function summarizeMeeting(
 function isExcludedStatus(status: string | null): boolean {
   if (!status) return false;
   const normalized = status.toLowerCase().replace(/[\s_-]+/g, '');
-  return ['cancelled', 'canceled', 'invalid', 'noshow'].includes(normalized);
+  return ['cancelled', 'canceled', 'deleted', 'invalid', 'noshow'].includes(normalized);
 }
 
 function normalizeName(value: string): string {
