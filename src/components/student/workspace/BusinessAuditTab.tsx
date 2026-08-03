@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import AddIcon from '@mui/icons-material/Add';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import {
@@ -42,10 +41,6 @@ type BusinessAuditTabProps = {
 
 type ApiErrorBody = {
   error?: string;
-};
-
-type CreateBusinessReviewResponse = ApiErrorBody & {
-  review?: BusinessReview;
 };
 
 type SaveFocusValueResponse = ApiErrorBody & {
@@ -220,15 +215,7 @@ function LoadingState() {
   );
 }
 
-function EmptyAuditState({
-  creating,
-  studentName,
-  onCreate,
-}: {
-  creating: boolean;
-  studentName?: string | null;
-  onCreate: () => void;
-}) {
+function EmptyAuditState({ studentName }: { studentName?: string | null }) {
   return (
     <Paper
       elevation={0}
@@ -243,25 +230,16 @@ function EmptyAuditState({
     >
       <CalendarMonthIcon color="primary" sx={{ fontSize: 42 }} />
       <Typography variant="h5" sx={{ mt: 1.5, fontWeight: 800 }}>
-        Start the first business audit
+        No business audits yet
       </Typography>
       <Typography
         variant="body2"
         color="text.secondary"
         sx={{ maxWidth: 520, mx: 'auto', mt: 1 }}
       >
-        This creates a new 60 Day Business Audit and its connected coaching note
-        {studentName ? ` for ${studentName}` : ''}.
+        {studentName ? `${studentName}'s` : 'The student\'s'} next Business Audit will
+        appear here after the appointment is booked in GHL and synchronized.
       </Typography>
-      <Button
-        variant="contained"
-        startIcon={creating ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
-        disabled={creating}
-        onClick={onCreate}
-        sx={{ mt: 3, fontWeight: 800 }}
-      >
-        {creating ? 'Creating audit…' : 'Create business audit'}
-      </Button>
     </Paper>
   );
 }
@@ -276,7 +254,6 @@ export default function BusinessAuditTab({
   const [reviews, setReviews] = useState<BusinessReview[]>([]);
   const [selectedReviewId, setSelectedReviewId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
   const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -543,42 +520,6 @@ export default function BusinessAuditTab({
     [pendingPrioritySystemIds, selectedReviewId, selectedStudentId],
   );
 
-  const createAudit = async () => {
-    setCreating(true);
-    setLoadError(null);
-    setSaveError(null);
-    setSystemSaveError(null);
-    setPrioritySaveError(null);
-
-    try {
-      const response = await fetch('/api/business-reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: selectedStudentId,
-          reviewDate: getBusinessAuditLocalDate(),
-        }),
-      });
-      const body = (await response.json()) as CreateBusinessReviewResponse;
-
-      if (!response.ok || !body.review) {
-        throw new Error(body.error || 'Failed to create business audit.');
-      }
-
-      setReviews((current) => [
-        body.review!,
-        ...current.filter((review) => review.id !== body.review!.id),
-      ]);
-      setSelectedReviewId(body.review.id);
-      setHasSaved(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create business audit.';
-      setLoadError(message);
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const toggleReviewCompletion = async () => {
     if (!selectedReview || selectedReview.meetingCancelled) return;
     const completed = selectedReview.status !== 'completed';
@@ -637,39 +578,26 @@ export default function BusinessAuditTab({
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1} alignItems="center">
-          {selectedReview ? (
-            <Chip
-              label={
-                selectedReview.meetingCancelled
-                  ? 'Cancelled'
-                  : selectedReview.status === 'completed'
-                    ? 'Completed · editable'
-                    : 'Draft'
-              }
-              color={
-                selectedReview.meetingCancelled
-                  ? 'error'
-                  : selectedReview.status === 'completed'
-                    ? 'success'
-                    : 'default'
-              }
-              variant="outlined"
-              sx={{ fontWeight: 700, textTransform: 'capitalize' }}
-            />
-          ) : null}
-          {reviews.length > 0 ? (
-            <Button
-              variant="contained"
-              startIcon={creating ? <CircularProgress size={16} color="inherit" /> : <AddIcon />}
-              disabled={creating}
-              onClick={() => void createAudit()}
-              sx={{ fontWeight: 800 }}
-            >
-              {creating ? 'Creating…' : 'New audit'}
-            </Button>
-          ) : null}
-        </Stack>
+        {selectedReview ? (
+          <Chip
+            label={
+              selectedReview.meetingCancelled
+                ? 'Cancelled'
+                : selectedReview.status === 'completed'
+                  ? 'Completed · editable'
+                  : 'Draft'
+            }
+            color={
+              selectedReview.meetingCancelled
+                ? 'error'
+                : selectedReview.status === 'completed'
+                  ? 'success'
+                  : 'default'
+            }
+            variant="outlined"
+            sx={{ fontWeight: 700, textTransform: 'capitalize' }}
+          />
+        ) : null}
       </Stack>
 
       {loadError ? <Alert severity="error">{loadError}</Alert> : null}
@@ -692,11 +620,7 @@ export default function BusinessAuditTab({
       {loading ? (
         <LoadingState />
       ) : reviews.length === 0 ? (
-        <EmptyAuditState
-          creating={creating}
-          studentName={studentName}
-          onCreate={() => void createAudit()}
-        />
+        <EmptyAuditState studentName={studentName} />
       ) : (
         <>
           <Paper

@@ -866,49 +866,6 @@ export default function CoachingNotesPanel({
     }
   };
 
-  const handleCreateImplementationMeeting = async (slotKey: MeetingSlotKey) => {
-    if (slotKey === 'm2') return;
-
-    const note = notes.find((entry) => entry.id === selectedNoteId);
-    if (!note || !userId) return;
-
-    const m2MeetingId = note.m2_meeting_id ?? null;
-    if (!m2MeetingId && !businessAuditMode) {
-      setError('Create the M2 meeting first.');
-      return;
-    }
-
-    const date = newMeetingDates[slotKey];
-    if (!date) {
-      setError('Please pick a date for this implementation meeting.');
-      return;
-    }
-
-    setSlotSavingKey(slotKey);
-    setError(null);
-
-    try {
-      await createMeetingWithAttendees({
-        meetingTypeCode: 'IMPLEMENTATION_MEETING',
-        date,
-        attendeeIds: [userId],
-        title: userDisplayName
-          ? `${userDisplayName} implementation meeting`
-          : 'implementation meeting',
-      });
-
-      setNewMeetingDates((prev) => ({ ...prev, [slotKey]: '' }));
-      setMeetingSlotsVersion((prev) => prev + 1);
-    } catch (err: unknown) {
-      console.error(err);
-      const message =
-        err instanceof Error ? err.message : 'Failed to create implementation meeting';
-      setError(message);
-    } finally {
-      setSlotSavingKey(null);
-    }
-  };
-
   const handleChangeSlotDate = async (slotKey: MeetingSlotKey, newDate: string) => {
     const slot = meetingSlots[slotKey];
     if (!slot) return;
@@ -1231,9 +1188,6 @@ export default function CoachingNotesPanel({
                     ...prev,
                     [slotKey]: value,
                   }));
-                }}
-                onCreateImplementationMeeting={(slotKey) => {
-                  void handleCreateImplementationMeeting(slotKey);
                 }}
                 onCreateM2Meeting={() => {
                   void handleCreateM2Meeting();

@@ -28,7 +28,6 @@ type MeetingSlotsPanelProps = {
   slotSavingKey: MeetingSlotKey | null;
   onChangeExistingDate: (slotKey: MeetingSlotKey, value: string) => void;
   onChangeNewDate: (slotKey: MeetingSlotKey, value: string) => void;
-  onCreateImplementationMeeting: (slotKey: MeetingSlotKey) => void;
   onCreateM2Meeting: () => void;
   onToggleAttendance: (slotKey: MeetingSlotKey) => void;
 };
@@ -44,7 +43,6 @@ export default function MeetingSlotsPanel({
   slotSavingKey,
   onChangeExistingDate,
   onChangeNewDate,
-  onCreateImplementationMeeting,
   onCreateM2Meeting,
   onToggleAttendance,
 }: MeetingSlotsPanelProps) {
@@ -134,7 +132,9 @@ export default function MeetingSlotsPanel({
           ? 'Managed in GHL. Reschedule it there to change the date.'
         : hasMeeting
           ? 'Meeting created for this student.'
-          : 'Pick a date to create this meeting.';
+          : isM2
+            ? 'Pick a date to create this meeting.'
+            : 'This meeting will appear after it is booked in GHL and synchronized.';
 
     return (
       <Box
@@ -167,28 +167,30 @@ export default function MeetingSlotsPanel({
             </Stack>
           </Stack>
 
-          <TextField
-            type="date"
-            size="small"
-            fullWidth
-            value={dateValue}
-            onChange={(event) => {
-              if (hasMeeting) {
-                onChangeExistingDate(slotKey, event.target.value);
-                return;
-              }
+          {hasMeeting || isM2 ? (
+            <TextField
+              type="date"
+              size="small"
+              fullWidth
+              value={dateValue}
+              onChange={(event) => {
+                if (hasMeeting) {
+                  onChangeExistingDate(slotKey, event.target.value);
+                  return;
+                }
 
-              onChangeNewDate(slotKey, event.target.value);
-            }}
-            InputLabelProps={{ shrink: true }}
-            disabled={disableDateInput}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 1.5,
-                bgcolor: 'background.paper',
-              },
-            }}
-          />
+                onChangeNewDate(slotKey, event.target.value);
+              }}
+              InputLabelProps={{ shrink: true }}
+              disabled={disableDateInput}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                  bgcolor: 'background.paper',
+                },
+              }}
+            />
+          ) : null}
 
           {hasMeeting ? (
             <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
@@ -205,7 +207,7 @@ export default function MeetingSlotsPanel({
                 <Typography variant="body2">Attended</Typography>
               </Stack>
             </Stack>
-          ) : (
+          ) : isM2 ? (
             <>
               <Typography variant="caption" color="text.secondary">
                 {helperText}
@@ -214,14 +216,7 @@ export default function MeetingSlotsPanel({
                 variant="outlined"
                 size="small"
                 fullWidth
-                onClick={() => {
-                  if (isM2) {
-                    onCreateM2Meeting();
-                    return;
-                  }
-
-                  onCreateImplementationMeeting(slotKey);
-                }}
+                onClick={onCreateM2Meeting}
                 disabled={disableInputs || !newMeetingDates[slotKey]}
                 sx={{
                   textTransform: 'none',
@@ -234,6 +229,10 @@ export default function MeetingSlotsPanel({
                 Create
               </Button>
             </>
+          ) : (
+            <Typography variant="caption" color="text.secondary">
+              {helperText}
+            </Typography>
           )}
         </Stack>
       </Box>

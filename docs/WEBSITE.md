@@ -127,6 +127,7 @@ The partnership handlers call `await requireAdmin()` but do not inspect the retu
 | Route | Methods | Auth | Purpose |
 |---|---|---|---|
 | `/api/business-audit-preparation` | GET, PUT | User | Load or update the signed-in student's preparation form for one Business Audit |
+| `/api/business-reviews` | GET | Coach/admin | Load a student's Business Audits; manual creation is intentionally unavailable |
 | `/api/business-reviews/[reviewId]/status` | PUT | Coach/admin | Mark a Business Audit complete or reopen it without making its content read-only |
 | `/api/coach/booking-follow-up` | GET | User | Booking follow-up scoped to coach |
 | `/api/coach/status-overview` | GET | Session/coach logic | Status overview for assigned members |
@@ -194,6 +195,8 @@ Uses:
 `GHL_LOCATION_ID` has a hardcoded fallback in `src/lib/config.ts`; deployments and scripts should set it explicitly.
 
 The forward-only cutoff (`2026-08-06T00:00:00-06:00`) and Calgary timezone (`America/Edmonton`) are fixed Business Audit rules in `src/lib/businessAuditMeetingSync.ts`. The job never scans before that cutoff. Repeated runs are safe because `meetings.ghl_appointment_id` is unique. An unambiguous same-day manual Implementation meeting is adopted by the GHL appointment rather than duplicated. Existing GHL appointments that disappear from valid scan matches are reported as an incomplete reconciliation, and incomplete cron runs return a non-success status instead of silently appearing healthy.
+
+Coaches cannot manually create Business Audits or Implementation meetings in the workspace. Both record types are created by the GHL reconciliation job; empty workspace slots are informational until a matching appointment synchronizes.
 
 The GHL and admin provisioning routes currently create accounts with a shared bootstrap password and set `must_reset_password`. This is security debt and should not be reproduced in external scripts.
 
