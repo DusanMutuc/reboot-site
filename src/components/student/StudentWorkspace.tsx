@@ -121,13 +121,8 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   useEffect(() => {
     if (!selectedStudentId) {
       setPrivateNotesOpen(false);
-      return;
     }
-
-    if (tab === 'notes') {
-      setPrivateNotesOpen(true);
-    }
-  }, [selectedStudentId, tab]);
+  }, [selectedStudentId]);
 
   // Measure the unshifted workspace so wide screens keep the main content centered.
   const updatePrivateNotesOffset = useCallback(() => {
@@ -246,10 +241,6 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
           <BusinessAuditTab
             selectedStudentId={selectedStudentId}
             studentName={selectedStudent?.full_name}
-            foundationsCompleted={
-              coachProgressCourses.filter((course) => course.progressPercent === 100).length
-            }
-            foundationsLoading={coachProgressLoading}
           />
         );
       case 'progress':

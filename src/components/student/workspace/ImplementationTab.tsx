@@ -7,6 +7,7 @@ import {
   Alert,
   Box,
   Chip,
+  LinearProgress,
   Paper,
   Skeleton,
   Stack,
@@ -162,7 +163,10 @@ export default function ImplementationTab({
   const allPrioritiesComplete =
     prioritySystems.length > 0 &&
     completedPriorityCount === prioritySystems.length;
-  const hasCompletedPriorities = completedPriorityCount > 0;
+  const priorityCompletionPercent =
+    prioritySystems.length > 0
+      ? (completedPriorityCount / prioritySystems.length) * 100
+      : 0;
 
   const handleActionStepsChanged = useCallback(
     (steps: CoachingNoteActionStep[]) => {
@@ -255,7 +259,13 @@ export default function ImplementationTab({
                     <FlagRoundedIcon />
                   )
                 }
-                label={`${prioritySystems.length}/3 priority systems`}
+                label={
+                  allPrioritiesComplete
+                    ? 'All priorities complete'
+                    : prioritySystems.length > 0
+                      ? `${completedPriorityCount} of ${prioritySystems.length} complete`
+                      : 'No priorities selected'
+                }
                 color={
                   allPrioritiesComplete
                     ? 'success'
@@ -263,58 +273,129 @@ export default function ImplementationTab({
                       ? 'warning'
                       : 'default'
                 }
-                variant={
-                  allPrioritiesComplete || prioritySystems.length > 0
-                    ? 'filled'
-                    : 'outlined'
-                }
-                sx={{
-                  fontWeight: 800,
-                  ...(hasCompletedPriorities && !allPrioritiesComplete
-                    ? {
-                        bgcolor: 'success.100',
-                        color: 'success.dark',
-                        '& .MuiChip-icon': { color: 'success.main' },
-                      }
-                    : {}),
-                }}
+                variant={allPrioritiesComplete ? 'filled' : 'outlined'}
+                sx={{ fontWeight: 800 }}
               />
             </Stack>
 
             {prioritySystems.length > 0 ? (
-              <Stack
-                direction="row"
-                spacing={1}
-                flexWrap="wrap"
-                useFlexGap
-                sx={{ mt: 2.5 }}
+              <Box
+                sx={{
+                  mt: 2.5,
+                  pt: 2.5,
+                  borderTop: '1px solid',
+                  borderColor: 'grey.200',
+                }}
               >
-                {prioritySystems.map((system) => {
-                  const completed =
-                    actionStepStatuses[system.priority!.actionStepId] ===
-                    'complete';
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
+                  <Box>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>
+                      Priority systems
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {prioritySystems.length}/3 selected for this cycle
+                    </Typography>
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                    {Math.round(priorityCompletionPercent)}%
+                  </Typography>
+                </Stack>
 
-                  return (
-                    <Chip
-                      key={system.id}
-                      icon={
-                        completed ? (
-                          <CheckCircleRoundedIcon />
-                        ) : (
-                          <FlagRoundedIcon />
-                        )
-                      }
-                      label={`${system.priority!.position}. ${system.label}`}
-                      color={completed ? 'success' : 'warning'}
-                      variant={completed ? 'filled' : 'outlined'}
-                      sx={{
-                        fontWeight: 800,
-                        bgcolor: completed ? undefined : 'background.paper',
-                      }}
-                    />
-                  );
-                })}
-              </Stack>
+                <LinearProgress
+                  variant="determinate"
+                  value={priorityCompletionPercent}
+                  color={allPrioritiesComplete ? 'success' : 'warning'}
+                  aria-label="Priority action step completion"
+                  aria-valuetext={`${completedPriorityCount} of ${prioritySystems.length} complete`}
+                  sx={{ mt: 1.25, height: 7, borderRadius: 999 }}
+                />
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: 'minmax(0, 1fr)',
+                      md: 'repeat(3, minmax(0, 1fr))',
+                    },
+                    gap: 1.5,
+                    mt: 2,
+                  }}
+                >
+                  {prioritySystems.map((system) => {
+                    const completed =
+                      actionStepStatuses[system.priority!.actionStepId] ===
+                      'complete';
+
+                    return (
+                      <Box
+                        key={system.id}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1.25,
+                          minWidth: 0,
+                          p: 1.5,
+                          border: '1px solid',
+                          borderColor: completed ? 'success.light' : 'warning.light',
+                          borderRadius: 2,
+                          bgcolor: 'background.paper',
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            width: 34,
+                            height: 34,
+                            flexShrink: 0,
+                            display: 'grid',
+                            placeItems: 'center',
+                            borderRadius: 1.5,
+                            bgcolor: completed ? 'success.50' : 'warning.50',
+                            color: completed ? 'success.main' : 'warning.dark',
+                          }}
+                        >
+                          {completed ? (
+                            <CheckCircleRoundedIcon fontSize="small" />
+                          ) : (
+                            <FlagRoundedIcon fontSize="small" />
+                          )}
+                        </Box>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 900, lineHeight: 1.25 }}
+                          >
+                            {system.priority!.position}. {system.label}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            color={completed ? 'success.main' : 'text.secondary'}
+                            sx={{ fontWeight: 700 }}
+                          >
+                            {completed ? 'Action step complete' : 'Action step in progress'}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+
+                {prioritySystems.length < 3 ? (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: 'block', mt: 1.5 }}
+                  >
+                    Select {3 - prioritySystems.length} more{' '}
+                    {prioritySystems.length === 2 ? 'priority' : 'priorities'} in the
+                    Business Audit.
+                  </Typography>
+                ) : null}
+              </Box>
             ) : (
               <Alert severity="warning" sx={{ mt: 2.5 }}>
                 No priority systems have been selected in this Business Audit yet.

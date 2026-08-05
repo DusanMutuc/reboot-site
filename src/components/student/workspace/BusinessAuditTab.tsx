@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
   Chip,
-  CircularProgress,
   Paper,
   Skeleton,
   Stack,
@@ -35,8 +39,6 @@ import type {
 type BusinessAuditTabProps = {
   selectedStudentId: string;
   studentName?: string | null;
-  foundationsCompleted?: number | null;
-  foundationsLoading?: boolean;
 };
 
 type ApiErrorBody = {
@@ -89,11 +91,6 @@ function formatSavedAt(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value));
-}
-
-function formatFoundationsCompleted(value: number | null | undefined) {
-  if (value == null) return '— / 6 completed';
-  return `${Math.min(Math.max(value, 0), 6)} / 6 completed`;
 }
 
 function selectDefaultReviewId(reviews: BusinessReview[]): number | null {
@@ -247,8 +244,6 @@ function EmptyAuditState({ studentName }: { studentName?: string | null }) {
 export default function BusinessAuditTab({
   selectedStudentId,
   studentName,
-  foundationsCompleted = null,
-  foundationsLoading = false,
 }: BusinessAuditTabProps) {
   const [dimensions, setDimensions] = useState<FocusFinderDimension[]>([]);
   const [reviews, setReviews] = useState<BusinessReview[]>([]);
@@ -661,6 +656,7 @@ export default function BusinessAuditTab({
                   return (
                     <Button
                       key={review.id}
+                      aria-pressed={selected}
                       variant={selected ? 'contained' : 'outlined'}
                       color={selected ? 'primary' : 'inherit'}
                       onClick={() => {
@@ -705,47 +701,6 @@ export default function BusinessAuditTab({
 
           {selectedReview ? (
             <>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 2,
-                  border: '1px solid',
-                  borderColor: 'grey.200',
-                  borderRadius: 3,
-                }}
-              >
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1.5}
-                  alignItems={{ xs: 'flex-start', sm: 'center' }}
-                  justifyContent="space-between"
-                >
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <CalendarMonthIcon fontSize="small" color="action" />
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      Audit date: {formatReviewDate(selectedReview.reviewDate)}
-                    </Typography>
-                  </Stack>
-
-                  {foundationsLoading ? (
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <CircularProgress size={18} />
-                      <Typography variant="body2" color="text.secondary">
-                        Loading Foundations progress…
-                      </Typography>
-                    </Stack>
-                  ) : (
-                    <Chip
-                      icon={<SchoolOutlinedIcon />}
-                      label={`Foundations videos: ${formatFoundationsCompleted(foundationsCompleted)}`}
-                      color={(foundationsCompleted ?? 0) >= 6 ? 'success' : 'primary'}
-                      variant="outlined"
-                      sx={{ fontWeight: 800 }}
-                    />
-                  )}
-                </Stack>
-              </Paper>
-
               {selectedReview.meetingCancelled ? (
                 <Alert severity="warning">
                   This appointment was cancelled in GHL. It remains in audit history, but it will
@@ -753,93 +708,126 @@ export default function BusinessAuditTab({
                 </Alert>
               ) : null}
 
-              <Paper
+              <Accordion
+                disableGutters
                 elevation={0}
                 sx={{
-                  p: { xs: 2, md: 3 },
                   border: '1px solid',
                   borderColor: 'grey.200',
-                  borderRadius: 3,
+                  borderRadius: '12px !important',
+                  overflow: 'hidden',
+                  '&::before': { display: 'none' },
                 }}
               >
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1.5}
-                  alignItems={{ xs: 'flex-start', sm: 'center' }}
-                  justifyContent="space-between"
+                <AccordionSummary
+                  expandIcon={<ExpandMoreRoundedIcon />}
+                  aria-controls={`preparation-${selectedReview.id}-content`}
+                  id={`preparation-${selectedReview.id}-header`}
+                  sx={{
+                    px: { xs: 2, md: 3 },
+                    py: 1,
+                    bgcolor: 'grey.50',
+                    '& .MuiAccordionSummary-content': { minWidth: 0 },
+                  }}
                 >
-                  <Box>
-                    <Typography variant="overline" color="text.secondary">
-                      Student preparation
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                      Pre-audit responses
-                    </Typography>
-                  </Box>
-                  {selectedReview.preparation ? (
-                    <Chip
-                      label={`Submitted · ${formatSavedAt(selectedReview.preparation.updatedAt)}`}
-                      color="success"
-                      variant="outlined"
-                      sx={{ fontWeight: 800 }}
-                    />
-                  ) : (
-                    <Chip label="Not submitted" color="warning" sx={{ fontWeight: 800 }} />
-                  )}
-                </Stack>
-
-                {selectedReview.preparation ? (
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-                      gap: 2,
-                      mt: 2.5,
-                    }}
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={1.5}
+                    alignItems={{ xs: 'flex-start', sm: 'center' }}
+                    justifyContent="space-between"
+                    sx={{ width: '100%', minWidth: 0, pr: 1 }}
                   >
-                    {[
-                      ['Business wins & movement', selectedReview.preparation.businessForwardWins],
-                      ['Personal wins & movement', selectedReview.preparation.personalForwardWins],
-                      ['Greatest business challenge', selectedReview.preparation.greatestBusinessChallenge],
-                      ['Greatest personal challenge', selectedReview.preparation.greatestPersonalChallenge],
-                      ['Desired outcome from this call', selectedReview.preparation.desiredCallOutcome],
-                      ['Topics or situations to discuss', selectedReview.preparation.topicsToDiscuss],
-                    ].map(([label, answer]) => (
-                      <Box
-                        key={label}
-                        sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, minWidth: 0 }}
-                      >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="overline" color="text.secondary">
+                        Student preparation
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                        Pre-audit responses
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                        {selectedReview.preparation
+                          ? 'Expand to review the student’s submitted answers.'
+                          : 'No responses are available for this audit yet.'}
+                      </Typography>
+                    </Box>
+                    {selectedReview.preparation ? (
+                      <Chip
+                        label={`Submitted · ${formatSavedAt(selectedReview.preparation.updatedAt)}`}
+                        color="success"
+                        variant="outlined"
+                        sx={{ fontWeight: 800 }}
+                      />
+                    ) : (
+                      <Chip label="Not submitted" color="warning" sx={{ fontWeight: 800 }} />
+                    )}
+                  </Stack>
+                </AccordionSummary>
+
+                <AccordionDetails
+                  id={`preparation-${selectedReview.id}-content`}
+                  aria-labelledby={`preparation-${selectedReview.id}-header`}
+                  sx={{
+                    px: { xs: 2, md: 3 },
+                    pt: 0,
+                    pb: { xs: 2, md: 3 },
+                    borderTop: '1px solid',
+                    borderColor: 'grey.200',
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  {selectedReview.preparation ? (
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
+                        gap: 2,
+                        mt: 2.5,
+                      }}
+                    >
+                      {[
+                        ['Business wins & movement', selectedReview.preparation.businessForwardWins],
+                        ['Personal wins & movement', selectedReview.preparation.personalForwardWins],
+                        ['Greatest business challenge', selectedReview.preparation.greatestBusinessChallenge],
+                        ['Greatest personal challenge', selectedReview.preparation.greatestPersonalChallenge],
+                        ['Desired outcome from this call', selectedReview.preparation.desiredCallOutcome],
+                        ['Topics or situations to discuss', selectedReview.preparation.topicsToDiscuss],
+                      ].map(([label, answer]) => (
+                        <Box
+                          key={label}
+                          sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, minWidth: 0 }}
+                        >
+                          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                            {label}
+                          </Typography>
+                          <Typography variant="body2" sx={{ mt: 0.75, whiteSpace: 'pre-wrap' }}>
+                            {answer || 'No response provided.'}
+                          </Typography>
+                        </Box>
+                      ))}
+                      <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
                         <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
-                          {label}
+                          Business rating
                         </Typography>
-                        <Typography variant="body2" sx={{ mt: 0.75, whiteSpace: 'pre-wrap' }}>
-                          {answer}
+                        <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 900 }}>
+                          {selectedReview.preparation.businessRating}/10
                         </Typography>
                       </Box>
-                    ))}
-                    <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
-                        Business rating
-                      </Typography>
-                      <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 900 }}>
-                        {selectedReview.preparation.businessRating}/10
-                      </Typography>
+                      <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+                          Personal rating
+                        </Typography>
+                        <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 900 }}>
+                          {selectedReview.preparation.personalRating}/10
+                        </Typography>
+                      </Box>
                     </Box>
-                    <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
-                        Personal rating
-                      </Typography>
-                      <Typography variant="h5" sx={{ mt: 0.5, fontWeight: 900 }}>
-                        {selectedReview.preparation.personalRating}/10
-                      </Typography>
-                    </Box>
-                  </Box>
-                ) : (
-                  <Alert severity="info" sx={{ mt: 2 }}>
-                    The student has not submitted the preparation form for this audit yet.
-                  </Alert>
-                )}
-              </Paper>
+                  ) : (
+                    <Alert severity="info" sx={{ mt: 2 }}>
+                      The student has not submitted the preparation form for this audit yet.
+                    </Alert>
+                  )}
+                </AccordionDetails>
+              </Accordion>
 
               <Paper
                 elevation={0}
@@ -924,19 +912,88 @@ export default function BusinessAuditTab({
             </>
           ) : null}
           {selectedReview && !selectedReview.meetingCancelled ? (
-            <Button
-              variant="outlined"
-              color={selectedReview.status === 'completed' ? 'inherit' : 'success'}
-              disabled={savingReviewStatus}
-              onClick={() => void toggleReviewCompletion()}
-              sx={{ fontWeight: 800 }}
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 2, sm: 2.5 },
+                border: '1px solid',
+                borderColor:
+                  selectedReview.status === 'completed' ? 'success.light' : 'grey.200',
+                borderRadius: 3,
+                bgcolor:
+                  selectedReview.status === 'completed' ? 'success.50' : 'grey.50',
+              }}
             >
-              {savingReviewStatus
-                ? 'Saving…'
-                : selectedReview.status === 'completed'
-                  ? 'Reopen audit'
-                  : 'Mark complete'}
-            </Button>
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={2}
+                alignItems={{ xs: 'stretch', sm: 'center' }}
+                justifyContent="space-between"
+              >
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      flexShrink: 0,
+                      display: 'grid',
+                      placeItems: 'center',
+                      borderRadius: 2,
+                      bgcolor:
+                        selectedReview.status === 'completed'
+                          ? 'success.main'
+                          : 'background.paper',
+                      color:
+                        selectedReview.status === 'completed'
+                          ? 'success.contrastText'
+                          : 'success.main',
+                      border: '1px solid',
+                      borderColor: 'success.light',
+                    }}
+                  >
+                    <CheckCircleRoundedIcon />
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
+                      {selectedReview.status === 'completed'
+                        ? 'Audit complete'
+                        : 'Ready to wrap up?'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {selectedReview.status === 'completed'
+                        ? 'This audit remains editable and can be reopened at any time.'
+                        : 'Confirm the plan is ready before starting the implementation cycle.'}
+                    </Typography>
+                  </Box>
+                </Stack>
+
+                <Button
+                  variant={selectedReview.status === 'completed' ? 'outlined' : 'contained'}
+                  color={selectedReview.status === 'completed' ? 'inherit' : 'success'}
+                  disabled={savingReviewStatus}
+                  startIcon={
+                    selectedReview.status === 'completed' ? (
+                      <ReplayRoundedIcon />
+                    ) : (
+                      <CheckCircleRoundedIcon />
+                    )
+                  }
+                  onClick={() => void toggleReviewCompletion()}
+                  sx={{
+                    minWidth: { sm: 178 },
+                    minHeight: 44,
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {savingReviewStatus
+                    ? 'Saving…'
+                    : selectedReview.status === 'completed'
+                      ? 'Reopen audit'
+                      : 'Mark audit complete'}
+                </Button>
+              </Stack>
+            </Paper>
           ) : null}
         </>
       )}

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlined';
 import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
@@ -242,15 +243,27 @@ export default function BusinessAuditPreparationForm() {
     >
       <Box sx={{ bgcolor: '#252827', color: 'common.white' }}>
         <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
-          <Button
-            component={Link}
-            href="/dashboard"
-            color="inherit"
-            size="small"
-            sx={{ mb: 3, px: 0, opacity: 0.82, textTransform: 'none' }}
-          >
-            ← Back to Member Hub
-          </Button>
+          <Box component="nav" aria-label="Back navigation" sx={{ mb: { xs: 3, md: 4 } }}>
+            <Button
+              component={Link}
+              href="/dashboard"
+              color="inherit"
+              startIcon={<ArrowBackRoundedIcon />}
+              sx={{
+                px: 1.5,
+                py: 0.75,
+                border: '1px solid rgba(255,255,255,0.24)',
+                borderRadius: 2,
+                bgcolor: 'rgba(255,255,255,0.06)',
+                fontSize: '1.05rem',
+                fontWeight: 800,
+                textTransform: 'none',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
+              }}
+            >
+              Back to Member Hub
+            </Button>
+          </Box>
           <Typography
             variant="overline"
             sx={{ color: '#8fddca', fontWeight: 800, letterSpacing: '0.12em' }}
@@ -367,7 +380,14 @@ export default function BusinessAuditPreparationForm() {
               </Stack>
             </Paper>
 
-            <Alert severity="info" sx={{ mb: 3, borderRadius: 3 }}>
+            <Alert
+              severity="info"
+              sx={{
+                mb: 3,
+                borderRadius: 3,
+                '& .MuiAlert-message': { fontSize: '0.95rem', lineHeight: 1.55 },
+              }}
+            >
               All eight questions are required. You can return through the same link and update
               your answers at any time.
             </Alert>
@@ -436,7 +456,7 @@ export default function BusinessAuditPreparationForm() {
               icon={<BusinessCenterOutlinedIcon />}
               eyebrow="04 · Rate"
               title="The past 60 days"
-              description="Choose the rating that most honestly reflects this period. Ratings 5 and 7 are intentionally omitted."
+              description="Choose the rating that most honestly reflects this period. No 5s or 7s."
             >
               <RatingField
                 icon={<BusinessCenterOutlinedIcon fontSize="small" />}
@@ -556,7 +576,11 @@ function QuestionSection({
           <Typography variant="h5" sx={{ fontWeight: 900, lineHeight: 1.15 }}>
             {title}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75, lineHeight: 1.65 }}>
+          <Typography
+            variant="body1"
+            color="text.secondary"
+            sx={{ mt: 0.75, lineHeight: 1.65 }}
+          >
             {description}
           </Typography>
         </Box>
@@ -579,23 +603,54 @@ function QuestionField({
   error?: string;
   onChange: (value: string) => void;
 }) {
+  const inputId = useId();
+
   return (
-    <TextField
-      required
-      fullWidth
-      multiline
-      minRows={4}
-      label={label}
-      value={value}
-      error={Boolean(error)}
-      helperText={error || ' '}
-      onChange={(event) => onChange(event.target.value)}
-      slotProps={{ htmlInput: { maxLength: 10_000 } }}
-      sx={{
-        '& .MuiInputLabel-root': { whiteSpace: 'normal', maxWidth: 'calc(100% - 48px)' },
-        '& .MuiOutlinedInput-root': { alignItems: 'flex-start', bgcolor: '#fbfdfc' },
-      }}
-    />
+    <Box>
+      <Typography
+        component="label"
+        htmlFor={inputId}
+        sx={{
+          display: 'block',
+          mb: 1.25,
+          maxWidth: 720,
+          fontSize: { xs: '1.1rem', sm: '1.3rem' },
+          fontWeight: 850,
+          lineHeight: 1.4,
+          letterSpacing: '-0.01em',
+          color: 'text.primary',
+        }}
+      >
+        {label}
+        <Box component="span" aria-hidden="true" sx={{ ml: 0.5, color: 'error.main' }}>
+          *
+        </Box>
+      </Typography>
+      <TextField
+        id={inputId}
+        required
+        fullWidth
+        multiline
+        minRows={4}
+        placeholder="Share your response…"
+        value={value}
+        error={Boolean(error)}
+        helperText={error || ' '}
+        onChange={(event) => onChange(event.target.value)}
+        slotProps={{ htmlInput: { maxLength: 10_000 } }}
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            alignItems: 'flex-start',
+            bgcolor: '#fbfdfc',
+            borderRadius: 2.5,
+          },
+          '& .MuiInputBase-inputMultiline': {
+            fontSize: '1.1rem',
+            lineHeight: 1.65,
+          },
+        }}
+      />
+    </Box>
   );
 }
 
@@ -616,7 +671,15 @@ function RatingField({
     <Box>
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
         <Box sx={{ color: 'primary.main', display: 'flex' }}>{icon}</Box>
-        <Typography sx={{ fontWeight: 800 }}>{label}</Typography>
+        <Typography
+          sx={{
+            fontSize: { xs: '1.1rem', sm: '1.2rem' },
+            fontWeight: 850,
+            lineHeight: 1.4,
+          }}
+        >
+          {label}
+        </Typography>
       </Stack>
       <ToggleButtonGroup
         exclusive
