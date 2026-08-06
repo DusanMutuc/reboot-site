@@ -7,8 +7,12 @@ import {
   Alert,
   Box,
   Chip,
+  FormControl,
+  InputLabel,
   LinearProgress,
+  MenuItem,
   Paper,
+  Select,
   Skeleton,
   Stack,
   Typography,
@@ -21,7 +25,7 @@ import type {
   BusinessReviewsPayload,
   SystemScorecardSystem,
 } from '@/lib/businessReviews';
-import { getBusinessAuditLocalDate } from '@/lib/businessAuditConfig';
+import type { CoachingCycle, CoachingCyclesPayload } from '@/lib/coachingCycles';
 import type { ActionStepStatus, CoachingNoteActionStep } from '@/types/coaching';
 
 const COACH_CONTENT_MAX_WIDTH = 1180;
@@ -45,28 +49,6 @@ function formatReviewDate(value: string) {
   return dateFormatter.format(new Date(`${value}T00:00:00`));
 }
 
-function selectImplementationCycle(reviews: BusinessReview[]): {
-  activeReview: BusinessReview | null;
-  nextReviewDate: string | null;
-} {
-  const today = getBusinessAuditLocalDate();
-  const activeReview = reviews
-    .filter((review) => !review.meetingCancelled && review.reviewDate <= today)
-    .sort(
-      (left, right) =>
-        right.reviewDate.localeCompare(left.reviewDate) || right.id - left.id,
-    )[0] ?? null;
-  const boundaryDate = activeReview?.reviewDate ?? today;
-  const nextReviewDate = reviews
-    .filter((review) => !review.meetingCancelled && review.reviewDate > boundaryDate)
-    .sort(
-      (left, right) =>
-        left.reviewDate.localeCompare(right.reviewDate) || left.id - right.id,
-    )[0]?.reviewDate ?? null;
-
-  return { activeReview, nextReviewDate };
-}
-
 function getPrioritySystems(review: BusinessReview | null): SystemScorecardSystem[] {
   if (!review?.systemScorecard) return [];
 
@@ -83,8 +65,11 @@ export default function ImplementationTab({
   selectedStudentId,
   studentName,
 }: ImplementationTabProps) {
-  const [activeReview, setActiveReview] = useState<BusinessReview | null>(null);
-  const [nextReviewDate, setNextReviewDate] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<BusinessReview[]>([]);
+  const [cycles, setCycles] = useState<CoachingCycle[]>([]);
+  const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
+  const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
+  const [nextAuditDate, setNextAuditDate] = useState<string | null>(null);
   const [actionStepStatuses, setActionStepStatuses] = useState<
     Record<number, ActionStepStatus>
   >({});
@@ -96,35 +81,53 @@ export default function ImplementationTab({
 
     setLoading(true);
     setError(null);
-    setActiveReview(null);
-    setNextReviewDate(null);
+    setReviews([]);
+    setCycles([]);
+    setActiveCycleId(null);
+    setSelectedCycleId(null);
+    setNextAuditDate(null);
     setActionStepStatuses({});
 
-    const loadActiveReview = async () => {
+    const loadImplementationCycles = async () => {
       try {
-        const response = await fetch(
-          `/api/business-reviews?userId=${encodeURIComponent(selectedStudentId)}`,
-          {
-            cache: 'no-store',
-            signal: controller.signal,
-          },
-        );
-        const body = (await response.json()) as BusinessReviewsPayload & ApiErrorBody;
+        const [reviewsResponse, cyclesResponse] = await Promise.all([
+          fetch(
+            `/api/business-reviews?userId=${encodeURIComponent(selectedStudentId)}`,
+            { cache: 'no-store', signal: controller.signal },
+          ),
+          fetch(
+            `/api/coaching-cycles?userId=${encodeURIComponent(selectedStudentId)}`,
+            { cache: 'no-store', signal: controller.signal },
+          ),
+        ]);
+        const [reviewsBody, cyclesBody] = (await Promise.all([
+          reviewsResponse.json(),
+          cyclesResponse.json(),
+        ])) as [
+          BusinessReviewsPayload & ApiErrorBody,
+          CoachingCyclesPayload & ApiErrorBody,
+        ];
 
-        if (!response.ok) {
-          throw new Error(body.error || 'Failed to load the active Business Audit.');
+        if (!reviewsResponse.ok) {
+          throw new Error(reviewsBody.error || 'Failed to load Business Reviews.');
         }
 
-        const cycle = selectImplementationCycle(body.reviews ?? []);
-        setActiveReview(cycle.activeReview);
-        setNextReviewDate(cycle.nextReviewDate);
+        if (!cyclesResponse.ok) {
+          throw new Error(cyclesBody.error || 'Failed to load coaching cycles.');
+        }
+
+        setReviews(reviewsBody.reviews ?? []);
+        setCycles(cyclesBody.cycles ?? []);
+        setActiveCycleId(cyclesBody.activeCycleId);
+        setSelectedCycleId(cyclesBody.activeCycleId);
+        setNextAuditDate(cyclesBody.nextAuditDate);
       } catch (loadError) {
         if (controller.signal.aborted) return;
 
         setError(
           loadError instanceof Error
             ? loadError.message
-            : 'Failed to load the active Business Audit.',
+            : 'Failed to load coaching cycles.',
         );
       } finally {
         if (!controller.signal.aborted) {
@@ -133,14 +136,54 @@ export default function ImplementationTab({
       }
     };
 
-    void loadActiveReview();
+    void loadImplementationCycles();
 
     return () => controller.abort();
   }, [selectedStudentId]);
 
+  const selectableCycles = useMemo(
+    () => cycles.filter((cycle) => !cycle.cancelled && !cycle.isFuture),
+    [cycles],
+  );
+  const selectedCycle = useMemo(
+    () => cycles.find((cycle) => cycle.id === selectedCycleId) ?? null,
+    [cycles, selectedCycleId],
+  );
+  const selectedReview = useMemo(
+    () =>
+      selectedCycle?.businessReviewId
+        ? reviews.find((review) => review.id === selectedCycle.businessReviewId) ?? null
+        : null,
+    [reviews, selectedCycle],
+  );
+  const nextReviewDate = useMemo(() => {
+    if (!selectedReview) return nextAuditDate;
+
+    return reviews
+      .filter(
+        (review) =>
+          !review.meetingCancelled && review.reviewDate > selectedReview.reviewDate,
+      )
+      .sort(
+        (left, right) =>
+          left.reviewDate.localeCompare(right.reviewDate) || left.id - right.id,
+      )[0]?.reviewDate ?? null;
+  }, [nextAuditDate, reviews, selectedReview]);
+  const selectedCycleEndDate = useMemo(() => {
+    if (!selectedCycle) return null;
+
+    return cycles
+      .filter(
+        (cycle) =>
+          !cycle.cancelled && cycle.cycleDate > selectedCycle.cycleDate,
+      )
+      .sort((left, right) => left.cycleDate.localeCompare(right.cycleDate))[0]
+      ?.cycleDate ?? null;
+  }, [cycles, selectedCycle]);
+
   const prioritySystems = useMemo(
-    () => getPrioritySystems(activeReview),
-    [activeReview],
+    () => getPrioritySystems(selectedReview),
+    [selectedReview],
   );
   const priorityActionStepPositions = useMemo(
     () =>
@@ -178,24 +221,28 @@ export default function ImplementationTab({
   );
 
   const removePriorityByActionStep = (actionStepId: number) => {
-    setActiveReview((current) => {
-      if (!current?.systemScorecard) return current;
+    if (!selectedReview) return;
 
-      return {
-        ...current,
-        systemScorecard: {
-          ...current.systemScorecard,
-          categories: current.systemScorecard.categories.map((category) => ({
-            ...category,
-            systems: category.systems.map((system) =>
-              system.priority?.actionStepId === actionStepId
-                ? { ...system, priority: null }
-                : system,
-            ),
-          })),
-        },
-      };
-    });
+    setReviews((current) =>
+      current.map((review) => {
+        if (review.id !== selectedReview.id || !review.systemScorecard) return review;
+
+        return {
+          ...review,
+          systemScorecard: {
+            ...review.systemScorecard,
+            categories: review.systemScorecard.categories.map((category) => ({
+              ...category,
+              systems: category.systems.map((system) =>
+                system.priority?.actionStepId === actionStepId
+                  ? { ...system, priority: null }
+                  : system,
+              ),
+            })),
+          },
+        };
+      }),
+    );
   };
 
   if (loading) {
@@ -211,15 +258,15 @@ export default function ImplementationTab({
     <Box sx={{ maxWidth: COACH_CONTENT_MAX_WIDTH, mx: 'auto' }}>
       {error ? <Alert severity="error">{error}</Alert> : null}
 
-      {!error && !activeReview ? (
+      {!error && !selectedCycle ? (
         <Alert severity="info">
-          {nextReviewDate
-            ? `The next implementation cycle begins with the Business Audit on ${formatReviewDate(nextReviewDate)}.`
-            : 'Create a Business Audit before starting an implementation cycle.'}
+          {nextAuditDate
+            ? `The next implementation cycle begins with the Business Review on ${formatReviewDate(nextAuditDate)}.`
+            : 'No active M2 or Business Review coaching cycle was found.'}
         </Alert>
       ) : null}
 
-      {activeReview ? (
+      {selectedCycle ? (
         <>
           <Paper
             elevation={0}
@@ -240,45 +287,89 @@ export default function ImplementationTab({
             >
               <Box>
                 <Typography variant="overline" color="text.secondary">
-                  Active 60-day cycle
+                  {selectedCycle.id === activeCycleId
+                    ? 'Active 60-day cycle'
+                    : 'Coaching history'}
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 900 }}>
                   Implementation
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   {studentName ? `${studentName} · ` : ''}
-                  Business Audit from {formatReviewDate(activeReview.reviewDate)}
+                  {selectedCycle.kind === 'business_audit' ? 'Business Review' : 'M2'} from{' '}
+                  {formatReviewDate(selectedCycle.cycleDate)}
                 </Typography>
               </Box>
 
-              <Chip
-                icon={
-                  allPrioritiesComplete ? (
-                    <CheckCircleRoundedIcon />
-                  ) : (
-                    <FlagRoundedIcon />
-                  )
-                }
-                label={
-                  allPrioritiesComplete
-                    ? 'All priorities complete'
-                    : prioritySystems.length > 0
-                      ? `${completedPriorityCount} of ${prioritySystems.length} complete`
-                      : 'No priorities selected'
-                }
-                color={
-                  allPrioritiesComplete
-                    ? 'success'
-                    : prioritySystems.length > 0
-                      ? 'warning'
-                      : 'default'
-                }
-                variant={allPrioritiesComplete ? 'filled' : 'outlined'}
-                sx={{ fontWeight: 800 }}
-              />
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1.5}
+                alignItems={{ xs: 'stretch', sm: 'center' }}
+                sx={{ width: { xs: '100%', md: 'auto' } }}
+              >
+                <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 270 } }}>
+                  <InputLabel id="implementation-cycle-select-label">
+                    Coaching cycle
+                  </InputLabel>
+                  <Select
+                    labelId="implementation-cycle-select-label"
+                    label="Coaching cycle"
+                    value={selectedCycleId ?? ''}
+                    onChange={(event) => {
+                      setSelectedCycleId(String(event.target.value));
+                      setActionStepStatuses({});
+                    }}
+                  >
+                    {selectableCycles.map((cycle) => (
+                      <MenuItem key={cycle.id} value={cycle.id}>
+                        {cycle.kind === 'business_audit' ? 'Business Review' : 'M2'} —{' '}
+                        {formatReviewDate(cycle.cycleDate)}
+                        {cycle.id === activeCycleId ? ' · Active' : ''}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+
+                {selectedReview ? (
+                  <Chip
+                    icon={
+                      allPrioritiesComplete ? (
+                        <CheckCircleRoundedIcon />
+                      ) : (
+                        <FlagRoundedIcon />
+                      )
+                    }
+                    label={
+                      allPrioritiesComplete
+                        ? 'All priorities complete'
+                        : prioritySystems.length > 0
+                          ? `${completedPriorityCount} of ${prioritySystems.length} complete`
+                          : 'No priorities selected'
+                    }
+                    color={
+                      allPrioritiesComplete
+                        ? 'success'
+                        : prioritySystems.length > 0
+                          ? 'warning'
+                          : 'default'
+                    }
+                    variant={allPrioritiesComplete ? 'filled' : 'outlined'}
+                    sx={{ fontWeight: 800 }}
+                  />
+                ) : (
+                  <Chip
+                    label={
+                      selectedCycle.id === activeCycleId ? 'Active M2' : 'Historical M2'
+                    }
+                    color={selectedCycle.id === activeCycleId ? 'primary' : 'default'}
+                    variant="outlined"
+                    sx={{ fontWeight: 800 }}
+                  />
+                )}
+              </Stack>
             </Stack>
 
-            {prioritySystems.length > 0 ? (
+            {selectedReview && prioritySystems.length > 0 ? (
               <Box
                 sx={{
                   mt: 2.5,
@@ -392,22 +483,30 @@ export default function ImplementationTab({
                   >
                     Select {3 - prioritySystems.length} more{' '}
                     {prioritySystems.length === 2 ? 'priority' : 'priorities'} in the
-                    Business Audit.
+                    Business Review.
                   </Typography>
                 ) : null}
               </Box>
-            ) : (
+            ) : selectedReview ? (
               <Alert severity="warning" sx={{ mt: 2.5 }}>
-                No priority systems have been selected in this Business Audit yet.
+                No priority systems have been selected in this Business Review yet.
               </Alert>
-            )}
+            ) : selectedCycle.id === activeCycleId && nextAuditDate ? (
+              <Alert severity="info" sx={{ mt: 2.5 }}>
+                This M2 is the active coaching cycle. The next Business Review is
+                scheduled for {formatReviewDate(nextAuditDate)}.
+              </Alert>
+            ) : null}
           </Paper>
 
           <CoachingNotesPanel
             userId={selectedStudentId}
-            fixedNoteId={activeReview.coachingNoteId}
-            businessAuditReviewDate={activeReview.reviewDate}
-            businessAuditNextReviewDate={nextReviewDate}
+            fixedNoteId={selectedCycle.noteId}
+            businessAuditReviewDate={selectedReview?.reviewDate ?? null}
+            businessAuditNextReviewDate={selectedReview ? nextReviewDate : null}
+            cycleEndDate={
+              selectedCycle.kind === 'm2' ? selectedCycleEndDate : null
+            }
             priorityActionStepPositions={priorityActionStepPositions}
             onActionStepsChanged={handleActionStepsChanged}
             onPriorityActionStepDeleted={removePriorityByActionStep}

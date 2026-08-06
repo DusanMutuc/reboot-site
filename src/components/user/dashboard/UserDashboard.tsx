@@ -11,8 +11,10 @@ import ActionSteps from './ActionSteps';
 import Wins from './Wins';
 import Achievements from './Achievements';
 import AttendanceSection from './AttendanceSection';
+import CoachingNotesPicker from './CoachingNotesPicker';
 import CoachingNotesSection from './CoachingNotesSection';
 import useDashboardData from './useDashboardData';
+import type { CoachingNotesSectionProps } from '@/types/dashboard';
 
 type Props = {
   userId: string;
@@ -31,11 +33,17 @@ export default function UserDashboard({
   const bottomRowRef = useRef<HTMLDivElement>(null);
   const [topRowHeight, setTopRowHeight] = useState<number | null>(null);
   const [bottomRowHeight, setBottomRowHeight] = useState<number | null>(null);
+  const [selectedCoachingNotes, setSelectedCoachingNotes] =
+    useState<CoachingNotesSectionProps | null>(null);
   const { data, loading, error, refreshing: chartRefreshing, chartVersion } = useDashboardData({
     userId,
     refreshSignal,
     refreshMode: 'chart-only',
   });
+
+  useEffect(() => {
+    setSelectedCoachingNotes(null);
+  }, [userId]);
 
   // Measure heights after data loads and on window resize
   useEffect(() => {
@@ -73,10 +81,16 @@ export default function UserDashboard({
   }
 
   const { revenueProfit, kpi, attendance, coachingNotes, wins, achievements } = data;
+  const visibleCoachingNotes = selectedCoachingNotes ?? coachingNotes;
 
   return (
     <Box sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1200, mx: 'auto' }}>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <CoachingNotesPicker
+          userId={userId}
+          onSectionChange={(section) => setSelectedCoachingNotes(section)}
+        />
+
         {/* ===== TOP SECTION ===== */}
         <Box>
           <Grid container spacing={3}>
@@ -119,14 +133,14 @@ export default function UserDashboard({
             {/* Column 2: 25% - constrained by topRowHeight */}
             <Grid size={{ xs: 12, md: 3 }}>
               <Box sx={{ height: topRowHeight ? `${topRowHeight}px` : 'auto' }}>
-                <ActionSteps steps={coachingNotes.actionSteps} />
+                <ActionSteps steps={visibleCoachingNotes.actionSteps} />
               </Box>
             </Grid>
 
             {/* Column 3: 25% - constrained by topRowHeight */}
             <Grid size={{ xs: 12, md: 3 }}>
               <Box sx={{ height: topRowHeight ? `${topRowHeight}px` : 'auto' }}>
-                <CoachingNotesSection {...coachingNotes} />
+                <CoachingNotesSection {...visibleCoachingNotes} />
               </Box>
             </Grid>
           </Grid>

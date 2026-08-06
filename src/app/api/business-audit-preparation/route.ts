@@ -87,7 +87,7 @@ function validateBody(body: SaveBody | null):
     typeof body?.businessReviewId === 'number' ? body.businessReviewId : Number.NaN;
 
   if (!Number.isSafeInteger(businessReviewId) || businessReviewId <= 0) {
-    errors.businessReviewId = 'A valid Business Audit is required.';
+    errors.businessReviewId = 'A valid Business Review is required.';
   }
 
   const answers = {
@@ -139,7 +139,7 @@ export async function GET(request: NextRequest) {
     if (!payload) {
       return NextResponse.json(
         {
-          error: 'No upcoming Business Audit was found for your account.',
+          error: 'No upcoming Business Review was found for your account.',
         },
         { status: 404 },
       );
@@ -176,7 +176,7 @@ export async function PUT(request: NextRequest) {
     );
     if (!canEditAudit) {
       return NextResponse.json(
-        { error: 'This Business Audit was not found for your account.' },
+        { error: 'This Business Review was not found for your account.' },
         { status: 404 },
       );
     }

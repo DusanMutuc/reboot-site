@@ -28,21 +28,21 @@ export async function GET(request: NextRequest) {
 
     if (report.unmatchedAppointmentIds.length > 0) {
       console.warn(
-        '[business-audit-meeting-sync] Some Business Audit appointments could not be matched to exactly one student.',
+        '[business-audit-meeting-sync] Some Business Review appointments could not be matched to exactly one student.',
         { appointmentIds: report.unmatchedAppointmentIds },
       );
     }
 
     if (report.appointmentsMissingStableId > 0) {
       console.warn(
-        '[business-audit-meeting-sync] Some Business Audit appointments had no stable GHL id and were skipped.',
+        '[business-audit-meeting-sync] Some Business Review appointments had no stable GHL id and were skipped.',
         { count: report.appointmentsMissingStableId },
       );
     }
 
     if (report.knownAppointmentsNotReconciled.length > 0) {
       console.error(
-        '[business-audit-meeting-sync] Existing Business Audit appointments were not returned as valid matches.',
+        '[business-audit-meeting-sync] Existing Business Review appointments were not returned as valid matches.',
         { appointmentIds: report.knownAppointmentsNotReconciled },
       );
     }

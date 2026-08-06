@@ -48,6 +48,7 @@ type Props = {
   fixedNoteId?: number | null;
   businessAuditReviewDate?: string | null;
   businessAuditNextReviewDate?: string | null;
+  cycleEndDate?: string | null;
   contentMode?: 'full' | 'notes-only';
   priorityActionStepPositions?: Record<number, number>;
   onActionStepsChanged?: (steps: CoachingNoteActionStep[]) => void;
@@ -115,6 +116,7 @@ export default function CoachingNotesPanel({
   fixedNoteId = null,
   businessAuditReviewDate = null,
   businessAuditNextReviewDate = null,
+  cycleEndDate = null,
   contentMode = 'full',
   priorityActionStepPositions = {},
   onActionStepsChanged,
@@ -448,12 +450,15 @@ export default function CoachingNotesPanel({
               : a.meeting_date.localeCompare(b.meeting_date),
           );
         const nextM2Date = otherM2s[0]?.meeting_date;
+        const nextCycleDate = [nextM2Date, cycleEndDate]
+          .filter((date): date is string => Boolean(date))
+          .sort((left, right) => left.localeCompare(right))[0];
 
         const implCandidates = all
           .filter((meeting) => {
             if (meeting.meeting_type_code !== 'IMPLEMENTATION_MEETING') return false;
             if (meeting.meeting_date < m2Date) return false;
-            if (nextM2Date && meeting.meeting_date >= nextM2Date) return false;
+            if (nextCycleDate && meeting.meeting_date >= nextCycleDate) return false;
             return true;
           })
           .sort((a, b) =>
@@ -504,6 +509,7 @@ export default function CoachingNotesPanel({
     businessAuditMode,
     businessAuditNextReviewDate,
     businessAuditReviewDate,
+    cycleEndDate,
     meetingSlotsVersion,
     notes,
     selectedNoteId,
@@ -1145,7 +1151,7 @@ export default function CoachingNotesPanel({
             }}
           >
             <Typography variant="body2" color="text.secondary">
-              The coaching note connected to this Business Audit could not be loaded.
+              The coaching note connected to this Business Review could not be loaded.
             </Typography>
           </Paper>
         )
@@ -1199,7 +1205,7 @@ export default function CoachingNotesPanel({
             </Paper>
 
             <Box sx={{ flexGrow: 1, width: '100%', minWidth: 0 }}>
-              {!businessAuditMode ? (
+              {fixedNoteId == null ? (
                 <NoteSelector
                   notes={notes}
                   notesLoading={notesLoading}
@@ -1274,8 +1280,8 @@ export default function CoachingNotesPanel({
               }}
             >
               <Typography variant="body2" color="text.secondary">
-                {businessAuditMode
-                  ? 'The active Business Audit implementation record could not be loaded.'
+                {fixedNoteId != null
+                  ? 'The selected coaching cycle record could not be loaded.'
                   : 'Create a coaching note to start capturing notes, action steps, and meetings.'}
               </Typography>
             </Paper>

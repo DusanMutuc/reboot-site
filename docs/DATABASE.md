@@ -149,7 +149,7 @@ meeting_types
 
 - `meeting_types.code` is the stable identifier.
 - `meetings.date` is a Postgres date, not a timestamp.
-- Future GHL-backed Business Audit and Implementation meetings retain `date` for compatibility and also store `starts_at`, `ends_at`, `meeting_timezone`, GHL status, and the unique `ghl_appointment_id`.
+- Future GHL-backed Business Review and Implementation meetings retain `date` for compatibility and also store `starts_at`, `ends_at`, `meeting_timezone`, GHL status, and the unique `ghl_appointment_id`.
 - `meeting_attendance_base` has a composite key of meeting and user.
 - `meeting_attendance` is a view; use the base table or attendance RPC.
 - `counts_toward_engagement` controls engagement calculations.
@@ -212,9 +212,9 @@ Dashboard-only aliases `total_closed` and `fifteen_thirty` are presentation keys
 
 Use the coaching and win RPCs listed in the generated reference for normal mutations.
 
-### Business Audit preparation
+### Business Review preparation
 
-`business_review_preparation_responses` is a one-to-one child of `business_reviews`; its `business_review_id` is both the primary key and cascading foreign key. It stores the six required written answers and two required 1-10 ratings, with 5 and 7 excluded by database constraints. Students access it only through the authenticated website API, which verifies `business_reviews.user_id` and rejects canceled appointments; direct browser policies are intentionally absent. Resubmission updates the same row and refreshes `submitted_at` and `updated_at`. Coaches with access to the student receive these answers in the Business Audit payload and can review them in the audit tab.
+`business_review_preparation_responses` is a one-to-one child of `business_reviews`; its `business_review_id` is both the primary key and cascading foreign key. It stores the six required written answers and two required 1-10 ratings, with 5 and 7 excluded by database constraints. Students access it only through the authenticated website API, which verifies `business_reviews.user_id` and rejects canceled appointments; direct browser policies are intentionally absent. Resubmission updates the same row and refreshes `submitted_at` and `updated_at`. Coaches with access to the student receive these answers in the Business Review payload and can review them in the review tab.
 
 ### Attention status
 

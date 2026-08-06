@@ -181,7 +181,7 @@ export default function ImportantLinks({ mode = 'user', courseId = null }: Props
       // 1) Columnize the "Refer an agent..." pill: add it as a regular button
       items.push({ label: REFERRAL_PILL_LABEL }); // no href provided (same behavior as before)
 
-      // 2) Add the active Business Audit implementation workspace
+      // 2) Add the active Business Review implementation workspace
       items.push({ label: COACH_NOTES_LABEL, href: coachNotesUrl ?? undefined });
     }
 

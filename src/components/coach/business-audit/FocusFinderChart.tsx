@@ -298,7 +298,7 @@ export default function FocusFinderChart({
             <title id="focus-finder-title">Interactive Focus Finder graph</title>
             <desc id="focus-finder-description">
               Nine business dimensions rated from Problem to Superpower. Each selected rating is
-              saved to this business audit.
+              saved to this business review.
             </desc>
 
             <rect

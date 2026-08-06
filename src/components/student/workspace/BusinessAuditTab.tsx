@@ -227,14 +227,14 @@ function EmptyAuditState({ studentName }: { studentName?: string | null }) {
     >
       <CalendarMonthIcon color="primary" sx={{ fontSize: 42 }} />
       <Typography variant="h5" sx={{ mt: 1.5, fontWeight: 800 }}>
-        No business audits yet
+        No business reviews yet
       </Typography>
       <Typography
         variant="body2"
         color="text.secondary"
         sx={{ maxWidth: 520, mx: 'auto', mt: 1 }}
       >
-        {studentName ? `${studentName}'s` : 'The student\'s'} next Business Audit will
+        {studentName ? `${studentName}'s` : 'The student\'s'} next Business Review will
         appear here after the appointment is booked in GHL and synchronized.
       </Typography>
     </Paper>
@@ -293,7 +293,7 @@ export default function BusinessAuditTab({
         const body = (await response.json()) as BusinessReviewsPayload & ApiErrorBody;
 
         if (!response.ok) {
-          throw new Error(body.error || 'Failed to load business audits.');
+          throw new Error(body.error || 'Failed to load business reviews.');
         }
 
         if (activeStudentIdRef.current !== selectedStudentId) return;
@@ -304,7 +304,7 @@ export default function BusinessAuditTab({
       } catch (error) {
         if (controller.signal.aborted) return;
 
-        const message = error instanceof Error ? error.message : 'Failed to load business audits.';
+        const message = error instanceof Error ? error.message : 'Failed to load business reviews.';
         setLoadError(message);
       } finally {
         if (!controller.signal.aborted && activeStudentIdRef.current === selectedStudentId) {
@@ -529,7 +529,7 @@ export default function BusinessAuditTab({
       });
       const body = (await response.json()) as SaveReviewStatusResponse;
       if (!response.ok || !body.status || !body.updatedAt) {
-        throw new Error(body.error || 'Could not update the audit status.');
+        throw new Error(body.error || 'Could not update the review status.');
       }
 
       setReviews((current) =>
@@ -545,7 +545,7 @@ export default function BusinessAuditTab({
         ),
       );
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Could not update the audit status.');
+      setLoadError(error instanceof Error ? error.message : 'Could not update the review status.');
     } finally {
       setSavingReviewStatus(false);
     }
@@ -561,10 +561,10 @@ export default function BusinessAuditTab({
       >
         <Box>
           <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1 }}>
-            60 Day Business Audit
+            60 Day Business Review
           </Typography>
           <Typography variant="h4" sx={{ fontWeight: 800 }}>
-            Business Audit
+            Business Review
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
             {studentName
@@ -634,10 +634,10 @@ export default function BusinessAuditTab({
             >
               <Box sx={{ minWidth: 124 }}>
                 <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                  Audit history
+                  Review history
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  {reviews.length} {reviews.length === 1 ? 'audit' : 'audits'}
+                  {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
                 </Typography>
               </Box>
 
@@ -703,7 +703,7 @@ export default function BusinessAuditTab({
             <>
               {selectedReview.meetingCancelled ? (
                 <Alert severity="warning">
-                  This appointment was cancelled in GHL. It remains in audit history, but it will
+                  This appointment was cancelled in GHL. It remains in review history, but it will
                   not start an Implementation cycle or count as a scheduled meeting.
                 </Alert>
               ) : null}
@@ -742,12 +742,12 @@ export default function BusinessAuditTab({
                         Student preparation
                       </Typography>
                       <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                        Pre-audit responses
+                        Pre-review responses
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
                         {selectedReview.preparation
                           ? 'Expand to review the student’s submitted answers.'
-                          : 'No responses are available for this audit yet.'}
+                          : 'No responses are available for this review yet.'}
                       </Typography>
                     </Box>
                     {selectedReview.preparation ? (
@@ -823,7 +823,7 @@ export default function BusinessAuditTab({
                     </Box>
                   ) : (
                     <Alert severity="info" sx={{ mt: 2 }}>
-                      The student has not submitted the preparation form for this audit yet.
+                      The student has not submitted the preparation form for this review yet.
                     </Alert>
                   )}
                 </AccordionDetails>
@@ -868,7 +868,7 @@ export default function BusinessAuditTab({
                 />
               ) : (
                 <Alert severity="warning">
-                  This audit does not have a systems scorecard attached.
+                  This review does not have a systems scorecard attached.
                 </Alert>
               )}
 
@@ -880,7 +880,7 @@ export default function BusinessAuditTab({
                   Notes & wins
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Capture any final context or progress worth celebrating before ending the audit.
+                  Capture any final context or progress worth celebrating before ending the review.
                 </Typography>
               </Box>
 
@@ -956,12 +956,12 @@ export default function BusinessAuditTab({
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 900 }}>
                       {selectedReview.status === 'completed'
-                        ? 'Audit complete'
+                        ? 'Review complete'
                         : 'Ready to wrap up?'}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       {selectedReview.status === 'completed'
-                        ? 'This audit remains editable and can be reopened at any time.'
+                        ? 'This review remains editable and can be reopened at any time.'
                         : 'Confirm the plan is ready before starting the implementation cycle.'}
                     </Typography>
                   </Box>
@@ -989,8 +989,8 @@ export default function BusinessAuditTab({
                   {savingReviewStatus
                     ? 'Saving…'
                     : selectedReview.status === 'completed'
-                      ? 'Reopen audit'
-                      : 'Mark audit complete'}
+                      ? 'Reopen review'
+                      : 'Mark review complete'}
                 </Button>
               </Stack>
             </Paper>

@@ -950,12 +950,33 @@ export default function StudentOverviewNew({
               }}
             >
               <Stack spacing={2}>
-                <Typography
-                  variant={embedded ? 'adminSectionTitle' : 'h4'}
-                  sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.25}
+                  alignItems={{ xs: 'flex-start', sm: 'center' }}
+                  justifyContent="space-between"
                 >
-                  Coaching Workspace
-                </Typography>
+                  <Typography
+                    variant={embedded ? 'adminSectionTitle' : 'h4'}
+                    sx={{ fontFamily: DISPLAY_FONT, fontWeight: 700, letterSpacing: '-0.02em' }}
+                  >
+                    Coaching Workspace
+                  </Typography>
+                  {overviewData.coachingWorkspace.cycleKind &&
+                  overviewData.coachingWorkspace.cycleDate ? (
+                    <Chip
+                      size="small"
+                      label={`Active ${
+                        overviewData.coachingWorkspace.cycleKind === 'business_audit'
+                          ? 'Business Review'
+                          : 'M2'
+                      } · ${formatDateLabel(overviewData.coachingWorkspace.cycleDate)}`}
+                      color="primary"
+                      variant="outlined"
+                      sx={{ fontWeight: 700 }}
+                    />
+                  ) : null}
+                </Stack>
 
                 <Box
                   className="student-overview-coaching-grid"
@@ -980,7 +1001,7 @@ export default function StudentOverviewNew({
 
                     {overviewData.coachingWorkspace.actionSteps.length === 0 ? (
                       <Typography variant="body2" color="text.secondary">
-                        No assigned action steps on the latest coaching cycle.
+                        No assigned action steps on the active coaching cycle.
                       </Typography>
                     ) : (
                       <Stack spacing={1.5}>
@@ -1077,7 +1098,7 @@ export default function StudentOverviewNew({
 
                         <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
                           {overviewData.coachingWorkspace.noteCount} note
-                          {overviewData.coachingWorkspace.noteCount === 1 ? '' : 's'} in latest coaching cycle
+                          {overviewData.coachingWorkspace.noteCount === 1 ? '' : 's'} in the active coaching cycle
                           {overviewData.coachingWorkspace.notesUpdatedAt
                             ? ` - last updated ${formatDateLabel(
                                 overviewData.coachingWorkspace.notesUpdatedAt,
@@ -1087,7 +1108,7 @@ export default function StudentOverviewNew({
                       </>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        No coaching note comments available for the latest cycle.
+                        No coaching note comments available for the active coaching cycle.
                       </Typography>
                     )}
                   </Box>

@@ -619,7 +619,7 @@ export default function KpiTracker({
                 {MONTH_NAMES[selectedMonth - 1]} {selectedYear}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Set by the Business Audit date
+                Set by the Business Review date
               </Typography>
             </Box>
           ) : (

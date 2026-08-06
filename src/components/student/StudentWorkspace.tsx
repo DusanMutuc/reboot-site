@@ -444,7 +444,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
               }}
             >
               <Tab value="overview" label="Overview" />
-              <Tab value="audit" label="Business Audit" />
+              <Tab value="audit" label="Business Review" />
               <Tab value="notes" label="Implementation" />
               <Tab value="progress" label="Progress" />
               <Tab value="kpi" label="KPI Tracker" />

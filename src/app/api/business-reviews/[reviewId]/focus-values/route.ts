@@ -47,7 +47,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     typeof body?.value === 'number' && Number.isSafeInteger(body.value) ? body.value : null;
 
   if (!reviewId) {
-    return NextResponse.json({ error: 'A valid business audit id is required.' }, { status: 400 });
+    return NextResponse.json({ error: 'A valid business review id is required.' }, { status: 400 });
   }
 
   if (!dimensionId || dimensionId <= 0) {
@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     if (!review) {
-      return NextResponse.json({ error: 'Business audit not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Business review not found.' }, { status: 404 });
     }
 
     const allowed = await canManageBusinessReviews(
@@ -83,7 +83,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     );
 
     if (!allowed) {
-      return NextResponse.json({ error: 'You do not have access to this audit.' }, { status: 403 });
+      return NextResponse.json({ error: 'You do not have access to this review.' }, { status: 403 });
     }
 
     const { data: dimension, error: dimensionError } = await admin
@@ -99,7 +99,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (!dimension) {
       return NextResponse.json(
-        { error: 'That Focus Finder dimension does not belong to this audit.' },
+        { error: 'That Focus Finder dimension does not belong to this review.' },
         { status: 400 },
       );
     }

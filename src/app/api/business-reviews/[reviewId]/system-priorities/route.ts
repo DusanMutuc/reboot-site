@@ -56,7 +56,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   const selected = typeof body?.selected === 'boolean' ? body.selected : null;
 
   if (!reviewId) {
-    return NextResponse.json({ error: 'A valid business audit id is required.' }, { status: 400 });
+    return NextResponse.json({ error: 'A valid business review id is required.' }, { status: 400 });
   }
 
   if (!systemId || systemId <= 0) {
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     if (!review) {
-      return NextResponse.json({ error: 'Business audit not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Business review not found.' }, { status: 404 });
     }
 
     const allowed = await canManageBusinessReviews(
@@ -92,7 +92,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     );
 
     if (!allowed) {
-      return NextResponse.json({ error: 'You do not have access to this audit.' }, { status: 403 });
+      return NextResponse.json({ error: 'You do not have access to this review.' }, { status: 403 });
     }
 
     const { error: saveError } = await guard.supabase.rpc(

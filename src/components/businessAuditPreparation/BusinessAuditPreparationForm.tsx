@@ -141,7 +141,7 @@ export default function BusinessAuditPreparationForm() {
         });
         const body = (await response.json()) as BusinessAuditPreparationPayload & ApiError;
         if (!response.ok) {
-          throw new Error(body.error || 'Could not load your Business Audit preparation form.');
+          throw new Error(body.error || 'Could not load your Business Review preparation form.');
         }
 
         setPayload(body);
@@ -151,7 +151,7 @@ export default function BusinessAuditPreparationForm() {
         setLoadError(
           error instanceof Error
             ? error.message
-            : 'Could not load your Business Audit preparation form.',
+            : 'Could not load your Business Review preparation form.',
         );
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -280,7 +280,7 @@ export default function BusinessAuditPreparationForm() {
               lineHeight: 0.98,
             }}
           >
-            Business Audit Preparation
+            Business Review Preparation
           </Typography>
           <Typography sx={{ mt: 2, maxWidth: 690, color: '#d4e6e1', lineHeight: 1.7 }}>
             Take a few thoughtful minutes to reflect on the past 60 days. Your answers will help
@@ -294,7 +294,7 @@ export default function BusinessAuditPreparationForm() {
           <Paper elevation={0} sx={{ p: 6, borderRadius: 4, textAlign: 'center' }}>
             <CircularProgress size={34} />
             <Typography sx={{ mt: 2, color: 'text.secondary' }}>
-              Loading your Business Audit…
+              Loading your Business Review…
             </Typography>
           </Paper>
         ) : loadError || !payload ? (
@@ -303,7 +303,7 @@ export default function BusinessAuditPreparationForm() {
             sx={{ p: { xs: 3, md: 5 }, border: '1px solid', borderColor: 'grey.200', borderRadius: 4 }}
           >
             <Alert severity="warning" sx={{ mb: 3 }}>
-              {loadError || 'No upcoming Business Audit was found.'}
+              {loadError || 'No upcoming Business Review was found.'}
             </Alert>
             <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
               If you only just booked the meeting, synchronization can take up to one hour. You
@@ -347,7 +347,7 @@ export default function BusinessAuditPreparationForm() {
                   </Box>
                   <Box>
                     <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                      {payload.audit.timing === 'upcoming' ? 'YOUR UPCOMING AUDIT' : 'YOUR LATEST AUDIT'}
+                      {payload.audit.timing === 'upcoming' ? 'YOUR UPCOMING REVIEW' : 'YOUR LATEST REVIEW'}
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 900, lineHeight: 1.2 }}>
                       {formatAuditDate(payload.audit.reviewDate)}
@@ -506,7 +506,7 @@ export default function BusinessAuditPreparationForm() {
                     {payload.answers ? 'Update your preparation' : 'Ready to submit?'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Saving again replaces the answers for this Business Audit.
+                    Saving again replaces the answers for this Business Review.
                   </Typography>
                 </Box>
                 <Button

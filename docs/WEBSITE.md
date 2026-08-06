@@ -7,7 +7,7 @@
 - Supabase Auth for sessions.
 - Supabase Postgres/PostgREST for data and functions.
 - Supabase Storage for images and uploaded resources.
-- Vercel deployment with a daily podcast sync (`0 6 * * *`) and hourly Business Audit/Implementation meeting sync (`0 * * * *`).
+- Vercel deployment with a daily podcast sync (`0 6 * * *`) and hourly Business Review/Implementation meeting sync (`0 * * * *`).
 
 ## Supabase clients
 
@@ -55,7 +55,7 @@ API handlers still need their own guards. A middleware-public API prefix does no
 | Area | Routes | Purpose |
 |---|---|---|
 | Entry/auth | `/`, `/login`, `/reset-password`, `/auth/mobile-handoff`, `/access-removed` | Role routing and session flows |
-| Member | `/dashboard`, `/tracker`, `/business-audit-prep`, `/resources`, `/courses/**`, `/library/**`, `/support` | Dashboard, KPI, Business Audit preparation, courses, content, resources |
+| Member | `/dashboard`, `/tracker`, `/business-review-prep`, `/resources`, `/courses/**`, `/library/**`, `/support` | Dashboard, KPI, Business Review preparation, courses, content, resources |
 | Assistant | `/assistant-library/**` | Assistant-scoped library |
 | Coach | `/coach`, `/coach/notes`, `/coach/progress`, `/coach/students-overview`, `/coach/student-dashboard/[userId]`, `/coach/kpi-tracker/[userId]` | Assigned-member coaching workspace |
 | Admin | `/admin`, `/admin/[view]` | User, content, meeting, resource, achievement, and assignment administration |
@@ -126,9 +126,9 @@ The partnership handlers call `await requireAdmin()` but do not inspect the retu
 
 | Route | Methods | Auth | Purpose |
 |---|---|---|---|
-| `/api/business-audit-preparation` | GET, PUT | User | Load or update the signed-in student's preparation form for one Business Audit |
-| `/api/business-reviews` | GET | Coach/admin | Load a student's Business Audits; manual creation is intentionally unavailable |
-| `/api/business-reviews/[reviewId]/status` | PUT | Coach/admin | Mark a Business Audit complete or reopen it without making its content read-only |
+| `/api/business-audit-preparation` | GET, PUT | User | Load or update the signed-in student's preparation form for one Business Review |
+| `/api/business-reviews` | GET | Coach/admin | Load a student's Business Reviews; manual creation is intentionally unavailable |
+| `/api/business-reviews/[reviewId]/status` | PUT | Coach/admin | Mark a Business Review complete or reopen it without making its content read-only |
 | `/api/coach/booking-follow-up` | GET | User | Booking follow-up scoped to coach |
 | `/api/coach/status-overview` | GET | Session/coach logic | Status overview for assigned members |
 | `/api/coach/workspace-students` | GET | User | Coach’s current assigned members |
@@ -167,7 +167,7 @@ All use `requireUser`.
 |---|---|---|---|
 | `/api/auth/is-admin` | GET | Session | Admin-role check |
 | `/api/auth/clear-first-login-flag` | POST | Session | Clear `must_reset_password` Auth metadata |
-| `/api/cron/sync-business-audit-meetings` | GET | Bearer `CRON_SECRET` | Reconcile future GHL Business Audit and Implementation appointments with site meetings and audits |
+| `/api/cron/sync-business-audit-meetings` | GET | Bearer `CRON_SECRET` | Reconcile future GHL Business Review and Implementation appointments with site meetings and reviews |
 | `/api/cron/sync-podcasts` | GET | Bearer `CRON_SECRET` | Sync Transistor episodes into `resources` |
 | `/api/ghl/create-assistant` | POST | `x-reboot-webhook-secret` | Create/update assistant account from GHL tags |
 
@@ -189,14 +189,14 @@ Uses:
 
 - assistant provisioning webhook;
 - coach calendars and booking follow-up;
-- forward-only hourly Business Audit and Implementation meeting reconciliation;
+- forward-only hourly Business Review and Implementation meeting reconciliation;
 - ambassador-hub contact/link resolution.
 
 `GHL_LOCATION_ID` has a hardcoded fallback in `src/lib/config.ts`; deployments and scripts should set it explicitly.
 
-The forward-only cutoff (`2026-08-06T00:00:00-06:00`) and Calgary timezone (`America/Edmonton`) are fixed Business Audit rules in `src/lib/businessAuditMeetingSync.ts`. The job never scans before that cutoff. Repeated runs are safe because `meetings.ghl_appointment_id` is unique. An unambiguous same-day manual Implementation meeting is adopted by the GHL appointment rather than duplicated. Existing GHL appointments that disappear from valid scan matches are reported as an incomplete reconciliation, and incomplete cron runs return a non-success status instead of silently appearing healthy.
+The forward-only cutoff (`2026-08-06T00:00:00-06:00`) and Calgary timezone (`America/Edmonton`) are fixed Business Review rules in `src/lib/businessAuditMeetingSync.ts`. The job never scans before that cutoff. Repeated runs are safe because `meetings.ghl_appointment_id` is unique. An unambiguous same-day manual Implementation meeting is adopted by the GHL appointment rather than duplicated. Existing GHL appointments that disappear from valid scan matches are reported as an incomplete reconciliation, and incomplete cron runs return a non-success status instead of silently appearing healthy.
 
-Coaches cannot manually create Business Audits or Implementation meetings in the workspace. Both record types are created by the GHL reconciliation job; empty workspace slots are informational until a matching appointment synchronizes.
+Coaches cannot manually create Business Reviews or Implementation meetings in the workspace. Both record types are created by the GHL reconciliation job; empty workspace slots are informational until a matching appointment synchronizes.
 
 The GHL and admin provisioning routes currently create accounts with a shared bootstrap password and set `must_reset_password`. This is security debt and should not be reproduced in external scripts.
 
@@ -224,9 +224,9 @@ Auth user → `profiles` → KPI RPCs + meeting RPCs + coaching-note relations +
 
 Coach profile → active `user_coaches` → current-member filter → profiles, status summary, course progress, KPI history, attendance, notes, smart-doc answers, and wins.
 
-### Business Audit preparation
+### Business Review preparation
 
-Authenticated `/business-audit-prep` uses the signed-in student's ID to resolve their nearest upcoming, non-cancelled, meeting-connected Business Audit. When no future audit exists, it falls back to the latest non-cancelled audit so submitted answers remain editable after the meeting. The GHL reminder link is therefore static and does not need appointment-specific merge data. All eight answers are required; the two ratings allow 1-10 except 5 and 7. Preparation wins remain form answers and do not write to `wins`. Coaches see the saved responses at the top of the matching Business Audit.
+Authenticated `/business-review-prep` uses the signed-in student's ID to resolve their nearest upcoming, non-cancelled, meeting-connected Business Review. When no future review exists, it falls back to the latest non-cancelled review so submitted answers remain editable after the meeting. The legacy `/business-audit-prep` URL redirects to the canonical page so existing GHL reminders continue working. The reminder link is static and does not need appointment-specific merge data. All eight answers are required; the two ratings allow 1-10 except 5 and 7. Preparation wins remain form answers and do not write to `wins`. Coaches see the saved responses at the top of the matching Business Review.
 
 ### Course render
 

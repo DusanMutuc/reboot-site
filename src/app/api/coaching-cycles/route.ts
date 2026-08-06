@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import {
-  canManageBusinessReviews,
-  isUuid,
-  loadBusinessReviews,
-} from '@/lib/businessReviews';
+import { canManageBusinessReviews, isUuid } from '@/lib/businessReviews';
+import { loadCoachingCycles } from '@/lib/coachingCycles';
 import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -14,6 +11,7 @@ function readStudentId(request: NextRequest): string | null {
   const value = request.nextUrl.searchParams.get('userId');
   return value && isUuid(value) ? value : null;
 }
+
 export async function GET(request: NextRequest) {
   const guard = await requireUser(request);
   if (!guard.ok) return guard.res;
@@ -26,20 +24,26 @@ export async function GET(request: NextRequest) {
   const admin = getAdminClient();
 
   try {
-    const allowed = await canManageBusinessReviews(
-      admin,
-      guard.user.id,
-      guard.roleCodes,
-      studentId,
-    );
+    const allowed =
+      guard.user.id === studentId ||
+      (await canManageBusinessReviews(
+        admin,
+        guard.user.id,
+        guard.roleCodes,
+        studentId,
+      ));
 
     if (!allowed) {
-      return NextResponse.json({ error: 'You do not have access to this student.' }, { status: 403 });
+      return NextResponse.json(
+        { error: 'You do not have access to this coaching history.' },
+        { status: 403 },
+      );
     }
 
-    return NextResponse.json(await loadBusinessReviews(admin, studentId));
+    return NextResponse.json(await loadCoachingCycles(admin, studentId));
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to load business reviews.';
+    const message =
+      error instanceof Error ? error.message : 'Failed to load coaching history.';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

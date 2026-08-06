@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
   if (!reviewId || completed === null) {
     return NextResponse.json(
-      { error: 'A valid Business Audit and completion state are required.' },
+      { error: 'A valid Business Review and completion state are required.' },
       { status: 400 },
     );
   }
@@ -47,7 +47,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (reviewError) throw new Error(reviewError.message);
     if (!review) {
-      return NextResponse.json({ error: 'Business Audit not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Business Review not found.' }, { status: 404 });
     }
 
     const allowed = await canManageBusinessReviews(
@@ -57,7 +57,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       review.user_id,
     );
     if (!allowed) {
-      return NextResponse.json({ error: 'You do not have access to this audit.' }, { status: 403 });
+      return NextResponse.json({ error: 'You do not have access to this review.' }, { status: 403 });
     }
 
     const now = new Date().toISOString();
@@ -79,7 +79,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       updatedAt: saved.updated_at,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not update this audit.';
+    const message = error instanceof Error ? error.message : 'Could not update this review.';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

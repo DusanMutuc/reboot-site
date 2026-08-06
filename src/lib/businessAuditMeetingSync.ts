@@ -90,11 +90,11 @@ function readPositiveInteger(name: string, fallback: number): number {
 function getSyncWindow(now = DateTime.utc()): SyncWindow {
   const cutoff = DateTime.fromISO(BUSINESS_AUDIT_SYNC_FROM, { setZone: true });
   if (!cutoff.isValid) {
-    throw new Error('The Business Audit synchronization cutoff is invalid.');
+    throw new Error('The Business Review synchronization cutoff is invalid.');
   }
 
   if (!IANAZone.isValidZone(BUSINESS_AUDIT_TIMEZONE)) {
-    throw new Error('The Business Audit synchronization timezone is invalid.');
+    throw new Error('The Business Review synchronization timezone is invalid.');
   }
 
   const lookbackDays = readPositiveInteger(
@@ -110,7 +110,7 @@ function getSyncWindow(now = DateTime.utc()): SyncWindow {
   const end = now.plus({ days: futureDays });
 
   if (start >= end) {
-    throw new Error('The Business Audit synchronization cutoff must be before the window end.');
+    throw new Error('The Business Review synchronization cutoff must be before the window end.');
   }
 
   return {
@@ -208,7 +208,7 @@ async function syncBusinessAuditAppointment(
       error.message.includes('sync_business_audit_appointment');
     throw new Error(
       missingMigration
-        ? 'The GHL Business Audit meeting migration has not been installed yet.'
+        ? 'The GHL Business Review meeting migration has not been installed yet.'
         : error.message,
     );
   }

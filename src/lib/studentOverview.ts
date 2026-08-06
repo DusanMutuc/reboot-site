@@ -1,8 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadCoachingCycles,
+  type CoachingCycleKind,
+} from '@/lib/coachingCycles';
 import { getContentNodeHref } from '@/lib/contentNodeLinks';
 import type { ActionStepStatus } from '@/types/coaching';
-
-type IsoDate = string;
 
 type ProfileRow = {
   id: string;
@@ -33,13 +35,6 @@ type KpiHistoryRow = {
 
 type KpiRecordMetaRow = {
   last_updated_at: string | null;
-};
-
-type CoachingNoteRow = {
-  id: number;
-  user_id: string;
-  created_at: string;
-  m2_meeting_id: number | null;
 };
 
 type ActionStepRow = {
@@ -161,6 +156,8 @@ export type StudentOverviewData = {
   };
   recency: Record<StudentOverviewRecencyKey, string | null>;
   coachingWorkspace: {
+    cycleKind: CoachingCycleKind | null;
+    cycleDate: string | null;
     actionSteps: StudentOverviewActionStep[];
     notesSummary: string;
     notesUpdatedAt: string | null;
@@ -343,19 +340,22 @@ async function fetchLatestKpiUpdate(
   return rows[0]?.last_updated_at ?? null;
 }
 
-async function fetchLatestCoachingWorkspace(
+async function fetchActiveCoachingWorkspace(
   client: SupabaseClient,
   userId: string,
-  meetings: UserMeetingRow[],
 ): Promise<StudentOverviewData['coachingWorkspace']> {
-  const { data: notesData, error: noteErr } = await client
-    .from('coaching_notes')
-    .select('id, user_id, created_at, m2_meeting_id')
-    .eq('user_id', userId);
+  let activeCycle = null;
 
-  if (noteErr) {
-    console.error('fetchLatestCoachingWorkspace notes error', noteErr);
+  try {
+    const cyclePayload = await loadCoachingCycles(client, userId);
+    activeCycle =
+      cyclePayload.cycles.find((cycle) => cycle.id === cyclePayload.activeCycleId) ??
+      null;
+  } catch (error) {
+    console.error('fetchActiveCoachingWorkspace cycle error', error);
     return {
+      cycleKind: null,
+      cycleDate: null,
       actionSteps: [],
       notesSummary: '',
       notesUpdatedAt: null,
@@ -363,53 +363,33 @@ async function fetchLatestCoachingWorkspace(
     };
   }
 
-  const notes = (notesData ?? []) as CoachingNoteRow[];
-  if (!notes.length) {
+  if (!activeCycle) {
     return {
+      cycleKind: null,
+      cycleDate: null,
       actionSteps: [],
       notesSummary: '',
       notesUpdatedAt: null,
       noteCount: 0,
     };
   }
-
-  const m2DateById = new Map<number, IsoDate>();
-  meetings.forEach((meeting) => {
-    if (meeting.meeting_type_code === 'M2_MEETING') {
-      m2DateById.set(meeting.meeting_id, meeting.meeting_date);
-    }
-  });
-
-  const effectiveDate = (note: CoachingNoteRow): string => {
-    if (note.m2_meeting_id && m2DateById.has(note.m2_meeting_id)) {
-      return m2DateById.get(note.m2_meeting_id) ?? note.created_at;
-    }
-    return note.created_at;
-  };
-
-  const latestNote = notes.reduce((latest, current) => {
-    return new Date(effectiveDate(current)).getTime() >
-      new Date(effectiveDate(latest)).getTime()
-      ? current
-      : latest;
-  }, notes[0]);
 
   const [{ data: stepsData, error: stepsErr }, { data: commentsData, error: commentsErr }] =
     await Promise.all([
       client
         .from('coaching_note_action_steps')
         .select('id, coaching_note_id, label, status, library_item_id, created_at, updated_at')
-        .eq('coaching_note_id', latestNote.id)
+        .eq('coaching_note_id', activeCycle.noteId)
         .order('created_at', { ascending: true }),
       client
         .from('coaching_note_comments')
         .select('id, body, created_at')
-        .eq('coaching_note_id', latestNote.id)
+        .eq('coaching_note_id', activeCycle.noteId)
         .order('created_at', { ascending: true }),
     ]);
 
-  if (stepsErr) console.error('fetchLatestCoachingWorkspace steps error', stepsErr);
-  if (commentsErr) console.error('fetchLatestCoachingWorkspace comments error', commentsErr);
+  if (stepsErr) console.error('fetchActiveCoachingWorkspace steps error', stepsErr);
+  if (commentsErr) console.error('fetchActiveCoachingWorkspace comments error', commentsErr);
 
   const rawSteps = (stepsData ?? []) as ActionStepRow[];
   const comments = (commentsData ?? []) as NoteCommentRow[];
@@ -426,7 +406,7 @@ async function fetchLatestCoachingWorkspace(
       .in('id', linkedIds);
 
     if (nodeErr) {
-      console.error('fetchLatestCoachingWorkspace content nodes error', nodeErr);
+      console.error('fetchActiveCoachingWorkspace content nodes error', nodeErr);
     } else {
       nodeMap = new Map(
         ((nodeRows ?? []) as ContentNodeRow[]).map((row) => [row.id, row]),
@@ -452,9 +432,11 @@ async function fetchLatestCoachingWorkspace(
   });
 
   const notesSummary = comments.map((comment) => comment.body.trim()).filter(Boolean).join('\n\n');
-  const notesUpdatedAt = comments[comments.length - 1]?.created_at ?? latestNote.created_at;
+  const notesUpdatedAt = comments[comments.length - 1]?.created_at ?? activeCycle.cycleDate;
 
   return {
+    cycleKind: activeCycle.kind,
+    cycleDate: activeCycle.cycleDate,
     actionSteps,
     notesSummary,
     notesUpdatedAt,
@@ -574,7 +556,7 @@ export async function fetchStudentOverviewData(
       fetchAchievements(client, userId),
     ]);
 
-  const coachingWorkspace = await fetchLatestCoachingWorkspace(client, userId, meetings);
+  const coachingWorkspace = await fetchActiveCoachingWorkspace(client, userId);
 
   const latestM2Meeting =
     meetings

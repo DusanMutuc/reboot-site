@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       : null;
 
   if (!reviewId) {
-    return NextResponse.json({ error: 'A valid business audit id is required.' }, { status: 400 });
+    return NextResponse.json({ error: 'A valid business review id is required.' }, { status: 400 });
   }
 
   if (!systemId || systemId <= 0) {
@@ -90,12 +90,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     if (!review) {
-      return NextResponse.json({ error: 'Business audit not found.' }, { status: 404 });
+      return NextResponse.json({ error: 'Business review not found.' }, { status: 404 });
     }
 
     if (!review.system_scorecard_template_key) {
       return NextResponse.json(
-        { error: 'This business audit does not have a systems scorecard.' },
+        { error: 'This business review does not have a systems scorecard.' },
         { status: 409 },
       );
     }
@@ -108,7 +108,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     );
 
     if (!allowed) {
-      return NextResponse.json({ error: 'You do not have access to this audit.' }, { status: 403 });
+      return NextResponse.json({ error: 'You do not have access to this review.' }, { status: 403 });
     }
 
     const [{ data: system, error: systemError }, { data: template, error: templateError }] =
@@ -136,7 +136,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (!system || !template) {
       return NextResponse.json(
-        { error: 'That system does not belong to this audit.' },
+        { error: 'That system does not belong to this review.' },
         { status: 400 },
       );
     }
@@ -163,7 +163,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (!saved) {
       return NextResponse.json(
-        { error: 'The scorecard system was not initialized for this audit.' },
+        { error: 'The scorecard system was not initialized for this review.' },
         { status: 409 },
       );
     }
