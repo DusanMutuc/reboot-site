@@ -6,7 +6,6 @@ import {
   Box,
   TextField,
   MenuItem,
-  Paper,
   Typography,
   Alert,
   Snackbar,
@@ -40,24 +39,29 @@ export default function AddUserForm() {
     shared_notes: false,
   });
   const [coaches, setCoaches] = useState<Person[]>([]);
+  const [users, setUsers] = useState<Person[]>([]);
   const [primaryCoach, setPrimaryCoach] = useState<Person | null>(null);
   const [implementationCoach, setImplementationCoach] = useState<Person | null>(null);
+  const [assistantTo, setAssistantTo] = useState<Person | null>(null);
   const [busy, setBusy] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>(
     { open: false, message: '', severity: 'success' }
   );
 
   useEffect(() => {
-    (async () => {
+    async function loadPeople(url: string, setPeople: (people: Person[]) => void) {
       try {
-        const res = await fetch('/api/admin/list-coaches');
+        const res = await fetch(url);
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || res.statusText);
-        setCoaches(Array.isArray(data?.items) ? data.items : []);
+        setPeople(Array.isArray(data?.items) ? data.items : []);
       } catch {
-        setCoaches([]);
+        setPeople([]);
       }
-    })();
+    }
+
+    void loadPeople('/api/admin/list-coaches', setCoaches);
+    void loadPeople('/api/admin/list-users', setUsers);
   }, []);
 
   useEffect(() => {
@@ -81,6 +85,13 @@ export default function AddUserForm() {
     () => coaches.map((c) => ({ ...c, label: `${c.name} — ${c.email}` })),
     [coaches]
   );
+  const userOptions = useMemo(
+    () => users.map((user) => ({ ...user, label: `${user.name} — ${user.email}` })),
+    [users]
+  );
+
+  const hasAssistantOnboardee = forms.some((form) => form.role === 'assistant');
+  const hasNonAssistantOnboardee = forms.some((form) => form.role !== 'assistant');
 
   const emailErrors = forms.map((form) => form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email));
 
@@ -97,6 +108,16 @@ export default function AddUserForm() {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ user_id: userId, coach_id: coachId, replace: true, relationship_type }),
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.error || res.statusText);
+  }
+
+  async function assignAssistantToUser(userId: string, assistantId: string) {
+    const res = await fetch('/api/admin/assistant-assignments', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, assistant_id: assistantId, replace: false }),
     });
     const j = await res.json();
     if (!res.ok) throw new Error(j.error || res.statusText);
@@ -157,11 +178,17 @@ export default function AddUserForm() {
         if (!userId) throw new Error(`User created for ${form.email} but no user_id was returned.`);
         createdUserIds.push(userId);
 
-        if (primaryCoach?.id) {
-          await assignCoach(userId, primaryCoach.id, 'primary');
-        }
-        if (implementationCoach?.id) {
-          await assignCoach(userId, implementationCoach.id, 'implementation');
+        if (form.role === 'assistant') {
+          if (assistantTo?.id) {
+            await assignAssistantToUser(assistantTo.id, userId);
+          }
+        } else {
+          if (primaryCoach?.id) {
+            await assignCoach(userId, primaryCoach.id, 'primary');
+          }
+          if (implementationCoach?.id) {
+            await assignCoach(userId, implementationCoach.id, 'implementation');
+          }
         }
 
         createdEmails.push(form.email);
@@ -288,23 +315,42 @@ export default function AddUserForm() {
           </Box>
         ))}
 
-        <Autocomplete
-          options={coachOptions}
-          value={primaryCoach}
-          onChange={(_, v) => setPrimaryCoach(v)}
-          renderInput={(params) => <TextField {...params} label="Primary coach (optional)" />}
-        />
+        {hasNonAssistantOnboardee && (
+          <>
+            <Autocomplete
+              options={coachOptions}
+              value={primaryCoach}
+              onChange={(_, v) => setPrimaryCoach(v)}
+              renderInput={(params) => <TextField {...params} label="Primary coach (optional)" />}
+            />
 
-        <Autocomplete
-          options={coachOptions}
-          value={implementationCoach}
-          onChange={(_, v) => setImplementationCoach(v)}
-          renderInput={(params) => <TextField {...params} label="Implementation coach (optional)" />}
-        />
+            <Autocomplete
+              options={coachOptions}
+              value={implementationCoach}
+              onChange={(_, v) => setImplementationCoach(v)}
+              renderInput={(params) => <TextField {...params} label="Implementation coach (optional)" />}
+            />
 
-        <Alert severity="info" variant="outlined">
-          Optionally assign a primary coach and/or implementation coach during onboarding.
-        </Alert>
+            <Alert severity="info" variant="outlined">
+              Optionally assign a primary coach and/or implementation coach during onboarding.
+            </Alert>
+          </>
+        )}
+
+        {hasAssistantOnboardee && (
+          <>
+            <Autocomplete
+              options={userOptions}
+              value={assistantTo}
+              onChange={(_, value) => setAssistantTo(value)}
+              renderInput={(params) => <TextField {...params} label="Assistant to (optional)" />}
+            />
+
+            <Alert severity="info" variant="outlined">
+              Select the user this assistant supports. Any existing assistant assignments for that user will be kept.
+            </Alert>
+          </>
+        )}
 
         <FormActions>
           <LoadingButton type="submit" variant="contained" loading={busy}>
