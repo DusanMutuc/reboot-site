@@ -31,7 +31,7 @@ public.profiles
 
 ### Core relations
 
-- `profiles` — display names, Looker/GHL links, introduction timestamp, and automatic/manual attention status.
+- `profiles` — display names, GHL identifiers, introduction timestamp, and automatic/manual attention status.
 - `roles` — stable authorization codes.
 - `user_roles` — many-to-many user/role assignment.
 - `coach_profiles` — booking, calendar, dashboard, form, and coaching links for a coach.

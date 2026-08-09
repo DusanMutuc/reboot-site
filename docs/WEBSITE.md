@@ -210,10 +210,6 @@ Environment:
 
 The cron fetches all episodes, de-duplicates existing podcast titles, and upserts `resources` with Transistor source metadata.
 
-### Looker Studio
-
-Member dashboard links are stored in `profiles.looker_link`; coach-level links live in `coach_profiles`.
-
 ## High-level data flows
 
 ### Member dashboard

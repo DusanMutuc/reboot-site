@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { requireAdmin } from '@/lib/requireAdmin';
 
@@ -221,6 +222,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [withMembers] = await buildPartnershipsWithMembers([base]);
+    invalidateAdminUserDirectory();
     return NextResponse.json(withMembers, { status: 201 });
   } catch (err: unknown) {
     console.error('partnerships POST unexpected error', err);

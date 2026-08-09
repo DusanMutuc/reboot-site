@@ -4,12 +4,11 @@ import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
 type CourseRow = { id: number; name: string | null; start_date: string | null; created_at: string };
-type ProfileRow = { id: string; first_name: string | null; last_name: string | null; looker_link: string | null };
+type ProfileRow = { id: string; first_name: string | null; last_name: string | null };
 
 type CourseItem = { id: number; name: string; start_date: string | null };
 type UserSummary = { id: string; name: string; email: string };
 
-type LookerSummary = UserSummary & { looker_link: string | null };
 type PhoneSummary = UserSummary & { phone: string | null };
 
 function formatName(profile: ProfileRow | undefined) {
@@ -65,14 +64,13 @@ export async function GET(request: NextRequest) {
       defaultCourseId,
       selectedCourseId: courseId,
       missingCoachUsers: [],
-      missingLookerUsers: [],
       missingPhoneUsers: [],
     });
   }
 
   const { data: profileRows, error: profileErr } = await supa
     .from('profiles')
-    .select('id, first_name, last_name, looker_link')
+    .select('id, first_name, last_name')
     .in('id', userIds);
 
   if (profileErr) {
@@ -107,12 +105,6 @@ export async function GET(request: NextRequest) {
     ? []
     : userIds.filter((id) => !assignedSet.has(id));
 
-  const missingLookerRows = (profileRows ?? []).filter((row) => {
-    if (!row?.id) return false;
-    const link = (row.looker_link ?? '').trim();
-    return link.length === 0;
-  });
-
   const authMap = new Map<string, { email: string; phone: string | null }>();
 
   let page = 1;
@@ -144,18 +136,6 @@ export async function GET(request: NextRequest) {
     };
   }).sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email));
 
-  const missingLookerUsers: LookerSummary[] = missingLookerRows
-    .map((row) => {
-      const auth = row?.id ? authMap.get(row.id) : undefined;
-      return {
-        id: row.id,
-        name: formatName(row as ProfileRow),
-        email: auth?.email ?? '',
-        looker_link: row.looker_link ?? null,
-      };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name) || a.email.localeCompare(b.email));
-
   const missingPhoneUsers: PhoneSummary[] = userIds
     .filter((id) => {
       const auth = authMap.get(id);
@@ -179,7 +159,6 @@ export async function GET(request: NextRequest) {
     defaultCourseId,
     selectedCourseId: courseId,
     missingCoachUsers,
-    missingLookerUsers,
     missingPhoneUsers,
   });
 }

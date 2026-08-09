@@ -10,7 +10,6 @@ type Params = { params: Promise<{ userId?: string | string[] | undefined }> };
 type EditableUserPayload = Partial<{
   first_name: string;
   last_name: string;
-  looker_link: string | null;
   phone: string | null;
   ghl_user_id: string | null;
   introduced_at: string | null;
@@ -39,7 +38,7 @@ async function fetchUserPayload(userId: string) {
   ] = await Promise.all([
     supa
       .from('profiles')
-      .select('first_name, last_name, looker_link, ghl_user_id, introduced_at')
+      .select('first_name, last_name, ghl_user_id, introduced_at')
       .eq('id', userId)
       .maybeSingle(),
     supa.auth.admin.getUserById(userId),
@@ -73,7 +72,6 @@ async function fetchUserPayload(userId: string) {
       phone: user.phone && user.phone.trim().length > 0 ? user.phone : null,
       first_name: profile.first_name ?? '',
       last_name: profile.last_name ?? '',
-      looker_link: profile.looker_link?.trim() ?? '',
       ghl_user_id: profile.ghl_user_id?.trim() ?? '',
       introduced_at: profile.introduced_at ?? null,
       is_legend: hasRoleCode(roleCodes, 'legend'),
@@ -163,7 +161,6 @@ export async function PATCH(request: NextRequest, context: Params) {
   const {
     first_name,
     last_name,
-    looker_link,
     phone,
     ghl_user_id,
     introduced_at,
@@ -179,12 +176,6 @@ export async function PATCH(request: NextRequest, context: Params) {
 
   if (typeof last_name === 'string') {
     profileUpdates.last_name = last_name.trim();
-  }
-
-  if (typeof looker_link === 'string') {
-    profileUpdates.looker_link = looker_link.trim();
-  } else if (looker_link === null) {
-    profileUpdates.looker_link = '';
   }
 
   if (typeof ghl_user_id === 'string') {

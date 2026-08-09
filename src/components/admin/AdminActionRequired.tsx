@@ -21,7 +21,6 @@ import { supabase } from '../../lib/supabaseClient';
 
 type Course = { id: number; name: string; start_date: string | null };
 type UserSummary = { id: string; name: string; email: string };
-type LookerSummary = UserSummary & { looker_link: string | null };
 type PhoneSummary = UserSummary & { phone: string | null };
 
 type ActionRequiredResponse = {
@@ -29,7 +28,6 @@ type ActionRequiredResponse = {
   defaultCourseId: number | null;
   selectedCourseId: number | null;
   missingCoachUsers: UserSummary[];
-  missingLookerUsers: LookerSummary[];
   missingPhoneUsers: PhoneSummary[];
 };
 
@@ -41,7 +39,6 @@ type UserDetails = {
   phone: string | null;
   first_name: string;
   last_name: string;
-  looker_link: string;
 };
 
 const emptyDetails: UserDetails = {
@@ -50,7 +47,6 @@ const emptyDetails: UserDetails = {
   phone: '',
   first_name: '',
   last_name: '',
-  looker_link: '',
 };
 
 function sortSummaries<T extends UserSummary>(items: T[]) {
@@ -69,16 +65,10 @@ function formatDate(date: string | null) {
   return d.toLocaleDateString();
 }
 
-function isValidUrl(value: string) {
-  if (!value) return false;
-  return /^https?:\/\//i.test(value.trim());
-}
-
 export default function AdminActionRequired() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [missingCoaches, setMissingCoaches] = useState<UserSummary[]>([]);
-  const [missingLooker, setMissingLooker] = useState<LookerSummary[]>([]);
   const [missingPhone, setMissingPhone] = useState<PhoneSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadedOnce, setLoadedOnce] = useState(false);
@@ -87,8 +77,6 @@ export default function AdminActionRequired() {
     { open: false, message: '', severity: 'success' }
   );
 
-  const [lookerInputs, setLookerInputs] = useState<Record<string, string>>({});
-  const [savingLookerIds, setSavingLookerIds] = useState<string[]>([]);
   const [phoneInputs, setPhoneInputs] = useState<Record<string, string>>({});
   const [savingPhoneIds, setSavingPhoneIds] = useState<string[]>([]);
 
@@ -103,9 +91,6 @@ export default function AdminActionRequired() {
 
   const [detailsForm, setDetailsForm] = useState(emptyDetails);
 
-  const editorLookerInvalid =
-    !!userDetails && detailsForm.looker_link.trim().length > 0 && !isValidUrl(detailsForm.looker_link);
-
   async function loadActionData(courseId?: number) {
     setLoading(true);
     setError(null);
@@ -117,9 +102,7 @@ export default function AdminActionRequired() {
 
       setCourses(data.courses ?? []);
       setMissingCoaches(sortSummaries(data.missingCoachUsers ?? []));
-      setMissingLooker(sortSummaries(data.missingLookerUsers ?? []));
       setMissingPhone(sortSummaries(data.missingPhoneUsers ?? []));
-      setLookerInputs({});
       setPhoneInputs({});
 
       const effectiveCourse =
@@ -169,7 +152,6 @@ export default function AdminActionRequired() {
       phone: userDetails.phone ?? '',
       first_name: userDetails.first_name,
       last_name: userDetails.last_name,
-      looker_link: userDetails.looker_link ?? '',
     });
   }, [userDetails]);
 
@@ -178,57 +160,10 @@ export default function AdminActionRequired() {
     [missingCoaches.length]
   );
 
-  const lookerCountLabel = useMemo(
-    () => `${missingLooker.length} user${missingLooker.length === 1 ? '' : 's'}`,
-    [missingLooker.length]
-  );
-
   const phoneCountLabel = useMemo(
     () => `${missingPhone.length} user${missingPhone.length === 1 ? '' : 's'}`,
     [missingPhone.length]
   );
-
-  async function updateLookerLink(user: LookerSummary, value: string) {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      setSnack({ open: true, message: 'Link cannot be empty', severity: 'error' });
-      return;
-    }
-    if (!isValidUrl(trimmed)) {
-      setSnack({ open: true, message: 'Link must start with http:// or https://', severity: 'error' });
-      return;
-    }
-
-    setSavingLookerIds((prev) => [...prev, user.id]);
-    try {
-      const res = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ looker_link: trimmed }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || res.statusText);
-
-      setMissingLooker((prev) => prev.filter((item) => item.id !== user.id));
-      setLookerInputs((prev) => {
-        const next = { ...prev };
-        delete next[user.id];
-        return next;
-      });
-      if (userDetails?.id === user.id) {
-        setUserDetails({
-          ...userDetails,
-          looker_link: trimmed,
-        });
-      }
-      setSnack({ open: true, message: `Saved Looker link for ${user.name}`, severity: 'success' });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to update Looker link';
-      setSnack({ open: true, message, severity: 'error' });
-    } finally {
-      setSavingLookerIds((prev) => prev.filter((id) => id !== user.id));
-    }
-  }
 
   async function updatePhone(user: PhoneSummary, value: string) {
     const trimmed = value.trim();
@@ -288,19 +223,12 @@ export default function AdminActionRequired() {
   async function saveUserDetails() {
     if (!userDetails?.id) return;
 
-    const trimmedLooker = detailsForm.looker_link.trim();
-    if (trimmedLooker && !isValidUrl(trimmedLooker)) {
-      setSnack({ open: true, message: 'Looker link must start with http:// or https://', severity: 'error' });
-      return;
-    }
-
     setSavingDetails(true);
     try {
       const phoneInputValue = detailsForm.phone?.trim() ?? '';
       const payload = {
         first_name: detailsForm.first_name.trim(),
         last_name: detailsForm.last_name.trim(),
-        looker_link: trimmedLooker,
         phone: phoneInputValue.length > 0 ? phoneInputValue : null,
       };
       const res = await fetch(`/api/admin/users/${encodeURIComponent(userDetails.id)}`, {
@@ -325,30 +253,6 @@ export default function AdminActionRequired() {
           item.id === data.id ? { ...item, name, email: data.email } : item
         );
         return sortSummaries(updated);
-      });
-
-      const lookerValue = data.looker_link?.trim() ?? '';
-      const hasLooker = lookerValue.length > 0;
-      setMissingLooker((prev) => {
-        const idx = prev.findIndex((item) => item.id === data.id);
-        if (hasLooker) {
-          if (idx === -1) return prev;
-          const next = [...prev];
-          next.splice(idx, 1);
-          return next;
-        }
-        const nextItem: LookerSummary = {
-          id: data.id,
-          name,
-          email: data.email,
-          looker_link: hasLooker ? lookerValue : null,
-        };
-        if (idx !== -1) {
-          const next = [...prev];
-          next[idx] = nextItem;
-          return sortSummaries(next);
-        }
-        return sortSummaries([...prev, nextItem]);
       });
 
       const nextPhoneValue = data.phone?.trim() ?? '';
@@ -418,14 +322,7 @@ export default function AdminActionRequired() {
     loadActionData(parsed).catch(() => {});
   };
 
-  const lookerInputValue = (id: string) => lookerInputs[id] ?? '';
   const phoneInputValue = (id: string) => phoneInputs[id] ?? '';
-
-    const invalidLookerIds = new Set(
-      Object.entries(lookerInputs)
-        .filter(([, value]) => value.trim().length > 0 && !isValidUrl(value))
-        .map(([id]) => id)
-    );
 
   const showGlobalSpinner = !loadedOnce && loading;
 
@@ -506,60 +403,6 @@ export default function AdminActionRequired() {
                     </Paper>
                   ))}
                 </Box>
-              )}
-            </Stack>
-          </Paper>
-
-          <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-            <Stack spacing={2}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Typography variant="h6" fontWeight={600}>
-                  Missing Looker links
-                </Typography>
-                <Chip label={lookerCountLabel} size="small" />
-              </Box>
-
-              {missingLooker.length === 0 ? (
-                <Alert severity="success">Everyone has a Looker link.</Alert>
-              ) : (
-                <Stack spacing={1.5}>
-                  {missingLooker.map((user) => {
-                    const value = lookerInputValue(user.id);
-                    const invalid = invalidLookerIds.has(user.id);
-                    const saving = savingLookerIds.includes(user.id);
-                    return (
-                      <Paper key={user.id} variant="outlined" sx={{ p: 2 }}>
-                        <Stack spacing={1.5}>
-                          <Box>
-                            <Typography variant="body1" fontWeight={600}>{user.name}</Typography>
-                            <Typography variant="body2" color="text.secondary">{user.email || 'No email on file'}</Typography>
-                          </Box>
-                          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
-                            <TextField
-                              fullWidth
-                              label="Looker link"
-                              placeholder="https://..."
-                              value={value}
-                              onChange={(event) =>
-                                setLookerInputs((prev) => ({ ...prev, [user.id]: event.target.value }))
-                              }
-                              error={invalid}
-                              helperText={invalid ? 'Must start with http:// or https://' : ' '}
-                            />
-                            <LoadingButton
-                              variant="contained"
-                              onClick={() => updateLookerLink(user, value)}
-                              disabled={!value.trim() || invalid}
-                              loading={saving}
-                            >
-                              Save
-                            </LoadingButton>
-                          </Stack>
-                        </Stack>
-                      </Paper>
-                    );
-                  })}
-                </Stack>
               )}
             </Stack>
           </Paper>
@@ -673,16 +516,6 @@ export default function AdminActionRequired() {
                         fullWidth
                       />
                     </Stack>
-                        <TextField
-                          label="Looker link"
-                          value={detailsForm.looker_link}
-                          onChange={(event) =>
-                            setDetailsForm((prev) => ({ ...prev, looker_link: event.target.value }))
-                          }
-                          helperText={editorLookerInvalid ? 'Must start with http:// or https://' : 'Leave blank to remove the link.'}
-                          error={editorLookerInvalid}
-                          fullWidth
-                        />
                       </Stack>
 
                       <Stack spacing={1.5}>
@@ -710,7 +543,6 @@ export default function AdminActionRequired() {
                       variant="contained"
                       onClick={saveUserDetails}
                       loading={savingDetails}
-                      disabled={editorLookerInvalid}
                     >
                       Save changes
                     </LoadingButton>

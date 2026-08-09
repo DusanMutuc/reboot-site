@@ -1,5 +1,6 @@
 // app/api/admin/assign-coach/route.ts
 import { NextRequest, NextResponse } from 'next/server';
+import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -168,6 +169,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ assign-coach: Assignment successful');
+    invalidateAdminUserDirectory();
     return NextResponse.json({ ok: true, message: 'Coach assigned successfully' });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Unexpected server error';
@@ -203,5 +205,6 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  invalidateAdminUserDirectory();
   return NextResponse.json({ ok: true, message: 'Coach removed successfully' });
 }

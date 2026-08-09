@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { requireAdmin } from '@/lib/requireAdmin';
 
@@ -267,6 +268,7 @@ export async function PATCH(
     }
 
     const full = await buildPartnershipWithMembers(row as PartnershipRow);
+    invalidateAdminUserDirectory();
     return NextResponse.json(full);
   } catch (err: unknown) {
     console.error('partnerships PATCH unexpected error', err);
@@ -309,6 +311,7 @@ export async function DELETE(
       );
     }
 
+    invalidateAdminUserDirectory();
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     console.error('partnerships DELETE unexpected error', err);

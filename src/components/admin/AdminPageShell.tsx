@@ -77,8 +77,8 @@ const navigationStructure: AdminNavSection[] = [
     icon: PeopleIcon,
     children: [
       { id: 'add-user', label: 'Onboard User', icon: PersonAddIcon, component: 'AddUserForm' },
-      { id: 'assign-assistant', label: 'Assign Assistant', icon: AssignmentIndIcon, component: 'AssignAssistantPanel' },
-      { id: 'user-profiles', label: 'User Profiles', icon: PeopleIcon, component: 'UserProfilesAdmin' },
+      { id: 'assign-assistant', label: 'Assistants', icon: AssignmentIndIcon, component: 'AssignAssistantPanel' },
+      { id: 'user-profiles', label: 'Members', icon: PeopleIcon, component: 'UserProfilesAdmin' },
       { id: 'user-partnerships', label: 'User Partnerships', icon: GroupAdd, component: 'PartnershipsAdmin' },
       { id: 'user-data-transfer', label: 'User Data Transfer', icon: SwapHorizIcon, component: 'UserDataTransfer' },
     ],

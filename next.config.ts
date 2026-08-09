@@ -40,8 +40,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            value:
-              "frame-ancestors 'self' https://lookerstudio.google.com https://*.lookerstudio.google.com;",
+            value: "frame-ancestors 'self';",
           },
         ],
       },
