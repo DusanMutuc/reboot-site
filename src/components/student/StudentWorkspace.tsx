@@ -119,10 +119,10 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   });
 
   useEffect(() => {
-    if (!selectedStudentId) {
+    if (!selectedStudent) {
       setPrivateNotesOpen(false);
     }
-  }, [selectedStudentId]);
+  }, [selectedStudent]);
 
   // Measure the unshifted workspace so wide screens keep the main content centered.
   const updatePrivateNotesOffset = useCallback(() => {
@@ -215,16 +215,18 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
   const sectionLabel = mode === 'coach' ? 'Coach Workspace' : null;
 
   const renderTabContent = () => {
-    if (!selectedStudentId) {
+    if (!selectedStudent) {
       return <EmptyStudentState />;
     }
+
+    const activeStudentId = selectedStudent.id;
 
     switch (tab) {
       case 'overview':
         return (
           <OverviewTab
             mode={mode}
-            userId={selectedStudentId}
+            userId={activeStudentId}
             refreshSignal={kpiRefreshSignal}
             isLegend={selectedStudent?.is_legend ?? false}
           />
@@ -232,15 +234,15 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
       case 'notes':
         return (
           <ImplementationTab
-            selectedStudentId={selectedStudentId}
-            studentName={selectedStudent?.full_name}
+            selectedStudentId={activeStudentId}
+            studentName={selectedStudent.full_name}
           />
         );
       case 'audit':
         return (
           <BusinessAuditTab
-            selectedStudentId={selectedStudentId}
-            studentName={selectedStudent?.full_name}
+            selectedStudentId={activeStudentId}
+            studentName={selectedStudent.full_name}
           />
         );
       case 'progress':
@@ -251,7 +253,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
             coachLoading={coachProgressLoading}
             mode={mode}
             selectedCourseId={selectedCourseId}
-            selectedStudentId={selectedStudentId}
+            selectedStudentId={activeStudentId}
             onSelectCourse={(courseId) => setQuery({ courseId })}
           />
         );
@@ -260,7 +262,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
         return (
           <KpiTab
             refreshSignal={kpiRefreshSignal}
-            userId={selectedStudentId}
+            userId={activeStudentId}
             onSaved={() => setKpiRefreshSignal((prev) => prev + 1)}
           />
         );
@@ -333,7 +335,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
                 fullWidth
                 startIcon={<NotesIcon />}
                 onClick={() => setPrivateNotesOpen((prev) => !prev)}
-                disabled={!selectedStudentId}
+                disabled={!selectedStudent}
               >
                 Private notes
               </Button>
@@ -523,8 +525,8 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
         </Box>
 
         <Box sx={{ p: 2, flex: 1, minHeight: 0 }}>
-          {selectedStudentId ? (
-            <PrivateNotesPanel userId={selectedStudentId} />
+          {selectedStudent ? (
+            <PrivateNotesPanel userId={selectedStudent.id} />
           ) : (
             <Typography variant="body2" color="text.secondary">
               Pick a student above to view private notes.

@@ -14,6 +14,8 @@ type ProfileRow = {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  ghl_contact_id: string | null;
+  ghl_user_id: string | null;
 };
 
 function buildFullName(profile: ProfileRow | undefined, email: string): string {
@@ -21,11 +23,29 @@ function buildFullName(profile: ProfileRow | undefined, email: string): string {
   return name || email || 'Unnamed student';
 }
 
+function resolveRequestedUserId(
+  requestedId: string | null,
+  userIds: string[],
+  profiles: ProfileRow[],
+): string | null {
+  if (!requestedId) return null;
+  if (userIds.includes(requestedId)) return requestedId;
+
+  const matches = profiles.filter((profile) =>
+    [profile.ghl_contact_id, profile.ghl_user_id].some(
+      (ghlId) => ghlId?.trim() === requestedId,
+    ),
+  );
+
+  return matches.length === 1 ? matches[0].id : null;
+}
+
 export async function GET(request: NextRequest) {
   const guard = await requireUser(request);
   if (!guard.ok) return guard.res;
 
   const supa = getAdminClient();
+  const requestedId = request.nextUrl.searchParams.get('requestedId')?.trim() || null;
 
   try {
     const { data: assignmentRows, error: assignmentError } = await supa
@@ -45,7 +65,7 @@ export async function GET(request: NextRequest) {
     const userIds = assignedUserIds.filter((userId) => currentMemberUserIdSet.has(userId));
 
     if (userIds.length === 0) {
-      return NextResponse.json({ items: [] });
+      return NextResponse.json({ items: [], resolved_user_id: null });
     }
 
     const [
@@ -54,7 +74,7 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       supa
         .from('profiles')
-        .select('id, first_name, last_name')
+        .select('id, first_name, last_name, ghl_contact_id, ghl_user_id')
         .in('id', userIds),
       fetchLegendUserIdSet(supa, userIds),
     ]);
@@ -63,9 +83,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: profileError.message }, { status: 400 });
     }
 
-    const profileById = new Map(
-      ((profiles ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-    );
+    const profileRows = (profiles ?? []) as ProfileRow[];
+    const profileById = new Map(profileRows.map((profile) => [profile.id, profile]));
     const emailMap = new Map<string, string>();
     const userIdSet = new Set(userIds);
     const perPage = 1000;
@@ -99,7 +118,10 @@ export async function GET(request: NextRequest) {
       })
       .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
-    return NextResponse.json({ items });
+    return NextResponse.json({
+      items,
+      resolved_user_id: resolveRequestedUserId(requestedId, userIds, profileRows),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load students.';
     return NextResponse.json({ error: message }, { status: 500 });

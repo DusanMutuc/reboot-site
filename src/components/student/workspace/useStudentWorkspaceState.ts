@@ -27,7 +27,13 @@ type AdminListUserRow = {
 
 type CoachWorkspaceStudentsResponse = {
   items?: CoachRosterRow[];
+  resolved_user_id?: string | null;
   error?: string;
+};
+
+type LoadedStudents = {
+  items: StudentOption[];
+  resolvedStudentId: string | null;
 };
 
 type UseStudentWorkspaceStateArgs = {
@@ -38,7 +44,7 @@ type UseStudentWorkspaceStateArgs = {
   setQuery: (patch: WorkspaceQueryPatch) => void;
 };
 
-async function loadAdminStudents(): Promise<StudentOption[]> {
+async function loadAdminStudents(requestedId: string | null): Promise<LoadedStudents> {
   const response = await fetch('/api/admin/list-users', { cache: 'no-store' });
   const body = (await response.json()) as { items?: AdminListUserRow[]; error?: string };
 
@@ -46,7 +52,7 @@ async function loadAdminStudents(): Promise<StudentOption[]> {
     throw new Error(body.error || 'Failed to load students.');
   }
 
-  return (body.items ?? [])
+  const items = (body.items ?? [])
     .map((item) => ({
       id: item.id,
       full_name: item.name?.trim() || item.email?.trim() || 'Unnamed student',
@@ -54,17 +60,28 @@ async function loadAdminStudents(): Promise<StudentOption[]> {
       is_legend: !!item.is_legend,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  return {
+    items,
+    resolvedStudentId: items.some((item) => item.id === requestedId) ? requestedId : null,
+  };
 }
 
-async function loadCoachStudents(): Promise<StudentOption[]> {
-  const response = await fetch('/api/coach/workspace-students', { cache: 'no-store' });
+async function loadCoachStudents(requestedId: string | null): Promise<LoadedStudents> {
+  const params = new URLSearchParams();
+  if (requestedId) params.set('requestedId', requestedId);
+  const query = params.toString();
+  const response = await fetch(
+    query ? `/api/coach/workspace-students?${query}` : '/api/coach/workspace-students',
+    { cache: 'no-store' },
+  );
   const body = (await response.json()) as CoachWorkspaceStudentsResponse;
 
   if (!response.ok) {
     throw new Error(body.error || 'Failed to load students.');
   }
 
-  return (body.items ?? [])
+  const items = (body.items ?? [])
     .map((row) => ({
       id: row.id,
       full_name: row.full_name || row.email || 'Unnamed student',
@@ -72,6 +89,11 @@ async function loadCoachStudents(): Promise<StudentOption[]> {
       is_legend: !!row.is_legend,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  return {
+    items,
+    resolvedStudentId: body.resolved_user_id ?? null,
+  };
 }
 
 export function useStudentWorkspaceState({
@@ -96,18 +118,26 @@ export function useStudentWorkspaceState({
       try {
         setStudentsLoading(true);
         setStudentsError(null);
-        const items = mode === 'admin' ? await loadAdminStudents() : await loadCoachStudents();
+        const result =
+          mode === 'admin'
+            ? await loadAdminStudents(selectedStudentId)
+            : await loadCoachStudents(selectedStudentId);
         if (!active) return;
 
+        const { items, resolvedStudentId } = result;
         setStudents(items);
 
-        if (!selectedStudentId && items[0]) {
+        // A direct link to the Business Review tab should open as a neutral
+        // landing page so the coach can deliberately choose the right student.
+        if (!selectedStudentId && items[0] && tab !== 'audit') {
           setQuery({ userId: items[0].id });
           return;
         }
 
-        if (selectedStudentId && !items.some((item) => item.id === selectedStudentId)) {
-          setQuery({ userId: items[0]?.id ?? null });
+        if (selectedStudentId && resolvedStudentId !== selectedStudentId) {
+          setQuery({
+            userId: resolvedStudentId ?? (tab === 'audit' ? null : items[0]?.id ?? null),
+          });
         }
       } catch (error) {
         if (!active) return;
@@ -122,12 +152,18 @@ export function useStudentWorkspaceState({
     return () => {
       active = false;
     };
-  }, [mode, selectedStudentId, setQuery]);
+  }, [mode, selectedStudentId, setQuery, tab]);
+
+  const selectedStudent = useMemo(
+    () => students.find((student) => student.id === selectedStudentId) ?? null,
+    [selectedStudentId, students],
+  );
 
   useEffect(() => {
     const needsProgress = tab === 'progress' || tab === 'audit';
+    const activeStudentId = selectedStudent?.id ?? null;
 
-    if (!needsProgress || !selectedStudentId) {
+    if (!needsProgress || !activeStudentId) {
       setCoachProgressCourses([]);
       setCoachProgressError(null);
       setCoachProgressLoading(false);
@@ -140,7 +176,7 @@ export function useStudentWorkspaceState({
       try {
         setCoachProgressLoading(true);
         setCoachProgressError(null);
-        const progressCourses = await fetchStudentProgressCourses(supabase, selectedStudentId);
+        const progressCourses = await fetchStudentProgressCourses(supabase, activeStudentId);
         if (!active) return;
 
         setCoachProgressCourses(progressCourses);
@@ -172,12 +208,7 @@ export function useStudentWorkspaceState({
     return () => {
       active = false;
     };
-  }, [mode, selectedCourseId, selectedStudentId, setQuery, tab]);
-
-  const selectedStudent = useMemo(
-    () => students.find((student) => student.id === selectedStudentId) ?? null,
-    [selectedStudentId, students],
-  );
+  }, [mode, selectedCourseId, selectedStudent, setQuery, tab]);
 
   return {
     coachProgressCourses,
