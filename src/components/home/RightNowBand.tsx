@@ -1,5 +1,10 @@
 'use client';
 
+import Image from 'next/image';
+// Static import, matching LoginClient. The filename contains a space, which the
+// image optimizer cannot fetch when passed as a runtime `src` string — webpack
+// resolves and hashes it at build time instead.
+import darkWall from '/public/dark wall.png';
 import { Box, Button, Container, Typography } from '@mui/material';
 import VideocamRoundedIcon from '@mui/icons-material/VideocamRounded';
 import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded';
@@ -37,6 +42,7 @@ export default function RightNowBand({
   bookHref = '#calls',
 }: Props) {
   const tone = TREATMENT[status];
+  const textured = status === 'none';
 
   const eyebrow =
     status === 'imminent' ? 'Right now' : status === 'booked' ? 'Your next call' : 'Your coaching calls';
@@ -60,12 +66,42 @@ export default function RightNowBand({
       component="section"
       id={id}
       sx={{
+        position: 'relative',
+        overflow: 'hidden',
         bgcolor: tone.bg,
         borderBottom: status === 'booked' ? `1px solid ${brand.border}` : 'none',
         animation: 'homeRise .34s ease-out both',
       }}
     >
-      <Container maxWidth={false} sx={{ maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}>
+      {/* The chalkboard texture warms up the dark slab, which is otherwise the
+          blandest element on the page. Left off the turquoise state so the
+          brand color stays clean. next/image resizes and re-encodes the 2.5MB
+          source rather than shipping it. */}
+      {textured ? (
+        <>
+          <Image
+            src={darkWall}
+            alt=""
+            aria-hidden="true"
+            fill
+            quality={40}
+            sizes="100vw"
+            placeholder="blur"
+            style={{ objectFit: 'cover' }}
+          />
+          {/* Scrim, so headline contrast holds regardless of which part of the
+              texture sits behind it. */}
+          <Box
+            aria-hidden="true"
+            sx={{ position: 'absolute', inset: 0, bgcolor: 'rgba(20,20,20,0.55)' }}
+          />
+        </>
+      ) : null}
+
+      <Container
+        maxWidth={false}
+        sx={{ position: 'relative', zIndex: 1, maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}
+      >
         <Box
           sx={{
             py: { xs: 3.5, md: 4.5 },

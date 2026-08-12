@@ -10,6 +10,7 @@ import NumbersStrip from './NumbersStrip';
 import { FocusSection, HelpSection, PodcastSection, ProgressSection } from './OnePageSections';
 import UtilityFooter from './UtilityFooter';
 import CompareStrip from './CompareStrip';
+import type { ContentVolume } from './onePagePlaceholderData';
 import type { HomeData, OnePageExtras } from './types';
 
 /**
@@ -20,9 +21,11 @@ import type { HomeData, OnePageExtras } from './types';
 export default function OnePageShell({
   data,
   extras,
+  volume = 'typical',
 }: {
   data: HomeData;
   extras: OnePageExtras;
+  volume?: ContentVolume;
 }) {
   return (
     <Box sx={{ minHeight: '100dvh', bgcolor: brand.page, display: 'flex', flexDirection: 'column' }}>
@@ -85,10 +88,18 @@ export default function OnePageShell({
               wins={extras.wins}
               achievements={extras.achievements}
             />
+          </Box>
+        </Container>
 
-            <HelpSection steps={extras.helpSteps} />
+        <HelpSection steps={extras.helpSteps} />
 
-            <CompareStrip currentPath="/home/onepage" status={data.callStatus} />
+        <Container maxWidth={false} sx={{ maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}>
+          <Box sx={{ py: { xs: 3, md: 4 } }}>
+            <CompareStrip
+              currentPath="/home/onepage"
+              status={data.callStatus}
+              volume={volume}
+            />
           </Box>
         </Container>
       </Box>

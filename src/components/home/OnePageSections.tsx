@@ -1,11 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Box, Typography } from '@mui/material';
+import { Box, Container, Typography } from '@mui/material';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import { brand } from '@/lib/homeTheme';
+import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
+import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
 import type { Achievement, ActionStep, Attendance, Episode, HelpStep, Win } from './types';
 
 function SectionHeading({
@@ -53,6 +55,51 @@ function SectionHeading({
   );
 }
 
+/**
+ * Every list on this page is capped. Without caps a member with a lot of
+ * history produces a longer page than the one this replaces — measured at
+ * 5,821px with 20 action steps and 40 episodes.
+ */
+const CAPS = { focus: 5, episodes: 4, wins: 3, achievements: 4 } as const;
+
+function ShowMore({
+  total,
+  cap,
+  expanded,
+  onToggle,
+  noun,
+}: {
+  total: number;
+  cap: number;
+  expanded: boolean;
+  onToggle: () => void;
+  noun: string;
+}) {
+  if (total <= cap) return null;
+
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onToggle}
+      sx={{
+        mt: 1.5,
+        border: 'none',
+        background: 'none',
+        cursor: 'pointer',
+        p: 0,
+        fontFamily: '"Poppins", Arial, sans-serif',
+        fontSize: 14,
+        fontWeight: 500,
+        color: brand.turquoiseDeep,
+        '&:hover': { color: brand.ink },
+      }}
+    >
+      {expanded ? 'Show fewer' : `Show all ${total} ${noun}`}
+    </Box>
+  );
+}
+
 function Card({ children, sx }: { children: React.ReactNode; sx?: object }) {
   return (
     <Box
@@ -78,12 +125,29 @@ const STATUS_STYLES: Record<ActionStep['status'], { label: string; fg: string; b
 };
 
 export function FocusSection({ steps }: { steps: ActionStep[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? steps : steps.slice(0, CAPS.focus);
+
+  if (steps.length === 0) {
+    return (
+      <Box component="section" id="focus">
+        <SectionHeading label="Your focus" />
+        <Card>
+          <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+            Your coach hasn&apos;t set any action steps yet. They&apos;ll appear here after
+            your next call.
+          </Typography>
+        </Card>
+      </Box>
+    );
+  }
+
   return (
     <Box component="section" id="focus">
       <SectionHeading label="Your focus" />
       <Card>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {steps.map((step) => {
+          {visible.map((step) => {
             const tone = STATUS_STYLES[step.status];
             const done = step.status === 'complete';
             return (
@@ -140,6 +204,13 @@ export function FocusSection({ steps }: { steps: ActionStep[] }) {
             );
           })}
         </Box>
+        <ShowMore
+          total={steps.length}
+          cap={CAPS.focus}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+          noun="steps"
+        />
       </Card>
     </Box>
   );
@@ -148,8 +219,23 @@ export function FocusSection({ steps }: { steps: ActionStep[] }) {
 /* -------------------------------------------------------------- podcast ---- */
 
 export function PodcastSection({ episodes }: { episodes: Episode[] }) {
-  if (episodes.length === 0) return null;
+  const [expanded, setExpanded] = useState(false);
+
+  if (episodes.length === 0) {
+    return (
+      <Box component="section" id="podcast">
+        <SectionHeading label="Private podcast" />
+        <Card>
+          <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+            No episodes published yet.
+          </Typography>
+        </Card>
+      </Box>
+    );
+  }
+
   const [latest, ...rest] = episodes;
+  const visibleRest = expanded ? rest : rest.slice(0, CAPS.episodes);
 
   return (
     <Box component="section" id="podcast">
@@ -216,7 +302,7 @@ export function PodcastSection({ episodes }: { episodes: Episode[] }) {
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          {rest.map((episode, index) => (
+          {visibleRest.map((episode, index) => (
             <Box
               key={episode.episodeLabel}
               component={Link}
@@ -253,6 +339,13 @@ export function PodcastSection({ episodes }: { episodes: Episode[] }) {
             </Box>
           ))}
         </Box>
+        <ShowMore
+          total={rest.length}
+          cap={CAPS.episodes}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+          noun="episodes"
+        />
       </Card>
     </Box>
   );
@@ -269,9 +362,17 @@ export function ProgressSection({
   wins: Win[];
   achievements: Achievement[];
 }) {
+  const [winsOpen, setWinsOpen] = useState(false);
+  const [achievementsOpen, setAchievementsOpen] = useState(false);
+
   const pct = attendance.totalCount > 0
     ? Math.round((attendance.attendedCount / attendance.totalCount) * 100)
     : 0;
+
+  const visibleWins = winsOpen ? wins : wins.slice(0, CAPS.wins);
+  const visibleAchievements = achievementsOpen
+    ? achievements
+    : achievements.slice(0, CAPS.achievements);
 
   return (
     <Box component="section">
@@ -315,18 +416,27 @@ export function ProgressSection({
               No wins logged yet.
             </Typography>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-              {wins.map((win) => (
-                <Box key={win.text} sx={{ borderLeft: `3px solid ${brand.turquoise}`, pl: 1.25 }}>
-                  <Typography sx={{ fontSize: 14.5, color: brand.ink, lineHeight: 1.4 }}>
-                    {win.text}
-                  </Typography>
-                  <Typography sx={{ fontSize: 12, color: brand.inkMuted, mt: 0.25 }}>
-                    {win.dateLabel}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
+            <>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+                {visibleWins.map((win) => (
+                  <Box key={win.text} sx={{ borderLeft: `3px solid ${brand.turquoise}`, pl: 1.25 }}>
+                    <Typography sx={{ fontSize: 14.5, color: brand.ink, lineHeight: 1.4 }}>
+                      {win.text}
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: brand.inkMuted, mt: 0.25 }}>
+                      {win.dateLabel}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+              <ShowMore
+                total={wins.length}
+                cap={CAPS.wins}
+                expanded={winsOpen}
+                onToggle={() => setWinsOpen((v) => !v)}
+                noun="wins"
+              />
+            </>
           )}
         </Card>
 
@@ -339,34 +449,65 @@ export function ProgressSection({
               None earned yet.
             </Typography>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {achievements.map((achievement) => (
+            /* Rendered at 56px rather than the legacy dashboard's 48px
+               postage stamp — this is the most colorful artwork the program
+               has and it was being wasted. */
+            <>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {visibleAchievements.map((achievement) => (
                 <Box
                   key={achievement.title}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}
                 >
-                  <Box
-                    aria-hidden="true"
-                    sx={{
-                      width: 30,
-                      height: 30,
-                      flexShrink: 0,
-                      borderRadius: '8px',
-                      bgcolor: brand.turquoiseTint,
-                      border: `1px solid ${brand.turquoise}`,
-                    }}
-                  />
+                  {achievement.imageUrl ? (
+                    <Box
+                      component="img"
+                      src={achievement.imageUrl}
+                      alt={achievement.title}
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        flexShrink: 0,
+                        objectFit: 'contain',
+                        borderRadius: '10px',
+                      }}
+                    />
+                  ) : (
+                    <Box
+                      aria-hidden="true"
+                      sx={{
+                        width: 56,
+                        height: 56,
+                        flexShrink: 0,
+                        borderRadius: '10px',
+                        bgcolor: brand.turquoiseTint,
+                        border: `1px solid ${brand.turquoise}`,
+                        display: 'grid',
+                        placeItems: 'center',
+                      }}
+                    >
+                      <EmojiEventsRoundedIcon sx={{ fontSize: 26, color: brand.turquoise }} />
+                    </Box>
+                  )}
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 14, fontWeight: 500, color: brand.ink }}>
+                    <Typography sx={{ fontSize: 14.5, fontWeight: 500, color: brand.ink }}>
                       {achievement.title}
                     </Typography>
-                    <Typography sx={{ fontSize: 12, color: brand.inkMuted }}>
+                    <Typography sx={{ fontSize: 12.5, color: brand.inkMuted }}>
                       {achievement.dateLabel}
                     </Typography>
                   </Box>
                 </Box>
               ))}
             </Box>
+            <ShowMore
+              total={achievements.length}
+              cap={CAPS.achievements}
+              expanded={achievementsOpen}
+              onToggle={() => setAchievementsOpen((v) => !v)}
+              noun="achievements"
+            />
+            </>
           )}
         </Card>
       </Box>
@@ -376,67 +517,76 @@ export function ProgressSection({
 
 /* ----------------------------------------------------------------- help ---- */
 
+/**
+ * Full-bleed turquoise, which is the brand's own structural device (see
+ * `helpSteps`). Breaks up an otherwise uninterrupted run of white cards and
+ * gives the lower half of the page some rhythm.
+ */
 export function HelpSection({ steps }: { steps: HelpStep[] }) {
   return (
-    <Box component="section" id="help">
-      <SectionHeading label="How to get help" />
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
-          gap: 1.5,
-          alignItems: 'start',
-        }}
-      >
-        {steps.map((step, index) => (
-          <Card key={step.title}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1 }}>
+    <Box component="section" id="help" sx={{ bgcolor: brand.turquoise, py: { xs: 4, md: 5 } }}>
+      <Container maxWidth={false} sx={{ maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}>
+        <Typography variant="sectionLabel" component="h2" sx={{ color: brand.ink, mb: 2.5 }}>
+          How to get help
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+            gap: 2,
+            alignItems: 'start',
+          }}
+        >
+          {steps.map((step, index) => (
+            <Card key={step.title} sx={{ border: 'none' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1 }}>
+                <Box
+                  aria-hidden="true"
+                  sx={{
+                    width: 26,
+                    height: 26,
+                    flexShrink: 0,
+                    borderRadius: '50%',
+                    bgcolor: brand.slate,
+                    color: '#ffffff',
+                    display: 'grid',
+                    placeItems: 'center',
+                    fontFamily: '"League Spartan", Arial, sans-serif',
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  {index + 1}
+                </Box>
+                <Typography variant="cardTitle" sx={{ fontSize: 16.5, color: brand.ink }}>
+                  {step.title}
+                </Typography>
+              </Box>
+
+              <Typography sx={{ fontSize: 14.5, color: brand.inkSoft, lineHeight: 1.55, mb: 1.75 }}>
+                {step.detail}
+              </Typography>
+
               <Box
-                aria-hidden="true"
+                component={Link}
+                href={step.href}
                 sx={{
-                  width: 24,
-                  height: 24,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  bgcolor: brand.turquoise,
-                  color: brand.ink,
-                  display: 'grid',
-                  placeItems: 'center',
-                  fontFamily: '"League Spartan", Arial, sans-serif',
-                  fontSize: 13,
-                  fontWeight: 700,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  fontSize: 14.5,
+                  fontWeight: 500,
+                  color: brand.turquoiseDeep,
+                  '&:hover': { color: brand.ink },
                 }}
               >
-                {index + 1}
+                {step.actionLabel}
+                <ArrowForwardRoundedIcon sx={{ fontSize: 16 }} />
               </Box>
-              <Typography variant="cardTitle" sx={{ fontSize: 16, color: brand.ink }}>
-                {step.title}
-              </Typography>
-            </Box>
-
-            <Typography sx={{ fontSize: 14, color: brand.inkSoft, lineHeight: 1.55, mb: 1.5 }}>
-              {step.detail}
-            </Typography>
-
-            <Box
-              component={Link}
-              href={step.href}
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.5,
-                fontSize: 14,
-                fontWeight: 500,
-                color: brand.turquoiseDeep,
-                '&:hover': { color: brand.ink },
-              }}
-            >
-              {step.actionLabel}
-              <ArrowForwardRoundedIcon sx={{ fontSize: 16 }} />
-            </Box>
-          </Card>
-        ))}
-      </Box>
+            </Card>
+          ))}
+        </Box>
+      </Container>
     </Box>
   );
 }

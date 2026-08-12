@@ -93,20 +93,22 @@ const homeTheme = createTheme({
     fontFamily: BODY_FONT_FAMILY,
 
     // Display: the brand voice. Uppercase League Spartan, used structurally.
+    // League Spartan is the brand's voice and it is meant to be loud. These sit
+    // well above the body scale without returning to the legacy 6:1 ratio.
     slabTitle: {
       fontFamily: DISPLAY_FONT_FAMILY,
-      fontSize: 34,
-      lineHeight: 1.08,
+      fontSize: 38,
+      lineHeight: 1.06,
       fontWeight: 700,
-      letterSpacing: '-0.01em',
+      letterSpacing: '-0.015em',
     },
     sectionLabel: {
       fontFamily: DISPLAY_FONT_FAMILY,
-      fontSize: 19,
-      lineHeight: 1.15,
+      fontSize: 25,
+      lineHeight: 1.1,
       fontWeight: 700,
       textTransform: 'uppercase',
-      letterSpacing: '0.06em',
+      letterSpacing: '0.035em',
     },
     metricValue: {
       fontFamily: DISPLAY_FONT_FAMILY,

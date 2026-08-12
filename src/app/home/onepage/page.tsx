@@ -1,6 +1,6 @@
 import OnePageShell from '@/components/home/OnePageShell';
 import { getPlaceholderHomeData, parseCallStatus } from '@/components/home/placeholderData';
-import { onePageExtras } from '@/components/home/onePagePlaceholderData';
+import { getOnePageExtras, parseVolume } from '@/components/home/onePagePlaceholderData';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,10 +11,29 @@ export const dynamic = 'force-dynamic';
 export default async function OnePagePage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string }>;
+  searchParams: Promise<{ state?: string; volume?: string }>;
 }) {
-  const { state } = await searchParams;
-  const data = getPlaceholderHomeData(parseCallStatus(state));
+  const { state, volume } = await searchParams;
+  const contentVolume = parseVolume(volume);
+  const base = getPlaceholderHomeData(parseCallStatus(state));
 
-  return <OnePageShell data={data} extras={onePageExtras} />;
+  // A brand-new member has no numbers and nothing in progress either, so the
+  // empty case has to clear HomeData as well as the extras.
+  const data =
+    contentVolume === 'empty'
+      ? {
+          ...base,
+          continueItem: null,
+          latestEpisode: null,
+          metrics: base.metrics.map((metric) => ({ ...metric, value: '—', deltaPct: null })),
+        }
+      : base;
+
+  return (
+    <OnePageShell
+      data={data}
+      extras={getOnePageExtras(contentVolume)}
+      volume={contentVolume}
+    />
+  );
 }

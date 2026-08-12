@@ -1,11 +1,18 @@
-import type { OnePageExtras } from './types';
+import type { ActionStep, Episode, OnePageExtras } from './types';
+
+/** Content volume, so the layout can be reviewed under stress and when empty. */
+export type ContentVolume = 'typical' | 'heavy' | 'empty';
+
+export function parseVolume(raw: string | undefined): ContentVolume {
+  return raw === 'heavy' || raw === 'empty' ? raw : 'typical';
+}
 
 /**
  * Additional placeholder content for the one-page variant. Same wiring plan as
  * `placeholderData.ts`: action steps come from coaching notes, episodes from the
  * podcast route, attendance from `getUserEngagementSummary`.
  */
-export const onePageExtras: OnePageExtras = {
+const TYPICAL: OnePageExtras = {
   actionSteps: [
     { id: 'a1', label: '15/30 list built and active', status: 'in_progress', href: '#' },
     { id: 'a2', label: 'Monthly profit and loss reviewed', status: 'not_started', href: '#' },
@@ -61,8 +68,8 @@ export const onePageExtras: OnePageExtras = {
   ],
 
   achievements: [
-    { title: 'Christmas prospect drop-offs', dateLabel: 'Nov 2025' },
-    { title: '90-day consistency streak', dateLabel: 'Jun 2026' },
+    { title: 'Christmas prospect drop-offs', dateLabel: 'Nov 2025', imageUrl: null },
+    { title: '90-day consistency streak', dateLabel: 'Jun 2026', imageUrl: null },
   ],
 
   attendance: {
@@ -106,3 +113,60 @@ export const onePageExtras: OnePageExtras = {
     { title: 'Referral request scripts', typeLabel: 'Playbook', href: '#' },
   ],
 };
+
+/** Twenty action steps and forty episodes: does the page still hold together? */
+const HEAVY: OnePageExtras = {
+  ...TYPICAL,
+  actionSteps: Array.from({ length: 20 }, (_, i): ActionStep => ({
+    id: `h${i}`,
+    label: [
+      'Build the 15/30 list and keep it active',
+      'Review monthly profit and loss with your coach',
+      'Delegate all contract paperwork',
+      'Run the database reactivation campaign',
+      'Script and rehearse the listing presentation',
+    ][i % 5] + ` (week ${i + 1})`,
+    status: (['not_started', 'in_progress', 'complete'] as const)[i % 3],
+    href: '#',
+  })),
+  episodes: Array.from({ length: 40 }, (_, i): Episode => ({
+    title: [
+      'Turning a cold database into listing appointments',
+      'The three-call follow-up sequence that closed 11 deals',
+      'Hiring your first assistant without losing control',
+      'Why your listing presentation is losing to a worse agent',
+    ][i % 4],
+    episodeLabel: `Episode ${48 - i}`,
+    durationLabel: `${22 + (i % 15)} min`,
+    publishedLabel: i === 0 ? '4 days ago' : `${i} weeks ago`,
+    href: '#',
+    isNew: i === 0,
+  })),
+  wins: Array.from({ length: 12 }, (_, i) => ({
+    text: `Win number ${i + 1} that a member logged after a coaching call`,
+    dateLabel: `${i + 1} weeks ago`,
+  })),
+  achievements: Array.from({ length: 9 }, (_, i) => ({
+    title: `Achievement ${i + 1}`,
+    dateLabel: 'Jun 2026',
+    imageUrl: null,
+  })),
+};
+
+/** A brand-new member: every section is empty. */
+const EMPTY: OnePageExtras = {
+  ...TYPICAL,
+  actionSteps: [],
+  episodes: [],
+  wins: [],
+  achievements: [],
+  attendance: { attendedCount: 0, totalCount: 0, periodLabel: 'last 8 weeks', streakLabel: null },
+};
+
+export function getOnePageExtras(volume: ContentVolume = 'typical'): OnePageExtras {
+  if (volume === 'heavy') return HEAVY;
+  if (volume === 'empty') return EMPTY;
+  return TYPICAL;
+}
+
+export const onePageExtras = TYPICAL;

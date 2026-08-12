@@ -47,14 +47,30 @@ function Chip({
   );
 }
 
+const VOLUMES = [
+  { key: 'typical', label: 'Typical content' },
+  { key: 'heavy', label: 'Heavy (20 steps, 40 episodes)' },
+  { key: 'empty', label: 'Brand-new member' },
+];
+
 /** Review-only affordance. Remove before this ships to members. */
 export default function CompareStrip({
   currentPath,
   status,
+  volume,
 }: {
   currentPath: string;
   status: CallStatus;
+  /** Only the one-page variant carries the content-volume switch. */
+  volume?: string;
 }) {
+  const qs = (overrides: Record<string, string>) => {
+    const params = new URLSearchParams({ state: status });
+    if (volume) params.set('volume', volume);
+    Object.entries(overrides).forEach(([k, v]) => params.set(k, v));
+    return `?${params.toString()}`;
+  };
+
   return (
     <Box
       sx={{
@@ -73,7 +89,7 @@ export default function CompareStrip({
         {VERSIONS.map((version) => (
           <Chip
             key={version.path}
-            href={`${version.path}?state=${status}`}
+            href={`${version.path}${qs({})}`}
             active={version.path === currentPath}
           >
             {version.label}
@@ -88,13 +104,30 @@ export default function CompareStrip({
         {STATES.map((state) => (
           <Chip
             key={state.key}
-            href={`${currentPath}?state=${state.key}`}
+            href={`${currentPath}${qs({ state: state.key })}`}
             active={state.key === status}
           >
             {state.label}
           </Chip>
         ))}
       </Box>
+
+      {volume ? (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+            Content volume
+          </Typography>
+          {VOLUMES.map((option) => (
+            <Chip
+              key={option.key}
+              href={`${currentPath}${qs({ volume: option.key })}`}
+              active={option.key === volume}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </Box>
+      ) : null}
     </Box>
   );
 }

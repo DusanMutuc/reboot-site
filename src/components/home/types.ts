@@ -86,6 +86,8 @@ export type Win = {
 export type Achievement = {
   title: string;
   dateLabel: string;
+  /** Square art from the `achievements` storage bucket. */
+  imageUrl: string | null;
 };
 
 export type Attendance = {
