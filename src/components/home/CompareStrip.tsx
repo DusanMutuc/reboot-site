@@ -8,6 +8,7 @@ import type { CallStatus } from './types';
 const VERSIONS = [
   { path: '/home', label: 'Separate destinations' },
   { path: '/home/onepage', label: 'One-pager' },
+  { path: '/home/hub', label: 'One-pager, hierarchy' },
 ];
 
 const STATES: Array<{ key: CallStatus; label: string }> = [

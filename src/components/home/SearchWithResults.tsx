@@ -15,7 +15,14 @@ const MAX_VISIBLE = 5;
  * of keeping search on a single page. Filtering is client-side against a
  * placeholder index; the real version queries the library search endpoint.
  */
-export default function SearchWithResults({ index }: { index: SearchItem[] }) {
+export default function SearchWithResults({
+  index,
+  large = false,
+}: {
+  index: SearchItem[];
+  /** Centerpiece treatment: this is the primary action on the hub layout. */
+  large?: boolean;
+}) {
   const [query, setQuery] = useState('');
   const trimmed = query.trim();
 
@@ -34,13 +41,32 @@ export default function SearchWithResults({ index }: { index: SearchItem[] }) {
         fullWidth
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search playbooks, courses, recordings…"
+        placeholder={
+          large ? 'Search for anything — scripts, systems, recordings…' : 'Search playbooks, courses, recordings…'
+        }
         aria-label="Search training content"
+        sx={
+          large
+            ? {
+                '& .MuiOutlinedInput-root': {
+                  fontSize: 19,
+                  borderRadius: '14px',
+                  bgcolor: brand.card,
+                  '& fieldset': { borderColor: brand.borderStrong, borderWidth: 2 },
+                  '&:hover fieldset': { borderColor: brand.turquoise },
+                  '&.Mui-focused fieldset': { borderColor: brand.turquoise, borderWidth: 2 },
+                },
+                '& .MuiOutlinedInput-input': { paddingTop: '19px', paddingBottom: '19px' },
+              }
+            : undefined
+        }
         slotProps={{
           input: {
             startAdornment: (
               <InputAdornment position="start">
-                <SearchRoundedIcon sx={{ fontSize: 21, color: brand.inkMuted }} />
+                <SearchRoundedIcon
+                  sx={{ fontSize: large ? 27 : 21, color: large ? brand.turquoiseDeep : brand.inkMuted, ml: large ? 0.5 : 0 }}
+                />
               </InputAdornment>
             ),
           },
