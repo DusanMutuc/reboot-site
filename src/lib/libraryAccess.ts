@@ -14,6 +14,7 @@ import type {
 
 const MAIN_LIBRARY_SLUG = 'library';
 const ASSISTANT_LIBRARY_SLUG = 'assistant-library';
+const LEGENDS_LIBRARY_SLUG = 'legends-library';
 
 type DbNode = {
   id: number;
@@ -29,6 +30,11 @@ type DbNodeChild = {
   parent_id: number;
   child_id: number;
   position: number;
+};
+
+type LibraryRoot = {
+  id: number;
+  sourceScope: LibraryScope;
 };
 
 export class LibraryAccessError extends Error {
@@ -48,6 +54,10 @@ export function parseLibraryScope(value: string | null | undefined): LibraryScop
 
   if (value === 'assistant') {
     return 'assistant';
+  }
+
+  if (value === 'legend') {
+    return 'legend';
   }
 
   throw new LibraryAccessError('Invalid library scope', 400);
@@ -79,6 +89,13 @@ async function assertAssistantAccess(userId: string) {
   }
 }
 
+async function assertLegendAccess(userId: string) {
+  const codes = await getUserRoleCodes(userId);
+  if (!codes.includes('legend')) {
+    throw new LibraryAccessError('Legend access required', 403);
+  }
+}
+
 async function resolveMainLibraryRootId(): Promise<number> {
   const { data: librarySlug, error: slugError } = await adminClient
     .from('content_nodes')
@@ -94,17 +111,20 @@ async function resolveMainLibraryRootId(): Promise<number> {
     return librarySlug.id;
   }
 
-  const { data: latestCollection, error: latestError } = await adminClient
+  const { data: latestCollections, error: latestError } = await adminClient
     .from('content_nodes')
-    .select('id')
+    .select('id, slug')
     .eq('node_type', 'collection')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order('updated_at', { ascending: false });
 
   if (latestError) {
     throw new LibraryAccessError(`Failed to resolve fallback library root: ${latestError.message}`, 500);
   }
+
+  const latestCollection = (latestCollections ?? []).find(
+    (collection) =>
+      collection.slug !== ASSISTANT_LIBRARY_SLUG && collection.slug !== LEGENDS_LIBRARY_SLUG,
+  );
 
   if (!latestCollection?.id) {
     throw new LibraryAccessError('No Library collection found.', 404);
@@ -131,17 +151,57 @@ async function resolveAssistantLibraryRootId(): Promise<number> {
   return assistantSlug.id;
 }
 
-export async function resolveLibraryRootIdsForScope(userId: string, scope: LibraryScope): Promise<number[]> {
+async function resolveLegendsLibraryRootId(): Promise<number> {
+  const { data: legendsSlug, error } = await adminClient
+    .from('content_nodes')
+    .select('id')
+    .eq('slug', LEGENDS_LIBRARY_SLUG)
+    .maybeSingle();
+
+  if (error) {
+    throw new LibraryAccessError(`Failed to resolve Legends library root: ${error.message}`, 500);
+  }
+
+  if (!legendsSlug?.id) {
+    throw new LibraryAccessError('Legends Library collection not found.', 404);
+  }
+
+  return legendsSlug.id;
+}
+
+async function resolveLibraryRootsForScope(userId: string, scope: LibraryScope): Promise<LibraryRoot[]> {
   const mainRootId = await resolveMainLibraryRootId();
 
   if (scope === 'main') {
-    return [mainRootId];
+    return [{ id: mainRootId, sourceScope: 'main' }];
   }
 
-  await assertAssistantAccess(userId);
-  const assistantRootId = await resolveAssistantLibraryRootId();
+  if (scope === 'assistant') {
+    await assertAssistantAccess(userId);
+    const assistantRootId = await resolveAssistantLibraryRootId();
 
-  return Array.from(new Set([mainRootId, assistantRootId]));
+    return assistantRootId === mainRootId
+      ? [{ id: mainRootId, sourceScope: 'main' }]
+      : [
+          { id: mainRootId, sourceScope: 'main' },
+          { id: assistantRootId, sourceScope: 'assistant' },
+        ];
+  }
+
+  await assertLegendAccess(userId);
+  const legendsRootId = await resolveLegendsLibraryRootId();
+
+  return legendsRootId === mainRootId
+    ? [{ id: mainRootId, sourceScope: 'main' }]
+    : [
+        { id: mainRootId, sourceScope: 'main' },
+        { id: legendsRootId, sourceScope: 'legend' },
+      ];
+}
+
+export async function resolveLibraryRootIdsForScope(userId: string, scope: LibraryScope): Promise<number[]> {
+  const roots = await resolveLibraryRootsForScope(userId, scope);
+  return roots.map((root) => root.id);
 }
 
 async function fetchRootChildLinks(rootId: number): Promise<DbNodeChild[]> {
@@ -190,12 +250,12 @@ export async function fetchLibraryCollectionItemsForScope(
   userId: string,
   scope: LibraryScope,
 ): Promise<LibraryChildRow[]> {
-  const rootIds = await resolveLibraryRootIdsForScope(userId, scope);
+  const roots = await resolveLibraryRootsForScope(userId, scope);
   const seen = new Set<number>();
   const items: LibraryChildRow[] = [];
 
-  for (const rootId of rootIds) {
-    const links = await fetchRootChildLinks(rootId);
+  for (const root of roots) {
+    const links = await fetchRootChildLinks(root.id);
     const nodes = await fetchNodesByIds(links.map((link) => link.child_id));
 
     for (const link of links) {
@@ -206,6 +266,7 @@ export async function fetchLibraryCollectionItemsForScope(
       items.push({
         child_id: link.child_id,
         position: link.position,
+        source_scope: root.sourceScope,
         child: toLibraryNodeRow(child),
       });
     }
@@ -218,16 +279,18 @@ export async function fetchLibrarySidebarItemsForScope(
   userId: string,
   scope: LibraryScope,
 ): Promise<LibrarySidebarItem[]> {
-  const rootIds = await resolveLibraryRootIdsForScope(userId, scope);
+  const roots = await resolveLibraryRootsForScope(userId, scope);
   const orderedLessonIds: number[] = [];
   const seenLessonIds = new Set<number>();
+  const lessonSourceScopes = new Map<number, LibraryScope>();
 
-  for (const rootId of rootIds) {
-    const links = await fetchRootChildLinks(rootId);
+  for (const root of roots) {
+    const links = await fetchRootChildLinks(root.id);
     for (const link of links) {
       if (seenLessonIds.has(link.child_id)) continue;
       seenLessonIds.add(link.child_id);
       orderedLessonIds.push(link.child_id);
+      lessonSourceScopes.set(link.child_id, root.sourceScope);
     }
   }
 
@@ -283,6 +346,7 @@ export async function fetchLibrarySidebarItemsForScope(
         node_type: lesson.node_type ?? 'lesson',
         hero_image: lesson.hero_image ?? null,
         state: lesson.state ?? null,
+        source_scope: lessonSourceScopes.get(lesson.id) ?? 'main',
         children: lessonChildren.get(lesson.id) ?? [],
       };
     })

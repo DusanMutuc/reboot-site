@@ -11,6 +11,7 @@ import CoachRosters from '@/components/admin/CoachRosters';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
 import CourseEditor from '@/components/admin/courseEditor';
 import LibraryEditor from '@/components/admin/libraryEditor';
+import SystemScorecardLibraryAdmin from '@/components/admin/SystemScorecardLibraryAdmin';
 import CoachProfilesAdmin from '@/components/admin/CoachProfilesAdmin';
 import UserProfilesAdmin from '@/components/admin/UserProfilesAdmin';
 import AdminMeetingsPanel from '@/components/admin/meetings/AdminMeetingsPanel';
@@ -52,6 +53,7 @@ import {
   Campaign as CampaignIcon,
   GroupAdd,
   PendingActions as PendingActionsIcon,
+  LinkRounded as LinkRoundedIcon,
 } from '@mui/icons-material';
 
 type AdminNavChild = {
@@ -102,6 +104,7 @@ const navigationStructure: AdminNavSection[] = [
       { id: 'course-builder', label: 'Course Builder', icon: MenuBookIcon, component: 'CourseEditor' },
       { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
       { id: 'library-editor', label: 'Library Editor', icon: LibraryBooksIcon, component: 'LibraryEditor' },
+      { id: 'scorecard-library', label: 'Systems Scorecard', icon: LinkRoundedIcon, component: 'SystemScorecardLibraryAdmin' },
       { id: 'site-announcement', label: 'Home Announcement', icon: CampaignIcon, component: 'SiteAnnouncementAdmin' },
     ],
   },
@@ -296,6 +299,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         return <ResourceLibraryAdmin />;
       case 'library-editor':
         return <LibraryEditor />;
+      case 'scorecard-library':
+        return <SystemScorecardLibraryAdmin />;
       case 'site-announcement':
         return <SiteAnnouncementAdmin />;
       case 'status-overview':

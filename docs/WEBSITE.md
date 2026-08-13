@@ -47,6 +47,8 @@ Authenticated behavior:
 - Auth metadata `must_reset_password = true` → `/reset-password`.
 - Assistant role → assistant library only.
 - Non-assistants requesting assistant library → main library.
+- Legend role requesting the main library → Legends library (main plus Legend-only content).
+- Non-legends requesting the Legends library → main library; the API also enforces the role.
 
 API handlers still need their own guards. A middleware-public API prefix does not make its handler safe automatically.
 
@@ -57,6 +59,7 @@ API handlers still need their own guards. A middleware-public API prefix does no
 | Entry/auth | `/`, `/login`, `/reset-password`, `/auth/mobile-handoff`, `/access-removed` | Role routing and session flows |
 | Member | `/dashboard`, `/tracker`, `/business-review-prep`, `/resources`, `/courses/**`, `/library/**`, `/support` | Dashboard, KPI, Business Review preparation, courses, content, resources |
 | Assistant | `/assistant-library/**` | Assistant-scoped library |
+| Legend | `/legends-library/**` | Main library plus Legend-only content, with an All/Legends-only view switch |
 | Coach | `/coach`, `/coach/notes`, `/coach/progress`, `/coach/students-overview`, `/coach/student-dashboard/[userId]`, `/coach/kpi-tracker/[userId]` | Assigned-member coaching workspace |
 | Admin | `/admin`, `/admin/[view]` | User, content, meeting, resource, achievement, and assignment administration |
 | Utility | `/r/[id]`, `/delete-account`, `/privacy-policy` | Authenticated resource redirect and policy pages |
@@ -92,6 +95,7 @@ API handlers still need their own guards. A middleware-public API prefix does no
 | `/api/admin/partnerships` | GET, POST | List/create partnerships; intended admin guard is currently not enforced correctly |
 | `/api/admin/partnerships/[partnershipId]` | PATCH, DELETE | Update/delete partnership and members; intended admin guard is currently not enforced correctly |
 | `/api/admin/resources/placements` | POST | Resolve resource placements |
+| `/api/admin/system-scorecard-library` | GET, PATCH | Manage scorecard-system library mappings |
 | `/api/admin/status-overview` | GET | All-member status overview |
 | `/api/admin/transfer-user-data` | POST | Privileged user merge/transfer |
 | `/api/admin/zoom-attendance-aliases` | GET, POST, DELETE | Approved Zoom-name mappings |
@@ -223,6 +227,16 @@ Coach profile → active `user_coaches` → current-member filter → profiles, 
 ### Business Review preparation
 
 Authenticated `/business-review-prep` uses the signed-in student's ID to resolve their nearest upcoming, non-cancelled, meeting-connected Business Review. When no future review exists, it falls back to the latest non-cancelled review so submitted answers remain editable after the meeting. The legacy `/business-audit-prep` URL redirects to the canonical page so existing GHL reminders continue working. The reminder link is static and does not need appointment-specific merge data. All eight answers are required; the two ratings allow 1-10 except 5 and 7. Preparation wins remain form answers and do not write to `wins`. Coaches see the saved responses at the top of the matching Business Review.
+
+### Systems Scorecard administration
+
+Admin → Content Management → Systems Scorecard manages Foundation and Legends templates. The
+active version remains editable only for library connections. A new version begins as an inactive
+copy whose name, categories, systems, order, stable keys, and library connections can be edited.
+Publishing previews every incomplete Business Review for that audience: compatible reviews upgrade
+automatically, while removed priorities or reviewed systems open a resolution dialog. Completed
+reviews remain on their historical template. The same preview can be reopened from an active
+version to upgrade reviews that were deliberately left behind.
 
 ### Course render
 

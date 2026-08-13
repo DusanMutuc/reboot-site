@@ -117,7 +117,24 @@ export async function middleware(req: NextRequest) {
   const assistantPath =
     pathname === '/assistant-library' || pathname.startsWith('/assistant-library/');
 
+  const mainLibraryPath = pathname === '/library' || pathname.startsWith('/library/');
+  const legendsLibraryPath =
+    pathname === '/legends-library' || pathname.startsWith('/legends-library/');
+
   const isAssistant = hasRoleCode(roleCodes, 'assistant');
+  const isLegend = hasRoleCode(roleCodes, 'legend');
+
+  if (legendsLibraryPath && !isLegend) {
+    const url = req.nextUrl.clone();
+    url.pathname = pathname.replace(/^\/legends-library/, '/library');
+    return NextResponse.redirect(url);
+  }
+
+  if (mainLibraryPath && isLegend && !isAssistant) {
+    const url = req.nextUrl.clone();
+    url.pathname = pathname.replace(/^\/library/, '/legends-library');
+    return NextResponse.redirect(url);
+  }
 
   if (assistantPath && !isAssistant) {
     const url = req.nextUrl.clone();

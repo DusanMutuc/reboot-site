@@ -168,25 +168,29 @@ function normalizeHtmlContent(html?: string | null) {
 }
 // -----------------------------------------------------------------------------------
 
-type LibraryMode = 'main' | 'assistant';
+type LibraryMode = 'main' | 'assistant' | 'legend';
 
 async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
-  if (mode === 'assistant') {
-    const { data: assistantRoot, error } = await supabase
+  if (mode !== 'main') {
+    const restrictedLibrary =
+      mode === 'assistant'
+        ? { slug: 'assistant-library', title: 'Assistant Library' }
+        : { slug: 'legends-library', title: 'Legends Library' };
+    const { data: restrictedRoot, error } = await supabase
       .from('content_nodes')
       .select('id')
-      .eq('slug', 'assistant-library')
+      .eq('slug', restrictedLibrary.slug)
       .maybeSingle();
 
     if (error) {
       throw new Error(error.message);
     }
 
-    if (!assistantRoot?.id) {
-      throw new Error('Assistant Library collection not found.');
+    if (!restrictedRoot?.id) {
+      throw new Error(`${restrictedLibrary.title} collection not found.`);
     }
 
-    return assistantRoot.id;
+    return restrictedRoot.id;
   }
 
   const { data: librarySlug, error: slugError } = await supabase
@@ -203,17 +207,20 @@ async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
     return librarySlug.id;
   }
 
-  const { data: latestCollection, error: latestError } = await supabase
+  const { data: latestCollections, error: latestError } = await supabase
     .from('content_nodes')
-    .select('id')
+    .select('id, slug')
     .eq('node_type', 'collection')
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order('updated_at', { ascending: false });
 
   if (latestError) {
     throw new Error(latestError.message);
   }
+
+  const latestCollection = (latestCollections ?? []).find(
+    (collection) =>
+      collection.slug !== 'assistant-library' && collection.slug !== 'legends-library',
+  );
 
   if (!latestCollection?.id) {
     throw new Error('No Library collection found.');
@@ -706,7 +713,7 @@ function LibraryEditorInner() {
             Editing Target
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Switch between the public Library tree and the assistant-only Library tree.
+            Switch between the main Library tree and the role-restricted Library trees.
           </Typography>
         </Box>
         <ToggleButtonGroup
@@ -719,6 +726,7 @@ function LibraryEditorInner() {
         >
           <ToggleButton value="main">Main Library</ToggleButton>
           <ToggleButton value="assistant">Assistant Library</ToggleButton>
+          <ToggleButton value="legend">Legends Library</ToggleButton>
         </ToggleButtonGroup>
       </Stack>
 

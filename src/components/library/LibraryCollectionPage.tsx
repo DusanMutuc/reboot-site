@@ -24,6 +24,9 @@ import {
   type LibraryChildRow,
   type LibraryScope,
 } from './shared';
+import LegendsLibraryViewControl, {
+  useLegendsLibraryView,
+} from './LegendsLibraryViewControl';
 
 type LibraryCollectionPageProps = {
   basePath: string;
@@ -77,6 +80,7 @@ export default function LibraryCollectionPage({
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<LibraryChildRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const { view } = useLegendsLibraryView();
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +112,14 @@ export default function LibraryCollectionPage({
     };
   }, [scope]);
 
+  const visibleItems = useMemo(
+    () =>
+      scope === 'legend' && view === 'legend'
+        ? items.filter((item) => item.source_scope === 'legend')
+        : items,
+    [items, scope, view],
+  );
+
   const gridContent = useMemo(() => {
     if (loading) {
       return (
@@ -129,12 +141,16 @@ export default function LibraryCollectionPage({
       );
     }
 
-    if (items.length === 0) {
+    if (visibleItems.length === 0) {
       return (
         <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
-          <Typography variant="h6">No items in the Library yet</Typography>
+          <Typography variant="h6">
+            {view === 'legend' ? 'No Legends-only items yet' : 'No items in the Library yet'}
+          </Typography>
           <Typography color="text.secondary" align="center">
-            Add resources or connect content to this collection to see them here.
+            {view === 'legend'
+              ? 'Items added to the Legends Library will appear here.'
+              : 'Add resources or connect content to this collection to see them here.'}
           </Typography>
         </Stack>
       );
@@ -142,7 +158,7 @@ export default function LibraryCollectionPage({
 
     return (
       <Grid container spacing={3}>
-        {items.map(({ child }) => {
+        {visibleItems.map(({ child, source_scope: sourceScope }) => {
           const heroSrc = resolveLibraryHeroSrc(child.hero_image ?? null);
           const href = `${basePath}/${child.slug || child.id}`;
 
@@ -192,6 +208,32 @@ export default function LibraryCollectionPage({
                         background: 'linear-gradient(to top, rgba(0,0,0,.22), rgba(0,0,0,0))',
                       }}
                     />
+                    {sourceScope === 'legend' ? (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 12,
+                          right: 12,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.6,
+                          px: 1.1,
+                          py: 0.55,
+                          borderRadius: 999,
+                          bgcolor: 'rgba(19, 16, 9, 0.84)',
+                          color: '#f7d67d',
+                          backdropFilter: 'blur(8px)',
+                          boxShadow: '0 4px 14px rgba(0, 0, 0, 0.18)',
+                        }}
+                      >
+                        <Typography
+                          component="span"
+                          sx={{ fontSize: 10, lineHeight: 1, fontWeight: 800, letterSpacing: 0.8 }}
+                        >
+                          LEGENDS
+                        </Typography>
+                      </Box>
+                    ) : null}
                   </Box>
 
                   <CardContent sx={{ display: 'grid', gap: 1 }}>
@@ -212,7 +254,7 @@ export default function LibraryCollectionPage({
         })}
       </Grid>
     );
-  }, [basePath, error, items, loading]);
+  }, [basePath, error, loading, view, visibleItems]);
 
   return (
     <Box
@@ -233,7 +275,13 @@ export default function LibraryCollectionPage({
         }}
       >
         <Container maxWidth="lg" sx={{ py: 1 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1.5}
+            useFlexGap
+            flexWrap="wrap"
+          >
             {backHref ? (
               <IconButton
                 LinkComponent={Link}
@@ -248,12 +296,28 @@ export default function LibraryCollectionPage({
               {title}
             </Typography>
             {headerAccessory}
+            {scope === 'legend' ? (
+              <Box sx={{ ml: { xs: 0, sm: 'auto' } }}>
+                <LegendsLibraryViewControl />
+              </Box>
+            ) : null}
           </Stack>
         </Container>
       </Box>
 
       <Container maxWidth="lg" sx={{ py: 8 }}>
-        {gridContent}
+        <Box
+          key={scope === 'legend' ? view : 'all'}
+          sx={{
+            '@keyframes libraryViewIn': {
+              from: { opacity: 0, transform: 'translateY(6px)' },
+              to: { opacity: 1, transform: 'translateY(0)' },
+            },
+            animation: 'libraryViewIn 220ms ease-out both',
+          }}
+        >
+          {gridContent}
+        </Box>
       </Container>
     </Box>
   );

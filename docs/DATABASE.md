@@ -110,8 +110,10 @@ Server code resolves:
 
 - Main library: `content_nodes.slug = 'library'`; fallback is the latest collection.
 - Assistant library: `content_nodes.slug = 'assistant-library'`.
+- Legends library: `content_nodes.slug = 'legends-library'`.
 
-The assistant scope includes both roots but requires the `assistant` role.
+The assistant scope includes the main and assistant roots and requires the `assistant` role. The
+legend scope includes the main and Legends roots and requires the `legend` role.
 
 ## Resources, search, and storage
 
@@ -215,6 +217,34 @@ Use the coaching and win RPCs listed in the generated reference for normal mutat
 ### Business Review preparation
 
 `business_review_preparation_responses` is a one-to-one child of `business_reviews`; its `business_review_id` is both the primary key and cascading foreign key. It stores the six required written answers and two required 1-10 ratings, with 5 and 7 excluded by database constraints. Students access it only through the authenticated website API, which verifies `business_reviews.user_id` and rejects canceled appointments; direct browser policies are intentionally absent. Resubmission updates the same row and refreshes `submitted_at` and `updated_at`. Coaches with access to the student receive these answers in the Business Review payload and can review them in the review tab.
+
+### System scorecard library links
+
+`system_scorecard_systems.library_item_id` is the canonical optional link from a Foundation or
+Legends scorecard system to a `content_nodes` library item. Foundation systems may use Main
+Library items; Legends systems may use Main or Legends Library items. Admins manage the mapping
+through `/api/admin/system-scorecard-library`.
+
+When a system is selected as a Business Review priority, its generated
+`coaching_note_action_steps` row inherits the mapped item. Database triggers also propagate later
+mapping changes to existing priority-generated action steps. The migration backfills existing
+priority steps from their system mappings.
+
+### Systems Scorecard versions
+
+`system_scorecard_templates.key` is the immutable version identifier stored on every
+`business_reviews.system_scorecard_template_key`. Published templates and any template already
+referenced by a review must not be edited structurally. Admins create an inactive copy, edit its
+categories and systems, then publish it through the service-role-only version-management RPCs.
+Stable `system_scorecard_systems.key` values map retained ratings and priorities between versions.
+
+Publishing upgrades all compatible draft Business Reviews for the same audience in one database
+transaction. Completed reviews are never migrated. A removed priority requires an explicit
+replacement, explicit removal, or a decision to keep that review on its previous version. Removing
+a manually reviewed system also requires confirmation. The migration preserves retained ratings,
+action steps, library links, and priority order; failures roll back the entire publish operation.
+`system_scorecard_version_migrations` stores the previous rating/priority snapshot and the admin's
+resolution for every migrated review.
 
 ### Attention status
 

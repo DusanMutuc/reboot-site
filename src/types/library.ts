@@ -1,7 +1,7 @@
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import type { ContentBlock } from '@/types/course';
 
-export type LibraryScope = 'main' | 'assistant';
+export type LibraryScope = 'main' | 'assistant' | 'legend';
 
 export type LibraryNodeRow = {
   id: number;
@@ -15,6 +15,7 @@ export type LibraryNodeRow = {
 export type LibraryChildRow = {
   child_id: number;
   position: number;
+  source_scope: LibraryScope;
   child: LibraryNodeRow;
 };
 
@@ -26,6 +27,7 @@ export type LibrarySidebarItem = {
   hero_image?: string | null;
   node_type: 'lesson' | 'chapter' | string;
   state?: 'published' | 'draft' | string | null;
+  source_scope?: LibraryScope;
   children?: LibrarySidebarItem[];
 };
 

@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Box, IconButton, Stack, Tooltip, Typography } from '@mui/material';
 import BookIcon from '@mui/icons-material/Book';
 import GridViewIcon from '@mui/icons-material/GridView';
@@ -14,6 +14,10 @@ import {
   type LibrarySidebarItem,
   type LibraryScope,
 } from './shared';
+import LegendsLibraryViewControl, {
+  LegendsLibraryViewProvider,
+  useLegendsLibraryView,
+} from './LegendsLibraryViewControl';
 
 type LibrarySidebarLayoutProps = {
   basePath: string;
@@ -195,23 +199,26 @@ const LessonCard = memo(function LessonCard({
       >
         <Thumb src={lesson.hero_image} alt={lesson.title || ''} width={72} height={48} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography
-            sx={{
-              fontSize: 14,
-              fontWeight: 700,
-              lineHeight: 1.3,
-              color: selectedLesson ? 'teal.700' : 'text.primary',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-              transition: 'color .2s',
-            }}
-            title={lesson.title || undefined}
-          >
-            {lesson.title || 'Untitled lesson'}
-          </Typography>
+          <Stack direction="row" spacing={0.75} alignItems="flex-start">
+            <Typography
+              sx={{
+                flex: 1,
+                fontSize: 14,
+                fontWeight: 700,
+                lineHeight: 1.3,
+                color: selectedLesson ? 'teal.700' : 'text.primary',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                transition: 'color .2s',
+              }}
+              title={lesson.title || undefined}
+            >
+              {lesson.title || 'Untitled lesson'}
+            </Typography>
+          </Stack>
         </Box>
       </Box>
 
@@ -246,12 +253,14 @@ const LibrarySidebar = memo(function LibrarySidebar({
   items,
   selectedSlug,
   onOpenItem,
+  showLegendsFilter,
 }: {
   title: string;
   basePath: string;
   items: LibrarySidebarItem[];
   selectedSlug: string | null;
   onOpenItem: (item: LibrarySidebarItem) => void;
+  showLegendsFilter: boolean;
 }) {
   return (
     <Box
@@ -278,43 +287,66 @@ const LibrarySidebar = memo(function LibrarySidebar({
             </IconButton>
           </Tooltip>
         </Stack>
+        {showLegendsFilter ? <LegendsLibraryViewControl compact /> : null}
       </Box>
 
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-        <Stack spacing={1}>
-          {items.map((lesson) => (
-            <LessonCard
-              key={lesson.id}
-              lesson={lesson}
-              selectedSlug={selectedSlug}
-              onOpen={onOpenItem}
-            />
-          ))}
-        </Stack>
+        {items.length ? (
+          <Stack
+            key={showLegendsFilter ? items.map((item) => item.id).join(':') : 'all'}
+            spacing={1}
+            sx={{
+              '@keyframes librarySidebarIn': {
+                from: { opacity: 0, transform: 'translateX(-4px)' },
+                to: { opacity: 1, transform: 'translateX(0)' },
+              },
+              animation: 'librarySidebarIn 180ms ease-out both',
+            }}
+          >
+            {items.map((lesson) => (
+              <LessonCard
+                key={lesson.id}
+                lesson={lesson}
+                selectedSlug={selectedSlug}
+                onOpen={onOpenItem}
+              />
+            ))}
+          </Stack>
+        ) : (
+          <Stack alignItems="center" spacing={1} sx={{ py: 5, color: 'text.secondary' }}>
+            <BookIcon color="disabled" />
+            <Typography variant="body2" textAlign="center">
+              {showLegendsFilter ? 'No Legends-only items yet.' : 'No library items available.'}
+            </Typography>
+          </Stack>
+        )}
       </Box>
     </Box>
   );
 });
 
-export default function LibrarySidebarLayout({
+function LibrarySidebarLayoutContent({
   basePath,
   scope,
   title,
   children,
 }: LibrarySidebarLayoutProps) {
   const router = useRouter();
+  const { view } = useLegendsLibraryView();
   const selectedSegments = useSelectedLayoutSegments();
   const selectedSlug = selectedSegments.length
     ? decodeURIComponent(selectedSegments[selectedSegments.length - 1])
     : null;
 
   const [items, setItems] = useState<LibrarySidebarItem[]>([]);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadItems() {
       try {
+        setItemsLoaded(false);
         const nextItems = await fetchLibrarySidebarItems(scope);
         if (!cancelled) {
           setItems(nextItems);
@@ -322,6 +354,10 @@ export default function LibrarySidebarLayout({
       } catch {
         if (!cancelled) {
           setItems([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setItemsLoaded(true);
         }
       }
     }
@@ -333,10 +369,32 @@ export default function LibrarySidebarLayout({
     };
   }, [scope]);
 
-  useEffect(() => {
-    if (!items.length || !selectedSlug) return;
+  const visibleItems = useMemo(
+    () =>
+      scope === 'legend' && view === 'legend'
+        ? items.filter((item) => item.source_scope === 'legend')
+        : items,
+    [items, scope, view],
+  );
 
-    const lesson = items.find((item) => matchesSelectedItem(selectedSlug, item));
+  useEffect(() => {
+    if (scope !== 'legend' || view !== 'legend' || !itemsLoaded || !selectedSlug) return;
+
+    const selectedIsVisible = visibleItems.some(
+      (lesson) =>
+        matchesSelectedItem(selectedSlug, lesson) ||
+        lesson.children?.some((chapter) => matchesSelectedItem(selectedSlug, chapter)),
+    );
+
+    if (!selectedIsVisible) {
+      router.replace(basePath);
+    }
+  }, [basePath, itemsLoaded, router, scope, selectedSlug, view, visibleItems]);
+
+  useEffect(() => {
+    if (!visibleItems.length || !selectedSlug) return;
+
+    const lesson = visibleItems.find((item) => matchesSelectedItem(selectedSlug, item));
     if (!lesson || !lesson.children?.length) return;
 
     const firstChapter = lesson.children[0];
@@ -344,11 +402,11 @@ export default function LibrarySidebarLayout({
     if (firstChapterKey !== selectedSlug) {
       router.push(buildItemPath(basePath, firstChapter, lesson));
     }
-  }, [basePath, items, router, selectedSlug]);
+  }, [basePath, router, selectedSlug, visibleItems]);
 
   const openItem = useCallback(
     (item: LibrarySidebarItem) => {
-      const lesson = findLessonForItem(items, item.id);
+      const lesson = findLessonForItem(visibleItems, item.id);
       if (!lesson) {
         const targetKey = getRouteKey(item);
         if (selectedSlug !== targetKey) {
@@ -363,7 +421,7 @@ export default function LibrarySidebarLayout({
         router.push(buildItemPath(basePath, target, lesson));
       }
     },
-    [basePath, items, router, selectedSlug],
+    [basePath, router, selectedSlug, visibleItems],
   );
 
   const onGrid = !selectedSlug;
@@ -375,11 +433,24 @@ export default function LibrarySidebarLayout({
       <LibrarySidebar
         title={title}
         basePath={basePath}
-        items={items}
+        items={visibleItems}
         selectedSlug={selectedSlug}
         onOpenItem={openItem}
+        showLegendsFilter={scope === 'legend'}
       />
       <Box sx={{ flex: 1, overflowY: 'auto', bgcolor: 'grey.100' }}>{children}</Box>
     </Box>
+  );
+}
+
+export default function LibrarySidebarLayout(props: LibrarySidebarLayoutProps) {
+  if (props.scope !== 'legend') {
+    return <LibrarySidebarLayoutContent {...props} />;
+  }
+
+  return (
+    <LegendsLibraryViewProvider>
+      <LibrarySidebarLayoutContent {...props} />
+    </LegendsLibraryViewProvider>
   );
 }

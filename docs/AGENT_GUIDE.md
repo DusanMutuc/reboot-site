@@ -128,6 +128,7 @@ These are destructive operations. Require explicit IDs, a dry run where supporte
 | Smart document field | `upsert_smart_field_value` |
 | Smart document submit | Website smart-doc API / `submit_smart_doc` where appropriate |
 | Coaching notes, comments, actions | `create_coaching_note`, `add_coaching_note_comment`, `add_coaching_note_action_step` |
+| Scorecard priority library links | Admin mapping API; database synchronization triggers |
 | Wins | `add_win`, `update_win`, `delete_win` |
 | Manual attention status | `set_user_attention_manual_status` |
 | Course access check | `can_user_access_course`, `can_user_access_node_via_course` |
@@ -175,7 +176,8 @@ The existing `scripts/replace-zoom-meetings.mjs` is a useful safety example: dry
 - Course visibility is `public` or `limited`; limited grants are in `user_course_visibility`.
 - Role audience rules are in `content_node_roles`.
 - User progress is in `user_node_progress` and should be changed through progress RPCs.
-- Main and assistant library roots are resolved by slugs `library` and `assistant-library`.
+- Main, assistant, and Legends library roots are resolved by slugs `library`, `assistant-library`,
+  and `legends-library`.
 
 ## Known traps and current discrepancies
 
