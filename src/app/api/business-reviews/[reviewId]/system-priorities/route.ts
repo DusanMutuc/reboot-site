@@ -130,6 +130,31 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     }
 
     const row = priorityRow as PriorityRow | null;
+
+    if (row) {
+      const { data: system, error: systemError } = await admin
+        .from('system_scorecard_systems')
+        .select('library_item_id')
+        .eq('id', systemId)
+        .maybeSingle();
+
+      if (systemError) {
+        return NextResponse.json({ error: systemError.message }, { status: 400 });
+      }
+
+      const { error: actionStepError } = await admin
+        .from('coaching_note_action_steps')
+        .update({
+          library_item_id: system?.library_item_id ?? null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', Number(row.action_step_id));
+
+      if (actionStepError) {
+        return NextResponse.json({ error: actionStepError.message }, { status: 400 });
+      }
+    }
+
     const priority: BusinessReviewSystemPriority | null = row
       ? {
           position: Number(row.position),

@@ -9,6 +9,7 @@ export function getContentNodeHref(node: ContentNodeLinkInput): string {
     return node.slug ? `/courses/${node.slug}` : `/courses`;
   }
 
-  return node.slug ? `/library/${node.slug}` : `/library/${node.id}`;
+  const itemPath = node.slug ? `/library/${node.slug}` : `/library/${node.id}`;
+  return `${itemPath}?libraryView=all`;
 }
 

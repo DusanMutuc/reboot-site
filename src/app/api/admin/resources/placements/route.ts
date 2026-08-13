@@ -165,6 +165,7 @@ export async function POST(request: NextRequest) {
         if (
           node?.slug === 'library' ||
           node?.slug === 'assistant-library' ||
+          node?.slug === 'legends-library' ||
           (isRoot && (node?.node_type === 'collection' || node?.node_type === 'playlist'))
         ) {
           placement.inLibrary = true;
