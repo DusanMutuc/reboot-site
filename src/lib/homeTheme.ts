@@ -31,6 +31,23 @@ export const brand = {
   negative: '#c0492f',
 } as const;
 
+/**
+ * Candidate surfaces for the content half of the page. The page background is
+ * `brand.page` (#f6f8f7); each of these is a step down from it, so the content
+ * zone reads as a distinct surface and the white cards sitting on it gain
+ * definition rather than losing it.
+ */
+export const contentSurfaces = {
+  /** No tint at all — tests whether the banner alone carries the separation. */
+  none: '#f6f8f7',
+  soft: '#eef2f1',
+  neutral: '#e8eeec',
+  deep: '#e0e8e6',
+  tint: '#eaf6f3',
+} as const;
+
+export type ContentSurface = keyof typeof contentSurfaces;
+
 export const HOME_MAX_WIDTH = 1180;
 export const HOME_GUTTER = { xs: 20, md: 32 } as const;
 

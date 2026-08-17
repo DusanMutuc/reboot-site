@@ -20,11 +20,14 @@ const BASE: Omit<HomeData, 'callStatus' | 'nextCall' | 'lastCall'> = {
     { label: 'Assistant workroom', href: '#' },
   ],
 
+  calendar: { label: 'Reboot calendar', href: '#' },
+
   continueItem: {
     title: 'Lead follow-up system',
-    contextLabel: 'Part 3 of 6',
+    contextLabel: 'Part 3 of 6 · about 12 minutes left',
     href: '#',
     progressPct: 62,
+    nextUpLabel: 'The seven-day cadence',
   },
 
   browseTiles: [
@@ -49,8 +52,9 @@ const BASE: Omit<HomeData, 'callStatus' | 'nextCall' | 'lastCall'> = {
     { label: 'Days off', value: '4', deltaPct: null },
   ],
 
+  // The calendar has moved into the sticky bar's Calls menu; a schedule is a
+  // calls question, not a utility link sitting beside the privacy policy.
   utilityLinks: [
-    { label: 'Reboot calendar', href: '#' },
     { label: 'Facebook group', href: '#' },
     { label: 'Refer an agent', href: '#' },
     { label: 'Find an agent to refer to', href: '#' },

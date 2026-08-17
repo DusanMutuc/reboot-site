@@ -1,14 +1,43 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import { brand } from '@/lib/homeTheme';
 import type { CallStatus } from './types';
+
+/**
+ * Every switch is a link, so a page navigation resets component state. The
+ * open/closed choice is persisted so collapsing it once actually sticks
+ * instead of springing back on the next click.
+ */
+const PANEL_KEY = 'reboot-review-panel';
 
 const VERSIONS = [
   { path: '/home', label: 'Separate destinations' },
   { path: '/home/onepage', label: 'One-pager' },
   { path: '/home/hub', label: 'One-pager, hierarchy' },
+  { path: '/home/momentum', label: 'Momentum (next step)' },
+];
+
+const COURSE_ROW = [
+  { key: 'on', label: 'With courses row' },
+  { key: 'off', label: 'Without courses row' },
+];
+
+const SURFACES = [
+  { key: 'none', label: 'No tint · banner only' },
+  { key: 'soft', label: 'Soft · #eef2f1' },
+  { key: 'neutral', label: 'Neutral · #e8eeec' },
+  { key: 'deep', label: 'Deep · #e0e8e6' },
+  { key: 'tint', label: 'Brand tint · #eaf6f3' },
+];
+
+const NEXT_STEPS = [
+  { key: 'action_step', label: 'Coach action step' },
+  { key: 'numbers', label: 'Numbers missing' },
+  { key: 'browse', label: 'Nothing outstanding' },
 ];
 
 const STATES: Array<{ key: CallStatus; label: string }> = [
@@ -59,30 +88,86 @@ export default function CompareStrip({
   currentPath,
   status,
   volume,
+  nextStep,
+  surface,
+  courseRow,
 }: {
   currentPath: string;
   status: CallStatus;
-  /** Only the one-page variant carries the content-volume switch. */
+  /** Only the one-page variants carry the content-volume switch. */
   volume?: string;
+  /** Only the momentum variant carries the next-step resolver switch. */
+  nextStep?: string;
+  /** Only the momentum variant carries the content-surface switch. */
+  surface?: string;
+  /** Only the momentum variant carries the courses-row switch. */
+  courseRow?: string;
 }) {
   const qs = (overrides: Record<string, string>) => {
     const params = new URLSearchParams({ state: status });
     if (volume) params.set('volume', volume);
+    if (nextStep) params.set('next', nextStep);
+    if (surface) params.set('surface', surface);
+    if (courseRow) params.set('courses', courseRow);
     Object.entries(overrides).forEach(([k, v]) => params.set(k, v));
     return `?${params.toString()}`;
+  };
+
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    if (window.localStorage.getItem(PANEL_KEY) === 'closed') setOpen(false);
+  }, []);
+
+  const toggle = () => {
+    setOpen((wasOpen) => {
+      window.localStorage.setItem(PANEL_KEY, wasOpen ? 'closed' : 'open');
+      return !wasOpen;
+    });
   };
 
   return (
     <Box
       sx={{
-        p: 2,
+        p: open ? 2 : 1.25,
         borderRadius: '10px',
         border: `1px dashed ${brand.borderStrong}`,
         display: 'flex',
         flexDirection: 'column',
-        gap: 1.25,
+        gap: open ? 1.25 : 0,
       }}
     >
+      <Box
+        component="button"
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          border: 'none',
+          background: 'none',
+          cursor: 'pointer',
+          p: 0,
+          mb: open ? 0.5 : 0,
+          alignSelf: 'flex-start',
+          color: brand.inkMuted,
+          '&:hover': { color: brand.ink },
+        }}
+      >
+        <ExpandMoreRoundedIcon
+          sx={{
+            fontSize: 18,
+            transition: 'transform .18s ease',
+            transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
+          }}
+        />
+        <Typography sx={{ fontSize: 12.5, color: 'inherit' }}>Design review</Typography>
+      </Box>
+
+      {open ? (
+        <>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
         <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
           Layout version
@@ -128,6 +213,59 @@ export default function CompareStrip({
             </Chip>
           ))}
         </Box>
+      ) : null}
+
+      {courseRow ? (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+            Courses row
+          </Typography>
+          {COURSE_ROW.map((option) => (
+            <Chip
+              key={option.key}
+              href={`${currentPath}${qs({ courses: option.key })}`}
+              active={option.key === courseRow}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </Box>
+      ) : null}
+
+      {surface ? (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+            Content surface
+          </Typography>
+          {SURFACES.map((option) => (
+            <Chip
+              key={option.key}
+              href={`${currentPath}${qs({ surface: option.key })}`}
+              active={option.key === surface}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </Box>
+      ) : null}
+
+      {nextStep ? (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+            Next step is
+          </Typography>
+          {NEXT_STEPS.map((option) => (
+            <Chip
+              key={option.key}
+              href={`${currentPath}${qs({ next: option.key })}`}
+              active={option.key === nextStep}
+            >
+              {option.label}
+            </Chip>
+          ))}
+            </Box>
+          ) : null}
+        </>
       ) : null}
     </Box>
   );

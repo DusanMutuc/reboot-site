@@ -45,7 +45,7 @@ export default function NumbersStrip({ metrics }: { metrics: Metric[] }) {
         }}
       >
         <Typography variant="sectionLabel" component="h2" sx={{ color: brand.ink }}>
-          Your numbers
+          Your stats
         </Typography>
 
         <Box
