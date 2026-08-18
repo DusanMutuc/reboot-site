@@ -5,11 +5,13 @@ import {
   getMeetings,
   placeholderPriorities,
   placeholderRequiredTraining,
+  placeholderTrainingStanding,
 } from '@/components/home/momentumPlaceholderData';
 import {
   placeholderContent,
   placeholderRecommended,
 } from '@/components/home/contentPlaceholderData';
+import { parseAccent } from '@/components/home/accentOption';
 import type { ContentSurface } from '@/lib/homeTheme';
 
 export const dynamic = 'force-dynamic';
@@ -23,10 +25,11 @@ export const dynamic = 'force-dynamic';
 export default async function MomentumPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; volume?: string; surface?: string }>;
+  searchParams: Promise<{ state?: string; volume?: string; surface?: string; accent?: string }>;
 }) {
-  const { state, volume, surface } = await searchParams;
+  const { state, volume, surface, accent } = await searchParams;
   const contentVolume = parseVolume(volume);
+  const contentAccent = parseAccent(accent);
   const meetingScenario = parseCallStatus(state);
   const contentSurface: ContentSurface =
     surface === 'none' || surface === 'soft' || surface === 'deep' || surface === 'tint'
@@ -52,10 +55,12 @@ export default async function MomentumPage({
       meetings={getMeetings(meetingScenario)}
       priorities={isEmpty ? [] : placeholderPriorities}
       requiredTraining={isEmpty ? null : placeholderRequiredTraining}
+      trainingStanding={placeholderTrainingStanding}
       recommended={isEmpty ? [] : placeholderRecommended}
       content={isEmpty ? [] : placeholderContent}
       volume={contentVolume}
       surface={contentSurface}
+      accent={contentAccent}
     />
   );
 }

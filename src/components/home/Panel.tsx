@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 
 export function Panel({
   label,
@@ -23,7 +23,7 @@ export function Panel({
       sx={{
         bgcolor: brand.card,
         border: `1px solid ${brand.border}`,
-        borderRadius: '14px',
+        borderRadius: CARD_RADIUS,
         p: { xs: 2.5, md: 3 },
         animation: 'homeRise .38s ease-out both',
         animationDelay: `${delayMs}ms`,
@@ -40,13 +40,10 @@ export function Panel({
 export function GroupLabel({ children, sx }: { children: React.ReactNode; sx?: object }) {
   return (
     <Typography
-      variant="metricLabel"
+      variant="kicker"
       sx={{
         display: 'block',
         color: brand.inkMuted,
-        textTransform: 'uppercase',
-        letterSpacing: '0.08em',
-        fontSize: 11.5,
         mb: 1,
         ...sx,
       }}
@@ -110,11 +107,11 @@ export function ActionRow({
       </Box>
 
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Typography variant="cardTitle" sx={{ fontSize: 15.5, color: brand.ink }}>
+        <Typography variant="cardTitle" sx={{ fontSize: 16, color: brand.ink }}>
           {label}
         </Typography>
         {sublabel ? (
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, mt: 0.125 }}>{sublabel}</Typography>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, mt: 0.125 }}>{sublabel}</Typography>
         ) : null}
       </Box>
 

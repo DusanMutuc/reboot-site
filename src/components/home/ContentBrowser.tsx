@@ -206,11 +206,8 @@ export default function ContentBrowser({
 
               <Box sx={{ p: 1.5 }}>
                 <Typography
+                  variant="kicker"
                   sx={{
-                    fontSize: 10.5,
-                    fontWeight: 600,
-                    letterSpacing: '0.09em',
-                    textTransform: 'uppercase',
                     color: brand.inkMuted,
                     mb: 0.5,
                   }}
@@ -220,7 +217,7 @@ export default function ContentBrowser({
                 <Typography
                   className="ci-title"
                   sx={{
-                    fontSize: 14.5,
+                    fontSize: 15,
                     fontWeight: 500,
                     lineHeight: 1.35,
                     color: brand.ink,
@@ -254,7 +251,7 @@ export default function ContentBrowser({
             borderRadius: '10px',
             border: `1px solid ${brand.borderStrong}`,
             bgcolor: brand.card,
-            fontSize: 14.5,
+            fontSize: 15,
             fontWeight: 500,
             color: brand.ink,
             transition: 'border-color .16s ease',

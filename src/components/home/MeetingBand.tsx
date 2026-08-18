@@ -44,7 +44,7 @@ export default function MeetingBand({ meetings }: { meetings: MeetingSlot[] }) {
 
   const tone =
     mode === 'join'
-      ? { bg: brand.turquoise, fg: brand.ink, sub: 'rgba(22,33,31,0.72)' }
+      ? { bg: brand.turquoise, fg: brand.ink, sub: 'rgba(22,33,31,0.85)' }
       : mode === 'book'
         ? { bg: brand.slate, fg: '#ffffff', sub: 'rgba(255,255,255,0.68)' }
         : { bg: brand.turquoiseTint, fg: brand.ink, sub: brand.inkSoft };
@@ -109,11 +109,9 @@ export default function MeetingBand({ meetings }: { meetings: MeetingSlot[] }) {
                 }}
               />
               <Typography
-                variant="sectionLabel"
+                variant="eyebrow"
                 sx={{
                   display: 'block',
-                  fontSize: 12.5,
-                  letterSpacing: '0.14em',
                   color: mode === 'book' ? brand.turquoise : tone.fg,
                   opacity: mode === 'booked' ? 0.75 : 1,
                 }}

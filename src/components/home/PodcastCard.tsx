@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { Episode } from './types';
 
 const LIST_LENGTH = 5;
@@ -36,12 +36,12 @@ export default function PodcastCard({ episodes }: { episodes: Episode[] }) {
         <Box
           sx={{
             border: `1px solid ${brand.border}`,
-            borderRadius: '14px',
+            borderRadius: CARD_RADIUS,
             bgcolor: brand.card,
             p: 3,
           }}
         >
-          <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+          <Typography sx={{ fontSize: 15, color: brand.inkMuted }}>
             No episodes published yet.
           </Typography>
         </Box>
@@ -90,7 +90,7 @@ export default function PodcastCard({ episodes }: { episodes: Episode[] }) {
           display: 'grid',
           gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.1fr) minmax(0, 1fr)' },
           border: `1px solid ${brand.border}`,
-          borderRadius: '14px',
+          borderRadius: CARD_RADIUS,
           bgcolor: brand.card,
           overflow: 'hidden',
         }}
@@ -103,7 +103,7 @@ export default function PodcastCard({ episodes }: { episodes: Episode[] }) {
                 sx={{
                   fontSize: 10,
                   fontWeight: 700,
-                  letterSpacing: '0.09em',
+                  letterSpacing: '0.08em',
                   textTransform: 'uppercase',
                   color: brand.ink,
                   bgcolor: brand.turquoise,
@@ -225,7 +225,7 @@ export default function PodcastCard({ episodes }: { episodes: Episode[] }) {
                 >
                   {episode.title}
                 </Typography>
-                <Typography sx={{ fontSize: 11.5, color: brand.inkMuted, mt: 0.25 }}>
+                <Typography sx={{ fontSize: 12, color: brand.inkMuted, mt: 0.25 }}>
                   {episode.episodeLabel} · {episode.durationLabel}
                 </Typography>
               </Box>

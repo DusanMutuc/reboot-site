@@ -86,8 +86,10 @@ const TYPICAL: OnePageExtras = {
   attendance: {
     attendedCount: 7,
     totalCount: 8,
-    periodLabel: 'last 8 weeks',
+    periodLabel: 'last 8 meetings',
     streakLabel: '5 in a row',
+    // One miss six meetings back, unbroken since — matches the streak label.
+    recent: [true, true, false, true, true, true, true, true],
   },
 
   helpSteps: [
@@ -172,7 +174,13 @@ const EMPTY: OnePageExtras = {
   episodes: [],
   wins: [],
   achievements: [],
-  attendance: { attendedCount: 0, totalCount: 0, periodLabel: 'last 8 weeks', streakLabel: null },
+  attendance: {
+    attendedCount: 0,
+    totalCount: 0,
+    periodLabel: 'last 8 meetings',
+    streakLabel: null,
+    recent: [],
+  },
 };
 
 export function getOnePageExtras(volume: ContentVolume = 'typical'): OnePageExtras {

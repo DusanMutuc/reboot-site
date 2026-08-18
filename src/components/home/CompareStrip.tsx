@@ -14,6 +14,16 @@ import type { CallStatus } from './types';
  */
 const PANEL_KEY = 'reboot-review-panel';
 
+/**
+ * The layout/state switcher is a design-review harness, not member-facing UI.
+ * It renders in development, and on a deployed build only when
+ * NEXT_PUBLIC_DESIGN_REVIEW=1 is set — so a preview deploy can still be
+ * driven, while a production build never shows it.
+ */
+const DESIGN_REVIEW_ENABLED =
+  process.env.NODE_ENV !== 'production' ||
+  process.env.NEXT_PUBLIC_DESIGN_REVIEW === '1';
+
 const VERSIONS = [
   { path: '/home', label: 'Separate destinations' },
   { path: '/home/onepage', label: 'One-pager' },
@@ -24,6 +34,11 @@ const VERSIONS = [
 const COURSE_ROW = [
   { key: 'on', label: 'With courses row' },
   { key: 'off', label: 'Without courses row' },
+];
+
+const ACCENTS = [
+  { key: 'none', label: 'Turquoise only' },
+  { key: 'brand', label: 'Logo red accents' },
 ];
 
 const SURFACES = [
@@ -60,7 +75,7 @@ function Chip({
       component={Link}
       href={href}
       sx={{
-        fontSize: 12.5,
+        fontSize: 13,
         fontWeight: active ? 600 : 400,
         px: 1.25,
         py: 0.5,
@@ -91,6 +106,7 @@ export default function CompareStrip({
   nextStep,
   surface,
   courseRow,
+  accent,
 }: {
   currentPath: string;
   status: CallStatus;
@@ -102,13 +118,17 @@ export default function CompareStrip({
   surface?: string;
   /** Only the momentum variant carries the courses-row switch. */
   courseRow?: string;
+  /** Only the momentum variant carries the colour-treatment switch. */
+  accent?: string;
 }) {
+
   const qs = (overrides: Record<string, string>) => {
     const params = new URLSearchParams({ state: status });
     if (volume) params.set('volume', volume);
     if (nextStep) params.set('next', nextStep);
     if (surface) params.set('surface', surface);
     if (courseRow) params.set('courses', courseRow);
+    if (accent) params.set('accent', accent);
     Object.entries(overrides).forEach(([k, v]) => params.set(k, v));
     return `?${params.toString()}`;
   };
@@ -118,6 +138,9 @@ export default function CompareStrip({
   useEffect(() => {
     if (window.localStorage.getItem(PANEL_KEY) === 'closed') setOpen(false);
   }, []);
+
+  // After the hooks: bailing earlier would make hook order conditional.
+  if (!DESIGN_REVIEW_ENABLED) return null;
 
   const toggle = () => {
     setOpen((wasOpen) => {
@@ -163,13 +186,13 @@ export default function CompareStrip({
             transform: open ? 'rotate(0deg)' : 'rotate(-90deg)',
           }}
         />
-        <Typography sx={{ fontSize: 12.5, color: 'inherit' }}>Design review</Typography>
+        <Typography sx={{ fontSize: 13, color: 'inherit' }}>Design review</Typography>
       </Box>
 
       {open ? (
         <>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
-        <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+        <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
           Layout version
         </Typography>
         {VERSIONS.map((version) => (
@@ -184,7 +207,7 @@ export default function CompareStrip({
       </Box>
 
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
-        <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+        <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
           Call band state
         </Typography>
         {STATES.map((state) => (
@@ -200,7 +223,7 @@ export default function CompareStrip({
 
       {volume ? (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
             Content volume
           </Typography>
           {VOLUMES.map((option) => (
@@ -217,7 +240,7 @@ export default function CompareStrip({
 
       {courseRow ? (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
             Courses row
           </Typography>
           {COURSE_ROW.map((option) => (
@@ -232,9 +255,26 @@ export default function CompareStrip({
         </Box>
       ) : null}
 
+      {accent ? (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
+            Colour
+          </Typography>
+          {ACCENTS.map((option) => (
+            <Chip
+              key={option.key}
+              href={`${currentPath}${qs({ accent: option.key })}`}
+              active={option.key === accent}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </Box>
+      ) : null}
+
       {surface ? (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
             Content surface
           </Typography>
           {SURFACES.map((option) => (
@@ -251,7 +291,7 @@ export default function CompareStrip({
 
       {nextStep ? (
         <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, minWidth: 96 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
             Next step is
           </Typography>
           {NEXT_STEPS.map((option) => (

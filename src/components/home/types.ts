@@ -113,6 +113,11 @@ export type Attendance = {
   totalCount: number;
   periodLabel: string;
   streakLabel: string | null;
+  /**
+   * The last eight meetings, oldest first — true where the member attended.
+   * A ratio says how many; this says which, and when.
+   */
+  recent: boolean[];
 };
 
 export type HelpStep = {
@@ -238,13 +243,60 @@ export type MeetingSlot = {
  * priority, but it comes from a different place and is a single item, so it
  * keeps its own card rather than competing inside the sprint list.
  */
+/**
+ * One video inside a course. Courses are sequential, so array order is the
+ * running order and `done` is only ever true from the front.
+ */
+export type TrainingPart = {
+  title: string;
+  /**
+   * Runtime in minutes, as a number rather than a label. The card needs to
+   * total what is left as well as show one part's length, and a string can
+   * only do the second without being parsed back.
+   */
+  minutes: number;
+  /**
+   * One line on what the part actually covers. Only ever rendered for the
+   * next part — the one the member is about to open — but modelled per part,
+   * because that is where the fact belongs.
+   */
+  description: string;
+  done: boolean;
+};
+
+/**
+ * The course a coach assigned. Modelled as the container it is: a percentage
+ * was the wrong instrument for something discrete and ordered — what a member
+ * needs is which part is next, by name.
+ */
 export type RequiredTraining = {
   title: string;
-  detail: string;
   href: string;
-  progressPct: number | null;
-  /** e.g. "Before your session on Thursday" — stated, not pressed. */
+  /**
+   * In running order. Counts, the next part and the time remaining are all
+   * derived, never stored — total runtime used to be a field here and it
+   * described the whole course, which is the one figure a member part-way
+   * through has no use for.
+   */
+  parts: TrainingPart[];
+  /** e.g. "Before Thursday's session" — stated, not pressed. */
   contextLabel: string | null;
+};
+
+/**
+ * What the training slot shows when no course is assigned.
+ *
+ * Deliberately a report on the member rather than a recommendation: the top
+ * zone only carries things attached to them, and suggesting a course here
+ * would make the same offer as the browse grid below.
+ */
+export type TrainingStanding = {
+  /** How many courses the member has finished in total. */
+  completedCount: number;
+  /** The most recent finish, for a single line of closure. */
+  lastCompleted: { title: string; completedLabel: string } | null;
+  /** The one route out of this card. */
+  browseHref: string;
 };
 
 /**

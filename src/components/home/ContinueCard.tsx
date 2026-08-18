@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { ContinueItem } from './types';
 
 /**
@@ -24,7 +24,7 @@ export default function ContinueCard({ item }: { item: ContinueItem }) {
         flexDirection: 'column',
         bgcolor: brand.card,
         border: `1px solid ${brand.border}`,
-        borderRadius: '14px',
+        borderRadius: CARD_RADIUS,
         p: { xs: 2.5, md: 3 },
         transition: 'border-color .16s ease',
         '&:hover': { borderColor: brand.turquoise },
@@ -32,12 +32,10 @@ export default function ContinueCard({ item }: { item: ContinueItem }) {
       }}
     >
       <Typography
-        variant="sectionLabel"
+        variant="eyebrow"
         component="div"
         sx={{
           display: 'block',
-          fontSize: 11.5,
-          letterSpacing: '0.12em',
           color: brand.turquoiseDeep,
           mb: 1.25,
         }}
@@ -60,7 +58,7 @@ export default function ContinueCard({ item }: { item: ContinueItem }) {
       {item.nextUpLabel ? (
         <Box sx={{ mt: 'auto', pt: 1.5, mb: 2, borderTop: `1px solid ${brand.border}` }}>
           <Typography sx={{ fontSize: 12, color: brand.inkMuted, mb: 0.25 }}>Up next</Typography>
-          <Typography sx={{ fontSize: 14.5, color: brand.ink }}>{item.nextUpLabel}</Typography>
+          <Typography sx={{ fontSize: 15, color: brand.ink }}>{item.nextUpLabel}</Typography>
         </Box>
       ) : null}
 
@@ -70,7 +68,7 @@ export default function ContinueCard({ item }: { item: ContinueItem }) {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 0.625,
-          fontSize: 14.5,
+          fontSize: 15,
           fontWeight: 500,
           color: brand.turquoiseDeep,
           transition: 'color .16s ease',

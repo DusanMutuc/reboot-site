@@ -164,7 +164,7 @@ export function TrainingHero({
               </Typography>
               <Typography
                 sx={{
-                  fontSize: 15.5,
+                  fontSize: 16,
                   fontWeight: 500,
                   color: brand.ink,
                   mb: 1,
@@ -195,7 +195,7 @@ export function TrainingHero({
                     sx={{
                       fontSize: 10,
                       fontWeight: 700,
-                      letterSpacing: '0.09em',
+                      letterSpacing: '0.08em',
                       textTransform: 'uppercase',
                       color: brand.ink,
                       bgcolor: brand.turquoise,
@@ -212,10 +212,10 @@ export function TrainingHero({
                   aria-hidden="true"
                   sx={{ fontSize: 20, color: brand.turquoiseDeep, flexShrink: 0 }}
                 />
-                <Typography className="ep-t" sx={{ fontSize: 15.5, fontWeight: 500, color: brand.ink, minWidth: 0 }}>
+                <Typography className="ep-t" sx={{ fontSize: 16, fontWeight: 500, color: brand.ink, minWidth: 0 }}>
                   {latestEpisode.title}
                 </Typography>
-                <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, flexShrink: 0 }}>
+                <Typography sx={{ fontSize: 13, color: brand.inkMuted, flexShrink: 0 }}>
                   {latestEpisode.durationLabel}
                 </Typography>
               </Box>
@@ -290,19 +290,15 @@ export function CallsRow({
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography
+                variant="kicker"
                 sx={{
-                  fontSize: 10.5,
-                  fontWeight: 600,
-                  letterSpacing: '0.1em',
-                  textTransform: 'uppercase',
                   color: brand.inkMuted,
-                  lineHeight: 1.2,
                   mb: 0.25,
                 }}
               >
                 {item.verb}
               </Typography>
-              <Typography sx={{ fontSize: 14.5, fontWeight: 500, color: brand.ink, lineHeight: 1.25 }}>
+              <Typography sx={{ fontSize: 15, fontWeight: 500, color: brand.ink, lineHeight: 1.25 }}>
                 {item.label}
               </Typography>
             </Box>
@@ -371,7 +367,7 @@ export function ProgressRegion({
       >
         {metrics.map((metric) => (
           <Box key={metric.label}>
-            <Typography sx={{ fontSize: 12.5, color: brand.inkSoft, mb: 0.5 }}>
+            <Typography sx={{ fontSize: 13, color: brand.inkSoft, mb: 0.5 }}>
               {metric.label}
             </Typography>
             <Typography
@@ -394,12 +390,12 @@ export function ProgressRegion({
         }}
       >
         <Box>
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, mb: 1.25 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, mb: 1.25 }}>
             What your coach asked for
           </Typography>
 
           {steps.length === 0 ? (
-            <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+            <Typography sx={{ fontSize: 15, color: brand.inkMuted }}>
               Nothing set yet — your coach will add steps after your next call.
             </Typography>
           ) : (
@@ -467,7 +463,7 @@ export function ProgressRegion({
                     cursor: 'pointer',
                     p: 0,
                     fontFamily: '"Poppins", Arial, sans-serif',
-                    fontSize: 13.5,
+                    fontSize: 14,
                     fontWeight: 500,
                     color: brand.turquoiseDeep,
                     '&:hover': { color: brand.ink },
@@ -481,7 +477,7 @@ export function ProgressRegion({
         </Box>
 
         <Box>
-          <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, mb: 1.25 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, mb: 1.25 }}>
             Attendance
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, mb: 1 }}>
@@ -498,10 +494,10 @@ export function ProgressRegion({
 
           {wins.length > 0 ? (
             <>
-              <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, mb: 1 }}>
+              <Typography sx={{ fontSize: 13, color: brand.inkMuted, mb: 1 }}>
                 Latest win
               </Typography>
-              <Typography sx={{ fontSize: 14.5, color: brand.ink, lineHeight: 1.45, mb: 0.375 }}>
+              <Typography sx={{ fontSize: 15, color: brand.ink, lineHeight: 1.45, mb: 0.375 }}>
                 {wins[0].text}
               </Typography>
               <Typography sx={{ fontSize: 12, color: brand.inkMuted, mb: achievements.length ? 3 : 0 }}>
@@ -513,7 +509,7 @@ export function ProgressRegion({
 
           {achievements.length > 0 ? (
             <>
-              <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, mb: 1 }}>
+              <Typography sx={{ fontSize: 13, color: brand.inkMuted, mb: 1 }}>
                 Achievements · {achievements.length}
               </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.875 }}>
@@ -585,11 +581,11 @@ export function HubFooter({
           >
             {helpSteps.map((step) => (
               <Box key={step.title}>
-                <Typography sx={{ fontSize: 15.5, fontWeight: 500, color: '#ffffff', mb: 0.625 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 500, color: '#ffffff', mb: 0.625 }}>
                   {step.title}
                 </Typography>
                 <Typography
-                  sx={{ fontSize: 13.5, color: 'rgba(255,255,255,0.62)', lineHeight: 1.5, mb: 1 }}
+                  sx={{ fontSize: 14, color: 'rgba(255,255,255,0.62)', lineHeight: 1.5, mb: 1 }}
                 >
                   {step.detail}
                 </Typography>
@@ -600,7 +596,7 @@ export function HubFooter({
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 0.5,
-                    fontSize: 13.5,
+                    fontSize: 14,
                     fontWeight: 500,
                     color: brand.turquoise,
                     '&:hover': { color: '#ffffff' },
@@ -629,7 +625,7 @@ export function HubFooter({
                 component={Link}
                 href={link.href}
                 sx={{
-                  fontSize: 13.5,
+                  fontSize: 14,
                   lineHeight: 1.45,
                   color: 'rgba(255,255,255,0.72)',
                   '&:hover': { color: brand.turquoise },
@@ -649,21 +645,21 @@ export function HubFooter({
               justifyContent: 'space-between',
             }}
           >
-            <Typography sx={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)' }}>
+            <Typography sx={{ fontSize: 13, color: 'rgba(255,255,255,0.55)' }}>
               Real Estate Reboot Coaching
             </Typography>
             <Box sx={{ display: 'flex', gap: 2.5 }}>
               <Box
                 component={Link}
                 href="/privacy-policy"
-                sx={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', '&:hover': { color: brand.turquoise } }}
+                sx={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', '&:hover': { color: brand.turquoise } }}
               >
                 Privacy policy
               </Box>
               <Box
                 component={Link}
                 href="/support"
-                sx={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', '&:hover': { color: brand.turquoise } }}
+                sx={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', '&:hover': { color: brand.turquoise } }}
               >
                 Support
               </Box>

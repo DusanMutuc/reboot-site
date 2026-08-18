@@ -7,7 +7,7 @@ import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
-import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
+import { brand, HOME_MAX_WIDTH, CARD_RADIUS } from '@/lib/homeTheme';
 import type { Achievement, ActionStep, Attendance, Episode, HelpStep, Win } from './types';
 
 function SectionHeading({
@@ -106,7 +106,7 @@ function Card({ children, sx }: { children: React.ReactNode; sx?: object }) {
       sx={{
         bgcolor: brand.card,
         border: `1px solid ${brand.border}`,
-        borderRadius: '14px',
+        borderRadius: CARD_RADIUS,
         p: { xs: 2, md: 2.5 },
         ...sx,
       }}
@@ -133,7 +133,7 @@ export function FocusSection({ steps }: { steps: ActionStep[] }) {
       <Box component="section" id="focus">
         <SectionHeading label="Your focus" />
         <Card>
-          <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+          <Typography sx={{ fontSize: 15, color: brand.inkMuted }}>
             Your coach hasn&apos;t set any action steps yet. They&apos;ll appear here after
             your next call.
           </Typography>
@@ -188,7 +188,7 @@ export function FocusSection({ steps }: { steps: ActionStep[] }) {
                   sx={{
                     flex: 1,
                     minWidth: 0,
-                    fontSize: 15.5,
+                    fontSize: 16,
                     fontWeight: 500,
                     color: done ? brand.inkSoft : brand.ink,
                     textDecoration: done ? 'line-through' : 'none',
@@ -197,7 +197,7 @@ export function FocusSection({ steps }: { steps: ActionStep[] }) {
                   {step.label}
                 </Typography>
 
-                <Typography sx={{ fontSize: 12.5, color: tone.fg, flexShrink: 0 }}>
+                <Typography sx={{ fontSize: 13, color: tone.fg, flexShrink: 0 }}>
                   {tone.label}
                 </Typography>
               </Box>
@@ -226,7 +226,7 @@ export function PodcastSection({ episodes }: { episodes: Episode[] }) {
       <Box component="section" id="podcast">
         <SectionHeading label="Private podcast" />
         <Card>
-          <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+          <Typography sx={{ fontSize: 15, color: brand.inkMuted }}>
             No episodes published yet.
           </Typography>
         </Card>
@@ -277,9 +277,9 @@ export function PodcastSection({ episodes }: { episodes: Episode[] }) {
                 <Typography
                   component="span"
                   sx={{
-                    fontSize: 10.5,
+                    fontSize: 10,
                     fontWeight: 700,
-                    letterSpacing: '0.09em',
+                    letterSpacing: '0.08em',
                     textTransform: 'uppercase',
                     color: brand.ink,
                     bgcolor: brand.turquoise,
@@ -326,14 +326,14 @@ export function PodcastSection({ episodes }: { episodes: Episode[] }) {
                 sx={{
                   flex: 1,
                   minWidth: 0,
-                  fontSize: 14.5,
+                  fontSize: 15,
                   color: brand.ink,
                   transition: 'color .14s ease',
                 }}
               >
                 {episode.title}
               </Typography>
-              <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, flexShrink: 0 }}>
+              <Typography sx={{ fontSize: 13, color: brand.inkMuted, flexShrink: 0 }}>
                 {episode.durationLabel}
               </Typography>
             </Box>
@@ -401,7 +401,7 @@ export function ProgressSection({
             <Box sx={{ width: `${pct}%`, height: '100%', bgcolor: brand.turquoise }} />
           </Box>
           {attendance.streakLabel ? (
-            <Typography sx={{ fontSize: 12.5, color: brand.turquoiseDeep }}>
+            <Typography sx={{ fontSize: 13, color: brand.turquoiseDeep }}>
               {attendance.streakLabel}
             </Typography>
           ) : null}
@@ -420,7 +420,7 @@ export function ProgressSection({
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
                 {visibleWins.map((win) => (
                   <Box key={win.text} sx={{ borderLeft: `3px solid ${brand.turquoise}`, pl: 1.25 }}>
-                    <Typography sx={{ fontSize: 14.5, color: brand.ink, lineHeight: 1.4 }}>
+                    <Typography sx={{ fontSize: 15, color: brand.ink, lineHeight: 1.4 }}>
                       {win.text}
                     </Typography>
                     <Typography sx={{ fontSize: 12, color: brand.inkMuted, mt: 0.25 }}>
@@ -490,10 +490,10 @@ export function ProgressSection({
                     </Box>
                   )}
                   <Box sx={{ minWidth: 0 }}>
-                    <Typography sx={{ fontSize: 14.5, fontWeight: 500, color: brand.ink }}>
+                    <Typography sx={{ fontSize: 15, fontWeight: 500, color: brand.ink }}>
                       {achievement.title}
                     </Typography>
-                    <Typography sx={{ fontSize: 12.5, color: brand.inkMuted }}>
+                    <Typography sx={{ fontSize: 13, color: brand.inkMuted }}>
                       {achievement.dateLabel}
                     </Typography>
                   </Box>
@@ -558,12 +558,12 @@ export function HelpSection({ steps }: { steps: HelpStep[] }) {
                 >
                   {index + 1}
                 </Box>
-                <Typography variant="cardTitle" sx={{ fontSize: 16.5, color: brand.ink }}>
+                <Typography variant="cardTitle" sx={{ fontSize: 17, color: brand.ink }}>
                   {step.title}
                 </Typography>
               </Box>
 
-              <Typography sx={{ fontSize: 14.5, color: brand.inkSoft, lineHeight: 1.55, mb: 1.75 }}>
+              <Typography sx={{ fontSize: 15, color: brand.inkSoft, lineHeight: 1.55, mb: 1.75 }}>
                 {step.detail}
               </Typography>
 
@@ -574,7 +574,7 @@ export function HelpSection({ steps }: { steps: HelpStep[] }) {
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: 0.5,
-                  fontSize: 14.5,
+                  fontSize: 15,
                   fontWeight: 500,
                   color: brand.turquoiseDeep,
                   '&:hover': { color: brand.ink },

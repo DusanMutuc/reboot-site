@@ -1,4 +1,10 @@
-import type { CallStatus, MeetingSlot, Priority, RequiredTraining } from './types';
+import type {
+  CallStatus,
+  MeetingSlot,
+  Priority,
+  RequiredTraining,
+  TrainingStanding,
+} from './types';
 
 /**
  * Placeholder content for the modules added after the review meeting.
@@ -35,10 +41,45 @@ export const placeholderPriorities: Priority[] = [
 
 export const placeholderRequiredTraining: RequiredTraining = {
   title: 'Pricing conversations that hold',
-  detail: '4 short videos · about 35 minutes',
   href: '#',
-  progressPct: 25,
-  contextLabel: 'Before your session on Thursday',
+  contextLabel: "Before Thursday's session",
+  parts: [
+    {
+      title: 'What your number is actually saying',
+      minutes: 8,
+      description:
+        'Why a price is read as a claim about the seller, not about the house, and what that changes about how you open.',
+      done: true,
+    },
+    {
+      title: 'Holding your price under pressure',
+      minutes: 9,
+      description:
+        'What to say in the ten seconds after a seller asks you to come down, and why the first thing most agents say gives the price away.',
+      done: false,
+    },
+    {
+      title: 'When the seller will not move',
+      minutes: 10,
+      description:
+        'The point where holding the number stops being the job, and how to tell that moment from a seller who is only testing you.',
+      done: false,
+    },
+    {
+      title: 'The follow-up that reopens it',
+      minutes: 8,
+      description:
+        'The message that brings a stalled seller back without reopening the argument you just had about price.',
+      done: false,
+    },
+  ],
+};
+
+/** Shown in the same slot when nothing is assigned. */
+export const placeholderTrainingStanding: TrainingStanding = {
+  completedCount: 6,
+  browseHref: '#library',
+  lastCompleted: { title: 'Lead follow-up system', completedLabel: 'in June' },
 };
 
 const BOOK_REVIEW = '#book-review';

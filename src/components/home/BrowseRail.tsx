@@ -87,11 +87,8 @@ export default function BrowseRail({
 
           <Box sx={{ p: 1.5 }}>
             <Typography
+              variant="kicker"
               sx={{
-                fontSize: 10.5,
-                fontWeight: 600,
-                letterSpacing: '0.09em',
-                textTransform: 'uppercase',
                 color: brand.inkMuted,
                 mb: 0.5,
               }}
@@ -101,7 +98,7 @@ export default function BrowseRail({
             <Typography
               className="bi-title"
               sx={{
-                fontSize: 14.5,
+                fontSize: 15,
                 fontWeight: 500,
                 lineHeight: 1.35,
                 color: brand.ink,

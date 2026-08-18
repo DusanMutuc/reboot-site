@@ -119,8 +119,8 @@ export default function RightNowBand({
                 sx={{ width: 18, height: 3, bgcolor: status === 'none' ? brand.turquoise : tone.fg, borderRadius: 2 }}
               />
               <Typography
-                variant="sectionLabel"
-                sx={{ fontSize: 13, letterSpacing: '0.14em', color: tone.fg, opacity: status === 'booked' ? 0.75 : 0.9 }}
+                variant="eyebrow"
+                sx={{ color: tone.fg, opacity: status === 'booked' ? 0.75 : 0.9 }}
               >
                 {eyebrow}
               </Typography>
@@ -131,7 +131,7 @@ export default function RightNowBand({
             </Typography>
 
             {detail ? (
-              <Typography sx={{ fontSize: 15.5, color: tone.sub }}>{detail}</Typography>
+              <Typography sx={{ fontSize: 16, color: tone.sub }}>{detail}</Typography>
             ) : null}
           </Box>
 

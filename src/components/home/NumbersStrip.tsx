@@ -5,13 +5,13 @@ import { Box, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { Metric } from './types';
 
 function Delta({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) {
     return (
-      <Typography sx={{ fontSize: 12.5, color: brand.inkMuted }}>No previous period</Typography>
+      <Typography sx={{ fontSize: 13, color: brand.inkMuted }}>No previous period</Typography>
     );
   }
 
@@ -21,10 +21,10 @@ function Delta({ deltaPct }: { deltaPct: number | null }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.375 }}>
       <Icon aria-hidden="true" sx={{ fontSize: 14, color: positive ? brand.positive : brand.negative }} />
-      <Typography sx={{ fontSize: 12.5, fontWeight: 500, color: positive ? brand.positive : brand.negative }}>
+      <Typography sx={{ fontSize: 13, fontWeight: 500, color: positive ? brand.positive : brand.negative }}>
         {Math.abs(Math.round(deltaPct))}%
       </Typography>
-      <Typography sx={{ fontSize: 12.5, color: brand.inkMuted }}>vs last period</Typography>
+      <Typography sx={{ fontSize: 13, color: brand.inkMuted }}>vs last period</Typography>
     </Box>
   );
 }
@@ -88,7 +88,7 @@ export default function NumbersStrip({ metrics }: { metrics: Metric[] }) {
             sx={{
               bgcolor: brand.card,
               border: `1px solid ${brand.border}`,
-              borderRadius: '14px',
+              borderRadius: CARD_RADIUS,
               p: { xs: 2, md: 2.25 },
             }}
           >

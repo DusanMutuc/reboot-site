@@ -74,7 +74,7 @@ export default function TrainingPanel({
               <Typography variant="cardTitle" sx={{ color: brand.ink }}>
                 {continueItem.title}
               </Typography>
-              <Typography sx={{ fontSize: 12.5, color: brand.inkMuted, flexShrink: 0 }}>
+              <Typography sx={{ fontSize: 13, color: brand.inkMuted, flexShrink: 0 }}>
                 {continueItem.contextLabel}
               </Typography>
             </Box>
@@ -172,9 +172,9 @@ export default function TrainingPanel({
                   <Typography
                     component="span"
                     sx={{
-                      fontSize: 10.5,
+                      fontSize: 10,
                       fontWeight: 700,
-                      letterSpacing: '0.09em',
+                      letterSpacing: '0.08em',
                       textTransform: 'uppercase',
                       color: brand.turquoiseDeep,
                       bgcolor: brand.turquoiseTint,
@@ -191,7 +191,7 @@ export default function TrainingPanel({
                   {latestEpisode.episodeLabel} · {latestEpisode.durationLabel}
                 </Typography>
               </Box>
-              <Typography variant="cardTitle" sx={{ fontSize: 15.5, color: brand.ink }}>
+              <Typography variant="cardTitle" sx={{ fontSize: 16, color: brand.ink }}>
                 {latestEpisode.title}
               </Typography>
             </Box>

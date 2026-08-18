@@ -128,7 +128,7 @@ export default function StickyBar({
     px: 1.5,
     py: 1.75,
     fontFamily: '"Poppins", Arial, sans-serif',
-    fontSize: 14.5,
+    fontSize: 15,
     color: open ? '#ffffff' : 'rgba(255,255,255,0.7)',
     transition: 'color .16s ease',
     '&:hover': { color: '#ffffff' },
@@ -153,7 +153,7 @@ export default function StickyBar({
     color: brand.inkMuted,
   };
 
-  const menuItemSx = { gap: 1.25, py: 1.25, fontSize: 14.5, color: brand.ink };
+  const menuItemSx = { gap: 1.25, py: 1.25, fontSize: 15, color: brand.ink };
 
   return (
     <Box
@@ -256,7 +256,7 @@ export default function StickyBar({
                 sx={{
                   px: 1.5,
                   py: 1.75,
-                  fontSize: 14.5,
+                  fontSize: 15,
                   color: 'rgba(255,255,255,0.7)',
                   transition: 'color .16s ease',
                   '&:hover': { color: '#ffffff' },
@@ -378,7 +378,7 @@ export default function StickyBar({
                 py: 0.875,
                 borderRadius: '8px',
                 fontFamily: '"Poppins", Arial, sans-serif',
-                fontSize: 13.5,
+                fontSize: 14,
                 fontWeight: chipUrgent ? 600 : 400,
                 bgcolor: chipUrgent ? brand.turquoise : 'transparent',
                 color: chipUrgent ? brand.ink : 'rgba(255,255,255,0.72)',

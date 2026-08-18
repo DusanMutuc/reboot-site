@@ -7,10 +7,13 @@ import {
   HOME_MAX_WIDTH,
   type ContentSurface,
 } from '@/lib/homeTheme';
+import { AccentProvider } from './accent';
+import type { Accent } from './accentOption';
 import StickyBar from './StickyBar';
 import MeetingBand from './MeetingBand';
 import PrioritiesModule from './PrioritiesModule';
 import RequiredTrainingCard from './RequiredTrainingCard';
+import TrainingStandingCard from './TrainingStandingCard';
 import ProgressCard from './ProgressCard';
 import PodcastCard from './PodcastCard';
 import ContentBrowser from './ContentBrowser';
@@ -26,6 +29,7 @@ import type {
   OnePageExtras,
   Priority,
   RequiredTraining,
+  TrainingStanding,
 } from './types';
 
 /**
@@ -60,26 +64,33 @@ export default function MomentumShell({
   meetings,
   priorities,
   requiredTraining,
+  trainingStanding,
   recommended,
   content,
   volume = 'typical',
   surface = 'neutral',
+  accent = 'brand',
 }: {
   data: HomeData;
   extras: OnePageExtras;
   meetings: MeetingSlot[];
   priorities: Priority[];
   requiredTraining: RequiredTraining | null;
+  /** Fills the training slot when no course is assigned. */
+  trainingStanding: TrainingStanding;
   /** The relatedness algorithm's picks, shown as the browser's default view. */
   recommended: ContentItem[];
   content: ContentItem[];
   volume?: ContentVolume;
   /** Which candidate surface the content zone uses, for side-by-side review. */
   surface?: ContentSurface;
+  /** Whether the logo's red is in play, for side-by-side review. */
+  accent?: Accent;
 }) {
   const contentBg = contentSurfaces[surface] ?? contentSurfaces.neutral;
 
   return (
+    <AccentProvider accent={accent}>
     <Box sx={{ minHeight: '100dvh', bgcolor: brand.page, display: 'flex', flexDirection: 'column' }}>
       <StickyBar
         memberFirstName={data.memberFirstName}
@@ -115,20 +126,17 @@ export default function MomentumShell({
               id="numbers"
               sx={{
                 display: 'grid',
-                gridTemplateColumns: {
-                  xs: '1fr',
-                  md: requiredTraining ? 'repeat(2, minmax(0, 1fr))' : '1fr',
-                },
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
                 gap: { xs: 2.5, md: 3 },
                 alignItems: 'stretch',
               }}
             >
-              {requiredTraining ? <RequiredTrainingCard training={requiredTraining} /> : null}
-              <ProgressCard
-                metrics={data.metrics}
-                attendance={extras.attendance}
-                wide={!requiredTraining}
-              />
+              {requiredTraining ? (
+                <RequiredTrainingCard training={requiredTraining} />
+              ) : (
+                <TrainingStandingCard standing={trainingStanding} />
+              )}
+              <ProgressCard metrics={data.metrics} attendance={extras.attendance} />
             </Box>
           </Box>
         </Container>
@@ -165,6 +173,7 @@ export default function MomentumShell({
                 status={data.callStatus}
                 volume={volume}
                 surface={surface}
+                accent={accent}
               />
             </Box>
           </Container>
@@ -173,5 +182,6 @@ export default function MomentumShell({
 
       <HubFooter helpSteps={extras.helpSteps} links={data.utilityLinks} />
     </Box>
+    </AccentProvider>
   );
 }

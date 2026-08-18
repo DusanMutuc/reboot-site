@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Box, Typography } from '@mui/material';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import Rail, { RAIL_GAP } from './Rail';
 import { thumbFor } from './thumbnails';
 import type { CourseItem } from './types';
@@ -50,7 +50,7 @@ export default function CourseRail({
               scrollSnapAlign: 'start',
               display: 'flex',
               flexDirection: 'column',
-              borderRadius: '14px',
+              borderRadius: CARD_RADIUS,
               overflow: 'hidden',
               border: `1px solid ${started ? brand.turquoise : brand.border}`,
               bgcolor: brand.card,
@@ -83,7 +83,7 @@ export default function CourseRail({
                   borderRadius: '4px',
                   bgcolor: brand.turquoise,
                   color: brand.ink,
-                  fontSize: 10.5,
+                  fontSize: 10,
                   fontWeight: 700,
                   letterSpacing: '0.08em',
                   textTransform: 'uppercase',
@@ -97,7 +97,7 @@ export default function CourseRail({
               <Typography
                 className="cr-title"
                 sx={{
-                  fontSize: 16.5,
+                  fontSize: 17,
                   fontWeight: 600,
                   lineHeight: 1.3,
                   color: brand.ink,

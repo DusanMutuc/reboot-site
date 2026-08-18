@@ -46,7 +46,7 @@ export default function BrowseSection({
           display: 'inline-flex',
           alignItems: 'center',
           gap: 0.5,
-          fontSize: 14.5,
+          fontSize: 15,
           fontWeight: 500,
           color: brand.turquoiseDeep,
           '&:hover': { color: brand.ink },

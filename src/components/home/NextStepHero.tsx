@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Box, Button, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { NextStep } from './types';
 
 /**
@@ -30,7 +30,7 @@ export default function NextStepHero({ step }: { step: NextStep }) {
       sx={{
         bgcolor: brand.card,
         border: `1px solid ${brand.border}`,
-        borderRadius: '16px',
+        borderRadius: CARD_RADIUS,
         p: { xs: 3, md: 4 },
         animation: 'homeRise .34s ease-out both',
       }}
@@ -45,9 +45,9 @@ export default function NextStepHero({ step }: { step: NextStep }) {
       >
         <Box>
       <Typography
-        variant="sectionLabel"
+        variant="eyebrow"
         component="h2"
-        sx={{ fontSize: 12.5, letterSpacing: '0.13em', color: brand.turquoiseDeep, mb: 1.75 }}
+        sx={{ color: brand.turquoiseDeep, mb: 1.75 }}
       >
         {step.eyebrow}
       </Typography>
@@ -59,7 +59,7 @@ export default function NextStepHero({ step }: { step: NextStep }) {
         {step.title}
       </Typography>
 
-      <Typography sx={{ fontSize: 15.5, color: brand.inkSoft, mb: 2.75 }}>
+      <Typography sx={{ fontSize: 16, color: brand.inkSoft, mb: 2.75 }}>
         {step.detail}
       </Typography>
 
@@ -105,7 +105,7 @@ export default function NextStepHero({ step }: { step: NextStep }) {
           sx={{
             bgcolor: brand.slate,
             color: '#ffffff',
-            fontSize: 16.5,
+            fontSize: 17,
             px: 3.5,
             minHeight: 54,
             '&:hover': { bgcolor: '#000000' },
@@ -119,7 +119,7 @@ export default function NextStepHero({ step }: { step: NextStep }) {
             component={Link}
             href={step.altHref}
             sx={{
-              fontSize: 14.5,
+              fontSize: 15,
               color: brand.inkMuted,
               textDecorationLine: 'underline',
               textUnderlineOffset: '3px',
@@ -143,11 +143,8 @@ export default function NextStepHero({ step }: { step: NextStep }) {
             }}
           >
             <Typography
+              variant="kicker"
               sx={{
-                fontSize: 11.5,
-                fontWeight: 600,
-                letterSpacing: '0.09em',
-                textTransform: 'uppercase',
                 color: brand.inkMuted,
                 mb: 1.75,
               }}

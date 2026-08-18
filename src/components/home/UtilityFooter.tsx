@@ -15,9 +15,9 @@ export default function UtilityFooter({ links }: { links: UtilityLink[] }) {
       <Container maxWidth={false} sx={{ maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}>
         <Box sx={{ py: { xs: 3.5, md: 4 } }}>
           <Typography
-            variant="sectionLabel"
+            variant="eyebrow"
             component="h2"
-            sx={{ fontSize: 12.5, letterSpacing: '0.14em', color: brand.turquoise, mb: 2 }}
+            sx={{ color: brand.turquoise, mb: 2 }}
           >
             Everything else
           </Typography>
@@ -64,7 +64,7 @@ export default function UtilityFooter({ links }: { links: UtilityLink[] }) {
               justifyContent: 'space-between',
             }}
           >
-            <Typography sx={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)' }}>
+            <Typography sx={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>
               Real Estate Reboot Coaching
             </Typography>
             <Box sx={{ display: 'flex', gap: 2.5, flexWrap: 'wrap' }}>
@@ -72,7 +72,7 @@ export default function UtilityFooter({ links }: { links: UtilityLink[] }) {
                 component={Link}
                 href="/privacy-policy"
                 sx={{
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: 'rgba(255,255,255,0.5)',
                   '&:hover': { color: brand.turquoise },
                 }}
@@ -83,7 +83,7 @@ export default function UtilityFooter({ links }: { links: UtilityLink[] }) {
                 component={Link}
                 href="/support"
                 sx={{
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: 'rgba(255,255,255,0.5)',
                   '&:hover': { color: brand.turquoise },
                 }}

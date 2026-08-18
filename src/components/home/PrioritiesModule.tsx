@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { Priority } from './types';
 
 /**
@@ -38,14 +38,14 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
         sx={{
           bgcolor: brand.card,
           border: `1px solid ${brand.border}`,
-          borderRadius: '16px',
+          borderRadius: CARD_RADIUS,
           p: { xs: 3, md: 4 },
         }}
       >
         <Typography variant="slabTitle" sx={{ fontSize: 24, color: brand.ink, mb: 1 }}>
           Nothing set yet
         </Typography>
-        <Typography sx={{ fontSize: 15.5, color: brand.inkSoft }}>
+        <Typography sx={{ fontSize: 16, color: brand.inkSoft }}>
           Your priorities appear here after your next business review.
         </Typography>
       </Box>
@@ -62,7 +62,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
       sx={{
         bgcolor: brand.card,
         border: `1px solid ${brand.border}`,
-        borderRadius: '16px',
+        borderRadius: CARD_RADIUS,
         p: { xs: 3, md: 4 },
         animation: 'homeRise .34s ease-out both',
       }}
@@ -77,12 +77,10 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
       >
         <Box>
           <Typography
-            variant="sectionLabel"
+            variant="eyebrow"
             component="h2"
             sx={{
               display: 'block',
-              fontSize: 12.5,
-              letterSpacing: '0.13em',
               color: brand.turquoiseDeep,
               mb: 1.75,
             }}
@@ -100,7 +98,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
           {/* Stating what the first move costs is what lowers resistance for
               an audience that is short on patience. */}
           {active.detail ? (
-            <Typography sx={{ fontSize: 15.5, color: brand.inkSoft, mb: 3 }}>
+            <Typography sx={{ fontSize: 16, color: brand.inkSoft, mb: 3 }}>
               {active.detail}
             </Typography>
           ) : (
@@ -114,7 +112,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
               sx={{
                 bgcolor: brand.slate,
                 color: '#ffffff',
-                fontSize: 16.5,
+                fontSize: 17,
                 px: 3.5,
                 minHeight: 54,
                 '&:hover': { bgcolor: '#000000' },
@@ -123,7 +121,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
               Open the guide
             </Button>
           ) : (
-            <Typography sx={{ fontSize: 14.5, color: brand.inkMuted }}>
+            <Typography sx={{ fontSize: 15, color: brand.inkMuted }}>
               No guide for this one — your coach will talk it through on your next call.
             </Typography>
           )}
@@ -138,11 +136,8 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
           }}
         >
           <Typography
+            variant="kicker"
             sx={{
-              fontSize: 11.5,
-              fontWeight: 600,
-              letterSpacing: '0.09em',
-              textTransform: 'uppercase',
               color: brand.inkMuted,
               mb: 1.75,
             }}

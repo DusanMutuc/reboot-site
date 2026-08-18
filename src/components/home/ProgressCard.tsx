@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import LocalFireDepartmentRoundedIcon from '@mui/icons-material/LocalFireDepartmentRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { Attendance, Metric } from './types';
 
 /**
@@ -23,28 +23,22 @@ export default function ProgressCard({
   /** Spans the full row when the course card is absent — lay the figures out flat. */
   wide?: boolean;
 }) {
-  const pct = attendance.totalCount > 0
-    ? Math.round((attendance.attendedCount / attendance.totalCount) * 100)
-    : 0;
-
   return (
     <Box
       sx={{
         bgcolor: brand.card,
         border: `1px solid ${brand.border}`,
-        borderRadius: '14px',
+        borderRadius: CARD_RADIUS,
         p: { xs: 2.5, md: 3 },
         display: 'flex',
         flexDirection: 'column',
       }}
     >
       <Typography
-        variant="sectionLabel"
+        variant="eyebrow"
         component="div"
         sx={{
           display: 'block',
-          fontSize: 11.5,
-          letterSpacing: '0.12em',
           color: brand.inkMuted,
           mb: 2,
         }}
@@ -68,7 +62,7 @@ export default function ProgressCard({
             <Typography sx={{ fontSize: 12, color: brand.inkMuted, mb: 0.25 }}>
               {metric.label}
             </Typography>
-            <Typography variant="metricValue" sx={{ fontSize: 22, color: brand.ink }}>
+            <Typography variant="metricValue" sx={{ color: brand.ink }}>
               {metric.value}
             </Typography>
           </Box>
@@ -86,7 +80,7 @@ export default function ProgressCard({
           }}
         >
           <Typography sx={{ fontSize: 13, color: brand.inkSoft }}>
-            {attendance.attendedCount} of {attendance.totalCount} calls · {attendance.periodLabel}
+            {attendance.attendedCount} of {attendance.totalCount} calls
           </Typography>
           {attendance.streakLabel ? (
             <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, flexShrink: 0 }}>
@@ -94,16 +88,52 @@ export default function ProgressCard({
                 aria-hidden="true"
                 sx={{ fontSize: 15, color: brand.turquoiseDeep }}
               />
-              <Typography sx={{ fontSize: 12.5, color: brand.turquoiseDeep }}>
+              <Typography sx={{ fontSize: 13, color: brand.turquoiseDeep }}>
                 {attendance.streakLabel}
               </Typography>
             </Box>
           ) : null}
         </Box>
 
-        <Box sx={{ height: 5, bgcolor: '#e7ebea', borderRadius: 3, overflow: 'hidden', mb: 1.75 }}>
-          <Box sx={{ width: `${pct}%`, height: '100%', bgcolor: brand.turquoise }} />
-        </Box>
+        {attendance.recent.length > 0 ? (
+          <Box sx={{ mb: 1.75 }}>
+            <Box
+              role="img"
+              aria-label={`${attendance.attendedCount} of the last ${attendance.recent.length} meetings attended`}
+              sx={{ display: 'flex', gap: 0.75 }}
+            >
+              {attendance.recent.map((attended, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    flex: 1,
+                    height: 26,
+                    borderRadius: '6px',
+                    bgcolor: attended ? brand.turquoise : brand.card,
+                    border: attended ? 'none' : `1.5px solid ${brand.borderMuted}`,
+                  }}
+                />
+              ))}
+            </Box>
+
+            {/* The row has a direction; without these it is just eight shapes. */}
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 1,
+                mt: 0.75,
+              }}
+            >
+              <Typography sx={{ fontSize: 12, color: brand.inkMuted }}>
+                {attendance.recent.length} meetings ago
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: brand.inkMuted }}>Most recent</Typography>
+            </Box>
+          </Box>
+        ) : (
+          <Box sx={{ height: 5, bgcolor: '#e7ebea', borderRadius: 3, mb: 1.75 }} />
+        )}
 
         {/* A bordered control, not a text link: this is the only route to the
             tracker on the page, and the figures above give no sign they are
@@ -119,7 +149,7 @@ export default function ProgressCard({
             py: 1,
             borderRadius: '10px',
             border: `1px solid ${brand.borderStrong}`,
-            fontSize: 14.5,
+            fontSize: 15,
             fontWeight: 500,
             color: brand.ink,
             transition: 'border-color .16s ease, background-color .16s ease',

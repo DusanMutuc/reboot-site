@@ -84,7 +84,7 @@ export default function Rail({
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography sx={{ fontSize: 15.5, fontWeight: 600, color: brand.ink }}>{label}</Typography>
+          <Typography sx={{ fontSize: 16, fontWeight: 600, color: brand.ink }}>{label}</Typography>
           {sublabel ? (
             <Typography sx={{ fontSize: 13, color: brand.inkMuted, mt: 0.25 }}>
               {sublabel}
@@ -152,7 +152,7 @@ export default function Rail({
           >
             <ArrowForwardRoundedIcon sx={{ fontSize: 22 }} />
             <Typography
-              sx={{ fontSize: 13.5, fontWeight: 500, textAlign: 'center', px: 1.5, lineHeight: 1.35 }}
+              sx={{ fontSize: 14, fontWeight: 500, textAlign: 'center', px: 1.5, lineHeight: 1.35 }}
             >
               {endCap.label}
             </Typography>

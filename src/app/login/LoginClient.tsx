@@ -604,37 +604,44 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
           flex: 2,
           backgroundColor: '#2a2a2a',
           position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '2rem',
         }}
       >
         <div
           style={{
-            position: 'absolute',
-            top: '45%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             textAlign: 'center',
+            width: '100%',
           }}
         >
-          <div style={{ width: 600, height: 240, marginBottom: 24 }}>
-            <Image 
-              src={rebootLogo} 
-              alt="Reboot logo" 
-              fill 
-              style={{ objectFit: 'contain' }} 
-              priority 
-            />
-          </div>
+          <Image
+            src={rebootLogo}
+            alt="Reboot logo"
+            priority
+            sizes="(max-width: 1200px) 60vw, 600px"
+            style={{
+              width: '100%',
+              maxWidth: 600,
+              height: 'auto',
+              display: 'block',
+            }}
+          />
 
           <Typography
             variant="h2"
             style={{
               color: '#5cbca8',
               fontWeight: 'bold',
-              fontSize: '9rem',
-              marginLeft: '1rem',
+              fontSize: 'clamp(3rem, 7vw, 9rem)',
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+              marginTop: '0.06em',
             }}
           >
             MEMBER&apos;S HUB

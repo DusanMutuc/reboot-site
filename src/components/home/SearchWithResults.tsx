@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Box, InputAdornment, TextField, Typography } from '@mui/material';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import { brand } from '@/lib/homeTheme';
+import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import type { SearchItem } from './types';
 
 const MAX_VISIBLE = 5;
@@ -50,7 +50,7 @@ export default function SearchWithResults({
             ? {
                 '& .MuiOutlinedInput-root': {
                   fontSize: 19,
-                  borderRadius: '14px',
+                  borderRadius: CARD_RADIUS,
                   bgcolor: brand.card,
                   '& fieldset': { borderColor: brand.borderStrong, borderWidth: 2 },
                   '&:hover fieldset': { borderColor: brand.turquoise },
@@ -84,7 +84,7 @@ export default function SearchWithResults({
         >
           {visible.length === 0 ? (
             <Box sx={{ px: 1.75, py: 1.75 }}>
-              <Typography sx={{ fontSize: 14.5, color: brand.inkSoft }}>
+              <Typography sx={{ fontSize: 15, color: brand.inkSoft }}>
                 Nothing matches “{trimmed}”. Try a shorter word.
               </Typography>
             </Box>
@@ -107,7 +107,7 @@ export default function SearchWithResults({
                     '&:hover': { bgcolor: brand.turquoiseTint },
                   }}
                 >
-                  <Typography sx={{ fontSize: 14.5, fontWeight: 500, color: brand.ink, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 15, fontWeight: 500, color: brand.ink, minWidth: 0 }}>
                     {item.title}
                   </Typography>
                   <Typography sx={{ fontSize: 12, color: brand.inkMuted, flexShrink: 0 }}>
@@ -127,7 +127,7 @@ export default function SearchWithResults({
                   py: 1.25,
                   borderTop: `1px solid ${brand.border}`,
                   bgcolor: '#fbfcfc',
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: 500,
                   color: brand.turquoiseDeep,
                   '&:hover': { bgcolor: brand.turquoiseTint },
