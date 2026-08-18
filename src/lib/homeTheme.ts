@@ -14,7 +14,7 @@ const BODY_FONT_FAMILY = '"Poppins", "Helvetica Neue", Arial, sans-serif';
 const DISPLAY_FONT_FAMILY = '"League Spartan", "Poppins", Arial, sans-serif';
 
 /**
- * Three tiers of colour, and the rule that keeps them apart.
+ * Four tiers of colour, and the rule that keeps them apart.
  *
  * The surface has one saturated hue doing every job at once, which is why it
  * reads as quiet: turquoise marks what you can click, what you have finished,
@@ -34,6 +34,8 @@ const DISPLAY_FONT_FAMILY = '"League Spartan", "Poppins", Arial, sans-serif';
  *                         done-states, progress fills, active chips. Unchanged.
  *   3  STATUS (pos/neg)   reserved. Deltas and the green/amber/red member
  *                         status this business already runs on.
+ *   4  ENTITLEMENT (gold) what a role unlocks. Only ever on the gated thing
+ *                         itself — see the note on `gold` below.
  *
  * The load-bearing rule is tier 1 versus tier 3. `negative` (#c0492f) and the
  * coach-side "Red — Emergency" chip mean *something is wrong*, and that
@@ -67,6 +69,26 @@ export const brand = {
   redDeep: '#7e1a1b',
   /** The far end of a gradient, so a large band has depth. 13.30:1 with white. */
   redShadow: '#5e1314',
+
+  /**
+   * A fourth register: entitlement. It is not interaction, not brand, and not
+   * status — it says what this member's role unlocks, which none of the three
+   * tiers above can express without being misread. Legend is a real role in
+   * this codebase (it already gates course audiences), so this is a genuine
+   * category rather than decoration, which is the only reason it gets a hue.
+   *
+   * The discipline that applies to red applies here too: gold appears on the
+   * thing that is actually gated and nowhere else. Gold as a general accent is
+   * how a restrained surface starts looking like a loyalty scheme.
+   */
+  /** Deep enough to carry text. 5.04:1 on white, and 4.72:1 on `goldTint`. */
+  gold: '#8a6a1f',
+  /** Highlight in the sheen only — 2.11:1, so it never carries text or shape. */
+  goldBright: '#d9b551',
+  /** The row wash the gold sits on. */
+  goldTint: '#fbf4e3',
+  /** Edge for the gated row. 1.31:1, decorative — the label states the state. */
+  goldEdge: '#e6d0a0',
 
   ink: '#16211f',
   inkSoft: '#5b6a67',

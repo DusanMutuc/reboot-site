@@ -41,6 +41,11 @@ const ACCENTS = [
   { key: 'brand', label: 'Logo red accents' },
 ];
 
+const LEGEND_ACCESS = [
+  { key: 'standard', label: 'Not a legend · locked' },
+  { key: 'legend', label: 'Legend · unlocked' },
+];
+
 const SURFACES = [
   { key: 'none', label: 'No tint · banner only' },
   { key: 'soft', label: 'Soft · #eef2f1' },
@@ -107,6 +112,7 @@ export default function CompareStrip({
   surface,
   courseRow,
   accent,
+  legend,
 }: {
   currentPath: string;
   status: CallStatus;
@@ -120,6 +126,8 @@ export default function CompareStrip({
   courseRow?: string;
   /** Only the momentum variant carries the colour-treatment switch. */
   accent?: string;
+  /** Only the momentum variant carries the legend-role switch. */
+  legend?: string;
 }) {
 
   const qs = (overrides: Record<string, string>) => {
@@ -129,6 +137,7 @@ export default function CompareStrip({
     if (surface) params.set('surface', surface);
     if (courseRow) params.set('courses', courseRow);
     if (accent) params.set('accent', accent);
+    if (legend) params.set('legend', legend);
     Object.entries(overrides).forEach(([k, v]) => params.set(k, v));
     return `?${params.toString()}`;
   };
@@ -265,6 +274,23 @@ export default function CompareStrip({
               key={option.key}
               href={`${currentPath}${qs({ accent: option.key })}`}
               active={option.key === accent}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </Box>
+      ) : null}
+
+      {legend ? (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+          <Typography sx={{ fontSize: 13, color: brand.inkMuted, minWidth: 96 }}>
+            Legend role
+          </Typography>
+          {LEGEND_ACCESS.map((option) => (
+            <Chip
+              key={option.key}
+              href={`${currentPath}${qs({ legend: option.key })}`}
+              active={option.key === legend}
             >
               {option.label}
             </Chip>

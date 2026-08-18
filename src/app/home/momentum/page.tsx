@@ -12,6 +12,7 @@ import {
   placeholderRecommended,
 } from '@/components/home/contentPlaceholderData';
 import { parseAccent } from '@/components/home/accentOption';
+import { parseLegend } from '@/components/home/legendOption';
 import type { ContentSurface } from '@/lib/homeTheme';
 
 export const dynamic = 'force-dynamic';
@@ -25,11 +26,18 @@ export const dynamic = 'force-dynamic';
 export default async function MomentumPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; volume?: string; surface?: string; accent?: string }>;
+  searchParams: Promise<{
+    state?: string;
+    volume?: string;
+    surface?: string;
+    accent?: string;
+    legend?: string;
+  }>;
 }) {
-  const { state, volume, surface, accent } = await searchParams;
+  const { state, volume, surface, accent, legend } = await searchParams;
   const contentVolume = parseVolume(volume);
   const contentAccent = parseAccent(accent);
+  const legendAccess = parseLegend(legend);
   const meetingScenario = parseCallStatus(state);
   const contentSurface: ContentSurface =
     surface === 'none' || surface === 'soft' || surface === 'deep' || surface === 'tint'
@@ -61,6 +69,7 @@ export default async function MomentumPage({
       volume={contentVolume}
       surface={contentSurface}
       accent={contentAccent}
+      legendAccess={legendAccess}
     />
   );
 }

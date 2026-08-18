@@ -9,6 +9,7 @@ import {
 } from '@/lib/homeTheme';
 import { AccentProvider } from './accent';
 import type { Accent } from './accentOption';
+import type { LegendAccess } from './legendOption';
 import StickyBar from './StickyBar';
 import MeetingBand from './MeetingBand';
 import PrioritiesModule from './PrioritiesModule';
@@ -70,6 +71,7 @@ export default function MomentumShell({
   volume = 'typical',
   surface = 'neutral',
   accent = 'brand',
+  legendAccess = 'standard',
 }: {
   data: HomeData;
   extras: OnePageExtras;
@@ -86,6 +88,8 @@ export default function MomentumShell({
   surface?: ContentSurface;
   /** Whether the logo's red is in play, for side-by-side review. */
   accent?: Accent;
+  /** Whether the member holds the legend role, for side-by-side review. */
+  legendAccess?: LegendAccess;
 }) {
   const contentBg = contentSurfaces[surface] ?? contentSurfaces.neutral;
 
@@ -98,6 +102,7 @@ export default function MomentumShell({
         nextCall={data.nextCall}
         bookingOptions={data.bookingOptions}
         roomOptions={data.roomOptions}
+        isLegend={legendAccess === 'legend'}
         calendar={data.calendar}
       />
 
@@ -174,6 +179,7 @@ export default function MomentumShell({
                 volume={volume}
                 surface={surface}
                 accent={accent}
+                legend={legendAccess}
               />
             </Box>
           </Container>
