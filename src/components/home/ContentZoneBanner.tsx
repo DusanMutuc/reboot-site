@@ -103,40 +103,21 @@ export default function ContentZoneBanner() {
         maxWidth={false}
         sx={{ position: 'relative', zIndex: 1, maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1 }}>
-          <Box
-            aria-hidden="true"
-            sx={{
-              width: 18,
-              height: 3,
-              bgcolor: isBrand ? 'rgba(255,255,255,0.92)' : brand.turquoise,
-              borderRadius: 2,
-            }}
-          />
-          {/* Not turquoise on the red field: at 12px it is body-sized for
-              contrast purposes, and turquoise on this red lands at 4.49:1 —
-              under the 4.5 it would need. White clears it outright. */}
-          <Typography
-            variant="eyebrow"
-            sx={{
-              display: 'block',
-              color: isBrand ? 'rgba(255,255,255,0.92)' : brand.turquoise,
-            }}
-          >
-            Training resources
-          </Typography>
-        </Box>
-
+        {/* The eyebrow and the rule are gone. "Training resources" over
+            "Have a look around" was two labels doing one job, and neither said
+            what this is. It is a search engine; naming it that is the whole
+            instruction, and the name has to carry the weight the eyebrow was
+            borrowing. */}
         <Typography
           variant="slabTitle"
           component="h2"
-          sx={{ fontSize: { xs: 27, md: 34 }, color: '#ffffff', mb: 0.75 }}
+          sx={{ fontSize: { xs: 32, md: 44 }, color: '#ffffff', mb: 1 }}
         >
-          Have a look around
+          The Reboot Search Engine
         </Typography>
 
-        <Typography sx={{ fontSize: 15, color: 'rgba(255,255,255,0.74)' }}>
-          Trainings, playbooks, replays and the podcast.
+        <Typography sx={{ fontSize: { xs: 15.5, md: 17 }, color: 'rgba(255,255,255,0.8)' }}>
+          Find every system, training, playbook and replay.
         </Typography>
       </Container>
     </Box>

@@ -5,8 +5,6 @@ import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
 import StickyBar from './StickyBar';
 import RightNowBand from './RightNowBand';
 import { CallsRow, HubFooter, ProgressRegion, TrainingHero } from './HubSections';
-import CompareStrip from './CompareStrip';
-import type { ContentVolume } from './onePagePlaceholderData';
 import type { HomeData, OnePageExtras } from './types';
 
 /**
@@ -25,11 +23,9 @@ import type { HomeData, OnePageExtras } from './types';
 export default function HubShell({
   data,
   extras,
-  volume = 'typical',
 }: {
   data: HomeData;
   extras: OnePageExtras;
-  volume?: ContentVolume;
 }) {
   const latest = extras.episodes.length > 0 ? extras.episodes[0] : null;
 
@@ -76,8 +72,6 @@ export default function HubShell({
               wins={extras.wins}
               achievements={extras.achievements}
             />
-
-            <CompareStrip currentPath="/home/hub" status={data.callStatus} volume={volume} />
           </Box>
         </Container>
       </Box>

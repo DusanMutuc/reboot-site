@@ -143,7 +143,7 @@ const ChapterRow = memo(function ChapterRow({
       <Typography
         sx={{
           flex: 1,
-          fontSize: 13,
+          fontSize: 14,
           fontWeight: 600,
           color: selected ? 'teal.700' : 'text.primary',
           overflow: 'hidden',
@@ -197,7 +197,7 @@ const LessonCard = memo(function LessonCard({
         <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography
             sx={{
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: 700,
               lineHeight: 1.3,
               color: selectedLesson ? 'teal.700' : 'text.primary',

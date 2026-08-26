@@ -4,8 +4,20 @@ import { useState } from 'react';
 import { Box, Button, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
-import { brand, CARD_RADIUS } from '@/lib/homeTheme';
+import { brand } from '@/lib/homeTheme';
 import type { Priority } from './types';
+
+/**
+ * Line box shared by the two column labels, matching `sectionLabel`'s own 1.1
+ * against the left label's size.
+ *
+ * The labels head adjacent columns, so their baselines have to agree, and they
+ * are deliberately different sizes — one names the section, the other counts
+ * it — so matching `fontSize` is not the fix. Matching the line box is: two
+ * sizes of one face, centred in boxes of equal height, land within a pixel of
+ * the same baseline.
+ */
+const LABEL_LINE_BOX = { xs: '18.7px', md: '19.8px' };
 
 /**
  * The member's three current action steps.
@@ -32,16 +44,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
 
   if (priorities.length === 0) {
     return (
-      <Box
-        component="section"
-        id="next"
-        sx={{
-          bgcolor: brand.card,
-          border: `1px solid ${brand.border}`,
-          borderRadius: CARD_RADIUS,
-          p: { xs: 3, md: 4 },
-        }}
-      >
+      <Box>
         <Typography variant="slabTitle" sx={{ fontSize: 24, color: brand.ink, mb: 1 }}>
           Nothing set yet
         </Typography>
@@ -56,17 +59,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
   const doneCount = priorities.filter((p) => p.status === 'done').length;
 
   return (
-    <Box
-      component="section"
-      id="next"
-      sx={{
-        bgcolor: brand.card,
-        border: `1px solid ${brand.border}`,
-        borderRadius: CARD_RADIUS,
-        p: { xs: 3, md: 4 },
-        animation: 'homeRise .34s ease-out both',
-      }}
-    >
+    <Box>
       <Box
         sx={{
           display: 'grid',
@@ -77,15 +70,16 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
       >
         <Box>
           <Typography
-            variant="eyebrow"
-            component="h2"
+            variant="sectionLabel"
+            component="h3"
             sx={{
-              display: 'block',
+              fontSize: { xs: 17, md: 18 },
+              lineHeight: LABEL_LINE_BOX,
               color: brand.turquoiseDeep,
               mb: 1.75,
             }}
           >
-            What you&apos;re working on now
+            Your priorities and goals
           </Typography>
 
           <Typography
@@ -118,7 +112,7 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
                 '&:hover': { bgcolor: '#000000' },
               }}
             >
-              Open the guide
+              Open the system
             </Button>
           ) : (
             <Typography sx={{ fontSize: 15, color: brand.inkMuted }}>
@@ -135,9 +129,19 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
             pt: { xs: 3, md: 0 },
           }}
         >
+          {/* This list is the sprint. It was set at 11px against a 32px
+              title and read as a footnote to the thing it actually contains.
+              Rendered as a block, because `sectionLabel` is not in MUI's
+              variant map and so falls back to a span — on which a line box
+              cannot be set and a bottom margin is silently dropped, which is
+              what left this label both off the neighbouring baseline and
+              sitting three pixels above its own list. */}
           <Typography
-            variant="kicker"
+            variant="sectionLabel"
+            component="p"
             sx={{
+              fontSize: 15,
+              lineHeight: LABEL_LINE_BOX,
               color: brand.inkMuted,
               mb: 1.75,
             }}
@@ -164,8 +168,8 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
                     width: '100%',
                     textAlign: 'left',
                     cursor: 'pointer',
-                    px: 1.25,
-                    py: 1.25,
+                    px: 1.375,
+                    py: 1.5,
                     borderRadius: '9px',
                     border: `1px solid ${isActive ? brand.turquoise : 'transparent'}`,
                     bgcolor: isActive ? brand.turquoiseTint : 'transparent',
@@ -176,9 +180,9 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
                   <Box
                     aria-hidden="true"
                     sx={{
-                      mt: 0.125,
-                      width: 16,
-                      height: 16,
+                      mt: 0.25,
+                      width: 19,
+                      height: 19,
                       flexShrink: 0,
                       borderRadius: '50%',
                       border: `2px solid ${done ? brand.turquoise : brand.borderStrong}`,
@@ -187,14 +191,14 @@ export default function PrioritiesModule({ priorities }: { priorities: Priority[
                       placeItems: 'center',
                     }}
                   >
-                    {done ? <CheckRoundedIcon sx={{ fontSize: 11, color: brand.ink }} /> : null}
+                    {done ? <CheckRoundedIcon sx={{ fontSize: 13, color: brand.ink }} /> : null}
                   </Box>
 
                   <Typography
                     sx={{
-                      fontSize: 14,
+                      fontSize: 16,
                       lineHeight: 1.4,
-                      fontWeight: isActive ? 600 : 400,
+                      fontWeight: isActive ? 600 : 500,
                       color: done ? brand.inkMuted : brand.ink,
                       textDecoration: done ? 'line-through' : 'none',
                     }}

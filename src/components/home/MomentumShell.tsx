@@ -12,17 +12,13 @@ import type { Accent } from './accentOption';
 import type { LegendAccess } from './legendOption';
 import StickyBar from './StickyBar';
 import MeetingBand from './MeetingBand';
-import PrioritiesModule from './PrioritiesModule';
-import RequiredTrainingCard from './RequiredTrainingCard';
-import TrainingStandingCard from './TrainingStandingCard';
-import ProgressCard from './ProgressCard';
-import PodcastCard from './PodcastCard';
+import SprintCard from './SprintCard';
+import StatsCard from './ProgressCard';
+import AttendanceCard from './AttendanceCard';
 import ContentBrowser from './ContentBrowser';
 import ContentZoneBanner from './ContentZoneBanner';
 import SearchWithResults from './SearchWithResults';
 import { HubFooter } from './HubSections';
-import CompareStrip from './CompareStrip';
-import type { ContentVolume } from './onePagePlaceholderData';
 import type {
   ContentItem,
   HomeData,
@@ -42,10 +38,10 @@ import type {
  * is expanded at a time, so it is still "do this or not" rather than a menu.
  *
  *   meetings          both required meetings; unbooked is a state, not a gap
- *   priorities        three action steps, swappable, one expanded
- *   training tier     assigned training + the member's numbers
+ *   60-day sprint     the priorities and the required training, one card
+ *   stats, attendance two reports, side by side
  *   ------------------ content zone ------------------
- *   search, browse, podcast
+ *   search, browse
  *
  * Nothing in zone one is shaped like a shelf. Content appears there only when
  * it is attached to something the member owes — the guide written for an open
@@ -53,11 +49,12 @@ import type {
  * as the browse grid below, and two identical offers either side of the break
  * is what stopped the break meaning anything.
  *
- * Zone two holds three objects and no more: a field to type into, one place to
- * browse, and the podcast. Recommendations belong on this side — relatedness
- * is a resemblance, not an obligation — but as the browser's default view
- * rather than a second collection, which is what kept the zone feeling like
- * loose parts.
+ * Zone two holds two objects and no more: a field to type into and one place
+ * to browse. The podcast block is gone — episodes stay reachable through the
+ * search engine, which is the only reason they were ever on this page.
+ * Recommendations belong on this side — relatedness is a resemblance, not an
+ * obligation — but as the browser's default view rather than a second
+ * collection, which is what kept the zone feeling like loose parts.
  */
 export default function MomentumShell({
   data,
@@ -68,10 +65,10 @@ export default function MomentumShell({
   trainingStanding,
   recommended,
   content,
-  volume = 'typical',
   surface = 'neutral',
   accent = 'brand',
   legendAccess = 'standard',
+  year,
 }: {
   data: HomeData;
   extras: OnePageExtras;
@@ -83,13 +80,14 @@ export default function MomentumShell({
   /** The relatedness algorithm's picks, shown as the browser's default view. */
   recommended: ContentItem[];
   content: ContentItem[];
-  volume?: ContentVolume;
   /** Which candidate surface the content zone uses, for side-by-side review. */
   surface?: ContentSurface;
   /** Whether the logo's red is in play, for side-by-side review. */
   accent?: Accent;
   /** Whether the member holds the legend role, for side-by-side review. */
   legendAccess?: LegendAccess;
+  /** Calendar year used by the live KPI snapshot. */
+  year: number;
 }) {
   const contentBg = contentSurfaces[surface] ?? contentSurfaces.neutral;
 
@@ -121,14 +119,16 @@ export default function MomentumShell({
               gap: { xs: 5, md: 8 },
             }}
           >
-            <PrioritiesModule priorities={priorities} />
+            <SprintCard
+              priorities={priorities}
+              requiredTraining={requiredTraining}
+              trainingStanding={trainingStanding}
+            />
 
-            {/* Assigned training beside the member's numbers. The unfinished
-                course card is gone — one learning card is enough, and the
-                numbers earn the second slot rather than a section of their own. */}
+            {/* Two reports, side by side. They answer different questions —
+                what you produced, and whether you turned up — and sharing one
+                card meant neither got a heading big enough to read. */}
             <Box
-              component="section"
-              id="numbers"
               sx={{
                 display: 'grid',
                 gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
@@ -136,12 +136,8 @@ export default function MomentumShell({
                 alignItems: 'stretch',
               }}
             >
-              {requiredTraining ? (
-                <RequiredTrainingCard training={requiredTraining} />
-              ) : (
-                <TrainingStandingCard standing={trainingStanding} />
-              )}
-              <ProgressCard metrics={data.metrics} attendance={extras.attendance} />
+              <StatsCard metrics={data.metrics} year={year} />
+              <AttendanceCard attendance={extras.coachingAttendance} />
             </Box>
           </Box>
         </Container>
@@ -166,27 +162,19 @@ export default function MomentumShell({
                   "Or look something up" was continuation copy working against
                   the break it sat on. */}
               <Box component="section" id="training">
-                <SearchWithResults index={extras.searchIndex} large />
+                <SearchWithResults index={extras.searchIndex} large live />
               </Box>
 
               <ContentBrowser items={content} recommended={recommended} />
-
-              <PodcastCard episodes={extras.episodes} />
-
-              <CompareStrip
-                currentPath="/home/momentum"
-                status={data.callStatus}
-                volume={volume}
-                surface={surface}
-                accent={accent}
-                legend={legendAccess}
-              />
             </Box>
           </Container>
         </Box>
       </Box>
 
-      <HubFooter helpSteps={extras.helpSteps} links={data.utilityLinks} />
+      {/* Flush: the content zone is a full-bleed tinted surface, so the
+          footer's usual leading margin would show a strip of page background
+          between two committed colours. */}
+      <HubFooter helpSteps={extras.helpSteps} links={data.utilityLinks} flush />
     </Box>
     </AccentProvider>
   );

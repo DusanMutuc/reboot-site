@@ -83,7 +83,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
         .eq('user_id', user.id);
 
       if (error) {
-        router.push(redirectTo || '/dashboard');
+        router.push(redirectTo || '/home');
         return;
       }
 
@@ -92,7 +92,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
       setError(`Role check failed: ${message}`);
-      router.push(redirectTo || '/dashboard');
+      router.push(redirectTo || '/home');
     }
   };
 

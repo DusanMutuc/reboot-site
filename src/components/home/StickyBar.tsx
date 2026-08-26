@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Box,
   Container,
@@ -25,6 +26,7 @@ import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
+import { supabase } from '@/lib/supabaseClient';
 import type { BookingOption, CalendarLink, CallStatus, NextCall, RoomOption } from './types';
 
 /**
@@ -129,12 +131,31 @@ export default function StickyBar({
   calendar = null,
   isLegend = false,
 }: Props) {
+  const router = useRouter();
   const [showChip, setShowChip] = useState(false);
   const [callsAnchor, setCallsAnchor] = useState<HTMLElement | null>(null);
   const [trainingAnchor, setTrainingAnchor] = useState<HTMLElement | null>(null);
   const [accountAnchor, setAccountAnchor] = useState<HTMLElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const hasCallsMenu = bookingOptions.length > 0 || roomOptions.length > 0 || calendar !== null;
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+
+    setSigningOut(true);
+    setAccountAnchor(null);
+    setDrawerOpen(false);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error('[momentum-home] sign out', error);
+      setSigningOut(false);
+      return;
+    }
+
+    router.replace('/login');
+    router.refresh();
+  };
 
   // Chip appears only once the band itself is off screen, so the call-to-action
   // is never duplicated on the first screen.
@@ -272,7 +293,7 @@ export default function StickyBar({
                 aria-expanded={Boolean(callsAnchor)}
                 sx={navButtonSx(Boolean(callsAnchor))}
               >
-                Calls
+                Call links
                 <ExpandMoreRoundedIcon
                   sx={{
                     fontSize: 17,
@@ -295,7 +316,7 @@ export default function StickyBar({
               aria-expanded={Boolean(trainingAnchor)}
               sx={navButtonSx(Boolean(trainingAnchor))}
             >
-              Training
+              Training library
               <ExpandMoreRoundedIcon
                 sx={{
                   fontSize: 17,
@@ -527,17 +548,13 @@ export default function StickyBar({
             <Typography sx={{ ...groupHeadingSx, pb: 1.25 }}>
               Signed in as {memberFirstName}
             </Typography>
-            {/* Deliberately thin: these are the destinations that exist today.
-                Sign out needs `supabase.auth.signOut()` when this is wired to
-                real data — see src/app/access-removed/AccessRemovedClient.tsx. */}
             <MenuItem
-              component={Link}
-              href="#"
-              onClick={() => setAccountAnchor(null)}
+              onClick={handleSignOut}
+              disabled={signingOut}
               sx={{ ...menuItemSx, borderTop: `1px solid ${brand.border}` }}
             >
               <LogoutRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />
-              Sign out
+              {signingOut ? 'Signing out…' : 'Sign out'}
             </MenuItem>
           </Menu>
 
@@ -680,9 +697,9 @@ export default function StickyBar({
             </MenuItem>
           ))}
 
-          <MenuItem component={Link} href="#" onClick={() => setDrawerOpen(false)} sx={menuItemSx}>
+          <MenuItem onClick={handleSignOut} disabled={signingOut} sx={menuItemSx}>
             <LogoutRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />
-            Sign out
+            {signingOut ? 'Signing out…' : 'Sign out'}
           </MenuItem>
         </Box>
       </Drawer>

@@ -120,6 +120,33 @@ export type Attendance = {
   recent: boolean[];
 };
 
+/**
+ * One line of the coaching attendance card.
+ *
+ * The denominator and markers come from the member's actual attendance-backed
+ * meeting records for the active cycle. They are not programme quotas.
+ *
+ * The business review is deliberately absent — the band at the top of the page
+ * already owns it, and one-per-period is not a figure worth a row.
+ */
+export type AttendanceRow = {
+  label: string;
+  attended: number;
+  total: number;
+  /** Oldest first. Present on live data; legacy design fixtures omit it. */
+  meetings?: Array<{
+    id: string;
+    dateLabel: string;
+    attended: boolean;
+  }>;
+};
+
+export type CoachingAttendance = {
+  /** e.g. "Last 60 days". */
+  periodLabel: string;
+  rows: AttendanceRow[];
+};
+
 export type HelpStep = {
   title: string;
   detail: string;
@@ -160,6 +187,8 @@ export type ContentItem = {
   metaLabel: string;
   href: string;
   thumbIndex: number;
+  /** Live catalogue artwork. Placeholder variants continue to use thumbIndex. */
+  thumbnailUrl?: string | null;
   categories: ContentCategory[];
   progressPct: number | null;
 };
@@ -236,6 +265,10 @@ export type MeetingSlot = {
   imminent: boolean;
   /** Neutral context, never pressure. Null when there is nothing to say. */
   prepLabel: string | null;
+  /** Present only for a real upcoming Business Review that can accept prep. */
+  prepHref: string | null;
+  /** Changes the prep action from a task into a review/update action. */
+  prepSubmitted: boolean;
 };
 
 /**
@@ -272,6 +305,26 @@ export type TrainingPart = {
 export type RequiredTraining = {
   title: string;
   href: string;
+  /**
+   * The course's own artwork, resolved from `hero_image` — the same file the
+   * library shows, deliberately.
+   *
+   * It is drawn small here, and that is the whole design. Cover art earns its
+   * place in a catalogue by helping someone choose; in this block there is
+   * nothing to choose, because the course is assigned and there is one of
+   * them. What art can still do is identify — this is the object you saw in
+   * the library — and identification only works if it is the same picture in
+   * both places, which rules out anything commissioned for this slot alone.
+   *
+   * That also disposes of the title collision. These heroes are title cards,
+   * with the course name set into the picture, which reads as a duplicate of
+   * the heading beside it only while the lettering is large enough to read.
+   * Around 128px it stops being read as type, the way album art does.
+   *
+   * Null falls back to a plain tile. The block must not depend on a picture
+   * existing: a course with no hero is a normal state, not a broken one.
+   */
+  heroUrl: string | null;
   /**
    * In running order. Counts, the next part and the time remaining are all
    * derived, never stored — total runtime used to be a field here and it
@@ -347,6 +400,8 @@ export type OnePageExtras = {
   wins: Win[];
   achievements: Achievement[];
   attendance: Attendance;
+  /** The rebuilt, named-row attendance. `attendance` still serves the older shells. */
+  coachingAttendance: CoachingAttendance;
   helpSteps: HelpStep[];
   searchIndex: SearchItem[];
 };

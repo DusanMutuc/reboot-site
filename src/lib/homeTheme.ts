@@ -134,6 +134,22 @@ export const HOME_MAX_WIDTH = 1180;
 export const CARD_RADIUS = '14px';
 export const HOME_GUTTER = { xs: 20, md: 32 } as const;
 
+/**
+ * Heading-block height for the two report cards that sit side by side in the
+ * momentum layout — stats and attendance.
+ *
+ * Attendance carries a period line under its title and stats does not, so left
+ * to themselves the two cards start their first data row twenty-five pixels
+ * apart, which is exactly the kind of difference a reader feels without being
+ * able to name. Holding both blocks to one height also makes the two cards the
+ * same natural height, which closes the stretch gap that used to open above
+ * "See all your stats" — the cards were only equal-height because the grid was
+ * forcing it.
+ *
+ * Desktop only: below md they stack, so there is nothing to align against.
+ */
+export const REPORT_HEADING_HEIGHT = 48;
+
 declare module '@mui/material/styles' {
   interface TypographyVariants {
     slabTitle: React.CSSProperties;

@@ -64,6 +64,7 @@ content_nodes
     │       └── smart_docs
     ├── content_node_roles ── roles
     ├── user_course_visibility ── profiles
+    ├── user_training_assignments ── profiles / coaching_notes_base
     ├── course_sort_orders
     └── user_node_progress ── profiles
 ```
@@ -97,12 +98,19 @@ Additional timing, label, notes, `settings`, and `data` fields support rendering
 
 - Role-based audience: `content_node_roles`.
 - Per-user grants for limited courses: `user_course_visibility`.
+- Explicit 60-day-sprint assignments: `user_training_assignments`. Assignment is distinct from
+  visibility and progress; one active row is allowed per member and coaching note.
 - User progress: `user_node_progress`, status `not_started`, `in_progress`, or `completed`.
 - Access checks: `can_user_access_course` and `can_user_access_node_via_course`.
 - Mutations: `mark_node_started` and `mark_completed_and_cascade`.
 - Unlock calculations: `get_child_unlock_status` and `get_child_unlock_status_bulk`.
 
 Do not set progress rows directly when an RPC can apply cascading rules.
+
+Assigning a course uses `set_user_training_assignment`; removing it uses
+`end_user_training_assignment`. Both are service-role-only RPCs reached through the website API.
+An assignment grants limited-course visibility but ending it does not revoke access, because the
+same visibility row may predate the assignment.
 
 ### Library roots
 

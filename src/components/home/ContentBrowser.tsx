@@ -49,6 +49,11 @@ export default function ContentBrowser({
     recommended.length > 0 ? 'for-you' : 'all',
   );
 
+  const availableCategories = useMemo(
+    () => new Set(items.flatMap((item) => item.categories)),
+    [items],
+  );
+
   const filtered = useMemo(() => {
     if (category === 'for-you') return recommended;
     if (category === 'all') return items;
@@ -67,9 +72,11 @@ export default function ContentBrowser({
           mb: 1.25,
         }}
       >
-        {CATEGORIES.filter(
-          (option) => option.key !== 'for-you' || recommended.length > 0,
-        ).map((option) => {
+        {CATEGORIES.filter((option) => {
+          if (option.key === 'all') return true;
+          if (option.key === 'for-you') return recommended.length > 0;
+          return availableCategories.has(option.key);
+        }).map((option) => {
           const isActive = option.key === category;
           return (
             <Box
@@ -105,7 +112,7 @@ export default function ContentBrowser({
       <Typography
         sx={{ minHeight: 22, mb: 2, fontSize: 14, lineHeight: '22px', color: brand.inkMuted }}
       >
-        {category === 'for-you' ? 'Picked from what you’re working on now.' : ''}
+        {category === 'for-you' ? 'Picked from your 60-day sprint.' : ''}
       </Typography>
 
       {filtered.length === 0 ? (
@@ -143,35 +150,47 @@ export default function ContentBrowser({
               <Box
                 sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', bgcolor: '#e7ebea' }}
               >
-                <Image
-                  src={thumbFor(entry.thumbIndex).src}
-                  alt=""
-                  aria-hidden="true"
-                  fill
-                  quality={55}
-                  sizes="(max-width: 900px) 50vw, 280px"
-                  style={{
-                    objectFit: 'cover',
-                    objectPosition: thumbFor(entry.thumbIndex).objectPosition,
-                  }}
-                />
-                <Typography
-                  component="span"
-                  sx={{
-                    position: 'absolute',
-                    right: 6,
-                    bottom: 6,
-                    px: 0.75,
-                    py: 0.125,
-                    borderRadius: '4px',
-                    bgcolor: 'rgba(18,20,20,0.78)',
-                    color: '#ffffff',
-                    fontSize: 11,
-                    fontWeight: 500,
-                  }}
-                >
-                  {entry.metaLabel}
-                </Typography>
+                {entry.thumbnailUrl ? (
+                  <Box
+                    component="img"
+                    src={entry.thumbnailUrl}
+                    alt=""
+                    aria-hidden="true"
+                    sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Image
+                    src={thumbFor(entry.thumbIndex).src}
+                    alt=""
+                    aria-hidden="true"
+                    fill
+                    quality={55}
+                    sizes="(max-width: 900px) 50vw, 280px"
+                    style={{
+                      objectFit: 'cover',
+                      objectPosition: thumbFor(entry.thumbIndex).objectPosition,
+                    }}
+                  />
+                )}
+                {entry.metaLabel ? (
+                  <Typography
+                    component="span"
+                    sx={{
+                      position: 'absolute',
+                      right: 6,
+                      bottom: 10,
+                      px: 0.75,
+                      py: 0.125,
+                      borderRadius: '4px',
+                      bgcolor: 'rgba(18,20,20,0.78)',
+                      color: '#ffffff',
+                      fontSize: 11,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {entry.metaLabel}
+                  </Typography>
+                ) : null}
 
                 {entry.typeLabel === 'Training' ? (
                   <Typography
@@ -179,7 +198,7 @@ export default function ContentBrowser({
                     sx={{
                       position: 'absolute',
                       left: 6,
-                      bottom: 6,
+                      bottom: 10,
                       px: 0.75,
                       py: 0.25,
                       borderRadius: '4px',
@@ -194,15 +213,32 @@ export default function ContentBrowser({
                     Training
                   </Typography>
                 ) : null}
-              </Box>
 
-              {entry.progressPct !== null ? (
-                <Box sx={{ height: 4, bgcolor: '#e7ebea' }}>
+                {/* On the artwork, not under it. As a sibling block this added
+                    four pixels to every card that had progress and none to the
+                    rest, so within a single row the kickers and titles sat on
+                    different lines — a wobble you can see across the grid
+                    without being able to point at what is causing it. Riding
+                    the thumbnail costs no layout at all, and it matches the
+                    required-training card, which has always drawn it this
+                    way. */}
+                {entry.progressPct !== null ? (
                   <Box
-                    sx={{ width: `${entry.progressPct}%`, height: '100%', bgcolor: brand.turquoise }}
-                  />
-                </Box>
-              ) : null}
+                    sx={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: 5,
+                      bgcolor: 'rgba(18,20,20,0.35)',
+                    }}
+                  >
+                    <Box
+                      sx={{ width: `${entry.progressPct}%`, height: '100%', bgcolor: brand.turquoise }}
+                    />
+                  </Box>
+                ) : null}
+              </Box>
 
               <Box sx={{ p: 1.5 }}>
                 <Typography

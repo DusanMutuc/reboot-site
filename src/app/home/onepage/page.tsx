@@ -33,7 +33,6 @@ export default async function OnePagePage({
     <OnePageShell
       data={data}
       extras={getOnePageExtras(contentVolume)}
-      volume={contentVolume}
     />
   );
 }

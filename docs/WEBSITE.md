@@ -141,6 +141,7 @@ The partnership handlers call `await requireAdmin()` but do not inspect the retu
 | `/api/library/slug` | GET | User | Resolve node ID to accessible slug |
 | `/api/nodes/[nodeId]/blocks` | GET | User | Authorized block list |
 | `/api/progress` | POST | User | Mark node started/completed |
+| `/api/training-assignments` | GET, PUT, DELETE | Coach/admin | Manage one required course per member coaching cycle |
 | `/api/podcast/episodes` | GET | User | Podcast episodes |
 | `/api/my-schedule` | GET | Session | Coach links and schedule |
 | `/api/user/assistant` | GET | Session | Current assistant contact |
@@ -169,6 +170,7 @@ All use `requireUser`.
 | `/api/auth/clear-first-login-flag` | POST | Session | Clear `must_reset_password` Auth metadata |
 | `/api/cron/sync-business-audit-meetings` | GET | Bearer `CRON_SECRET` | Reconcile future GHL Business Review and Implementation appointments with site meetings and reviews |
 | `/api/cron/sync-podcasts` | GET | Bearer `CRON_SECRET` | Sync Transistor episodes into `resources` |
+| `/api/cron/sync-resource-thumbnails` | GET | Bearer `CRON_SECRET` | Fill missing resource thumbnails from Vimeo, Transistor, and uploaded images |
 | `/api/ghl/create-assistant` | POST | `x-reboot-webhook-secret` | Create/update assistant account from GHL tags |
 
 ## External integrations

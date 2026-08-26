@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import { brand, CARD_RADIUS } from '@/lib/homeTheme';
+import { brand } from '@/lib/homeTheme';
 import type { TrainingStanding } from './types';
 
 /**
@@ -21,26 +21,15 @@ export default function TrainingStandingCard({ standing }: { standing: TrainingS
   const { lastCompleted, completedCount } = standing;
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: brand.card,
-        border: `1px solid ${brand.border}`,
-        borderRadius: CARD_RADIUS,
-        p: { xs: 2.5, md: 3 },
-        transition: 'border-color .16s ease',
-        '&:hover, &:focus-within': { borderColor: brand.turquoise },
-      }}
-    >
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       {/* Muted, not turquoise: on this page the turquoise eyebrow is reserved
           for something being asked of the member. */}
       <Typography
-        variant="eyebrow"
-        component="div"
-        sx={{ display: 'block', color: brand.inkMuted, mb: 1.5 }}
+        variant="sectionLabel"
+        component="h3"
+        sx={{ fontSize: { xs: 17, md: 18 }, color: brand.inkMuted, mb: 1.5 }}
       >
-        Your training
+        Required core foundational video to watch
       </Typography>
 
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -50,13 +39,13 @@ export default function TrainingStandingCard({ standing }: { standing: TrainingS
       </Typography>
 
       <Typography sx={{ fontSize: 14, color: brand.inkSoft, maxWidth: 380 }}>
-        Your coach assigns a course before a session. Until then the library is
+        Your coach assigns a training before a session. Until then the library is
         open to you.
       </Typography>
 
       {completedCount > 0 ? (
         <Typography sx={{ fontSize: 14, color: brand.inkMuted, mt: 2 }}>
-          {completedCount} {completedCount === 1 ? 'course' : 'courses'} finished
+          {completedCount} {completedCount === 1 ? 'training' : 'trainings'} finished
           {lastCompleted ? ` · last was ${lastCompleted.title} ${lastCompleted.completedLabel}` : ''}
         </Typography>
       ) : null}

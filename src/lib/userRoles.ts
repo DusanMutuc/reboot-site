@@ -20,7 +20,7 @@ export type AppHomePath =
   | '/admin'
   | '/assistant-library'
   | '/coach'
-  | '/dashboard';
+  | '/home';
 
 type RoleQueryClient = Pick<SupabaseClient, 'from'>;
 
@@ -79,5 +79,5 @@ export function resolveHomePathForRoleCodes(codes: readonly string[]): AppHomePa
     return '/assistant-library';
   }
 
-  return '/dashboard';
+  return '/home';
 }

@@ -92,6 +92,15 @@ const TYPICAL: OnePageExtras = {
     recent: [true, true, false, true, true, true, true, true],
   },
 
+  coachingAttendance: {
+    periodLabel: '60-day snapshot',
+    rows: [
+      { label: 'Wednesday sessions', attended: 4, total: 6 },
+      { label: 'Friday drop-in with Ben', attended: 2, total: 2 },
+      { label: 'Implementation sessions', attended: 2, total: 3 },
+    ],
+  },
+
   helpSteps: [
     {
       title: 'Ask your coach',
@@ -107,7 +116,7 @@ const TYPICAL: OnePageExtras = {
     },
     {
       title: 'Something is broken',
-      detail: 'Login trouble, a missing course, numbers that look wrong.',
+      detail: 'Login trouble, a missing training, numbers that look wrong.',
       actionLabel: 'Contact support',
       href: '/support',
     },
@@ -180,6 +189,15 @@ const EMPTY: OnePageExtras = {
     periodLabel: 'last 8 meetings',
     streakLabel: null,
     recent: [],
+  },
+
+  coachingAttendance: {
+    periodLabel: '60-day snapshot',
+    rows: [
+      { label: 'Wednesday sessions', attended: 0, total: 6 },
+      { label: 'Friday drop-in with Ben', attended: 0, total: 2 },
+      { label: 'Implementation sessions', attended: 0, total: 3 },
+    ],
   },
 };
 

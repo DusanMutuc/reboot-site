@@ -555,12 +555,29 @@ export function ProgressRegion({
 export function HubFooter({
   helpSteps,
   links,
+  flush = false,
 }: {
   helpSteps: HelpStep[];
   links: UtilityLink[];
+  /**
+   * Drop the leading margin, for a layout whose last section is a full-bleed
+   * tinted surface rather than the page background. The margin is breathing
+   * room on the hub, where content ends on the page colour; under a tinted
+   * zone it exposes a band of a third colour between two committed surfaces,
+   * which reads as an unfinished edge rather than as space.
+   */
+  flush?: boolean;
 }) {
   return (
-    <Box component="footer" id="help" sx={{ mt: { xs: 6, md: 9 }, bgcolor: brand.slate, color: '#ffffff' }}>
+    <Box
+      component="footer"
+      id="help"
+      sx={{
+        mt: flush ? 0 : { xs: 6, md: 9 },
+        bgcolor: brand.slate,
+        color: '#ffffff',
+      }}
+    >
       <Container maxWidth={false} sx={{ maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}>
         <Box sx={{ py: { xs: 4, md: 5 } }}>
           <Typography

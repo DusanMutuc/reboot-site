@@ -8,7 +8,6 @@ import TrainingPanel from './TrainingPanel';
 import BookingPanel from './BookingPanel';
 import NumbersStrip from './NumbersStrip';
 import UtilityFooter from './UtilityFooter';
-import CompareStrip from './CompareStrip';
 import type { HomeData } from './types';
 
 export default function HomeShell({ data }: { data: HomeData }) {
@@ -38,8 +37,6 @@ export default function HomeShell({ data }: { data: HomeData }) {
             </Box>
 
             <NumbersStrip metrics={data.metrics} />
-
-            <CompareStrip currentPath="/home" status={data.callStatus} />
           </Box>
         </Container>
       </Box>

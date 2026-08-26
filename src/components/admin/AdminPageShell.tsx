@@ -355,8 +355,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         <Alert severity="warning" sx={{ mb: 2 }}>
           Access denied - Admin privileges required.
         </Alert>
-        <Button variant="outlined" onClick={() => router.push('/dashboard')}>
-          Go to Dashboard
+        <Button variant="outlined" onClick={() => router.push('/home')}>
+          Go to Member Home
         </Button>
       </Container>
     );

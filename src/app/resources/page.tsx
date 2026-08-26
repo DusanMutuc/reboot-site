@@ -173,7 +173,7 @@ export default function ResourcesPage() {
           <Stack direction="row" alignItems="center" spacing={1.5}>
             <IconButton
               LinkComponent={Link}
-              href="/dashboard"
+              href="/home"
               aria-label="Back to Home"
               size="medium"
             >

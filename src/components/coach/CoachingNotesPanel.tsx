@@ -33,6 +33,7 @@ import ActionStepsPanel from './coaching-notes/ActionStepsPanel';
 import CommentsPanel from './coaching-notes/CommentsPanel';
 import MeetingSlotsPanel from './coaching-notes/MeetingSlotsPanel';
 import NoteSelector from './coaching-notes/NoteSelector';
+import TrainingAssignmentPanel from './coaching-notes/TrainingAssignmentPanel';
 import {
   makeEmptyMeetingDateInputs,
   makeEmptyMeetingSlots,
@@ -1243,6 +1244,11 @@ export default function CoachingNotesPanel({
                   void saveEditComment();
                 }}
                 onStartEditComment={startEditComment}
+              />
+
+              <TrainingAssignmentPanel
+                userId={userId}
+                coachingNoteId={selectedNote.id}
               />
 
               <ActionStepsPanel

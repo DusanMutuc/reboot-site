@@ -28,5 +28,5 @@ export default async function HubPage({
         }
       : base;
 
-  return <HubShell data={data} extras={getOnePageExtras(contentVolume)} volume={contentVolume} />;
+  return <HubShell data={data} extras={getOnePageExtras(contentVolume)} />;
 }

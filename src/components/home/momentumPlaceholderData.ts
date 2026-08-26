@@ -40,6 +40,8 @@ export const placeholderPriorities: Priority[] = [
 ];
 
 export const placeholderRequiredTraining: RequiredTraining = {
+  /** Filled from the real course when one resolves — see the momentum page. */
+  heroUrl: null,
   title: 'Pricing conversations that hold',
   href: '#',
   contextLabel: "Before Thursday's session",
@@ -93,13 +95,15 @@ export function getMeetings(scenario: CallStatus): MeetingSlot[] {
   const implementationBooked: MeetingSlot = {
     id: 'implementation',
     kind: 'Implementation Session',
-    startsAt: '2026-08-21T10:00:00',
-    whenLabel: 'Thursday 21 August, 10:00 am',
-    relativeLabel: 'in 9 days',
+    startsAt: '2026-09-10T10:00:00',
+    whenLabel: 'Thursday 10 September, 10:00 am',
+    relativeLabel: 'in 18 days',
     joinUrl: '#',
     bookUrl: BOOK_IMPL,
     imminent: false,
     prepLabel: null,
+    prepHref: null,
+    prepSubmitted: false,
   };
 
   if (scenario === 'imminent') {
@@ -113,7 +117,9 @@ export function getMeetings(scenario: CallStatus): MeetingSlot[] {
         joinUrl: '#',
         bookUrl: BOOK_REVIEW,
         imminent: true,
-        prepLabel: null,
+        prepLabel: 'Complete your preparation before the call.',
+        prepHref: '/business-review-prep',
+        prepSubmitted: false,
       },
       implementationBooked,
     ];
@@ -131,6 +137,8 @@ export function getMeetings(scenario: CallStatus): MeetingSlot[] {
         bookUrl: BOOK_REVIEW,
         imminent: false,
         prepLabel: null,
+        prepHref: null,
+        prepSubmitted: false,
       },
       implementationBooked,
     ];
@@ -146,7 +154,9 @@ export function getMeetings(scenario: CallStatus): MeetingSlot[] {
       joinUrl: '#',
       bookUrl: BOOK_REVIEW,
       imminent: false,
-      prepLabel: 'Bring your numbers for July and August.',
+      prepLabel: 'Complete your preparation before the call.',
+      prepHref: '/business-review-prep',
+      prepSubmitted: false,
     },
     implementationBooked,
   ];

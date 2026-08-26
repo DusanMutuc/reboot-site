@@ -45,11 +45,14 @@ const BASE: Omit<HomeData, 'callStatus' | 'nextCall' | 'lastCall'> = {
     isNew: true,
   },
 
+  // The four Ben chose for the snapshot. Profit came out because the tracker
+  // holds it and the snapshot is not the tracker; "days off" became holidays
+  // taken, since a day here and there is not what a member is trying to book.
   metrics: [
+    { label: 'Closed deals', value: '21', deltaPct: 8 },
     { label: 'Gross revenue', value: '$128,400', deltaPct: 12 },
-    { label: 'Profit', value: '$41,200', deltaPct: -3 },
-    { label: 'Closed', value: '21', deltaPct: 8 },
-    { label: 'Days off', value: '4', deltaPct: null },
+    { label: '15/30 list', value: '38', deltaPct: 5 },
+    { label: 'Holidays taken', value: '4', deltaPct: null },
   ],
 
   // The calendar has moved into the sticky bar's Calls menu; a schedule is a
