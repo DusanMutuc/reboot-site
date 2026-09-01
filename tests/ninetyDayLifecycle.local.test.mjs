@@ -154,6 +154,15 @@ test('local 90-day lifecycle stays isolated from ordinary members', {
     checked(await service.auth.admin.updateUserById(onboarded.user_id, {
       app_metadata: { must_reset_password: false },
     }));
+
+    const ninetyDayDirectory = await json(await call(
+      `/api/admin/users?membership=ninety-day&query=${encodeURIComponent(programmeEmail)}`,
+      admin,
+    ));
+    assert.equal(ninetyDayDirectory.total, 1);
+    assert.equal(ninetyDayDirectory.items[0].id, onboarded.user_id);
+    assert.equal(ninetyDayDirectory.items[0].is_ninety_day_user, true);
+
     const programmeUser = await sessionActor(programmeEmail, 'reboot');
 
     const programmeRoot = await follow('/', programmeUser);
@@ -203,6 +212,17 @@ test('local 90-day lifecycle stays isolated from ordinary members', {
       .single());
     assert.ok(history.ended_at);
     assert.equal(history.outcome, 'promoted');
+    const promotedNinetyDayDirectory = await json(await call(
+      `/api/admin/users?membership=ninety-day&query=${encodeURIComponent(programmeEmail)}`,
+      admin,
+    ));
+    assert.equal(promotedNinetyDayDirectory.total, 0);
+    const promotedMemberDirectory = await json(await call(
+      `/api/admin/users?membership=current&query=${encodeURIComponent(programmeEmail)}`,
+      admin,
+    ));
+    assert.equal(promotedMemberDirectory.total, 1);
+    assert.equal(promotedMemberDirectory.items[0].is_ninety_day_user, false);
     const promotedHome = await follow('/home/ninety-day', programmeUser);
     assert.equal(promotedHome.status, 200);
     assert.equal(new URL(promotedHome.url).pathname, '/dashboard');

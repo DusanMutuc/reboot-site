@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Box, Container, Typography } from '@mui/material';
-import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
 import type { HelpStep, UtilityLink } from './types';
 
@@ -16,6 +16,13 @@ export function HubFooter({
   links: UtilityLink[];
   flush?: boolean;
 }) {
+  const supportStep = helpSteps.find((step) => step.title === 'Something is broken') ?? {
+    title: 'Something is broken',
+    detail: 'Login trouble, a missing training, or numbers that look wrong.',
+    actionLabel: 'Contact support',
+    href: '/support',
+  };
+
   return (
     <Box
       component="footer"
@@ -27,51 +34,51 @@ export function HubFooter({
       }}
     >
       <Container maxWidth={false} sx={{ maxWidth: HOME_MAX_WIDTH, px: { xs: 2.5, md: 4 } }}>
-        <Box sx={{ py: { xs: 4, md: 5 } }}>
-          <Typography
-            variant="sectionLabel"
-            component="h2"
-            sx={{ fontSize: 17, color: brand.turquoise, mb: 2.25 }}
-          >
-            Stuck on something?
-          </Typography>
-
+        <Box sx={{ py: { xs: 3.5, md: 4.5 } }}>
           <Box
             sx={{
               display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0,1fr))' },
-              gap: { xs: 2.5, md: 4 },
-              mb: { xs: 4, md: 5 },
+              gridTemplateColumns: { xs: 'auto minmax(0,1fr)', md: 'auto minmax(0,1fr) auto' },
+              alignItems: 'center',
+              columnGap: { xs: 1.75, md: 2.25 },
+              rowGap: 2,
+              mb: { xs: 3.5, md: 4.5 },
             }}
           >
-            {helpSteps.map((step) => (
-              <Box key={step.title}>
-                <Typography sx={{ fontSize: 16, fontWeight: 500, color: '#ffffff', mb: 0.625 }}>
-                  {step.title}
-                </Typography>
-                <Typography
-                  sx={{ fontSize: 14, color: 'rgba(255,255,255,0.62)', lineHeight: 1.5, mb: 1 }}
-                >
-                  {step.detail}
-                </Typography>
-                <Box
-                  component={Link}
-                  href={step.href}
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    fontSize: 14,
-                    fontWeight: 500,
-                    color: brand.turquoise,
-                    '&:hover': { color: '#ffffff' },
-                  }}
-                >
-                  {step.actionLabel}
-                  <ArrowForwardRoundedIcon sx={{ fontSize: 15 }} />
-                </Box>
-              </Box>
-            ))}
+            <WarningAmberRoundedIcon sx={{ fontSize: 28, color: '#69b7ff' }} />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: 16, fontWeight: 600, color: '#ffffff', mb: 0.375 }}>
+                {supportStep.title}
+              </Typography>
+              <Typography sx={{ fontSize: 14, color: 'rgba(255,255,255,0.66)', lineHeight: 1.45 }}>
+                {supportStep.detail}
+              </Typography>
+            </Box>
+            <Box
+              component={Link}
+              href={supportStep.href}
+              sx={{
+                gridColumn: { xs: '1 / -1', md: 'auto' },
+                justifySelf: { xs: 'stretch', sm: 'start', md: 'end' },
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 40,
+                px: 2.25,
+                border: '1px solid rgba(255,255,255,0.24)',
+                borderRadius: '9px',
+                fontSize: 14.5,
+                fontWeight: 600,
+                color: '#ffffff',
+                transition: 'border-color .16s ease, background-color .16s ease',
+                '&:hover': {
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  bgcolor: 'rgba(255,255,255,0.06)',
+                },
+              }}
+            >
+              {supportStep.actionLabel}
+            </Box>
           </Box>
 
           <Box

@@ -28,8 +28,6 @@ import rebootLogo from '../../../public/Reboot Logo - Color.png';
 
 /** The programme content and tracker are already present on this page. */
 
-const HELP_LINK = { label: 'Help', href: '/support' };
-
 /** Id of the band the chip mirrors — the chip appears once it scrolls away. */
 const BAND_ID = 'now';
 
@@ -58,7 +56,6 @@ export default function StickyBar({
   const router = useRouter();
   const [showChip, setShowChip] = useState(false);
   const [callsAnchor, setCallsAnchor] = useState<HTMLElement | null>(null);
-  const [accountAnchor, setAccountAnchor] = useState<HTMLElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const hasCallsMenu = bookingOptions.length > 0 || roomOptions.length > 0 || calendar !== null;
@@ -67,7 +64,6 @@ export default function StickyBar({
     if (signingOut) return;
 
     setSigningOut(true);
-    setAccountAnchor(null);
     setDrawerOpen(false);
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -227,20 +223,6 @@ export default function StickyBar({
               </Box>
             ) : null}
 
-            <Box
-              component={Link}
-              href={HELP_LINK.href}
-              sx={{
-                px: 1.5,
-                py: 1.75,
-                fontSize: 15,
-                color: 'rgba(255,255,255,0.7)',
-                transition: 'color .16s ease',
-                '&:hover': { color: '#ffffff' },
-              }}
-            >
-              {HELP_LINK.label}
-            </Box>
           </Box>
 
           <Menu
@@ -352,56 +334,6 @@ export default function StickyBar({
             </Box>
           ) : null}
 
-          <Box
-            component="button"
-            type="button"
-            onClick={(event: React.MouseEvent<HTMLElement>) => setAccountAnchor(event.currentTarget)}
-            aria-haspopup="true"
-            aria-expanded={Boolean(accountAnchor)}
-            aria-label="Your account"
-            sx={{
-              width: 32,
-              height: 32,
-              flexShrink: 0,
-              p: 0,
-              border: 'none',
-              cursor: 'pointer',
-              borderRadius: '50%',
-              bgcolor: accountAnchor ? brand.turquoise : 'rgba(255,255,255,0.14)',
-              color: accountAnchor ? brand.ink : '#ffffff',
-              display: { xs: 'none', md: 'grid' },
-              placeItems: 'center',
-              fontFamily: '"League Spartan", Arial, sans-serif',
-              fontSize: 14,
-              fontWeight: 700,
-              transition: 'background-color .16s ease, color .16s ease',
-              '&:hover': { bgcolor: brand.turquoise, color: brand.ink },
-            }}
-          >
-            {memberFirstName.slice(0, 1).toUpperCase()}
-          </Box>
-
-          <Menu
-            anchorEl={accountAnchor}
-            open={Boolean(accountAnchor)}
-            onClose={() => setAccountAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-            slotProps={{ paper: { sx: { ...menuPaperSx, minWidth: 208 } } }}
-          >
-            <Typography sx={{ ...groupHeadingSx, pb: 1.25 }}>
-              Signed in as {memberFirstName}
-            </Typography>
-            <MenuItem
-              onClick={handleSignOut}
-              disabled={signingOut}
-              sx={{ ...menuItemSx, borderTop: `1px solid ${brand.border}` }}
-            >
-              <LogoutRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />
-              {signingOut ? 'Signing out…' : 'Sign out'}
-            </MenuItem>
-          </Menu>
-
           <IconButton
             aria-label="Open menu"
             onClick={() => setDrawerOpen(true)}
@@ -482,15 +414,6 @@ export default function StickyBar({
           ) : null}
 
           <Divider sx={{ my: 1 }} />
-
-          <MenuItem
-            component={Link}
-            href={HELP_LINK.href}
-            onClick={() => setDrawerOpen(false)}
-            sx={menuItemSx}
-          >
-            {HELP_LINK.label}
-          </MenuItem>
 
           <MenuItem onClick={handleSignOut} disabled={signingOut} sx={menuItemSx}>
             <LogoutRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />

@@ -75,6 +75,7 @@ type UserDirectoryRow = {
   created_at: string | null;
   last_sign_in_at: string | null;
   is_current_member: boolean;
+  is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
   primary_coaches: DirectoryPerson[];
@@ -104,7 +105,7 @@ type SnackbarState = {
   severity: 'success' | 'error' | 'info';
 };
 
-type MembershipFilter = 'all' | 'current' | 'past';
+type MembershipFilter = 'all' | 'current' | 'ninety-day' | 'past';
 type SetupFilter = 'all' | 'missing-phone' | 'missing-primary-coach' | 'missing-ghl';
 type SortOption = 'name' | 'introduced-desc' | 'last-sign-in-desc';
 type AttentionSeverity = 'blocking' | 'secondary';
@@ -182,7 +183,13 @@ function peopleLabel(people: DirectoryPerson[]) {
 }
 
 function MembershipSummary({ user }: { user: UserDirectoryRow }) {
-  const status = user.is_past_member ? 'Past member' : user.is_current_member ? 'Current member' : 'Inactive';
+  const status = user.is_ninety_day_user
+    ? '90-Day programme member'
+    : user.is_past_member
+      ? 'Past member'
+      : user.is_current_member
+        ? 'Current member'
+        : 'Inactive';
 
   return (
     <Stack direction="row" useFlexGap flexWrap="wrap" spacing={2} alignItems="center">
@@ -193,7 +200,11 @@ function MembershipSummary({ user }: { user: UserDirectoryRow }) {
             width: 8,
             height: 8,
             borderRadius: '50%',
-            bgcolor: user.is_current_member && !user.is_past_member ? 'success.main' : 'text.disabled',
+            bgcolor: user.is_ninety_day_user
+              ? 'info.main'
+              : user.is_current_member && !user.is_past_member
+                ? 'success.main'
+                : 'text.disabled',
           }}
         />
         <Typography variant="body2" color="text.secondary">{status}</Typography>
@@ -491,18 +502,22 @@ export default function UserProfilesAdmin() {
     setSaving(true);
 
     try {
+      const profilePayload: Record<string, string | boolean | null> = {
+        first_name: draft.first_name.trim(),
+        last_name: draft.last_name.trim(),
+        phone: draft.phone.trim() || null,
+        ghl_user_id: draft.ghl_user_id.trim() || null,
+        introduced_at: draft.introduced_at || null,
+      };
+      if (!selectedUser.is_ninety_day_user) {
+        profilePayload.is_legend = draft.is_legend;
+        profilePayload.is_past_member = draft.is_past_member;
+      }
+
       const response = await fetch(`/api/admin/users/${encodeURIComponent(selectedUser.id)}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          first_name: draft.first_name.trim(),
-          last_name: draft.last_name.trim(),
-          phone: draft.phone.trim() || null,
-          ghl_user_id: draft.ghl_user_id.trim() || null,
-          introduced_at: draft.introduced_at || null,
-          is_legend: draft.is_legend,
-          is_past_member: draft.is_past_member,
-        }),
+        body: JSON.stringify(profilePayload),
       });
       const data = (await response.json()) as Partial<UserDirectoryRow> & { error?: string };
       if (!response.ok) throw new Error(data.error || response.statusText);
@@ -649,6 +664,7 @@ export default function UserProfilesAdmin() {
             }}
           >
             <ToggleButton value="current">Current</ToggleButton>
+            <ToggleButton value="ninety-day">90-Day</ToggleButton>
             <ToggleButton value="past">Past</ToggleButton>
             <ToggleButton value="all">All</ToggleButton>
           </ToggleButtonGroup>
@@ -744,7 +760,7 @@ export default function UserProfilesAdmin() {
                           <Box sx={{ minWidth: 0 }}>
                             <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
                               <Typography variant="body2" fontWeight={600} noWrap>{displayName(user)}</Typography>
-                              {membership !== 'current' || !user.is_current_member ? (
+                              {membership !== 'current' || !user.is_current_member || user.is_ninety_day_user ? (
                                 <Stack direction="row" spacing={0.5} alignItems="center">
                                   <Box
                                     aria-hidden="true"
@@ -752,13 +768,21 @@ export default function UserProfilesAdmin() {
                                       width: 7,
                                       height: 7,
                                       borderRadius: '50%',
-                                      bgcolor: user.is_current_member && !user.is_past_member
-                                        ? 'success.main'
-                                        : 'text.disabled',
+                                      bgcolor: user.is_ninety_day_user
+                                        ? 'info.main'
+                                        : user.is_current_member && !user.is_past_member
+                                          ? 'success.main'
+                                          : 'text.disabled',
                                     }}
                                   />
                                   <Typography variant="caption" color="text.secondary">
-                                    {user.is_past_member ? 'Past member' : user.is_current_member ? 'Current' : 'Inactive'}
+                                    {user.is_ninety_day_user
+                                      ? '90-Day'
+                                      : user.is_past_member
+                                        ? 'Past member'
+                                        : user.is_current_member
+                                          ? 'Current'
+                                          : 'Inactive'}
                                   </Typography>
                                 </Stack>
                               ) : null}
@@ -874,29 +898,37 @@ export default function UserProfilesAdmin() {
                     <Typography variant="adminSectionTitle">Membership</Typography>
                     <Typography variant="body2" color="text.secondary">Access and lifecycle status.</Typography>
                   </Box>
-                  <FormControlLabel
-                    control={(
-                      <Checkbox
-                        checked={draft.is_legend}
-                        onChange={(event) => updateDraft('is_legend', event.target.checked)}
-                      />
-                    )}
-                    label="Legend access"
-                  />
-                  <FormControlLabel
-                    control={(
-                      <Checkbox
-                        checked={draft.is_past_member}
-                        onChange={(event) => updateDraft('is_past_member', event.target.checked)}
-                      />
-                    )}
-                    label="Past member"
-                  />
-                  {draft.is_past_member !== selectedUser.is_past_member ? (
-                    <Alert severity="warning" variant="outlined">
-                      This changes the member&apos;s lifecycle access when you save.
+                  {selectedUser.is_ninety_day_user ? (
+                    <Alert severity="info" variant="outlined">
+                      This member&apos;s cycle and promotion are managed from the 90-Day admin tab.
                     </Alert>
-                  ) : null}
+                  ) : (
+                    <>
+                      <FormControlLabel
+                        control={(
+                          <Checkbox
+                            checked={draft.is_legend}
+                            onChange={(event) => updateDraft('is_legend', event.target.checked)}
+                          />
+                        )}
+                        label="Legend access"
+                      />
+                      <FormControlLabel
+                        control={(
+                          <Checkbox
+                            checked={draft.is_past_member}
+                            onChange={(event) => updateDraft('is_past_member', event.target.checked)}
+                          />
+                        )}
+                        label="Past member"
+                      />
+                      {draft.is_past_member !== selectedUser.is_past_member ? (
+                        <Alert severity="warning" variant="outlined">
+                          This changes the member&apos;s lifecycle access when you save.
+                        </Alert>
+                      ) : null}
+                    </>
+                  )}
                 </Stack>
 
                 <Stack spacing={2}>

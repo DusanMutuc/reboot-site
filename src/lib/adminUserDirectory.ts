@@ -23,6 +23,7 @@ export type AdminUserDirectoryRow = {
   created_at: string | null;
   last_sign_in_at: string | null;
   is_current_member: boolean;
+  is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
   primary_coaches: AdminDirectoryPerson[];
@@ -32,7 +33,7 @@ export type AdminUserDirectoryRow = {
 };
 
 export type AdminUserDirectoryFilters = {
-  membership?: 'all' | 'current' | 'past';
+  membership?: 'all' | 'current' | 'ninety-day' | 'past';
   legendOnly?: boolean;
   setup?: 'all' | 'missing-phone' | 'missing-primary-coach' | 'missing-ghl';
   sort?: 'name' | 'introduced-desc' | 'last-sign-in-desc';
@@ -80,6 +81,7 @@ function displayName(firstName?: string | null, lastName?: string | null, fallba
 function buildSearchText(row: AdminUserDirectoryRow) {
   const statusTerms = [
     row.is_current_member ? 'current member' : 'inactive member',
+    row.is_ninety_day_user ? '90 day ninety day programme member' : '',
     row.is_past_member ? 'past member' : '',
     row.is_legend ? 'legend' : '',
     row.phone ? '' : 'missing phone',
@@ -141,6 +143,7 @@ function toPublicDirectoryRow(row: AdminUserDirectoryEntry): AdminUserDirectoryR
     created_at: row.created_at,
     last_sign_in_at: row.last_sign_in_at,
     is_current_member: row.is_current_member,
+    is_ninety_day_user: row.is_ninety_day_user,
     is_legend: row.is_legend,
     is_past_member: row.is_past_member,
     primary_coaches: row.primary_coaches,
@@ -330,27 +333,31 @@ async function fetchSupportDirectory(
 
 async function buildAdminUserDirectory() {
   const supa = getAdminClient();
-  const [userRoleId, legendRoleId, pastMemberRoleId] = await Promise.all([
+  const [userRoleId, ninetyDayRoleId, legendRoleId, pastMemberRoleId] = await Promise.all([
     fetchRoleIdByCode('user'),
+    fetchRoleIdByCode('ninety-day-user'),
     fetchRoleIdByCode('legend'),
     fetchRoleIdByCode('past_member'),
   ]);
-  if (!userRoleId) return [];
 
-  const [userIds, legendUserIds, pastMemberUserIds, currentMemberUserIdSet, authUsersMap] =
+  const [userIds, ninetyDayUserIds, legendUserIds, pastMemberUserIds, currentMemberUserIdSet, authUsersMap] =
     await Promise.all([
       fetchUserIdsByRoleId(userRoleId),
+      fetchUserIdsByRoleId(ninetyDayRoleId),
       fetchUserIdsByRoleId(legendRoleId),
       fetchUserIdsByRoleId(pastMemberRoleId),
       fetchCurrentMemberUserIdSet(supa),
       fetchAuthUsersMap(),
     ]);
-  if (userIds.length === 0) return [];
+  const directoryUserIds = Array.from(new Set([...userIds, ...ninetyDayUserIds]));
+  if (directoryUserIds.length === 0) return [];
 
   const [profiles, support] = await Promise.all([
-    fetchProfilesByIds(userIds),
-    fetchSupportDirectory(userIds, authUsersMap),
+    fetchProfilesByIds(directoryUserIds),
+    fetchSupportDirectory(directoryUserIds, authUsersMap),
   ]);
+  const fullMemberUserIdSet = new Set(userIds);
+  const ninetyDayUserIdSet = new Set(ninetyDayUserIds);
   const legendUserIdSet = new Set(legendUserIds);
   const pastMemberUserIdSet = new Set(pastMemberUserIds);
 
@@ -368,6 +375,8 @@ async function buildAdminUserDirectory() {
         created_at: auth?.created_at ?? profile.created_at ?? null,
         last_sign_in_at: auth?.last_sign_in_at ?? null,
         is_current_member: currentMemberUserIdSet.has(profile.id),
+        is_ninety_day_user:
+          ninetyDayUserIdSet.has(profile.id) && !fullMemberUserIdSet.has(profile.id),
         is_legend: legendUserIdSet.has(profile.id),
         is_past_member: pastMemberUserIdSet.has(profile.id),
         primary_coaches: support.primaryCoaches.get(profile.id) || [],
@@ -410,6 +419,7 @@ export async function getAdminUserDirectoryPage(
 
   const filtered = directory.filter((row) => {
     if (membership === 'current' && !row.is_current_member) return false;
+    if (membership === 'ninety-day' && !row.is_ninety_day_user) return false;
     if (membership === 'past' && !row.is_past_member) return false;
     if (filters.legendOnly && !row.is_legend) return false;
     if (setup === 'missing-phone' && row.phone) return false;
