@@ -2,7 +2,17 @@ import 'server-only';
 
 import { DateTime } from 'luxon';
 
+import type {
+  ContentItem,
+  CurrentFocus,
+  MeetingSlot,
+  ProgrammeMonth,
+  ProgrammeWeek,
+  RequiredTraining,
+  SearchItem,
+} from '@/components/home/types';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { loadNinetyDayCompassCourse } from '@/lib/trainingAssignments';
 
 type CycleRow = {
   id: number;
@@ -22,49 +32,31 @@ type SystemNodeRow = {
   description: string | null;
   hero_image: string | null;
 };
-
-export type NinetyDaySystem = {
-  id: number;
-  position: number;
-  title: string;
-  description: string | null;
-  href: string;
-  heroUrl: string | null;
-  progressPct: number | null;
-  isActive: boolean;
-};
-
-export type NinetyDayMeeting = {
+type MeetingRow = {
   id: number;
   title: string;
-  startsAt: string;
-  whenLabel: string;
-  relativeLabel: string;
-  joinUrl: string | null;
-  imminent: boolean;
+  starts_at: string;
+  ends_at: string | null;
+  join_url: string | null;
 };
 
 export type NinetyDayProgrammePayload = {
   cycle: CycleRow;
-  week: { current: number; total: 13 };
-  systems: NinetyDaySystem[];
-  currentSystem: NinetyDaySystem | null;
-  nextMeeting: NinetyDayMeeting | null;
-  course: {
-    title: string;
-    description: string | null;
-    href: '/courses/set-your-compass';
-    heroUrl: string | null;
-  };
+  systems: ContentItem[];
+  focus: CurrentFocus | null;
+  week: ProgrammeWeek;
+  meetings: MeetingSlot[];
+  course: RequiredTraining | null;
+  trackerMonths: ProgrammeMonth[];
+  searchIndex: SearchItem[];
 };
 
-function resolveHeroUrl(value: string | null): string | null {
+function heroUrl(client: ReturnType<typeof getAdminClient>, value: string | null): string | null {
   const trimmed = value?.trim();
   if (!trimmed) return null;
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return getAdminClient().storage.from('course-heroes').getPublicUrl(trimmed).data.publicUrl ?? null;
+  return client.storage.from('course-heroes').getPublicUrl(trimmed).data.publicUrl ?? null;
 }
-
 async function loadActiveCycle(userId: string): Promise<CycleRow | null> {
   const client = getAdminClient();
   const { data: enrollment, error: enrollmentError } = await client
@@ -74,9 +66,7 @@ async function loadActiveCycle(userId: string): Promise<CycleRow | null> {
     .is('ended_at', null)
     .maybeSingle();
 
-  if (enrollmentError) {
-    throw new Error(`Failed to load 90-day enrollment: ${enrollmentError.message}`);
-  }
+  if (enrollmentError) throw new Error(`Failed to load 90-day enrollment: ${enrollmentError.message}`);
   if (!enrollment) return null;
 
   const { data: cycle, error: cycleError } = await client
@@ -116,7 +106,7 @@ async function loadSystemRows(cycleId: number): Promise<Array<SystemLinkRow & { 
   });
 }
 
-function cycleWeek(cycle: CycleRow): { current: number; total: 13 } {
+function cycleWeek(cycle: CycleRow): ProgrammeWeek {
   const zone = cycle.timezone || 'America/Edmonton';
   const start = DateTime.fromISO(cycle.starts_on, { zone }).startOf('day');
   const now = DateTime.now().setZone(zone).startOf('day');
@@ -124,7 +114,18 @@ function cycleWeek(cycle: CycleRow): { current: number; total: 13 } {
   return { current: Math.min(13, Math.floor(elapsedDays / 7) + 1), total: 13 };
 }
 
-async function loadNextMeeting(cycle: CycleRow): Promise<NinetyDayMeeting | null> {
+function cycleMonths(cycle: CycleRow): ProgrammeMonth[] {
+  const start = DateTime.fromISO(cycle.starts_on, { zone: cycle.timezone }).startOf('month');
+  return Array.from({ length: 3 }, (_, index) => {
+    const month = start.plus({ months: index });
+    return {
+      periodStart: month.toISODate() ?? cycle.starts_on,
+      label: month.toFormat('LLLL'),
+    };
+  });
+}
+
+async function loadNextMeeting(cycle: CycleRow, focusTitle: string | null): Promise<MeetingSlot[]> {
   const client = getAdminClient();
   const now = DateTime.now();
   const oldestVisible = now.minus({ hours: 2 }).toUTC().toISO();
@@ -138,23 +139,30 @@ async function loadNextMeeting(cycle: CycleRow): Promise<NinetyDayMeeting | null
     .maybeSingle();
 
   if (error) throw new Error(`Failed to load 90-day meeting: ${error.message}`);
-  if (!data) return null;
+  if (!data) return [];
 
-  const starts = DateTime.fromISO(data.starts_at).setZone(cycle.timezone);
-  const ends = data.ends_at
-    ? DateTime.fromISO(data.ends_at).setZone(cycle.timezone)
+  const meeting = data as MeetingRow;
+  const starts = DateTime.fromISO(meeting.starts_at).setZone(cycle.timezone);
+  const ends = meeting.ends_at
+    ? DateTime.fromISO(meeting.ends_at).setZone(cycle.timezone)
     : starts.plus({ hours: 1 });
-  const localNow = now.setZone(cycle.timezone);
+  const cycleNow = now.setZone(cycle.timezone);
+  const imminent = cycleNow >= starts.minus({ minutes: 30 }) && cycleNow <= ends;
 
-  return {
-    id: Number(data.id),
-    title: data.title || 'Weekly group call',
-    startsAt: data.starts_at,
+  return [{
+    id: 'weekly_group',
+    kind: meeting.title || 'Weekly group call',
+    startsAt: meeting.starts_at,
     whenLabel: starts.toFormat('cccc d LLLL, h:mm a'),
-    relativeLabel: starts.toRelative({ base: localNow }) ?? '',
-    joinUrl: data.join_url,
-    imminent: localNow >= starts.minus({ minutes: 30 }) && localNow <= ends,
-  };
+    relativeLabel: starts.toRelative({ base: cycleNow }) ?? '',
+    joinUrl: meeting.join_url,
+    bookUrl: meeting.join_url ?? '#weekly-call',
+    imminent,
+    prepLabel: focusTitle ? `Current system — ${focusTitle}` : null,
+    prepHref: null,
+    prepSubmitted: false,
+    reschedulable: false,
+  }];
 }
 
 export async function loadNinetyDayProgramme(
@@ -182,42 +190,53 @@ export async function loadNinetyDayProgramme(
     ]),
   );
 
-  const systems: NinetyDaySystem[] = rows.map(({ node, position }) => ({
-    id: Number(node.id),
-    position,
+  const systems: ContentItem[] = rows.map(({ node, position }) => ({
+    id: `system-${node.id}`,
     title: node.title,
-    description: node.description?.trim() || null,
+    typeLabel: 'System',
+    metaLabel: '',
     href: node.slug ? `/library/${node.slug}` : `/library/${node.id}`,
-    heroUrl: resolveHeroUrl(node.hero_image),
+    thumbnailUrl: heroUrl(client, node.hero_image),
+    thumbIndex: position,
+    categories: ['systems'],
     progressPct: progress.get(Number(node.id)) ?? null,
-    isActive: Number(node.id) === Number(cycle.active_system_node_id),
   }));
+  const activeRow = rows.find((row) => Number(row.node_id) === Number(cycle.active_system_node_id));
+  const focus: CurrentFocus | null = activeRow
+    ? {
+        id: `focus-${activeRow.node.id}`,
+        title: activeRow.node.title,
+        detail: activeRow.node.description?.trim() || 'This is the system your group is working on now.',
+        guideHref: activeRow.node.slug ? `/library/${activeRow.node.slug}` : `/library/${activeRow.node.id}`,
+      }
+    : null;
 
-  const { data: compass, error: compassError } = await client
-    .from('content_nodes')
-    .select('title, description, hero_image')
-    .eq('node_type', 'course')
-    .eq('state', 'published')
-    .eq('slug', 'set-your-compass')
-    .maybeSingle();
-  if (compassError) throw new Error(`Failed to load Set Your Compass: ${compassError.message}`);
+  const [meetings, course] = await Promise.all([
+    loadNextMeeting(cycle, activeRow?.node.title ?? null),
+    loadNinetyDayCompassCourse(client, userId),
+  ]);
+  const searchIndex: SearchItem[] = [
+    ...systems.map((system) => ({
+      title: system.title,
+      typeLabel: system.typeLabel,
+      href: system.href,
+    })),
+    ...(course ? [{ title: course.title, typeLabel: 'Course', href: course.href }] : []),
+  ];
 
   return {
     cycle,
-    week: cycleWeek(cycle),
     systems,
-    currentSystem: systems.find((system) => system.isActive) ?? null,
-    nextMeeting: await loadNextMeeting(cycle),
-    course: {
-      title: compass?.title?.trim() || 'Set Your Compass',
-      description: compass?.description?.trim() || null,
-      href: '/courses/set-your-compass',
-      heroUrl: resolveHeroUrl(compass?.hero_image ?? null),
-    },
+    focus,
+    week: cycleWeek(cycle),
+    meetings,
+    course,
+    trackerMonths: cycleMonths(cycle),
+    searchIndex,
   };
 }
 
-/** The eight cycle systems and their descendants form the complete library entitlement. */
+/** Node entitlement used by the normal library APIs for 90-day-only users. */
 export async function getNinetyDayAccessibleNodeIds(userId: string): Promise<Set<number>> {
   const cycle = await loadActiveCycle(userId);
   if (!cycle) return new Set();

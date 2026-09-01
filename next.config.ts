@@ -28,6 +28,18 @@ const nextConfig: NextConfig = {
         hostname: 'zmkmgxrnhdnbpiblkkkk.supabase.co',
         pathname: '/storage/v1/render/image/public/achievements/**',
       },
+
+      // Local Supabase Storage for development and lifecycle verification.
+      ...(process.env.NODE_ENV === 'production'
+        ? []
+        : [
+            {
+              protocol: 'http' as const,
+              hostname: '127.0.0.1',
+              port: '54321',
+              pathname: '/storage/v1/**',
+            },
+          ]),
     ],
     // If you ever serve SVGs from storage:
     // dangerouslyAllowSVG: true,

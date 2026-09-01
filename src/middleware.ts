@@ -35,6 +35,7 @@ const NINETY_DAY_PAGE_PREFIXES = [
   NINETY_DAY_HOME_PATH,
   '/library',
   '/courses',
+  '/tracker',
   '/support',
   '/reset-password',
   '/r',

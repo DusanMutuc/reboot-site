@@ -161,9 +161,8 @@ test('local 90-day lifecycle stays isolated from ordinary members', {
     assert.equal(new URL(programmeRoot.url).pathname, '/home/ninety-day');
     const programmeHome = await call('/home/ninety-day', programmeUser);
     assert.equal(programmeHome.status, 200);
-    assert.match(await programmeHome.text(), /Your eight systems/);
-    assert.equal((await call('/tracker', programmeUser)).status, 307);
-    assert.equal((await call('/home/ninety-day/tracker', programmeUser)).status, 200);
+    assert.match(await programmeHome.text(), /Your 90-day library/);
+    assert.equal((await call('/tracker', programmeUser)).status, 200);
 
     const courses = await json(await call('/api/courses', programmeUser));
     assert.deepEqual(courses.courses.map((course) => course.slug), ['set-your-compass']);
