@@ -1,16 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
-import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import { supabase } from '@/lib/supabaseClient';
 import {
   acceptKpiInput,
   formatKpiValue,
   isMoneyMetric,
-  moneyFormatter,
   parseKpiValue,
 } from '@/lib/kpiFormat';
 import type { ProgrammeMonth } from './types';
@@ -196,12 +193,10 @@ export default function TrackerPanel({ months }: { months: ProgrammeMonth[] }) {
   }
 
   function handleBlur(key: string) {
-    if (isMoneyMetric(key)) {
-      setValues((prev) => {
-        const parsed = parseKpiValue(key, prev[key]);
-        return { ...prev, [key]: parsed === null ? '' : moneyFormatter.format(parsed) };
-      });
-    }
+    setValues((prev) => {
+      const parsed = parseKpiValue(key, prev[key]);
+      return { ...prev, [key]: formatKpiValue(key, parsed) };
+    });
     void save();
   }
 
@@ -321,36 +316,57 @@ export default function TrackerPanel({ months }: { months: ProgrammeMonth[] }) {
                 touched. The rule underneath appears on hover and turns
                 turquoise on focus, which is enough to say "editable" without
                 turning a report into a form. */}
-            <Box
-              component="input"
-              id={`kpi-${metric.key}`}
-              inputMode={isMoneyMetric(metric.key) ? 'decimal' : 'numeric'}
-              disabled={!editable}
-              value={values[metric.key] ?? ''}
-              placeholder="—"
-              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-                handleChange(metric.key, event.target.value)
-              }
-              onBlur={() => handleBlur(metric.key)}
-              sx={{
-                width: '100%',
-                p: 0,
-                bgcolor: 'transparent',
-                fontFamily: '"League Spartan", "Poppins", Arial, sans-serif',
-                fontSize: 30,
-                lineHeight: 1.05,
-                fontWeight: 700,
-                letterSpacing: '-0.015em',
-                color: brand.ink,
-                border: 0,
-                borderBottom: '2px solid transparent',
-                outline: 'none',
-                transition: 'border-color .16s ease',
-                '&::placeholder': { color: brand.borderStrong, opacity: 1 },
-                '&:hover:not(:disabled)': { borderBottomColor: brand.border },
-                '&:focus': { borderBottomColor: brand.turquoise },
-              }}
-            />
+            <Box sx={{ position: 'relative' }}>
+              {isMoneyMetric(metric.key) ? (
+                <Typography
+                  component="span"
+                  aria-hidden="true"
+                  sx={{
+                    position: 'absolute',
+                    left: 0,
+                    top: 0,
+                    fontFamily: '"League Spartan", "Poppins", Arial, sans-serif',
+                    fontSize: 30,
+                    lineHeight: 1.05,
+                    fontWeight: 700,
+                    color: brand.ink,
+                  }}
+                >
+                  $
+                </Typography>
+              ) : null}
+              <Box
+                component="input"
+                id={`kpi-${metric.key}`}
+                inputMode={isMoneyMetric(metric.key) ? 'decimal' : 'numeric'}
+                disabled={!editable}
+                value={values[metric.key] ?? ''}
+                placeholder="—"
+                onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                  handleChange(metric.key, event.target.value)
+                }
+                onBlur={() => handleBlur(metric.key)}
+                sx={{
+                  width: '100%',
+                  p: 0,
+                  pl: isMoneyMetric(metric.key) ? '18px' : 0,
+                  bgcolor: 'transparent',
+                  fontFamily: '"League Spartan", "Poppins", Arial, sans-serif',
+                  fontSize: 30,
+                  lineHeight: 1.05,
+                  fontWeight: 700,
+                  letterSpacing: '-0.015em',
+                  color: brand.ink,
+                  border: 0,
+                  borderBottom: '2px solid transparent',
+                  outline: 'none',
+                  transition: 'border-color .16s ease',
+                  '&::placeholder': { color: brand.borderStrong, opacity: 1 },
+                  '&:hover:not(:disabled)': { borderBottomColor: brand.border },
+                  '&:focus': { borderBottomColor: brand.turquoise },
+                }}
+              />
+            </Box>
           </Box>
         ))}
       </Box>
@@ -364,28 +380,6 @@ export default function TrackerPanel({ months }: { months: ProgrammeMonth[] }) {
           gap: 1.75,
         }}
       >
-        <Box
-          component={Link}
-          href="/tracker"
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 0.75,
-            px: 2,
-            py: 1,
-            borderRadius: '10px',
-            border: `1px solid ${brand.borderStrong}`,
-            fontSize: 14.5,
-            fontWeight: 500,
-            color: brand.ink,
-            transition: 'border-color .16s ease, background-color .16s ease',
-            '&:hover': { borderColor: brand.turquoise, bgcolor: brand.turquoiseTint },
-          }}
-        >
-          Open the full tracker
-          <ArrowForwardRoundedIcon sx={{ fontSize: 16 }} />
-        </Box>
-
         {/* Says what happened, and only after something has. The card saves on
             its own, so silence while nothing is being edited is correct — a
             standing "autosaves" notice would be instruction for a mechanism

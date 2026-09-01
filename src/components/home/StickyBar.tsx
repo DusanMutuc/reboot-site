@@ -18,93 +18,17 @@ import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded
 import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import CalendarMonthRoundedIcon from '@mui/icons-material/CalendarMonthRounded';
-import SchoolRoundedIcon from '@mui/icons-material/SchoolRounded';
-import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
-import WorkspacePremiumRoundedIcon from '@mui/icons-material/WorkspacePremiumRounded';
-import LockRoundedIcon from '@mui/icons-material/LockRounded';
 import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
 import { supabase } from '@/lib/supabaseClient';
 import type { BookingOption, CalendarLink, CallStatus, NextCall, RoomOption } from './types';
+import rebootLogo from '../../../public/Reboot Logo - Color.png';
 
-/**
- * Everything in this bar goes somewhere.
- *
- * It used to hold scroll-anchors — Training, Numbers, Podcast, Help — inherited
- * from the live nav, which paired them with two arrow buttons that actually
- * left the page. Keeping the anchors and dropping the arrows left every item
- * the same kind of thing with nothing to contrast against, which is what made
- * the bar read as arbitrary; and it meant the tracker, the library and courses
- * had no permanent route anywhere on the page.
- *
- * The page is about four screens tall, so scrolling beats reading a menu. The
- * bar spends its width on destinations instead.
- */
+/** The programme content and tracker are already present on this page. */
 
-const TRAINING_LINKS: Array<{ label: string; href: string; kind: 'course' | 'library' }> = [
-  // Label, not route: "trainings" is the agreed word for learning content.
-  { label: 'Trainings', href: '/courses', kind: 'course' },
-  { label: 'Library', href: '/library', kind: 'library' },
-];
-
-const DIRECT_LINKS = [
-  { label: 'Tracker', href: '/tracker' },
-  { label: 'Help', href: '/support' },
-];
-
-const LEGEND_LIBRARY = { label: 'Legend library', href: '/library/legend' };
-
-/**
- * The gated row, in both its states.
- *
- * Gold is the only place a fourth hue appears on this surface, and it is here
- * because entitlement is a real category — legend already gates course
- * audiences elsewhere in this codebase — that none of the other three tiers
- * can express. The shine is a single sweep on hover rather than a loop: a
- * menu is open for about two seconds, and something that glitters the whole
- * time reads as a banner ad rather than as a privilege.
- *
- * The locked state deliberately carries no gold at all. Showing the reward
- * greyed out is the point of the pattern — a member who cannot open it should
- * see the shape of the thing they do not have, not a dimmed version of the
- * thing they do. It stays legible rather than dropping to the usual disabled
- * opacity, because it is text a member is meant to read and act on.
- */
-const legendItemSx = (unlocked: boolean) => ({
-  gap: 1.25,
-  py: 1.25,
-  fontSize: 15,
-  position: 'relative' as const,
-  overflow: 'hidden' as const,
-  borderTop: `1px solid ${brand.border}`,
-  ...(unlocked
-    ? {
-        color: brand.gold,
-        fontWeight: 600,
-        backgroundImage: `linear-gradient(100deg, ${brand.goldTint} 0%, #f7ead0 100%)`,
-        '&:hover': { backgroundImage: `linear-gradient(100deg, #f9efdc 0%, #f3e3c2 100%)` },
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          backgroundImage: `linear-gradient(105deg, transparent 34%, ${brand.goldBright}00 40%, #ffffffd9 50%, ${brand.goldBright}00 60%, transparent 66%)`,
-          transform: 'translateX(-120%)',
-        },
-        '&:hover::after': { transform: 'translateX(120%)', transition: 'transform .65s ease' },
-        '@media (prefers-reduced-motion: reduce)': {
-          '&::after': { display: 'none' },
-        },
-      }
-    : {
-        color: brand.inkMuted,
-        cursor: 'default',
-        backgroundColor: '#f4f6f5',
-        '&:hover': { backgroundColor: '#f4f6f5' },
-      }),
-});
+const HELP_LINK = { label: 'Help', href: '/support' };
 
 /** Id of the band the chip mirrors — the chip appears once it scrolls away. */
 const BAND_ID = 'now';
@@ -120,8 +44,6 @@ type Props = {
   roomOptions?: RoomOption[];
   /** The published schedule of group sessions. */
   calendar?: CalendarLink | null;
-  /** Whether this member holds the legend role. Gates the legend library. */
-  isLegend?: boolean;
 };
 
 export default function StickyBar({
@@ -132,12 +54,10 @@ export default function StickyBar({
   bookingOptions = [],
   roomOptions = [],
   calendar = null,
-  isLegend = false,
 }: Props) {
   const router = useRouter();
   const [showChip, setShowChip] = useState(false);
   const [callsAnchor, setCallsAnchor] = useState<HTMLElement | null>(null);
-  const [trainingAnchor, setTrainingAnchor] = useState<HTMLElement | null>(null);
   const [accountAnchor, setAccountAnchor] = useState<HTMLElement | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -272,7 +192,7 @@ export default function StickyBar({
           >
             <Box
               component="img"
-              src="/Reboot Logo - Color.png"
+              src={rebootLogo.src}
               alt="Reboot Coaching"
               sx={{ height: { xs: 30, md: 50 }, width: 'auto', display: 'block' }}
             />
@@ -307,45 +227,20 @@ export default function StickyBar({
               </Box>
             ) : null}
 
-            {/* Courses and the library behind one control, mirroring Calls.
-                This is also the only route to /courses in the layout. */}
             <Box
-              component="button"
-              type="button"
-              onClick={(event: React.MouseEvent<HTMLElement>) =>
-                setTrainingAnchor(event.currentTarget)
-              }
-              aria-haspopup="true"
-              aria-expanded={Boolean(trainingAnchor)}
-              sx={navButtonSx(Boolean(trainingAnchor))}
+              component={Link}
+              href={HELP_LINK.href}
+              sx={{
+                px: 1.5,
+                py: 1.75,
+                fontSize: 15,
+                color: 'rgba(255,255,255,0.7)',
+                transition: 'color .16s ease',
+                '&:hover': { color: '#ffffff' },
+              }}
             >
-              Training library
-              <ExpandMoreRoundedIcon
-                sx={{
-                  fontSize: 17,
-                  transition: 'transform .16s ease',
-                  transform: trainingAnchor ? 'rotate(180deg)' : 'none',
-                }}
-              />
+              {HELP_LINK.label}
             </Box>
-
-            {DIRECT_LINKS.map((link) => (
-              <Box
-                key={link.href}
-                component={Link}
-                href={link.href}
-                sx={{
-                  px: 1.5,
-                  py: 1.75,
-                  fontSize: 15,
-                  color: 'rgba(255,255,255,0.7)',
-                  transition: 'color .16s ease',
-                  '&:hover': { color: '#ffffff' },
-                }}
-              >
-                {link.label}
-              </Box>
-            ))}
           </Box>
 
           <Menu
@@ -414,60 +309,6 @@ export default function StickyBar({
                 {calendar.label}
               </MenuItem>
             ) : null}
-          </Menu>
-
-          <Menu
-            anchorEl={trainingAnchor}
-            open={Boolean(trainingAnchor)}
-            onClose={() => setTrainingAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            slotProps={{ paper: { sx: menuPaperSx } }}
-          >
-            {TRAINING_LINKS.map((link) => (
-              <MenuItem
-                key={link.href}
-                component={Link}
-                href={link.href}
-                onClick={() => setTrainingAnchor(null)}
-                sx={menuItemSx}
-              >
-                {link.kind === 'course' ? (
-                  <SchoolRoundedIcon sx={{ fontSize: 19, color: brand.turquoiseDeep }} />
-                ) : (
-                  <MenuBookRoundedIcon sx={{ fontSize: 19, color: brand.turquoiseDeep }} />
-                )}
-                {link.label}
-              </MenuItem>
-            ))}
-
-            {isLegend ? (
-              <MenuItem
-                component={Link}
-                href={LEGEND_LIBRARY.href}
-                onClick={() => setTrainingAnchor(null)}
-                sx={legendItemSx(true)}
-              >
-                <WorkspacePremiumRoundedIcon sx={{ fontSize: 19, color: brand.gold }} />
-                {LEGEND_LIBRARY.label}
-              </MenuItem>
-            ) : (
-              <MenuItem
-                component="div"
-                aria-disabled="true"
-                onClick={(event: React.MouseEvent) => event.preventDefault()}
-                sx={legendItemSx(false)}
-              >
-                <LockRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />
-                {LEGEND_LIBRARY.label}
-                <Typography
-                  component="span"
-                  sx={{ ml: 'auto', pl: 2, fontSize: 12.5, color: brand.inkMuted }}
-                >
-                  Legends only
-                </Typography>
-              </MenuItem>
-            )}
           </Menu>
 
           {chipLabel ? (
@@ -640,65 +481,16 @@ export default function StickyBar({
             </MenuItem>
           ) : null}
 
-          <Typography sx={{ ...groupHeadingSx, pt: 1.5 }}>Training</Typography>
-          {TRAINING_LINKS.map((link) => (
-            <MenuItem
-              key={link.href}
-              component={Link}
-              href={link.href}
-              onClick={() => setDrawerOpen(false)}
-              sx={menuItemSx}
-            >
-              {link.kind === 'course' ? (
-                <SchoolRoundedIcon sx={{ fontSize: 19, color: brand.turquoiseDeep }} />
-              ) : (
-                <MenuBookRoundedIcon sx={{ fontSize: 19, color: brand.turquoiseDeep }} />
-              )}
-              {link.label}
-            </MenuItem>
-          ))}
-
-          {isLegend ? (
-            <MenuItem
-              component={Link}
-              href={LEGEND_LIBRARY.href}
-              onClick={() => setDrawerOpen(false)}
-              sx={legendItemSx(true)}
-            >
-              <WorkspacePremiumRoundedIcon sx={{ fontSize: 19, color: brand.gold }} />
-              {LEGEND_LIBRARY.label}
-            </MenuItem>
-          ) : (
-            <MenuItem
-              component="div"
-              aria-disabled="true"
-              onClick={(event: React.MouseEvent) => event.preventDefault()}
-              sx={legendItemSx(false)}
-            >
-              <LockRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />
-              {LEGEND_LIBRARY.label}
-              <Typography
-                component="span"
-                sx={{ ml: 'auto', pl: 2, fontSize: 12.5, color: brand.inkMuted }}
-              >
-                Legends only
-              </Typography>
-            </MenuItem>
-          )}
-
           <Divider sx={{ my: 1 }} />
 
-          {DIRECT_LINKS.map((link) => (
-            <MenuItem
-              key={link.href}
-              component={Link}
-              href={link.href}
-              onClick={() => setDrawerOpen(false)}
-              sx={menuItemSx}
-            >
-              {link.label}
-            </MenuItem>
-          ))}
+          <MenuItem
+            component={Link}
+            href={HELP_LINK.href}
+            onClick={() => setDrawerOpen(false)}
+            sx={menuItemSx}
+          >
+            {HELP_LINK.label}
+          </MenuItem>
 
           <MenuItem onClick={handleSignOut} disabled={signingOut} sx={menuItemSx}>
             <LogoutRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />

@@ -27,6 +27,10 @@ export const moneyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
+export const numberFormatter = new Intl.NumberFormat('en-US', {
+  maximumFractionDigits: 0,
+});
+
 /** The `period_start_date` the RPCs key on: the first of the month. */
 export function getPeriodStart(year: number, month: number): string {
   return `${year}-${String(month).padStart(2, '0')}-01`;
@@ -73,5 +77,5 @@ export function parseKpiValue(key: string, raw: string | undefined): number | nu
 /** A stored number as it should appear in an input. */
 export function formatKpiValue(key: string, value: number | null | undefined): string {
   if (value === null || value === undefined) return '';
-  return isMoneyMetric(key) ? moneyFormatter.format(value) : String(value);
+  return isMoneyMetric(key) ? moneyFormatter.format(value) : numberFormatter.format(value);
 }

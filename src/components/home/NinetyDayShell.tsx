@@ -110,7 +110,6 @@ export default function NinetyDayShell({
           nextCall={data.nextCall}
           bookingOptions={data.bookingOptions}
           roomOptions={data.roomOptions}
-          isLegend={false}
           calendar={data.calendar}
         />
 
