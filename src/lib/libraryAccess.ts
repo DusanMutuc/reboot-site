@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { adminClient } from '@/lib/courseBuilder';
+import { getNinetyDayAccessibleNodeIds } from '@/lib/ninetyDayProgramme';
 import type { ContentBlock } from '@/types/course';
 import type {
   LibraryChildRow,
@@ -80,6 +81,15 @@ async function getUserRoleCodes(userId: string): Promise<string[]> {
     })
     .map((roleRow) => roleRow?.code)
     .filter((code): code is string => typeof code === 'string');
+}
+
+async function getNinetyDayOnlyLibraryNodeIds(userId: string): Promise<Set<number> | null> {
+  const roleCodes = await getUserRoleCodes(userId);
+  if (roleCodes.includes('ninety-day-user') && !roleCodes.includes('user')) {
+    return getNinetyDayAccessibleNodeIds(userId);
+  }
+
+  return null;
 }
 
 async function assertAssistantAccess(userId: string) {
@@ -251,6 +261,7 @@ export async function fetchLibraryCollectionItemsForScope(
   scope: LibraryScope,
 ): Promise<LibraryChildRow[]> {
   const roots = await resolveLibraryRootsForScope(userId, scope);
+  const programmeIds = await getNinetyDayOnlyLibraryNodeIds(userId);
   const seen = new Set<number>();
   const items: LibraryChildRow[] = [];
 
@@ -259,7 +270,7 @@ export async function fetchLibraryCollectionItemsForScope(
     const nodes = await fetchNodesByIds(links.map((link) => link.child_id));
 
     for (const link of links) {
-      if (seen.has(link.child_id)) continue;
+      if (seen.has(link.child_id) || (programmeIds && !programmeIds.has(link.child_id))) continue;
       const child = nodes.get(link.child_id);
       if (!child) continue;
       seen.add(link.child_id);
@@ -280,6 +291,7 @@ export async function fetchLibrarySidebarItemsForScope(
   scope: LibraryScope,
 ): Promise<LibrarySidebarItem[]> {
   const roots = await resolveLibraryRootsForScope(userId, scope);
+  const programmeIds = await getNinetyDayOnlyLibraryNodeIds(userId);
   const orderedLessonIds: number[] = [];
   const seenLessonIds = new Set<number>();
   const lessonSourceScopes = new Map<number, LibraryScope>();
@@ -287,7 +299,7 @@ export async function fetchLibrarySidebarItemsForScope(
   for (const root of roots) {
     const links = await fetchRootChildLinks(root.id);
     for (const link of links) {
-      if (seenLessonIds.has(link.child_id)) continue;
+      if (seenLessonIds.has(link.child_id) || (programmeIds && !programmeIds.has(link.child_id))) continue;
       seenLessonIds.add(link.child_id);
       orderedLessonIds.push(link.child_id);
       lessonSourceScopes.set(link.child_id, root.sourceScope);
@@ -314,6 +326,7 @@ export async function fetchLibrarySidebarItemsForScope(
   const chapterMap = new Map<number, LibrarySidebarItem>();
 
   chapterNodes.forEach((node) => {
+    if (programmeIds && !programmeIds.has(node.id)) return;
     chapterMap.set(node.id, {
       id: node.id,
       slug: node.slug ?? '',
@@ -353,7 +366,14 @@ export async function fetchLibrarySidebarItemsForScope(
     .filter((row): row is LibrarySidebarItem => row !== null);
 }
 
-async function isNodeAccessibleFromRoots(nodeId: number, rootIds: number[]): Promise<boolean> {
+async function isNodeAccessibleFromRoots(
+  userId: string,
+  nodeId: number,
+  rootIds: number[],
+): Promise<boolean> {
+  const programmeIds = await getNinetyDayOnlyLibraryNodeIds(userId);
+  if (programmeIds) return programmeIds.has(nodeId);
+
   const allowedRoots = new Set(rootIds);
   if (allowedRoots.has(nodeId)) {
     return true;
@@ -412,7 +432,7 @@ async function fetchAccessibleNodeBySlug(
 
   const rootIds = await resolveLibraryRootIdsForScope(userId, scope);
   for (const nodeRow of candidates) {
-    const accessible = await isNodeAccessibleFromRoots(nodeRow.id, rootIds);
+    const accessible = await isNodeAccessibleFromRoots(userId, nodeRow.id, rootIds);
     if (accessible) {
       return nodeRow;
     }
@@ -441,7 +461,7 @@ async function fetchAccessibleNodeById(
   }
 
   const rootIds = await resolveLibraryRootIdsForScope(userId, scope);
-  const accessible = await isNodeAccessibleFromRoots(nodeRow.id, rootIds);
+  const accessible = await isNodeAccessibleFromRoots(userId, nodeRow.id, rootIds);
   if (!accessible) {
     throw new LibraryAccessError('Not found', 404);
   }
@@ -469,7 +489,7 @@ export async function resolveAccessibleLibrarySlugFromNodeId(
   }
 
   const rootIds = await resolveLibraryRootIdsForScope(userId, scope);
-  const accessible = await isNodeAccessibleFromRoots(data.id, rootIds);
+  const accessible = await isNodeAccessibleFromRoots(userId, data.id, rootIds);
   if (!accessible) {
     return null;
   }

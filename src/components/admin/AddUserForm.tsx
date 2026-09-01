@@ -16,8 +16,19 @@ import {
 } from '@mui/material';
 import { LoadingButton } from '@mui/lab';
 
-type Form = { email: string; first_name: string; last_name: string; role: 'user' | 'coach' | 'admin' | 'assistant' };
+type Form = {
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: 'user' | 'ninety-day-user' | 'coach' | 'admin' | 'assistant';
+};
 type Person = { id: string; name: string; email: string };
+type NinetyDayCycle = {
+  id: number;
+  name: string;
+  status: 'draft' | 'active' | 'completed';
+  starts_on: string;
+};
 
 type PartnershipConfig = {
   name: string;
@@ -43,6 +54,8 @@ export default function AddUserForm() {
   const [primaryCoach, setPrimaryCoach] = useState<Person | null>(null);
   const [implementationCoach, setImplementationCoach] = useState<Person | null>(null);
   const [assistantTo, setAssistantTo] = useState<Person | null>(null);
+  const [ninetyDayCycles, setNinetyDayCycles] = useState<NinetyDayCycle[]>([]);
+  const [ninetyDayCycleId, setNinetyDayCycleId] = useState<number | ''>('');
   const [busy, setBusy] = useState(false);
   const [snack, setSnack] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>(
     { open: false, message: '', severity: 'success' }
@@ -62,6 +75,21 @@ export default function AddUserForm() {
 
     void loadPeople('/api/admin/list-coaches', setCoaches);
     void loadPeople('/api/admin/list-users', setUsers);
+
+    void (async () => {
+      try {
+        const response = await fetch('/api/admin/ninety-day');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.error || response.statusText);
+        const cycles = ((data?.cycles ?? []) as NinetyDayCycle[])
+          .filter((cycle) => cycle.status !== 'completed');
+        setNinetyDayCycles(cycles);
+        const preferred = cycles.find((cycle) => cycle.status === 'active') ?? cycles[0];
+        setNinetyDayCycleId(preferred?.id ?? '');
+      } catch {
+        setNinetyDayCycles([]);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -91,6 +119,7 @@ export default function AddUserForm() {
   );
 
   const hasAssistantOnboardee = forms.some((form) => form.role === 'assistant');
+  const hasNinetyDayOnboardee = forms.some((form) => form.role === 'ninety-day-user');
   const hasNonAssistantOnboardee = forms.some((form) => form.role !== 'assistant');
 
   const emailErrors = forms.map((form) => form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email));
@@ -159,6 +188,11 @@ export default function AddUserForm() {
       return;
     }
 
+    if (hasNinetyDayOnboardee && !ninetyDayCycleId) {
+      setSnack({ open: true, message: 'Select a 90-day cycle for these users.', severity: 'error' });
+      return;
+    }
+
     setBusy(true);
     try {
       const createdEmails: string[] = [];
@@ -168,7 +202,10 @@ export default function AddUserForm() {
         const createRes = await fetch('/api/admin/create-user', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(form),
+          body: JSON.stringify({
+            ...form,
+            ninety_day_cycle_id: form.role === 'ninety-day-user' ? ninetyDayCycleId : undefined,
+          }),
         });
 
         const created = await createRes.json();
@@ -308,12 +345,32 @@ export default function AddUserForm() {
               onChange={e => updateForm(index, { role: e.target.value as Form['role'] })}
             >
               <MenuItem value="user">user</MenuItem>
+              <MenuItem value="ninety-day-user">90-day user</MenuItem>
               <MenuItem value="coach">coach</MenuItem>
               <MenuItem value="admin">admin</MenuItem>
               <MenuItem value="assistant">assistant</MenuItem>
             </TextField>
           </Box>
         ))}
+
+        {hasNinetyDayOnboardee ? (
+          <TextField
+            select
+            label="90-day cycle"
+            value={ninetyDayCycleId}
+            onChange={(event) => setNinetyDayCycleId(Number(event.target.value))}
+            required
+            helperText={ninetyDayCycles.length > 0
+              ? 'Every 90-day user in this onboarding batch joins this cycle.'
+              : 'Create a draft cycle in the 90-Day admin tab first.'}
+          >
+            {ninetyDayCycles.map((cycle) => (
+              <MenuItem key={cycle.id} value={cycle.id}>
+                {cycle.name} · {cycle.status} · starts {cycle.starts_on}
+              </MenuItem>
+            ))}
+          </TextField>
+        ) : null}
 
         {hasNonAssistantOnboardee && (
           <>

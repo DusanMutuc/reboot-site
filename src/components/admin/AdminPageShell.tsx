@@ -22,6 +22,7 @@ import SiteAnnouncementAdmin from '@/components/admin/SiteAnnouncementAdmin';
 import PartnershipsAdmin from '@/components/admin/PartnershipsAdmin';
 import StudentWorkspace from '@/components/student/StudentWorkspace';
 import UserDataTransfer from '@/components/admin/UserDataTransfer';
+import NinetyDayAdmin from '@/components/admin/NinetyDayAdmin';
 import BookingFollowUpPanel from '@/components/bookingFollowUp/BookingFollowUpPanel';
 import { SwapHoriz as SwapHorizIcon } from '@mui/icons-material';
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
@@ -54,6 +55,7 @@ import {
   GroupAdd,
   PendingActions as PendingActionsIcon,
   LinkRounded as LinkRoundedIcon,
+  Timelapse as TimelapseIcon,
 } from '@mui/icons-material';
 
 type AdminNavChild = {
@@ -73,6 +75,14 @@ type AdminNavSection = {
 const DEFAULT_ADMIN_VIEW = 'add-user';
 
 const navigationStructure: AdminNavSection[] = [
+  {
+    id: 'ninety-day-programme',
+    label: '90-Day Programme',
+    icon: TimelapseIcon,
+    children: [
+      { id: 'ninety-day', label: '90-Day', icon: TimelapseIcon, component: 'NinetyDayAdmin' },
+    ],
+  },
   {
     id: 'user-management',
     label: 'User Management',
@@ -277,6 +287,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
     switch (selectedView) {
       case 'add-user':
         return <AddUserForm />;
+      case 'ninety-day':
+        return <NinetyDayAdmin />;
       case 'assign-assistant':
         return <AssignAssistantPanel />;
       case 'user-profiles':

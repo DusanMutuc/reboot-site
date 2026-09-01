@@ -1,6 +1,12 @@
 import 'server-only';
 
-import { CourseBuilderError, adminClient, type NodeSubtree } from '@/lib/courseBuilder';
+import {
+  CourseBuilderError,
+  adminClient,
+  fetchNodeSubtree,
+  type NodeSubtree,
+} from '@/lib/courseBuilder';
+import { fetchUserRoleCodes, hasRoleCode, isNinetyDayUserRole } from '@/lib/userRoles';
 
 type CourseIdRow = {
   course_node_id: number;
@@ -16,7 +22,33 @@ function toCourseBuilderError(message: string, details: Record<string, unknown>)
   return new CourseBuilderError(message, 500, details);
 }
 
+async function isNinetyDayOnlyUser(userId: string) {
+  const codes = await fetchUserRoleCodes(adminClient, userId);
+  return isNinetyDayUserRole(codes) && !hasRoleCode(codes, 'user');
+}
+
+async function getCompassCourseId(): Promise<number | null> {
+  const { data, error } = await adminClient
+    .from('content_nodes')
+    .select('id')
+    .eq('node_type', 'course')
+    .eq('state', 'published')
+    .eq('slug', 'set-your-compass')
+    .maybeSingle();
+
+  if (error) {
+    throw toCourseBuilderError('Failed to resolve Set Your Compass', { details: error.message });
+  }
+
+  return data?.id ? Number(data.id) : null;
+}
+
 export async function getAvailableCourseIdsForUser(userId: string): Promise<number[]> {
+  if (await isNinetyDayOnlyUser(userId)) {
+    const compassId = await getCompassCourseId();
+    return compassId ? [compassId] : [];
+  }
+
   const { data, error } = await adminClient.rpc('get_available_course_ids_for_user', {
     p_user_id: userId,
   });
@@ -34,6 +66,10 @@ export async function getAvailableCourseIdsForUser(userId: string): Promise<numb
 }
 
 export async function canUserAccessCourse(userId: string, courseId: number): Promise<boolean> {
+  if (await isNinetyDayOnlyUser(userId)) {
+    return courseId === await getCompassCourseId();
+  }
+
   const { data, error } = await adminClient.rpc('can_user_access_course', {
     p_user_id: userId,
     p_course_node_id: courseId,
@@ -51,6 +87,17 @@ export async function canUserAccessCourse(userId: string, courseId: number): Pro
 }
 
 export async function canUserAccessNodeViaCourse(userId: string, nodeId: number): Promise<boolean> {
+  if (await isNinetyDayOnlyUser(userId)) {
+    const compassId = await getCompassCourseId();
+    if (!compassId) return false;
+
+    const subtree = await fetchNodeSubtree(compassId, {
+      includeBlocks: false,
+      allowUnpublished: false,
+    });
+    return collectSubtreeNodeIds(subtree).has(nodeId);
+  }
+
   const { data, error } = await adminClient.rpc('can_user_access_node_via_course', {
     p_user_id: userId,
     p_node_id: nodeId,

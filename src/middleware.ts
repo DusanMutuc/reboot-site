@@ -7,6 +7,7 @@ import {
   hasRoleCode,
   isPastMemberAllowedApiPath,
   isPastMemberRole,
+  NINETY_DAY_HOME_PATH,
   resolveHomePathForRoleCodes,
 } from '@/lib/userRoles';
 
@@ -29,6 +30,19 @@ const PUBLIC_PREFIXES = [
   '/images',
   '/api/webhooks',
 ];
+
+const NINETY_DAY_PAGE_PREFIXES = [
+  NINETY_DAY_HOME_PATH,
+  '/library',
+  '/courses',
+  '/support',
+  '/reset-password',
+  '/r',
+];
+
+function isPathAtOrBelow(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -106,6 +120,24 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = RESET_PATH;
     return NextResponse.redirect(url);
+  }
+
+  const resolvedHomePath = resolveHomePathForRoleCodes(roleCodes);
+  const isNinetyDayHome = isPathAtOrBelow(pathname, NINETY_DAY_HOME_PATH);
+
+  if (isNinetyDayHome && resolvedHomePath !== NINETY_DAY_HOME_PATH) {
+    const url = req.nextUrl.clone();
+    url.pathname = resolvedHomePath;
+    return NextResponse.redirect(url);
+  }
+
+  if (resolvedHomePath === NINETY_DAY_HOME_PATH) {
+    const allowed = NINETY_DAY_PAGE_PREFIXES.some((prefix) => isPathAtOrBelow(pathname, prefix));
+    if (!isApiRequest && !allowed) {
+      const url = req.nextUrl.clone();
+      url.pathname = NINETY_DAY_HOME_PATH;
+      return NextResponse.redirect(url);
+    }
   }
 
   const assistantAllowed =

@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const ACCESS_REMOVED_PATH = '/access-removed';
 export const PAST_MEMBER_ROLE_CODE = 'past_member';
+export const NINETY_DAY_USER_ROLE_CODE = 'ninety-day-user';
+export const NINETY_DAY_HOME_PATH = '/home/ninety-day';
 const PAST_MEMBER_ALLOWED_API_PATHS = new Set([
   '/api/mobile/ambassador-hub',
   '/api/user/ambassador-hub',
@@ -17,6 +19,7 @@ type UserRoleRow = {
 
 export type AppHomePath =
   | typeof ACCESS_REMOVED_PATH
+  | typeof NINETY_DAY_HOME_PATH
   | '/admin'
   | '/assistant-library'
   | '/coach'
@@ -58,6 +61,10 @@ export function isPastMemberRole(codes: readonly string[]): boolean {
   return hasRoleCode(codes, PAST_MEMBER_ROLE_CODE);
 }
 
+export function isNinetyDayUserRole(codes: readonly string[]): boolean {
+  return hasRoleCode(codes, NINETY_DAY_USER_ROLE_CODE);
+}
+
 export function isPastMemberAllowedApiPath(pathname: string): boolean {
   return PAST_MEMBER_ALLOWED_API_PATHS.has(pathname);
 }
@@ -77,6 +84,12 @@ export function resolveHomePathForRoleCodes(codes: readonly string[]): AppHomePa
 
   if (hasRoleCode(codes, 'assistant')) {
     return '/assistant-library';
+  }
+
+  // Full membership wins if both roles are ever present during a manual repair.
+  // The promotion RPC normally swaps them atomically.
+  if (isNinetyDayUserRole(codes) && !hasRoleCode(codes, 'user')) {
+    return NINETY_DAY_HOME_PATH;
   }
 
   return '/dashboard';

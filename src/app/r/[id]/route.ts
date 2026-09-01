@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
+import { adminClient } from '@/lib/courseBuilder';
+import { canUserAccessNodeViaCourse } from '@/lib/courseAccess';
+import { getNinetyDayAccessibleNodeIds } from '@/lib/ninetyDayProgramme';
 import { getSupabaseServer } from '@/lib/supabaseServer';
+import { fetchUserRoleCodes, hasRoleCode, isNinetyDayUserRole } from '@/lib/userRoles';
 
 type ResourceRow = {
   id: number;
@@ -30,6 +34,26 @@ async function isStaff(userId: string | null): Promise<boolean> {
   return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
 }
 
+async function canAccessNinetyDayResource(userId: string, resourceId: number): Promise<boolean> {
+  const roleCodes = await fetchUserRoleCodes(adminClient, userId);
+  if (!isNinetyDayUserRole(roleCodes) || hasRoleCode(roleCodes, 'user')) return true;
+
+  const { data: blockRows, error } = await adminClient
+    .from('content_blocks')
+    .select('node_id')
+    .eq('resource_id', resourceId);
+  if (error || !blockRows?.length) return false;
+
+  const libraryIds = await getNinetyDayAccessibleNodeIds(userId);
+  const nodeIds = Array.from(new Set(blockRows.map((row) => Number(row.node_id))));
+  if (nodeIds.some((nodeId) => libraryIds.has(nodeId))) return true;
+
+  const courseAccess = await Promise.all(
+    nodeIds.map((nodeId) => canUserAccessNodeViaCourse(userId, nodeId)),
+  );
+  return courseAccess.some(Boolean);
+}
+
 export async function GET(req: Request) {
   // Extract /r/[id] from the path without using the typed context arg
   const { pathname } = new URL(req.url);
@@ -42,7 +66,11 @@ export async function GET(req: Request) {
   }
 
   const supa = getSupabaseServer();
-  const staff = await isStaff(await getUserId());
+  const userId = await getUserId();
+  if (!userId || !await canAccessNinetyDayResource(userId, numericId)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  const staff = await isStaff(userId);
 
   let query = supa
     .from('resources')
