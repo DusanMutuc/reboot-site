@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Alert,
   Box,
@@ -28,7 +29,11 @@ import Properties, { type NodeDraft } from '@/components/admin/courseEditor/Side
 import ResourcePickerDialog from '@/components/admin/courseEditor/Canvas/ResourcePickerDialog';
 import HeroImageManagerDialog from '@/components/admin/courseEditor/HeroImageManagerDialog';
 import DeleteDialog from '@/components/admin/courseEditor/Sidebar/DeleteDialog';
-import { EditorStoreProvider, useEditorStore } from '@/components/admin/courseEditor/state/editorStore';
+import {
+  EditorStoreProvider,
+  parseEditorDeepLinkId,
+  useEditorStore,
+} from '@/components/admin/courseEditor/state/editorStore';
 
 import LibraryList from './libraryList';
 
@@ -168,29 +173,25 @@ function normalizeHtmlContent(html?: string | null) {
 }
 // -----------------------------------------------------------------------------------
 
-type LibraryMode = 'main' | 'assistant' | 'legend';
+type LibraryMode = 'main' | 'assistant';
 
 async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
-  if (mode !== 'main') {
-    const restrictedLibrary =
-      mode === 'assistant'
-        ? { slug: 'assistant-library', title: 'Assistant Library' }
-        : { slug: 'legends-library', title: 'Legends Library' };
-    const { data: restrictedRoot, error } = await supabase
+  if (mode === 'assistant') {
+    const { data: assistantRoot, error } = await supabase
       .from('content_nodes')
       .select('id')
-      .eq('slug', restrictedLibrary.slug)
+      .eq('slug', 'assistant-library')
       .maybeSingle();
 
     if (error) {
       throw new Error(error.message);
     }
 
-    if (!restrictedRoot?.id) {
-      throw new Error(`${restrictedLibrary.title} collection not found.`);
+    if (!assistantRoot?.id) {
+      throw new Error('Assistant Library collection not found.');
     }
 
-    return restrictedRoot.id;
+    return assistantRoot.id;
   }
 
   const { data: librarySlug, error: slugError } = await supabase
@@ -207,20 +208,17 @@ async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
     return librarySlug.id;
   }
 
-  const { data: latestCollections, error: latestError } = await supabase
+  const { data: latestCollection, error: latestError } = await supabase
     .from('content_nodes')
-    .select('id, slug')
+    .select('id')
     .eq('node_type', 'collection')
-    .order('updated_at', { ascending: false });
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (latestError) {
     throw new Error(latestError.message);
   }
-
-  const latestCollection = (latestCollections ?? []).find(
-    (collection) =>
-      collection.slug !== 'assistant-library' && collection.slug !== 'legends-library',
-  );
 
   if (!latestCollection?.id) {
     throw new Error('No Library collection found.');
@@ -230,6 +228,9 @@ async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
 }
 
 function LibraryEditorInner() {
+  const searchParams = useSearchParams();
+  const deepLinkNodeId = parseEditorDeepLinkId(searchParams.get('node'));
+  const deepLinkBlockId = parseEditorDeepLinkId(searchParams.get('block'));
   const {
     selectedNodeId,
     selectedBlockId,
@@ -253,7 +254,6 @@ function LibraryEditorInner() {
 
   // library-specific
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
   const [snack, setSnack] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
 
@@ -369,9 +369,14 @@ function LibraryEditorInner() {
       ]);
       setTrees(subtrees);
       setRules(edgeRules);
-
-      setSelectedNodeId(subtrees[0]?.node?.id ?? null);
-      setSelectedBlockId(null);
+      const deepLinkSubtree = deepLinkNodeId == null ? null : findSubtree(subtrees, deepLinkNodeId);
+      setSelectedNodeId(deepLinkSubtree?.node.id ?? subtrees[0]?.node?.id ?? null);
+      setSelectedBlockId(
+        deepLinkSubtree && deepLinkBlockId != null
+          && deepLinkSubtree.blocks.some((block) => block.id === deepLinkBlockId)
+          ? deepLinkBlockId
+          : null,
+      );
       setEditingBlockId(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load library';
@@ -379,7 +384,14 @@ function LibraryEditorInner() {
     } finally {
       setLoading(false);
     }
-  }, [libraryMode, setEditingBlockId, setSelectedBlockId, setSelectedNodeId]);
+  }, [
+    deepLinkBlockId,
+    deepLinkNodeId,
+    libraryMode,
+    setEditingBlockId,
+    setSelectedBlockId,
+    setSelectedNodeId,
+  ]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
@@ -401,14 +413,9 @@ function LibraryEditorInner() {
     }
     setNodeDraft({
       title: selectedSubtree.node.title ?? '',
-      slug: selectedSubtree.node.slug ?? '',
       description: selectedSubtree.node.description ?? '',
       hero_image: selectedSubtree.node.hero_image ?? '',
-      icon: selectedSubtree.node.icon ?? '',
-      objectives: selectedSubtree.node.objectives ?? '',
-      metadata: selectedSubtree.node.metadata ? JSON.stringify(selectedSubtree.node.metadata, null, 2) : '',
     });
-    setMetadataError(null);
   }, [selectedSubtree]);
 
   // ensure resources cache
@@ -517,22 +524,6 @@ function LibraryEditorInner() {
     if (!selectedSubtree) return;
     setNodeDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
     const nodeId = selectedSubtree.node.id;
-
-    if (field === 'metadata') {
-      if (!value.trim()) {
-        setMetadataError(null);
-        queueNodeUpdate(nodeId, { metadata: null });
-        return;
-      }
-      try {
-        const parsed = JSON.parse(value);
-        setMetadataError(null);
-        queueNodeUpdate(nodeId, { metadata: parsed });
-      } catch {
-        setMetadataError('Metadata must be valid JSON');
-      }
-      return;
-    }
 
     const mapped: Partial<ContentNode> = { [field]: value ? value : null } as Partial<ContentNode>;
     queueNodeUpdate(nodeId, mapped);
@@ -713,7 +704,7 @@ function LibraryEditorInner() {
             Editing Target
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Switch between the main Library tree and the role-restricted Library trees.
+            Switch between the public Library tree and the assistant-only Library tree.
           </Typography>
         </Box>
         <ToggleButtonGroup
@@ -726,7 +717,6 @@ function LibraryEditorInner() {
         >
           <ToggleButton value="main">Main Library</ToggleButton>
           <ToggleButton value="assistant">Assistant Library</ToggleButton>
-          <ToggleButton value="legend">Legends Library</ToggleButton>
         </ToggleButtonGroup>
       </Stack>
 
@@ -813,8 +803,9 @@ function LibraryEditorInner() {
               <Properties
                 subtree={selectedSubtree}
                 nodeDraft={nodeDraft}
-                metadataError={metadataError}
+                editorKind="library"
                 onNodeFieldChange={handleNodeFieldChange}
+                onManageCoverImage={(nodeId) => setHeroDialog({ open: true, nodeId })}
                 onRequestAddChild={(mode, options) =>
                   selectedSubtree && handleAddChild(selectedSubtree.node.id, {
                     node_type: (options?.type ?? 'lesson') as NodeType,

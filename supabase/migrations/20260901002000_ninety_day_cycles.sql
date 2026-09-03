@@ -269,7 +269,8 @@ begin
 end;
 $$;
 
--- Replace the role-only function so enrollment history closes in the same transaction.
+-- Replace the role-only implementation from the preceding migration so the
+-- enrollment history closes in the same transaction as the access swap.
 create or replace function public.promote_ninety_day_user(p_user_id uuid)
 returns boolean
 language plpgsql
@@ -319,7 +320,9 @@ begin
 end;
 $$;
 
--- Set Your Compass is the only course assigned to the 90-day role.
+-- Keep the fixed course available even if its audience is changed from public
+-- to limited later. Application course listing additionally hides every other
+-- course from 90-day-only accounts.
 insert into public.content_node_roles(node_id, role_id)
 select node.id, role.id
 from public.content_nodes node

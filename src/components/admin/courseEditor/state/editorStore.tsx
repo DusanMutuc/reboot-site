@@ -30,9 +30,20 @@ export type EditorStoreValue = {
 
 const EditorStoreContext = createContext<EditorStoreValue | undefined>(undefined);
 
+export function parseEditorDeepLinkId(raw: string | null): number | null {
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+/** `?node=` and `?block=` let another screen deep-link into a specific place in a guide. */
+function initialFromUrl(key: string): number | null {
+  if (typeof window === 'undefined') return null;
+  return parseEditorDeepLinkId(new URLSearchParams(window.location.search).get(key));
+}
+
 export function EditorStoreProvider({ children }: { children: ReactNode }) {
-  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
-  const [selectedBlockId, setSelectedBlockId] = useState<number | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<number | null>(() => initialFromUrl('node'));
+  const [selectedBlockId, setSelectedBlockId] = useState<number | null>(() => initialFromUrl('block'));
   const [editingBlockId, setEditingBlockId] = useState<number | null>(null);
   const [savingState, setSavingStateValue] = useState<SavingState>('idle');
   const [savingMessage, setSavingMessage] = useState('All changes saved');

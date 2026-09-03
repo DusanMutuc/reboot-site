@@ -1,7 +1,8 @@
 begin;
 
--- The 90-day offer is a first-class entitlement. It deliberately does not
--- include the normal `user` role: promotion swaps the assignments.
+-- The offer is a first-class entitlement. It deliberately does not include
+-- the normal `user` role: promotion swaps the assignments when the member
+-- moves onto the full programme.
 insert into public.roles(code)
 values ('ninety-day-user')
 on conflict (code) do nothing;
@@ -40,6 +41,7 @@ begin
     where user_id = p_user_id and role_id = member_role_id
   ) into has_member_role;
 
+  -- Retried requests are safe once the account is already a full member.
   if not has_ninety_day_role then
     if has_member_role then
       return false;

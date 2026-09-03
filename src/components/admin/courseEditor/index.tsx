@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Alert, Box, CircularProgress, Menu, MenuItem, Snackbar, Stack, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -38,7 +39,7 @@ import {
   updateSequentialUnlock,
   updateCourseOrder,
 } from './api/requests';
-import { EditorStoreProvider, useEditorStore } from './state/editorStore';
+import { EditorStoreProvider, parseEditorDeepLinkId, useEditorStore } from './state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import ResourcePickerDialog from './Canvas/ResourcePickerDialog';
 import AddChildDialog from './Sidebar/AddChildDialog';
@@ -297,6 +298,9 @@ function normalizeHtmlContent(html: string | null | undefined) {
 }
 
 function CourseEditorInner() {
+  const searchParams = useSearchParams();
+  const deepLinkNodeId = parseEditorDeepLinkId(searchParams.get('node'));
+  const deepLinkBlockId = parseEditorDeepLinkId(searchParams.get('block'));
   const {
     selectedNodeId,
     selectedBlockId,
@@ -324,7 +328,6 @@ function CourseEditorInner() {
   const [sequentialLoading, setSequentialLoading] = useState(false);
   const [courseReordering, setCourseReordering] = useState(false);
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
   const [snack, setSnack] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -376,13 +379,24 @@ function CourseEditorInner() {
       const [subtrees, edgeRules] = await Promise.all([fetchCourseTrees('course'), fetchEdgeRules()]);
       setTrees(subtrees);
       setRules(edgeRules);
+      const deepLinkSubtree = deepLinkNodeId == null ? null : findSubtree(subtrees, deepLinkNodeId);
+      const deepLinkPath = deepLinkNodeId == null ? null : findNodePathInForest(subtrees, deepLinkNodeId);
       setSelectedNodeId((prev) => {
+        if (deepLinkSubtree) return deepLinkSubtree.node.id;
         if (prev == null) return null;
         return findSubtree(subtrees, prev) ? prev : null;
       });
-      setSelectedBlockId(null);
+      setSelectedBlockId(
+        deepLinkSubtree && deepLinkBlockId != null
+          && deepLinkSubtree.blocks.some((block) => block.id === deepLinkBlockId)
+          ? deepLinkBlockId
+          : null,
+      );
       setEditingBlockId(null);
-      setExpanded(new Set(subtrees.map((tree) => tree.node.id)));
+      setExpanded(new Set([
+        ...subtrees.map((tree) => tree.node.id),
+        ...(deepLinkPath?.map((subtree) => subtree.node.id) ?? []),
+      ]));
       setCourseSearch('');
       setOutlineSearch('');
     } catch (err) {
@@ -397,6 +411,8 @@ function CourseEditorInner() {
     setSelectedNodeId,
     setExpanded,
     setCourseSearch,
+    deepLinkBlockId,
+    deepLinkNodeId,
     setOutlineSearch,
   ]);
   
@@ -510,14 +526,9 @@ function CourseEditorInner() {
 
     setNodeDraft({
       title: selectedSubtree.node.title ?? '',
-      slug: selectedSubtree.node.slug ?? '',
       description: selectedSubtree.node.description ?? '',
       hero_image: selectedSubtree.node.hero_image ?? '',
-      icon: selectedSubtree.node.icon ?? '',
-      objectives: selectedSubtree.node.objectives ?? '',
-      metadata: selectedSubtree.node.metadata ? JSON.stringify(selectedSubtree.node.metadata, null, 2) : '',
     });
-    setMetadataError(null);
   }, [selectedSubtree]);
 
   useEffect(() => {
@@ -887,22 +898,6 @@ function CourseEditorInner() {
       if (!selectedSubtree) return;
       setNodeDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
       const nodeId = selectedSubtree.node.id;
-
-      if (field === 'metadata') {
-        if (!value.trim()) {
-          setMetadataError(null);
-          queueNodeUpdate(nodeId, { metadata: null });
-          return;
-        }
-        try {
-          const parsed = JSON.parse(value);
-          setMetadataError(null);
-          queueNodeUpdate(nodeId, { metadata: parsed });
-        } catch {
-          setMetadataError('Metadata must be valid JSON');
-        }
-        return;
-      }
 
       const mapped: Partial<ContentNode> = {
         [field]: value ? value : null,
@@ -1426,8 +1421,9 @@ function CourseEditorInner() {
               <Properties
   subtree={selectedSubtree}
   nodeDraft={nodeDraft}
-  metadataError={metadataError}
+  editorKind="course"
   onNodeFieldChange={handleNodeFieldChange}
+  onManageCoverImage={(nodeId) => setHeroDialog({ open: true, nodeId })}
   onRequestAddChild={(mode, options) =>
     setAddChildDialog({ open: true, parentId: selectedSubtree?.node.id ?? null, mode, type: options?.type })
   }

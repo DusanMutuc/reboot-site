@@ -1,0 +1,630 @@
+<title>Discovery Tagging Card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --paper:      #FBFCFC;
+    --card:       #FFFFFF;
+    --rule:       #E7EBEA;
+    --rule-firm:  #CBD5D2;
+    --ink:        #16211E;
+    --ink-soft:   #4A5B57;
+    --ink-faint:  #7B8B87;
+    --brick:      #A13B2C;
+    --brick-bg:   #F7E9E6;
+    --mint:       #E0F1ED;
+    --mint-ink:   #14544A;
+    --sand:       #F3E3C2;
+    --sand-soft:  #F9EFDC;
+    --sand-ink:   #6B5426;
+    --sand-strong: #16211E;
+
+    --step: clamp(0.82rem, 0.79rem + 0.15vw, 0.9rem);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #101917;
+      --card:       #16211E;
+      --rule:       #26332F;
+      --rule-firm:  #3A4A45;
+      --ink:        #E8EFED;
+      --ink-soft:   #A8B8B4;
+      --ink-faint:  #7B8B87;
+      --brick:      #E08A76;
+      --brick-bg:   #2E1C18;
+      --mint:       #17322D;
+      --mint-ink:   #9FD8CB;
+      --sand:       #302819;
+      --sand-soft:  #251F14;
+      --sand-ink:   #D9C79B;
+      --sand-strong: #F0E4C8;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:      #101917;
+    --card:       #16211E;
+    --rule:       #26332F;
+    --rule-firm:  #3A4A45;
+    --ink:        #E8EFED;
+    --ink-soft:   #A8B8B4;
+    --ink-faint:  #7B8B87;
+    --brick:      #E08A76;
+    --brick-bg:   #2E1C18;
+    --mint:       #17322D;
+    --mint-ink:   #9FD8CB;
+    --sand:       #302819;
+    --sand-soft:  #251F14;
+    --sand-ink:   #D9C79B;
+    --sand-strong: #F0E4C8;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: var(--step);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 32px 28px 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 12px 24px;
+    padding-bottom: 14px;
+    border-bottom: 2px solid var(--ink);
+  }
+
+  h1 {
+    font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.6rem, 1.3rem + 1.4vw, 2.1rem);
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  .masthead p {
+    margin: 4px 0 0;
+    color: var(--ink-soft);
+    max-width: 46ch;
+  }
+
+  .masthead a { color: var(--brick); text-underline-offset: 2px; }
+
+  .stamp {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    text-align: right;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+
+  /* ---------- section headers ---------- */
+
+  .eyebrow {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 600;
+    font-size: 0.7rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 10px;
+  }
+
+  /* ---------- the seven steps ---------- */
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(122px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+
+  .step {
+    background: var(--card);
+    padding: 9px 11px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .step-n {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.66rem;
+    font-weight: 600;
+    color: var(--brick);
+    letter-spacing: 0.06em;
+  }
+
+  .step-do {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 600;
+    font-size: 0.87rem;
+    line-height: 1.2;
+  }
+
+  .step-where {
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.74rem;
+    color: var(--ink-soft);
+    line-height: 1.38;
+    text-wrap: pretty;
+  }
+
+  /* ---------- field cards ---------- */
+
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(292px, 1fr));
+    gap: 14px;
+    align-items: start;
+  }
+
+  .field {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--ink);
+    padding: 13px 15px 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .field-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .field-name {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 700;
+    font-size: 0.98rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin: 0;
+  }
+
+  .field-qty {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--ink-faint);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .rules { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+
+  .rules li { padding-left: 15px; position: relative; }
+
+  .rules li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.58em;
+    width: 6px;
+    height: 6px;
+    background: var(--rule-firm);
+  }
+
+  .rules strong { font-weight: 600; }
+
+  .ask {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--ink);
+    border-left: 2px solid var(--rule-firm);
+    padding: 1px 0 1px 10px;
+    margin: 0;
+  }
+
+  /* good / watch blocks */
+
+  .good, .watch {
+    padding: 8px 10px;
+    font-size: 0.79rem;
+    line-height: 1.45;
+  }
+
+  .good { background: var(--mint); color: var(--mint-ink); }
+  .watch { background: var(--brick-bg); color: var(--brick); }
+
+  .tag {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 700;
+    font-size: 0.64rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 3px;
+    opacity: 0.85;
+  }
+
+  .good code, .ex {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.73rem;
+    background: none;
+  }
+
+  .good div + div { margin-top: 4px; }
+
+  .arrow { opacity: 0.6; padding: 0 2px; }
+
+  /* ---------- switches table ---------- */
+
+  .switch-wrap { overflow-x: auto; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.79rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 5px 10px 5px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  th {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 600;
+    font-size: 0.64rem;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+
+  tbody tr:last-child td { border-bottom: none; }
+
+  td:first-child {
+    font-family: "IBM Plex Sans Condensed", sans-serif;
+    font-weight: 600;
+    white-space: nowrap;
+    padding-right: 14px;
+  }
+
+  td:last-child { color: var(--ink-soft); }
+
+  /* ---------- keep in mind ---------- */
+
+  .mind {
+    background: var(--sand-soft);
+    border: 1px solid var(--sand);
+    padding: 15px 17px 17px;
+  }
+
+  .mind .eyebrow { color: var(--sand-ink); }
+
+  .mind-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(228px, 1fr));
+    gap: 10px 26px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .mind-grid li {
+    color: var(--sand-ink);
+    font-size: 0.81rem;
+    line-height: 1.45;
+    padding-left: 15px;
+    position: relative;
+  }
+
+  .mind-grid li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 6px;
+    height: 6px;
+    background: var(--sand-ink);
+    opacity: 0.5;
+  }
+
+  .mind-grid strong { font-weight: 600; color: var(--sand-strong); }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 11px;
+    color: var(--ink-faint);
+    font-size: 0.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    justify-content: space-between;
+  }
+
+  footer code { font-family: "IBM Plex Mono", monospace; }
+
+  a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid var(--brick);
+    outline-offset: 2px;
+  }
+
+  /* ---------- print: one sheet of A4 ---------- */
+
+  @page { size: A4 portrait; margin: 10mm; }
+
+  @media print {
+    :root {
+      --paper: #FFFFFF; --card: #FFFFFF; --rule: #D8DEDC; --rule-firm: #B4C0BD;
+      --ink: #16211E; --ink-soft: #4A5B57; --ink-faint: #6E7E7A;
+      --brick: #A13B2C; --brick-bg: #F7E9E6;
+      --mint: #E4F2EE; --mint-ink: #14544A;
+      --sand: #EBDDBE; --sand-soft: #FAF3E4; --sand-ink: #5E4A20; --sand-strong: #16211E;
+    }
+    body { font-size: 8.29pt; line-height: 1.34; }
+    .sheet { max-width: none; padding: 0; gap: 9px; }
+    h1 { font-size: 16.8pt; }
+    .masthead p { font-size: 8.06pt; }
+    .stamp { font-size: 6.72pt; }
+    .eyebrow { font-size: 6.72pt; margin-bottom: 5px; }
+    .steps { grid-template-columns: repeat(7, 1fr); }
+    .step { padding: 5px 6px 6px; }
+    .step-do { font-size: 8.06pt; }
+    .step-where { font-size: 7.06pt; }
+    .step-n { font-size: 6.38pt; }
+    .fields { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .field { padding: 7px 9px 9px; gap: 6px; break-inside: avoid; }
+    .field-name { font-size: 9.18pt; }
+    .field-qty { font-size: 6.72pt; }
+    .good, .watch { padding: 5px 7px; font-size: 7.5pt; line-height: 1.32; }
+    .tag { font-size: 6.27pt; }
+    .good code, .ex { font-size: 7.17pt; }
+    .ask { font-size: 8.18pt; }
+    table { font-size: 7.5pt; }
+    th { font-size: 6.27pt; }
+    th, td { padding: 2.5px 8px 2.5px 0; }
+    .mind { padding: 8px 10px 10px; break-inside: avoid; }
+    .mind-grid { grid-template-columns: repeat(3, 1fr); gap: 5px 16px; }
+    .mind-grid li { font-size: 7.5pt; line-height: 1.32; }
+    footer { display: block; font-size: 6.72pt; padding-top: 6px; }
+    footer span { display: inline; }
+    footer span + span::before { content: " "; }
+  }
+</style>
+
+<div class="sheet">
+
+  <header class="masthead">
+    <div>
+      <h1>Discovery tagging card</h1>
+      <p>Keep this open while you work. The reasoning behind all of it is in <strong>discovery-admin-guide.md</strong> — read that once, then work from here.</p>
+    </div>
+    <div class="stamp">
+      258 RESOURCES<br>
+      20 GUIDES &middot; 7 COURSES<br>
+      REV. 3 SEP 2026
+    </div>
+  </header>
+
+  <section>
+    <p class="eyebrow">Do it in this order</p>
+    <div class="steps">
+      <div class="step">
+        <span class="step-n">01</span>
+        <span class="step-do">Seed topics</span>
+        <span class="step-where">Topics &amp; synonyms. A first list, not a final one.</span>
+      </div>
+      <div class="step">
+        <span class="step-n">02</span>
+        <span class="step-do">Tag a sample</span>
+        <span class="step-where">~30 items across formats. Run real searches. Fix the list.</span>
+      </div>
+      <div class="step">
+        <span class="step-n">03</span>
+        <span class="step-do">Tag guides &amp; courses</span>
+        <span class="step-where">Library Editor, Course Builder. All 27.</span>
+      </div>
+      <div class="step">
+        <span class="step-n">04</span>
+        <span class="step-do">Tag resources</span>
+        <span class="step-where">Assign topics. Bulk for real groups, rows for the rest.</span>
+      </div>
+      <div class="step">
+        <span class="step-n">05</span>
+        <span class="step-do">Approve browse</span>
+        <span class="step-where">Homepage browse. This switches algorithmic recommendations on.</span>
+      </div>
+      <div class="step">
+        <span class="step-n">06</span>
+        <span class="step-do">Answer standalone</span>
+        <span class="step-where">As you go, while the guide is open.</span>
+      </div>
+      <div class="step">
+        <span class="step-n">07</span>
+        <span class="step-do">Re-check</span>
+        <span class="step-where">Fix a search. Look at a real member's recommendations.</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <p class="eyebrow">How to fill each field</p>
+    <div class="fields">
+
+      <article class="field">
+        <div class="field-head">
+          <h2 class="field-name">Topic</h2>
+          <span class="field-qty">2–4 per item</span>
+        </div>
+        <ul class="rules">
+          <li>Tag what it is <strong>about</strong>, not what it mentions.</li>
+          <li>Reuse an existing topic before making a new one.</li>
+        </ul>
+        <p class="ask">Before using: would a member want a shelf of everything we have about this?</p>
+        <p class="ask">Before creating: will I use this on five or more things?</p>
+        <div class="good">
+          <span class="tag">Good looks like</span>
+          <div><code class="ex">Energy Leaks</code> <span class="arrow">→</span> time management · delegation · mindset</div>
+          <div><code class="ex">Ep 95 - Price Drop Workshop</code> <span class="arrow">→</span> price reductions · listing presentation</div>
+        </div>
+        <div class="watch">
+          <span class="tag">Watch</span>
+          A word can be in the title and still be a bad topic. <code class="ex">Order Your Stanchions</code> is not about stanchions.
+        </div>
+      </article>
+
+      <article class="field">
+        <div class="field-head">
+          <h2 class="field-name">Synonym</h2>
+          <span class="field-qty">applies catalogue-wide</span>
+        </div>
+        <ul class="rules">
+          <li><strong>Add</strong> for misspellings members keep making, and for abbreviations.</li>
+          <li><strong>Skip</strong> plurals and word forms — search already handles those.</li>
+          <li>Use it when the word suits <em>everything</em> under that topic.</li>
+        </ul>
+        <div class="good">
+          <span class="tag">Good looks like</span>
+          <div><code class="ex">refferal</code> <span class="arrow">→</span> referral</div>
+          <div><code class="ex">p&amp;l</code>, <code class="ex">pnl</code> <span class="arrow">→</span> profit and loss</div>
+          <div><code class="ex">listing appointment</code> <span class="arrow">→</span> listing presentation</div>
+        </div>
+        <div class="watch">
+          <span class="tag">Watch</span>
+          You create these by merging, and merging is <strong>one-way</strong>. No undo.
+        </div>
+      </article>
+
+      <article class="field">
+        <div class="field-head">
+          <h2 class="field-name">Alternate name</h2>
+          <span class="field-qty">one item only</span>
+        </div>
+        <ul class="rules">
+          <li>Add the name people actually say that isn't in the title.</li>
+          <li>Add the old name whenever you rename something.</li>
+          <li>Worth doing on anything members ask for by nickname.</li>
+        </ul>
+        <div class="good">
+          <span class="tag">Good looks like</span>
+          <div>"the TIM letter" <span class="arrow">→</span> <code class="ex">Ep 52 - Ben explains the TIM letter</code></div>
+          <div>"red carpet script" <span class="arrow">→</span> a formally-titled script</div>
+        </div>
+        <div class="watch">
+          <span class="tag">Watch</span>
+          If the name would suit five resources, it's a topic — not an alternate name.
+        </div>
+      </article>
+
+      <article class="field">
+        <div class="field-head">
+          <h2 class="field-name">Category</h2>
+          <span class="field-qty">exactly 1 per topic</span>
+        </div>
+        <ul class="rules">
+          <li>The category goes on the <strong>topic</strong>, never on the resource.</li>
+          <li>Set it the moment you create the topic.</li>
+          <li>Four, fixed: Marketing &amp; sales · Systems &amp; operations · Hiring &amp; team · Mindset &amp; leadership.</li>
+        </ul>
+        <div class="good">
+          <span class="tag">Good looks like</span>
+          <div><code class="ex">client events</code> <span class="arrow">→</span> Marketing &amp; sales</div>
+          <div><code class="ex">client onboarding</code> <span class="arrow">→</span> Systems &amp; operations</div>
+        </div>
+        <div class="watch">
+          <span class="tag">Watch</span>
+          A topic that needs two categories is two topics. Use the <em>No category</em> filter to catch misses.
+        </div>
+      </article>
+
+      <article class="field">
+        <div class="field-head">
+          <h2 class="field-name">The switches</h2>
+          <span class="field-qty">4 questions</span>
+        </div>
+        <div class="switch-wrap">
+          <table>
+            <thead>
+              <tr><th>Switch</th><th>Turn on when</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Published</td><td>It's finished. Nothing works without it.</td></tr>
+              <tr><td>In search</td><td>Members may find it by searching.</td></tr>
+              <tr><td>On the homepage</td><td>You'd offer it to someone not looking. Gates browse and <strong>algorithmic recommendations</strong>.</td></tr>
+              <tr><td>Standalone use</td><td>It makes sense outside its lesson.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="watch">
+          <span class="tag">Watch</span>
+          Coach-selected suggestions are the exception: a published, safely openable coach pick may appear without homepage approval.
+        </div>
+      </article>
+
+      <article class="field">
+        <div class="field-head">
+          <h2 class="field-name">Description</h2>
+          <span class="field-qty">256 of 258 empty</span>
+        </div>
+        <ul class="rules">
+          <li>Write it for the person deciding whether to open the thing.</li>
+          <li>Say what they'll get and who it's for.</li>
+          <li>Don't write it for search — it barely moves ranking.</li>
+        </ul>
+        <div class="good">
+          <span class="tag">Good looks like</span>
+          <div>"A one-page script for the first ninety seconds of a listing appointment. Use it before your first walk-through."</div>
+        </div>
+        <div class="watch">
+          <span class="tag">Watch</span>
+          Don't rewrite titles to game search. Accurate title + alternate names + topics do the job together.
+        </div>
+      </article>
+
+    </div>
+  </section>
+
+  <section class="mind">
+    <p class="eyebrow">Keep this in mind</p>
+    <ul class="mind-grid">
+      <li>An <strong>untagged guide</strong> means no recommendations for any member attached to it, however well the resources are tagged.</li>
+      <li>A <strong>topic used once</strong> recommends nothing. The match needs a guide and a resource to share it.</li>
+      <li>Under <strong>four algorithmic</strong> results and that slice stays hidden. A coach pick may still appear.</li>
+      <li>Approve a <strong>spread of formats</strong>. There are 126 podcasts against 104 videos and PDFs.</li>
+      <li>Tag resources <strong>kept with their lesson</strong> anyway — it's how the lesson becomes findable.</li>
+      <li>For <strong>long episode titles</strong>, topics are the only way a member finds it.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <span>Screens live under <strong>Resources</strong> in the admin sidebar. A count means a queue that empties.</span>
+    <span>A setting with a value doesn't mean anyone chose it — <code>Find content</code> shows you which.</span>
+  </footer>
+
+</div>

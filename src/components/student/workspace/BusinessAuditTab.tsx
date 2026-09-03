@@ -21,6 +21,7 @@ import {
 
 import KpiTracker from '@/components/KpiTracker';
 import CoachingNotesPanel from '@/components/coach/CoachingNotesPanel';
+import CoachResourceSuggestionPanel from '@/components/coach/coaching-notes/CoachResourceSuggestionPanel';
 import UserWinsPanel from '@/components/coach/UserWinsPanel';
 import FocusFinderChart from '@/components/coach/business-audit/FocusFinderChart';
 import type { FocusFinderSaveStatus } from '@/components/coach/business-audit/FocusFinderChart';
@@ -871,6 +872,11 @@ export default function BusinessAuditTab({
                   This review does not have a systems scorecard attached.
                 </Alert>
               )}
+
+              <CoachResourceSuggestionPanel
+                userId={selectedStudentId}
+                coachingNoteId={selectedReview.coachingNoteId}
+              />
 
               <Box sx={{ pt: 1 }}>
                 <Typography variant="overline" color="text.secondary">

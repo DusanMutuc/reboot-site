@@ -9,9 +9,10 @@ export async function GET(req: NextRequest, context: unknown) {
   const guard = await requireUser(req);
   if (!guard.ok) return guard.res;
 
-  const { params } = context as { params: { nodeId?: string } };
-  const nodeIdNum = Number(params.nodeId);
-  if (!Number.isFinite(nodeIdNum)) {
+  const { params } = context as { params: Promise<{ nodeId?: string }> };
+  const { nodeId } = await params;
+  const nodeIdNum = Number(nodeId);
+  if (!Number.isSafeInteger(nodeIdNum) || nodeIdNum <= 0) {
     return NextResponse.json({ error: 'Invalid node id' }, { status: 400 });
   }
 
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest, context: unknown) {
         headers: {
           ETag: etag,
           // Always revalidate; if unchanged, browser will use its cached JSON
-          'Cache-Control': 'public, max-age=0, must-revalidate, stale-while-revalidate=86400',
+          'Cache-Control': 'private, no-store',
         },
       });
     }
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest, context: unknown) {
       {
         headers: {
           ETag: etag,
-          'Cache-Control': 'public, max-age=0, must-revalidate, stale-while-revalidate=86400',
+          'Cache-Control': 'private, no-store',
         },
       }
     );

@@ -27,7 +27,18 @@ import LibraryBooksOutlinedIcon from '@mui/icons-material/LibraryBooksOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { supabase } from '@/lib/supabaseClient';
+import DiscoveryTagPicker from '@/components/admin/discovery/DiscoveryTagPicker';
+import DiscoveryCategories from '@/components/admin/discovery/DiscoveryCategories';
+import StandaloneUseSection from '@/components/admin/discovery/StandaloneUseSection';
+import { fetchItemDecision, recordDecision, setBrowseApproval } from '@/lib/discoveryJobsClient';
+import { DISCOVERY_BROWSE_BLOCKERS } from '@/lib/discoveryJobTypes';
+import { splitDiscoveryNames } from '@/lib/discoveryAdminTypes';
 import { adminCompactLabelSx } from '@/lib/theme';
+import {
+  discoveryVisibility,
+  DISCOVERY_VISIBILITY_LABELS,
+  type DiscoveryVisibility,
+} from '@/lib/discoveryVisibility';
 
 type ResourceType = 'video' | 'podcast' | 'pdf' | 'document' | 'audio' | 'image' | 'link';
 type ResourceState = 'draft' | 'published' | 'archived';
@@ -42,7 +53,14 @@ type SortValue =
   | 'placement_library'
   | 'placement_course'
   | 'placement_search_only';
-type ResourceTag = { id: number; name: string; category: string | null };
+type ResourceTag = {
+  id: number;
+  name: string;
+  category: string | null;
+  tag_kind?: 'browse_category' | 'topic' | 'alias' | 'format' | 'audience' | 'legacy';
+  browse_category?: string | null;
+  is_active?: boolean;
+};
 type ResourcePlacement = {
   inLibrary: boolean;
   inCourse: boolean;
@@ -59,6 +77,10 @@ type ResourceRow = {
   duration: number | null;
   created_at: string;
   state: ResourceState;
+  is_discoverable: boolean;
+  is_browsable: boolean;
+  discovery_open_mode?: 'context' | 'direct';
+  search_names?: string[];
   tags: ResourceTag[]; // denormalized for UI
   score?: number | null; // from RPC
 };
@@ -80,10 +102,6 @@ const PLACEMENT_SORTS: ReadonlySet<SortValue> = new Set([
   'placement_course',
   'placement_search_only',
 ]);
-
-const resourceTagChipSx = {
-  '& .MuiChip-label': adminCompactLabelSx,
-} as const;
 
 const resourceCardTagChipSx = {
   height: 22,
@@ -195,10 +213,10 @@ function PlacementInfo({
 
   if (!placement?.inLibrary && !placement?.inCourse) {
     return (
-      <Tooltip title="Not placed in the Library or a course; available through search only.">
+      <Tooltip title="Not placed inside a guide or course. Discovery visibility is managed separately.">
         <Box sx={placementItemSx}>
           <SearchIcon sx={{ fontSize: 15 }} />
-          <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Search only</Typography>
+          <Typography variant="caption" color="inherit" sx={metadataLabelSx}>Not in guide/course</Typography>
         </Box>
       </Tooltip>
     );
@@ -262,7 +280,12 @@ export default function ResourceLibraryAdmin() {
   // fetch tags for selectors
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from('tags').select('id,name,category').order('name', { ascending: true });
+      const { data, error } = await supabase
+        .from('tags')
+        .select('id,name,category,tag_kind,browse_category,is_active')
+        .eq('tag_kind', 'topic')
+        .order('tag_kind', { ascending: true })
+        .order('name', { ascending: true });
       if (error) setError(error.message);
       else setAllTags((data ?? []) as ResourceTag[]);
     })();
@@ -279,6 +302,10 @@ export default function ResourceLibraryAdmin() {
     duration: number | null;
     created_at: string;
     state?: ResourceState | null;
+    is_discoverable?: boolean | null;
+    is_browsable?: boolean | null;
+    discovery_open_mode?: 'context' | 'direct';
+    search_names?: string[];
     tags?: { id: number; name: string; category: string | null }[];
     score?: number | null;
   }): ResourceRow {
@@ -292,6 +319,10 @@ export default function ResourceLibraryAdmin() {
       duration: r.duration,
       created_at: r.created_at,
       state: (r.state ?? 'published') as ResourceState,
+      is_discoverable: r.is_discoverable ?? false,
+      discovery_open_mode: r.discovery_open_mode ?? 'context',
+      search_names: r.search_names ?? [],
+      is_browsable: r.is_browsable ?? false,
       tags: (r.tags ?? []).map((t) => ({ id: t.id, name: t.name, category: t.category })),
       score: r.score ?? null,
     };
@@ -307,6 +338,10 @@ export default function ResourceLibraryAdmin() {
     duration: number | null;
     created_at: string;
     state: ResourceState;
+    is_discoverable: boolean;
+    is_browsable: boolean;
+  discovery_open_mode?: 'context' | 'direct';
+  search_names?: string[];
     // Accept either single tag or array-of-tags per row
     resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
   }): ResourceRow {
@@ -326,6 +361,10 @@ export default function ResourceLibraryAdmin() {
       duration: r.duration,
       created_at: r.created_at,
       state: r.state,
+      is_discoverable: r.is_discoverable,
+      discovery_open_mode: r.discovery_open_mode ?? 'context',
+      search_names: r.search_names ?? [],
+      is_browsable: r.is_browsable,
       tags,
     };
   }
@@ -381,14 +420,38 @@ export default function ResourceLibraryAdmin() {
           const { data, error } = await supabase.rpc('search_resources', args);
           if (cancelled || runId !== runningRef.current) return;
           if (error) throw error;
-          const mapped = (data ?? []).map(mapRpcRowToResource);
+          const mapped: ResourceRow[] = (data ?? []).map(mapRpcRowToResource);
+          const resourceIds = mapped.map((resource) => resource.id);
+          const discoverability = resourceIds.length
+            ? await supabase
+                .from('resources')
+                .select('id,is_discoverable,is_browsable,discovery_open_mode,search_names')
+                .in('id', resourceIds)
+            : { data: [], error: null };
+          if (cancelled || runId !== runningRef.current) return;
+          if (discoverability.error) throw discoverability.error;
+          const discoverabilityById = new Map(
+            (discoverability.data ?? []).map((resource) => [
+              resource.id,
+              resource,
+            ]),
+          );
+          const enriched = mapped.map((resource) => ({
+            ...resource,
+            discovery_open_mode: discoverabilityById.get(resource.id)?.discovery_open_mode ?? 'context',
+            search_names: discoverabilityById.get(resource.id)?.search_names ?? [],
+            is_discoverable:
+              discoverabilityById.get(resource.id)?.is_discoverable ?? resource.is_discoverable,
+            is_browsable:
+              discoverabilityById.get(resource.id)?.is_browsable ?? resource.is_browsable,
+          }));
           const needsClientSort = !SUPPORTED_RPC_SORTS.has(sort);
-          setRows(needsClientSort ? sortPlain(mapped, sort) : mapped);
+          setRows(needsClientSort ? sortPlain(enriched, sort) : enriched);
         } else {
           let query = supabase
             .from('resources')
             .select(`
-              id, title, description, type, url, thumbnail, duration, created_at, state,
+              id, title, description, type, url, thumbnail, duration, created_at, state, is_discoverable, is_browsable, discovery_open_mode, search_names,
               resource_tags (
                 tag:tags ( id, name, category )
               )
@@ -483,7 +546,7 @@ export default function ResourceLibraryAdmin() {
     const { data, error } = await supabase
       .from('resources')
       .select(`
-        id, title, description, type, url, thumbnail, duration, created_at, state,
+        id, title, description, type, url, thumbnail, duration, created_at, state, is_discoverable, is_browsable, discovery_open_mode, search_names,
         resource_tags ( tag_id )
       `)
       .eq('id', row.id)
@@ -492,6 +555,10 @@ export default function ResourceLibraryAdmin() {
     setEditing({
       ...row,
       state: (data?.state as ResourceState | undefined) ?? row.state,
+      is_discoverable:
+        typeof data?.is_discoverable === 'boolean' ? data.is_discoverable : row.is_discoverable,
+      is_browsable:
+        typeof data?.is_browsable === 'boolean' ? data.is_browsable : row.is_browsable,
       tags: row.tags,
     });
     setOpen(true);
@@ -571,7 +638,7 @@ export default function ResourceLibraryAdmin() {
               <MenuItem value="duration_desc">Longest</MenuItem>
               <MenuItem value="placement_library">Placement: Library first</MenuItem>
               <MenuItem value="placement_course">Placement: Course first</MenuItem>
-              <MenuItem value="placement_search_only">Placement: Search only first</MenuItem>
+              <MenuItem value="placement_search_only">Placement: Not in guide/course first</MenuItem>
             </Select>
           </FormControl>
 
@@ -618,6 +685,17 @@ export default function ResourceLibraryAdmin() {
                           )}
                         </IconButton>
                       </Tooltip>
+                      <Tooltip
+                        title={`Edit discovery visibility: ${DISCOVERY_VISIBILITY_LABELS[discoveryVisibility(r)]}`}
+                      >
+                        <IconButton size="small" onClick={() => onEdit(r)}>
+                          {r.is_discoverable ? (
+                            <SearchIcon color="primary" />
+                          ) : (
+                            <SearchIcon color="disabled" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
                       <Tooltip title="Open">
                         <IconButton size="small" onClick={() => onOpen(r)}><OpenInNewIcon /></IconButton>
                       </Tooltip>
@@ -638,6 +716,13 @@ export default function ResourceLibraryAdmin() {
                     sx={{ flexWrap: 'wrap', minHeight: 22 }}
                   >
                     <StatusIndicator state={r.state} />
+                    <Typography
+                      variant="caption"
+                      color={r.is_discoverable ? 'primary.main' : 'text.disabled'}
+                      sx={metadataLabelSx}
+                    >
+                      {DISCOVERY_VISIBILITY_LABELS[discoveryVisibility(r)]}
+                    </Typography>
                     <PlacementInfo
                       placement={placements[r.id]}
                       loading={placementsLoading}
@@ -724,6 +809,38 @@ function formatDuration(totalSeconds?: number | null) {
   return h > 0 ? `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` : `${m}:${s.toString().padStart(2,'0')}`;
 }
 
+/**
+ * Discovery settings are decisions, not columns.
+ *
+ * Writing `is_discoverable` / `is_browsable` / `discovery_open_mode` straight onto the row did two
+ * things silently: it superseded any decision recorded in the jobs or the builders — deleting the
+ * record — and it set homepage approval without any of the eligibility checks
+ * `admin_set_discovery_browse` exists to enforce. That made this form the only place in the product
+ * that could put an unpublished or context-bound resource in front of members.
+ *
+ * The choice on screen stays one escalating question. Behind it sit the two separate records the
+ * model needs, written through the same API every other surface uses.
+ */
+async function applyDiscoverySettings(resourceId: number, visibility: DiscoveryVisibility) {
+  const current = await fetchItemDecision('resource', resourceId, 'visibility');
+  const recorded = await recordDecision({
+    item: { kind: 'resource', id: resourceId }, question: 'visibility',
+    answer: visibility === 'hidden' ? 'excluded' : 'allowed',
+    token: current.token,
+  });
+  if (!recorded.ok) {
+    throw new Error(recorded.decidedBy
+      ? `${recorded.decidedBy} changed the search visibility for this resource while you were editing. Reload and try again.`
+      : 'The search visibility for this resource changed while you were editing. Reload and try again.');
+  }
+
+  const browse = await setBrowseApproval({ kind: 'resource', id: resourceId }, visibility === 'browse');
+  if (!browse.ok) {
+    const reason = DISCOVERY_BROWSE_BLOCKERS[browse.blocker]?.label ?? browse.blocker;
+    throw new Error(`Saved, but it cannot go on the homepage yet — ${reason.toLowerCase()}.`);
+  }
+}
+
 /** ─────────────────────────────
  *  Create / Edit dialog
  *  ────────────────────────────*/
@@ -744,8 +861,12 @@ function ResourceDialog({
   const [thumbnail, setThumbnail] = useState(editing?.thumbnail ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [duration, setDuration] = useState<string>(editing?.duration?.toString() ?? '');
-  const [stateValue, setStateValue] = useState<ResourceState>(editing?.state ?? 'published');
-  const [selectedTags, setSelectedTags] = useState<ResourceTag[]>(editing?.tags ?? []);
+  const [stateValue, setStateValue] = useState<ResourceState>(editing?.state ?? 'draft');
+  const [alternateNames, setAlternateNames] = useState((editing?.search_names ?? []).join('\n'));
+  const [visibility, setVisibility] = useState<DiscoveryVisibility | ''>(
+    editing ? discoveryVisibility(editing) : '');
+  const [selectedTags, setSelectedTags] = useState<ResourceTag[]>(() => (editing?.tags ?? [])
+    .flatMap(tag => { const full = allTags.find(option => option.id === tag.id); return full ? [full] : []; }));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string|null>(null);
 
@@ -774,12 +895,16 @@ function isLikelyUrl(s: string): boolean {
     setThumbnail(editing?.thumbnail ?? '');
     setDescription(editing?.description ?? '');
     setDuration(editing?.duration?.toString() ?? '');
-    setStateValue(editing?.state ?? 'published');
-    setSelectedTags(editing?.tags ?? []);
+    setStateValue(editing?.state ?? 'draft');
+    setVisibility(editing ? discoveryVisibility(editing) : '');
+    setAlternateNames((editing?.search_names ?? []).join('\n'));
+    setSelectedTags((editing?.tags ?? []).flatMap(tag => {
+      const full = allTags.find(option => option.id === tag.id); return full ? [full] : [];
+    }));
     setUploadMode(editing?.type === 'pdf' || editing?.type === 'image' ? 'link' : 'link');
     setFile(null);
     setErr(null);
-  }, [editing]);
+  }, [editing, allTags]);
 
   // Helper to refetch a resource row (with tags) and map to UI shape
   async function refetchAndMap(resourceId: number): Promise<ResourceRow> {
@@ -793,12 +918,16 @@ function isLikelyUrl(s: string): boolean {
       duration: number | null;
       created_at: string;
       state: ResourceState;
+      is_discoverable: boolean;
+      is_browsable: boolean;
+  discovery_open_mode?: 'context' | 'direct';
+  search_names?: string[];
       resource_tags?: { tag: ResourceTag }[] | { tag: ResourceTag[] }[];
     };
     const { data: r2, error: e2 } = await supabase
       .from('resources')
       .select(`
-        id, title, description, type, url, thumbnail, duration, created_at, state,
+        id, title, description, type, url, thumbnail, duration, created_at, state, is_discoverable, is_browsable, discovery_open_mode, search_names,
         resource_tags ( tag:tags ( id, name, category ) )
       `)
       .eq('id', resourceId)
@@ -820,6 +949,10 @@ function isLikelyUrl(s: string): boolean {
       duration: r2.duration,
       created_at: r2.created_at,
       state: r2.state,
+      is_discoverable: r2.is_discoverable,
+      is_browsable: r2.is_browsable,
+      discovery_open_mode: r2.discovery_open_mode ?? 'context',
+      search_names: r2.search_names ?? [],
       tags,
     };
   }
@@ -829,8 +962,10 @@ function isLikelyUrl(s: string): boolean {
       setSaving(true);
       setErr(null);
 
-      // Ensure tags exist (admin-only op; uses unique constraints)
-      const tagIds = await ensureTags(selectedTags.map(t => t.name));
+      // Resource forms only assign active canonical taxonomy rows. New topics
+      // are governed separately rather than being created implicitly here.
+      const tagIds = selectedTags.map((tag) => tag.id).filter((id) => id > 0);
+      const searchNames = splitDiscoveryNames(alternateNames);
 
       // Branch: file upload via API (PDF or image)
       if (!isEdit && supportsFileUpload && uploadMode === 'upload') {
@@ -840,29 +975,16 @@ function isLikelyUrl(s: string): boolean {
         fd.append('type', type);
         fd.append('title', title);
         if (description) fd.append('description', description);
-        fd.append('tags', JSON.stringify(selectedTags.map(t => t.name)));
+        fd.append('tag_ids', JSON.stringify(tagIds));
+        fd.append('search_names', JSON.stringify(searchNames));
+        fd.append('state', stateValue);
 
         const res = await fetch('/api/resources/upload', { method: 'POST', body: fd });
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || 'Upload failed');
 
-        // Server already inserted the resource and set url=/r/<id>
+        if (visibility) await applyDiscoverySettings(json.id, visibility);
         const mapped = await refetchAndMap(json.id);
-        // State override if dialog selected non-default
-        if (stateValue && stateValue !== mapped.state) {
-          const { data: sUpd, error: sErr } = await supabase
-            .from('resources')
-            .update({ state: stateValue })
-            .eq('id', json.id)
-            .select('id')
-            .maybeSingle();
-          if (sErr) throw sErr;
-          if (sUpd?.id) {
-            const remapped = await refetchAndMap(json.id);
-            onSaved(remapped);
-            return;
-          }
-        }
         onSaved(mapped);
         return;
       }
@@ -878,6 +1000,7 @@ function isLikelyUrl(s: string): boolean {
         thumbnail: string | null;
         duration: number | null;
         state: ResourceState;
+  search_names?: string[];
       };
 
       const payload: ResourcePayload = {
@@ -888,6 +1011,7 @@ function isLikelyUrl(s: string): boolean {
         thumbnail: thumbnail || null,
         duration: desiredDuration,
         state: stateValue,
+        search_names: searchNames,
       };
 
       let resourceId = editing?.id;
@@ -908,8 +1032,13 @@ function isLikelyUrl(s: string): boolean {
         if (error) throw error;
       }
 
+      if (visibility) await applyDiscoverySettings(resourceId!, visibility);
+
       // Sync tags to desired set
-      await syncResourceTags(resourceId!, tagIds);
+      const originalTopicIds = (editing?.tags ?? []).filter(tag => allTags.some(option => option.id === tag.id)).map(tag => tag.id).sort((a, b) => a - b);
+      if (!editing || JSON.stringify([...tagIds].sort((a, b) => a - b)) !== JSON.stringify(originalTopicIds)) {
+        await syncResourceTags(resourceId!, tagIds);
+      }
 
       // Refetch and return mapped row
       const mapped = await refetchAndMap(resourceId!);
@@ -1054,14 +1183,14 @@ function isLikelyUrl(s: string): boolean {
 
 
           <FormControl>
-            <InputLabel shrink>Tags</InputLabel>
-            <TagSelector
+            <DiscoveryTagPicker
               options={allTags}
               value={selectedTags}
               onChange={setSelectedTags}
-              placeholder="Select or create tags…"
             />
           </FormControl>
+
+          <DiscoveryCategories tags={selectedTags} />
 
           <FormControl fullWidth>
             <InputLabel>State</InputLabel>
@@ -1070,11 +1199,52 @@ function isLikelyUrl(s: string): boolean {
               value={stateValue}
               onChange={(e)=>setStateValue(e.target.value as ResourceState)}
             >
-              <MenuItem value="published">Published (visible to members)</MenuItem>
-              <MenuItem value="draft">Draft (hidden from members)</MenuItem>
+              <MenuItem value="published">Published</MenuItem>
+              <MenuItem value="draft">Draft</MenuItem>
               <MenuItem value="archived">Archived</MenuItem>
             </Select>
           </FormControl>
+
+          <FormControl>
+            <Typography id="resource-discovery-label" variant="subtitle2">
+              Where can members find this?
+            </Typography>
+            <RadioGroup
+              aria-labelledby="resource-discovery-label"
+              value={visibility}
+              onChange={(event) => setVisibility(event.target.value as DiscoveryVisibility)}
+            >
+              <FormControlLabel value="hidden" control={<Radio />} label="Hidden from discovery" />
+              <FormControlLabel value="search_only" control={<Radio />} label="Search only" />
+              <FormControlLabel
+                value="browse" control={<Radio />} label="Search and homepage browse"
+                disabled={stateValue !== 'published'}
+              />
+            </RadioGroup>
+            {stateValue !== 'published' && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                Homepage browse needs a published resource. Publish it first, or add it later from
+                Homepage browse.
+              </Typography>
+            )}
+            {!visibility && (
+              <Typography variant="caption" sx={{ mt: 0.5, color: 'warning.dark' }}>
+                Nothing chosen yet. Save without answering and this resource will not appear in search
+                until someone does — you will find it under &ldquo;Not in search yet&rdquo;.
+              </Typography>
+            )}
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+              This does not publish a draft, grant access, or remove the item from its guide.
+            </Typography>
+          </FormControl>
+          {/* The standalone question renders itself only when this resource actually sits inside a
+              guide, and uses the same wording as the builder — the same question must never have
+              two phrasings. */}
+          {isEdit && editing && <StandaloneUseSection resourceId={editing.id} />}
+          <TextField label="Also findable by" value={alternateNames}
+            onChange={(event) => setAlternateNames(event.target.value)} multiline minRows={2}
+            placeholder="One word or phrase per line"
+            helperText="Words a member might search that aren't in the title. Up to 20, this item only." />
         </Stack>
       </DialogContent>
       <DialogActions>
@@ -1088,116 +1258,12 @@ function isLikelyUrl(s: string): boolean {
 }
 
 
-/** TagSelector: chips with ability to add new tag names */
-function TagSelector({
-  options, value, onChange, placeholder
-}: {
-  options: ResourceTag[];
-  value: ResourceTag[];
-  onChange: (v: ResourceTag[]) => void;
-  placeholder?: string;
-}) {
-  // simple “add by typing & press Enter” implementation
-  const [input, setInput] = useState('');
-  const filtered = useMemo(() => {
-    const q = input.trim().toLowerCase();
-    return q ? options.filter(o => o.name.toLowerCase().includes(q)) : options;
-  }, [input, options]);
-
-  const addByName = (name: string) => {
-    name = name.trim();
-    if (!name) return;
-    const existing = options.find(o => o.name.toLowerCase() === name.toLowerCase());
-    const tag = existing ?? { id: -Math.floor(Math.random()*1e6), name, category: null }; // temp id until saved
-    if (!value.some(v => v.name.toLowerCase() === tag.name.toLowerCase())) {
-      onChange([...value, tag]);
-    }
-    setInput('');
-  };
-
-  const remove = (id: number) => onChange(value.filter(v => v.id !== id));
-
-  return (
-    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1 }}>
-      <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
-        {value.map(v => (
-          <Chip key={v.id} label={`#${v.name}`} onDelete={() => remove(v.id)} sx={resourceTagChipSx} />
-        ))}
-      </Stack>
-      <TextField
-        size="small"
-        placeholder={placeholder ?? 'Add tag and press Enter'}
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); addByName(input); }
-        }}
-        fullWidth
-        sx={{ mt: 1 }}
-      />
-      <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
-        {filtered.slice(0, 12).map(o => (
-          <Chip
-            key={o.id}
-            label={`#${o.name}`}
-            onClick={() => addByName(o.name)}
-            variant="outlined"
-            size="small"
-            sx={resourceTagChipSx}
-          />
-        ))}
-      </Stack>
-    </Box>
-  );
-}
-
-/** Ensure tag names exist, return IDs (creates missing ones). */
-async function ensureTags(names: string[]): Promise<number[]> {
-  const clean = Array.from(new Set(names.map(n => n.trim()).filter(Boolean).map(n => n.toLowerCase())));
-  if (!clean.length) return [];
-
-  // fetch existing by lower(name)
-  const { data: existing, error: e1 } = await supabase.from('tags').select('id,name');
-  if (e1) throw e1;
-  const foundMap = new Map<string, number>();
-  (existing ?? []).forEach(t => foundMap.set(String(t.name).toLowerCase(), t.id as number));
-
-  const toCreate = clean.filter(n => !foundMap.has(n));
-  const createdIds: number[] = [];
-  if (toCreate.length) {
-    // create individually to surface errors clearly (admin-only per RLS)
-    for (const nm of toCreate) {
-      const { data, error } = await supabase.from('tags').insert({ name: nm }).select('id').single();
-      if (error) throw error;
-      createdIds.push((data as { id: number }).id);
-      foundMap.set(nm, (data as { id: number }).id);
-    }
-  }
-  return clean.map(nm => foundMap.get(nm)!).filter(Boolean);
-}
-
 /** Sync resource_tags to match the desired tag IDs. */
 async function syncResourceTags(resourceId: number, desiredTagIds: number[]) {
-  // current
-  const { data: links, error } = await supabase.from('resource_tags').select('tag_id').eq('resource_id', resourceId);
-  if (error) throw error;
-  const currentIds = new Set<number>((links ?? []).map((x: { tag_id: number }) => x.tag_id));
-
-  const desired = new Set<number>(desiredTagIds);
-  const toAdd = Array.from(desired).filter(id => !currentIds.has(id));
-  const toRemove = Array.from(currentIds).filter(id => !desired.has(id));
-
-  if (toAdd.length) {
-    const rows = toAdd.map(tag_id => ({ resource_id: resourceId, tag_id }));
-    const { error: e2 } = await supabase.from('resource_tags').insert(rows);
-    if (e2) throw e2;
-  }
-  if (toRemove.length) {
-    const { error: e3 } = await supabase
-      .from('resource_tags')
-      .delete()
-      .eq('resource_id', resourceId)
-      .in('tag_id', toRemove);
-    if (e3) throw e3;
-  }
+  const response = await fetch('/api/admin/discovery', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operation: 'update_items', resourceIds: [resourceId], tagIds: desiredTagIds, tagAction: 'replace' }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error ?? 'Tag save failed.');
 }
