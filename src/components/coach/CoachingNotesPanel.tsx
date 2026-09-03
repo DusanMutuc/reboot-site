@@ -30,6 +30,7 @@ import {
   upsertMeetingAttendance,
 } from '@/lib/meetings';
 import ActionStepsPanel from './coaching-notes/ActionStepsPanel';
+import CoachResourceSuggestionPanel from './coaching-notes/CoachResourceSuggestionPanel';
 import CommentsPanel from './coaching-notes/CommentsPanel';
 import MeetingSlotsPanel from './coaching-notes/MeetingSlotsPanel';
 import NoteSelector from './coaching-notes/NoteSelector';
@@ -1243,6 +1244,11 @@ export default function CoachingNotesPanel({
                   void saveEditComment();
                 }}
                 onStartEditComment={startEditComment}
+              />
+
+              <CoachResourceSuggestionPanel
+                userId={userId}
+                coachingNoteId={selectedNote.id}
               />
 
               <ActionStepsPanel

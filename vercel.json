@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/sync-podcasts", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/sync-business-audit-meetings", "schedule": "0 0 * * *" }
+    { "path": "/api/cron/sync-business-audit-meetings", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/maintain-discovery", "schedule": "15 1 * * *" }
   ]
 }

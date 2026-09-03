@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    '/api/admin/discovery/guide': ['./docs/discovery-admin-quickref.html'],
+  },
   images: {
     remotePatterns: [
       // Object endpoint (no transform) – course-heroes

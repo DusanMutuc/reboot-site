@@ -9,6 +9,10 @@ import AssignAssistantPanel from '@/components/admin/AssignAssistantPanel';
 import AssignCoachPanel from '@/components/admin/AssignCoachPanel';
 import CoachRosters from '@/components/admin/CoachRosters';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
+import DiscoveryAdminPanel from '@/components/admin/discovery/DiscoveryAdminPanel';
+import { fetchJobCounts } from '@/lib/discoveryJobsClient';
+import type { DiscoveryJobCounts } from '@/lib/discoveryJobsClient';
+import { navigateWithDiscoveryGuard } from '@/lib/discoveryAdminNavigation';
 import CourseEditor from '@/components/admin/courseEditor';
 import LibraryEditor from '@/components/admin/libraryEditor';
 import SystemScorecardLibraryAdmin from '@/components/admin/SystemScorecardLibraryAdmin';
@@ -46,6 +50,11 @@ import {
   AssignmentInd as AssignmentIndIcon,
   MenuBook as MenuBookIcon,
   LibraryBooks as LibraryBooksIcon,
+  LocalOffer as LocalOfferIcon,
+  UnfoldMore as UnfoldMoreIcon,
+  VisibilityOff as VisibilityOffIcon,
+  Home as HomeIcon,
+  Sell as SellIcon,
   Assessment as AssessmentIcon,
   Event as EventIcon,
   EmojiEvents as EmojiEventsIcon,
@@ -56,6 +65,8 @@ import {
   PendingActions as PendingActionsIcon,
   LinkRounded as LinkRoundedIcon,
   Timelapse as TimelapseIcon,
+  Search as SearchIcon,
+  Troubleshoot as TroubleshootIcon,
 } from '@mui/icons-material';
 
 type AdminNavChild = {
@@ -63,6 +74,8 @@ type AdminNavChild = {
   label: string;
   icon: typeof PersonAddIcon;
   component: string;
+  badge?: 'topics' | 'placement' | 'visibility';
+  groupBreak?: boolean;
 };
 
 type AdminNavSection = {
@@ -112,10 +125,24 @@ const navigationStructure: AdminNavSection[] = [
     icon: MenuBookIcon,
     children: [
       { id: 'course-builder', label: 'Course Builder', icon: MenuBookIcon, component: 'CourseEditor' },
-      { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
       { id: 'library-editor', label: 'Library Editor', icon: LibraryBooksIcon, component: 'LibraryEditor' },
       { id: 'scorecard-library', label: 'Systems Scorecard', icon: LinkRoundedIcon, component: 'SystemScorecardLibraryAdmin' },
       { id: 'site-announcement', label: 'Home Announcement', icon: CampaignIcon, component: 'SiteAnnouncementAdmin' },
+    ],
+  },
+  {
+    id: 'resources',
+    label: 'Resources',
+    icon: LibraryBooksIcon,
+    children: [
+      { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
+      { id: 'discovery-topics', label: 'Assign topics', icon: LocalOfferIcon, component: 'DiscoveryAdminPanel', badge: 'topics' },
+      { id: 'discovery-standalone', label: 'Check standalone use', icon: UnfoldMoreIcon, component: 'DiscoveryAdminPanel', badge: 'placement' },
+      { id: 'discovery-hidden', label: 'Not in search yet', icon: VisibilityOffIcon, component: 'DiscoveryAdminPanel', badge: 'visibility' },
+      { id: 'discovery-browse', label: 'Homepage browse', icon: HomeIcon, component: 'DiscoveryAdminPanel' },
+      { id: 'discovery-find', label: 'Find content', icon: SearchIcon, component: 'DiscoveryAdminPanel', groupBreak: true },
+      { id: 'discovery-search', label: 'Fix a search', icon: TroubleshootIcon, component: 'DiscoveryAdminPanel' },
+      { id: 'discovery-vocabulary', label: 'Topics & synonyms', icon: SellIcon, component: 'DiscoveryAdminPanel' },
     ],
   },
   {
@@ -152,6 +179,17 @@ const validAdminViews = new Set(
 const ADMIN_VIEW_ALIASES: Record<string, string> = {
   'student-overview-new': 'student-workspace',
   'student-tracker': 'student-workspace',
+  discovery: 'discovery-topics',
+};
+
+const DISCOVERY_VIEWS: Record<string, 'topics' | 'placement' | 'visibility' | 'browse' | 'find' | 'search' | 'vocabulary'> = {
+  'discovery-topics': 'topics',
+  'discovery-standalone': 'placement',
+  'discovery-hidden': 'visibility',
+  'discovery-browse': 'browse',
+  'discovery-find': 'find',
+  'discovery-search': 'search',
+  'discovery-vocabulary': 'vocabulary',
 };
 const knownAdminViews = new Set([...validAdminViews, ...Object.keys(ADMIN_VIEW_ALIASES)]);
 
@@ -179,6 +217,7 @@ function getSectionIdForView(viewId: string): string | null {
 export default function AdminPageShell({ currentView }: { currentView?: string | null }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [discoveryCounts, setDiscoveryCounts] = useState<DiscoveryJobCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -280,10 +319,31 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
 
   const navigateToView = (viewId: string) => {
     if (viewId === selectedView) return;
-    router.push(getAdminViewPath(viewId));
+    navigateWithDiscoveryGuard(() => router.push(getAdminViewPath(viewId)));
   };
 
+  const inResources = !!DISCOVERY_VIEWS[selectedView] || selectedView === 'resource-library';
+  useEffect(() => {
+    if (!inResources) return undefined;
+    let live = true;
+    void fetchJobCounts()
+      .then((next) => { if (live) setDiscoveryCounts(next); })
+      .catch(() => { /* A missing count must not block navigation. */ });
+    return () => { live = false; };
+  }, [inResources, selectedView]);
+
+  const refreshDiscoveryCounts = () => {
+    void fetchJobCounts().then(setDiscoveryCounts).catch(() => {});
+  };
+
+  const badgeCount = (badge?: 'topics' | 'placement' | 'visibility') =>
+    (badge && discoveryCounts ? discoveryCounts[badge].needs : null);
+
   const renderContent = () => {
+    const discoveryView = DISCOVERY_VIEWS[selectedView];
+    if (discoveryView) {
+      return <DiscoveryAdminPanel view={discoveryView} onCountsChanged={refreshDiscoveryCounts} />;
+    }
     switch (selectedView) {
       case 'add-user':
         return <AddUserForm />;
@@ -449,6 +509,10 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
                             py: 0.625,
                             borderRadius: 1,
                             mb: 0.25,
+                            mt: child.groupBreak ? 1.25 : 0,
+                            pt: child.groupBreak ? 1.25 : 0.625,
+                            borderTop: child.groupBreak ? '1px solid' : undefined,
+                            borderTopColor: child.groupBreak ? 'divider' : undefined,
                             minHeight: 0,
                             '&.Mui-selected': {
                               bgcolor: 'primary.main',
@@ -472,6 +536,27 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
                               fontWeight: 500,
                             }}
                           />
+                          {badgeCount(child.badge) !== null && (
+                            <Box
+                              component="span"
+                              aria-label={`${badgeCount(child.badge)} waiting`}
+                              sx={{
+                                ml: 1,
+                                px: 0.75,
+                                py: 0.1,
+                                borderRadius: 1,
+                                flex: 'none',
+                                fontFamily: 'monospace',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                fontVariantNumeric: 'tabular-nums',
+                                bgcolor: isSelected ? 'rgba(255,255,255,0.25)' : 'action.selected',
+                                color: isSelected ? 'white' : 'text.secondary',
+                              }}
+                            >
+                              {badgeCount(child.badge)}
+                            </Box>
+                          )}
                         </ListItemButton>
                       );
                     })}

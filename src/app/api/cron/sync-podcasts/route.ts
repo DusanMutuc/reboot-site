@@ -161,6 +161,7 @@ export async function GET(req: NextRequest) {
             thumbnail: episode.thumbnail,
             duration: episode.duration,
             state: 'published',
+            is_discoverable: true,
           },
           { onConflict: 'url' },
         )
