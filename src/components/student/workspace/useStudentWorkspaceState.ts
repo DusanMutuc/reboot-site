@@ -45,7 +45,9 @@ type UseStudentWorkspaceStateArgs = {
 };
 
 async function loadAdminStudents(requestedId: string | null): Promise<LoadedStudents> {
-  const response = await fetch('/api/admin/list-users', { cache: 'no-store' });
+  const response = await fetch('/api/admin/list-users?membership=coaching', {
+    cache: 'no-store',
+  });
   const body = (await response.json()) as { items?: AdminListUserRow[]; error?: string };
 
   if (!response.ok) {

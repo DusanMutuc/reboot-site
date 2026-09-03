@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchCurrentMemberUserIds } from '@/lib/currentMembers';
+import {
+  fetchCoachingWorkspaceUserIds,
+  fetchCurrentMemberUserIds,
+} from '@/lib/currentMembers';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
@@ -11,7 +14,9 @@ export async function GET(request: NextRequest) {
   if (!guard.ok) return guard.res;
 
   const supa = getAdminClient();
-  const includePastMembers = request.nextUrl.searchParams.get('membership') === 'all';
+  const membership = request.nextUrl.searchParams.get('membership');
+  const includePastMembers = membership === 'all';
+  const includeCoachingParticipants = membership === 'coaching';
 
   let ids: string[];
 
@@ -25,7 +30,9 @@ export async function GET(request: NextRequest) {
     ids = Array.from(new Set((roleRows ?? []).map((row) => row.user_id)));
   } else {
     try {
-      ids = await fetchCurrentMemberUserIds(supa);
+      ids = includeCoachingParticipants
+        ? await fetchCoachingWorkspaceUserIds(supa)
+        : await fetchCurrentMemberUserIds(supa);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to load current members';
       return NextResponse.json({ error: message }, { status: 400 });

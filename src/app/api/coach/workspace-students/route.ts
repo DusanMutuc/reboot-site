@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { fetchCurrentMemberUserIdSet } from '@/lib/currentMembers';
+import { fetchCoachingWorkspaceUserIdSet } from '@/lib/currentMembers';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
 import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
@@ -61,8 +61,8 @@ export async function GET(request: NextRequest) {
     const assignedUserIds = Array.from(
       new Set(((assignmentRows ?? []) as CoachAssignmentRow[]).map((row) => row.user_id)),
     );
-    const currentMemberUserIdSet = await fetchCurrentMemberUserIdSet(supa);
-    const userIds = assignedUserIds.filter((userId) => currentMemberUserIdSet.has(userId));
+    const coachingWorkspaceUserIdSet = await fetchCoachingWorkspaceUserIdSet(supa);
+    const userIds = assignedUserIds.filter((userId) => coachingWorkspaceUserIdSet.has(userId));
 
     if (userIds.length === 0) {
       return NextResponse.json({ items: [], resolved_user_id: null });
