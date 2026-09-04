@@ -43,7 +43,7 @@ export default function AssignCoachPanel() {
 
   useEffect(() => {
     (async () => {
-      const u = await getJSON<{ items: Person[] }>('/api/admin/list-users');
+      const u = await getJSON<{ items: Person[] }>('/api/admin/list-users?membership=coaching');
       const c = await getJSON<{ items: Person[] }>('/api/admin/list-coaches');
       setUsers(u.items || []);
       setCoaches(c.items || []);
