@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { GHL } from '@/lib/config';
+import { fetchCoachingWorkspaceUserIds } from '@/lib/currentMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import type {
   BookingFollowUpGroup,
@@ -215,20 +216,23 @@ export async function findBusinessAuditAppointmentsForSync(input: {
   startMs: number;
   endMs: number;
 }): Promise<GhlCoachingAppointmentScanResult> {
-  return findAppointmentsForSync(input, 'm2', 'primary');
+  return findAppointmentsForSync(input, 'm2', 'primary', true);
 }
 
 export async function findImplementationAppointmentsForSync(input: {
   startMs: number;
   endMs: number;
 }): Promise<GhlCoachingAppointmentScanResult> {
-  return findAppointmentsForSync(input, 'implementation', 'implementation');
+  // Implementation meetings still require their own coach pairing, so widening
+  // the pool here would only match appointments the RPC goes on to reject.
+  return findAppointmentsForSync(input, 'implementation', 'implementation', false);
 }
 
 async function findAppointmentsForSync(
   input: { startMs: number; endMs: number },
   meetingType: ParsedMeetingTitle['type'],
   relationshipType: CoachingRelationship,
+  matchBeyondRoster: boolean,
 ): Promise<GhlCoachingAppointmentScanResult> {
   const supabase = getAdminClient();
   const assignments = (await fetchAssignments(supabase)).filter(
@@ -246,7 +250,13 @@ async function findAppointmentsForSync(
 
   const coachIds = unique(assignments.map((assignment) => assignment.coach_id));
   const studentIds = unique(assignments.map((assignment) => assignment.user_id));
-  const allIds = unique([...coachIds, ...studentIds]);
+  // A member can be booked with a stand-in coach while their own coach is away,
+  // and 90-day participants may have no assignment at all. Matching therefore
+  // considers every coachable member, not only the calendar owner's roster.
+  const coachableIds = matchBeyondRoster
+    ? await fetchCoachingWorkspaceUserIds(supabase)
+    : [];
+  const allIds = unique([...coachIds, ...studentIds, ...coachableIds]);
   const [{ data: profileRows, error: profileError }, emailById] = await Promise.all([
     supabase
       .from('profiles')
@@ -278,6 +288,7 @@ async function findAppointmentsForSync(
     profileById,
     emailById,
     includeExcluded: true,
+    coachableIds,
   });
   const relevantAppointmentIds = new Set<string>();
   let appointmentsMissingStableId = 0;
@@ -586,12 +597,14 @@ function matchMeetingsToStudents({
   profileById,
   emailById,
   includeExcluded = false,
+  coachableIds = [],
 }: {
   coachScans: CoachScan[];
   assignmentsByCoachId: Map<string, AssignmentRow[]>;
   profileById: Map<string, ProfileRow>;
   emailById: Map<string, string>;
   includeExcluded?: boolean;
+  coachableIds?: string[];
 }): Map<string, MatchedMeeting[]> {
   const meetingsByStudentId = new Map<string, MatchedMeeting[]>();
   const seen = new Map<string, MatchedMeeting>();
@@ -605,7 +618,14 @@ function matchMeetingsToStudents({
       const parsed = parseMeetingTitle(event.title);
       if (!parsed) continue;
 
-      const studentId = matchStudent(event, parsed, assignments, profileById, emailById);
+      const studentId = matchStudent(
+        event,
+        parsed,
+        assignments,
+        profileById,
+        emailById,
+        coachableIds,
+      );
       if (!studentId) continue;
 
       const dedupeKey = `${event.id}:${parsed.type}:${studentId}`;
@@ -636,39 +656,53 @@ function matchMeetingsToStudents({
   return meetingsByStudentId;
 }
 
+// Strategies run strongest first: an exact GHL contact id or email beats any
+// name comparison, so those sweep every coachable member. Name comparison stays
+// tightest where it is most trustworthy — the calendar owner's own roster —
+// before widening, so no appointment that matches today changes who it matches.
 function matchStudent(
   event: NormalizedGhlEvent,
   parsed: ParsedMeetingTitle,
   assignments: AssignmentRow[],
   profileById: Map<string, ProfileRow>,
   emailById: Map<string, string>,
+  coachableIds: string[] = [],
 ): string | null {
-  const candidateIds = unique(assignments.map((row) => row.user_id));
+  const rosterIds = unique(assignments.map((row) => row.user_id));
+  const searchIds = unique([...rosterIds, ...coachableIds]);
+  const onlyMatch = (ids: string[], predicate: (id: string) => boolean): string | null => {
+    const matches = ids.filter(predicate);
+    return matches.length === 1 ? matches[0] : null;
+  };
 
   if (event.contactId) {
-    const contactMatches = candidateIds.filter(
+    const byContactId = onlyMatch(
+      searchIds,
       (id) => profileById.get(id)?.ghl_user_id?.trim() === event.contactId,
     );
-    if (contactMatches.length === 1) return contactMatches[0];
+    if (byContactId) return byContactId;
   }
 
   if (event.contactEmail) {
-    const emailMatches = candidateIds.filter((id) => emailById.get(id) === event.contactEmail);
-    if (emailMatches.length === 1) return emailMatches[0];
+    const byEmail = onlyMatch(searchIds, (id) => emailById.get(id) === event.contactEmail);
+    if (byEmail) return byEmail;
   }
 
   const titleName = normalizeName(parsed.memberName);
-  const titleMatches = candidateIds.filter(
-    (id) => namesProbablyMatch(fullName(profileById.get(id), emailById.get(id)), titleName),
-  );
-  if (titleMatches.length === 1) return titleMatches[0];
-
   const contactName = normalizeName(event.contactName ?? '');
-  if (contactName) {
-    const contactNameMatches = candidateIds.filter(
-      (id) => namesProbablyMatch(fullName(profileById.get(id), emailById.get(id)), contactName),
+
+  for (const ids of [rosterIds, searchIds]) {
+    const byTitleName = onlyMatch(ids, (id) =>
+      namesProbablyMatch(fullName(profileById.get(id), emailById.get(id)), titleName),
     );
-    if (contactNameMatches.length === 1) return contactNameMatches[0];
+    if (byTitleName) return byTitleName;
+
+    if (contactName) {
+      const byContactName = onlyMatch(ids, (id) =>
+        namesProbablyMatch(fullName(profileById.get(id), emailById.get(id)), contactName),
+      );
+      if (byContactName) return byContactName;
+    }
   }
 
   return null;
