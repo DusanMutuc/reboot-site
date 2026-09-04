@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
@@ -64,6 +65,12 @@ type SaveReviewStatusResponse = ApiErrorBody & {
   completedAt?: string | null;
   updatedAt?: string;
 };
+
+type CreateReviewResponse = ApiErrorBody &
+  Partial<BusinessReviewsPayload> & {
+    reviewId?: number;
+    created?: boolean;
+  };
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   day: 'numeric',
@@ -213,7 +220,15 @@ function LoadingState() {
   );
 }
 
-function EmptyAuditState({ studentName }: { studentName?: string | null }) {
+function EmptyAuditState({
+  studentName,
+  creating,
+  onCreate,
+}: {
+  studentName?: string | null;
+  creating: boolean;
+  onCreate: () => void;
+}) {
   return (
     <Paper
       elevation={0}
@@ -236,8 +251,18 @@ function EmptyAuditState({ studentName }: { studentName?: string | null }) {
         sx={{ maxWidth: 520, mx: 'auto', mt: 1 }}
       >
         {studentName ? `${studentName}'s` : 'The student\'s'} next Business Review will
-        appear here after the appointment is booked in GHL and synchronized.
+        appear here after the appointment is booked in GHL and synchronized. Start one by
+        hand when there is no booked appointment to wait for.
       </Typography>
+      <Button
+        variant="contained"
+        startIcon={<AddRoundedIcon />}
+        disabled={creating}
+        onClick={onCreate}
+        sx={{ mt: 2.5, minHeight: 44, fontWeight: 800, textTransform: 'none' }}
+      >
+        {creating ? 'Creating…' : 'Create business review'}
+      </Button>
     </Paper>
   );
 }
@@ -251,6 +276,8 @@ export default function BusinessAuditTab({
   const [selectedReviewId, setSelectedReviewId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingReviewStatus, setSavingReviewStatus] = useState(false);
+  const [creatingReview, setCreatingReview] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [systemSaveError, setSystemSaveError] = useState<string | null>(null);
@@ -272,6 +299,7 @@ export default function BusinessAuditTab({
 
     setLoading(true);
     setLoadError(null);
+    setCreateError(null);
     setSaveError(null);
     setSystemSaveError(null);
     setPrioritySaveError(null);
@@ -516,6 +544,52 @@ export default function BusinessAuditTab({
     [pendingPrioritySystemIds, selectedReviewId, selectedStudentId],
   );
 
+  // 90-day participants have no GHL appointment to sync from, so a coach opens
+  // their review by hand. create_business_review is the same primitive the
+  // hourly appointment sync calls, so a manual draft matches a synced one.
+  const createReview = useCallback(async () => {
+    if (creatingReview) return;
+
+    const studentIdAtCreate = selectedStudentId;
+
+    setCreatingReview(true);
+    setCreateError(null);
+
+    try {
+      const response = await fetch('/api/business-reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: studentIdAtCreate,
+          reviewDate: getBusinessAuditLocalDate(),
+        }),
+      });
+      const body = (await response.json()) as CreateReviewResponse;
+
+      if (!response.ok || !body.reviewId) {
+        throw new Error(body.error || 'Could not create the business review.');
+      }
+
+      if (activeStudentIdRef.current !== studentIdAtCreate) return;
+
+      setDimensions(body.dimensions ?? []);
+      setReviews(body.reviews ?? []);
+      setSelectedReviewId(body.reviewId);
+      setSaveError(null);
+      setSystemSaveError(null);
+      setPrioritySaveError(null);
+      setHasSaved(false);
+    } catch (error) {
+      if (activeStudentIdRef.current !== studentIdAtCreate) return;
+
+      setCreateError(
+        error instanceof Error ? error.message : 'Could not create the business review.',
+      );
+    } finally {
+      setCreatingReview(false);
+    }
+  }, [creatingReview, selectedStudentId]);
+
   const toggleReviewCompletion = async () => {
     if (!selectedReview || selectedReview.meetingCancelled) return;
     const completed = selectedReview.status !== 'completed';
@@ -597,6 +671,7 @@ export default function BusinessAuditTab({
       </Stack>
 
       {loadError ? <Alert severity="error">{loadError}</Alert> : null}
+      {createError ? <Alert severity="error">{createError}</Alert> : null}
       {saveError ? (
         <Alert severity="error">
           {saveError} Your selected score is still visible; choose it again to retry.
@@ -616,7 +691,11 @@ export default function BusinessAuditTab({
       {loading ? (
         <LoadingState />
       ) : reviews.length === 0 ? (
-        <EmptyAuditState studentName={studentName} />
+        <EmptyAuditState
+          studentName={studentName}
+          creating={creatingReview}
+          onCreate={() => void createReview()}
+        />
       ) : (
         <>
           <Paper
@@ -646,6 +725,7 @@ export default function BusinessAuditTab({
                 direction="row"
                 spacing={1}
                 sx={{
+                  flex: 1,
                   minWidth: 0,
                   overflowX: 'auto',
                   pb: 0.5,
@@ -697,6 +777,23 @@ export default function BusinessAuditTab({
                   );
                 })}
               </Stack>
+
+              <Button
+                variant="outlined"
+                startIcon={<AddRoundedIcon />}
+                disabled={creatingReview}
+                onClick={() => void createReview()}
+                sx={{
+                  flexShrink: 0,
+                  alignSelf: { xs: 'stretch', md: 'center' },
+                  minHeight: 44,
+                  fontWeight: 800,
+                  textTransform: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {creatingReview ? 'Creating…' : 'New review'}
+              </Button>
             </Stack>
           </Paper>
 
