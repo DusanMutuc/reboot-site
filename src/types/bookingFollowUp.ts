@@ -26,6 +26,7 @@ export type BookingFollowUpMember = {
   assignedAt: string | null;
   dataComplete: boolean;
   dataWarning: string | null;
+  pauseStartedAt: string | null;
   isNewMember: boolean;
   needsImplementation: boolean;
   needsM2: boolean;

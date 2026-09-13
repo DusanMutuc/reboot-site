@@ -58,6 +58,8 @@ type StudentOption = {
   id: string;
   full_name: string;
   is_legend: boolean;
+  pause_started_at: string | null;
+  pause_reason: string | null;
 };
 
 type AchievementOption = {
@@ -75,6 +77,8 @@ type StudentOverviewNewProps = {
   userId?: string | null;
   embedded?: boolean;
   isLegend?: boolean;
+  pauseStartedAt?: string | null;
+  pauseReason?: string | null;
 };
 
 type CourseModuleState = {
@@ -330,7 +334,7 @@ function getStudentOverviewPrintRoot(): HTMLDivElement | null {
 async function loadStudentOptions(): Promise<StudentOption[]> {
   const res = await fetch('/api/admin/list-users');
   const body = (await res.json()) as
-    | { items?: Array<{ id: string; name: string; email: string; is_legend?: boolean }> }
+    | { items?: Array<{ id: string; name: string; email: string; is_legend?: boolean; pause_started_at?: string | null; pause_reason?: string | null }> }
     | ApiError;
 
   if (!res.ok) {
@@ -342,10 +346,12 @@ async function loadStudentOptions(): Promise<StudentOption[]> {
       ? body.items
       : [];
   return items
-    .map((item: { id: string; name: string; email: string; is_legend?: boolean }) => ({
+    .map((item: { id: string; name: string; email: string; is_legend?: boolean; pause_started_at?: string | null; pause_reason?: string | null }) => ({
       id: item.id,
       full_name: item.name || item.email || 'Unnamed student',
       is_legend: !!item.is_legend,
+      pause_started_at: item.pause_started_at ?? null,
+      pause_reason: item.pause_reason ?? null,
     }))
     .sort((a: StudentOption, b: StudentOption) => a.full_name.localeCompare(b.full_name));
 }
@@ -368,6 +374,8 @@ export default function StudentOverviewNew({
   userId = null,
   embedded = false,
   isLegend,
+  pauseStartedAt,
+  pauseReason,
 }: StudentOverviewNewProps) {
   const printableRef = useRef<HTMLDivElement | null>(null);
   const [studentOptions, setStudentOptions] = useState<StudentOption[]>([]);
@@ -511,6 +519,8 @@ export default function StudentOverviewNew({
   const studentDisplayName =
     selectedStudent?.full_name ?? overviewData?.student.fullName ?? 'Student Overview';
   const studentIsLegend = isLegend ?? selectedStudent?.is_legend ?? false;
+  const studentPauseStartedAt = pauseStartedAt ?? selectedStudent?.pause_started_at ?? null;
+  const studentPauseReason = pauseReason ?? selectedStudent?.pause_reason ?? null;
 
   const attendanceSeries = useMemo(() => {
     const snapshot = overviewData?.attendance.snapshot ?? [];
@@ -878,6 +888,15 @@ export default function StudentOverviewNew({
                     {studentIsLegend ? <LegendMemberIcon sx={{ ml: 0.75 }} /> : null}
                   </Typography>
                   <Box>
+                    {studentPauseStartedAt ? (
+                      <Stack spacing={0.5} sx={{ mb: 1 }}>
+                        <Chip label="Member is paused" color="info" sx={{ alignSelf: 'flex-start', fontWeight: 700 }} />
+                        <Typography variant="caption" color="text.secondary">
+                          Since {new Date(studentPauseStartedAt).toLocaleDateString()}
+                          {studentPauseReason ? ` · ${studentPauseReason}` : ''}
+                        </Typography>
+                      </Stack>
+                    ) : null}
                     <Chip
                       label={overviewData.student.isIntroduced ? 'Introduced' : 'Not Introduced'}
                       sx={{
@@ -910,26 +929,29 @@ export default function StudentOverviewNew({
                           p: 2,
                           borderRadius: 2.5,
                           border: '1px solid',
-                          borderColor: toneColors.border,
-                          bgcolor: toneColors.bg,
+                          borderColor: studentPauseStartedAt ? 'grey.300' : toneColors.border,
+                          bgcolor: studentPauseStartedAt ? 'grey.100' : toneColors.bg,
                         }}
                       >
                         <Stack spacing={0.75}>
-                          <Typography variant="adminEyebrow" sx={{ fontWeight: 600, color: toneColors.fg }}>
+                          <Typography variant="adminEyebrow" sx={{ fontWeight: 600, color: studentPauseStartedAt ? 'text.secondary' : toneColors.fg }}>
                             {RECENCY_COPY[key]}
                           </Typography>
-                          <Typography
-                            variant="body1"
-                            sx={{
-                              fontWeight: 700,
-                              color: toneColors.fg,
-                            }}
-                          >
-                            {formatDateLabel(value)}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: toneColors.fg, opacity: 0.9 }}>
-                            {formatDaysAgo(value)}
-                          </Typography>
+                          {studentPauseStartedAt ? <Typography variant="body2" fontWeight={700} color="info.main">Member is paused</Typography> : null}
+                          <Box sx={{ opacity: studentPauseStartedAt ? 0.45 : 1 }}>
+                            <Typography
+                              variant="body1"
+                              sx={{
+                                fontWeight: 700,
+                                color: studentPauseStartedAt ? 'text.secondary' : toneColors.fg,
+                              }}
+                            >
+                              {formatDateLabel(value)}
+                            </Typography>
+                            <Typography variant="caption" sx={{ color: studentPauseStartedAt ? 'text.secondary' : toneColors.fg, opacity: 0.9 }}>
+                              {formatDaysAgo(value)}
+                            </Typography>
+                          </Box>
                         </Stack>
                       </Box>
                     );

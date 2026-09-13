@@ -178,6 +178,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
       implementation: members.filter((member) => member.needsImplementation).length,
       m2: members.filter((member) => member.needsM2).length,
       newMembers: members.filter((member) => member.isNewMember).length,
+      paused: members.filter((member) => Boolean(member.pauseStartedAt)).length,
     };
   }, [report]);
 
@@ -224,6 +225,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
             <ToggleButton value="attention">Needs attention</ToggleButton>
             <ToggleButton value="all">All roster</ToggleButton>
           </ToggleButtonGroup>
+          {summary.paused > 0 ? <Chip color="info" size="small" label={`${summary.paused} paused`} /> : null}
           <Tooltip title="Scan GHL again">
             <span>
               <IconButton
@@ -266,7 +268,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
           </Box>
 
           {filter === 'attention' && summary.attention === 0 ? (
-            <Alert severity="success">Everyone on the scanned roster is currently covered.</Alert>
+            <Alert severity="success">No members currently need booking follow-up. Paused members are excluded from these prompts.</Alert>
           ) : mode === 'admin' ? (
             <Stack spacing={1.5}>
               {visibleGroups.map((group) => (
@@ -400,7 +402,14 @@ function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
         </TableHead>
         <TableBody>
           {members.map((member) => (
-            <TableRow key={member.userId} hover>
+            <TableRow
+              key={member.userId}
+              hover
+              sx={member.pauseStartedAt ? {
+                bgcolor: 'grey.50',
+                '& td:nth-of-type(2), & td:nth-of-type(3), & td:nth-of-type(4)': { opacity: 0.45 },
+              } : undefined}
+            >
               <TableCell sx={{ minWidth: member.people.length > 1 ? 240 : 190 }}>
                 <Stack spacing={member.people.length > 1 ? 1 : 0}>
                   {member.people.map((person) => (
@@ -455,6 +464,14 @@ function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
               </TableCell>
               <TableCell sx={{ minWidth: 200 }}>
                 <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+                  {member.pauseStartedAt && (
+                    <Stack spacing={0.5}>
+                      <Chip color="info" size="small" label="Member is paused" />
+                      <Typography variant="caption" color="text.secondary">
+                        Booking follow-up is suspended until the member resumes.
+                      </Typography>
+                    </Stack>
+                  )}
                   {member.isNewMember && (
                     <Chip
                       icon={<NewReleasesOutlinedIcon />}
@@ -467,7 +484,7 @@ function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
                     <Chip color="error" size="small" label="Implementation booking missing" />
                   )}
                   {member.needsM2 && <Chip color="error" size="small" label="M2 booking missing" />}
-                  {!needsAttention(member) && member.dataComplete && (
+                  {!member.pauseStartedAt && !needsAttention(member) && member.dataComplete && (
                     <Chip color="success" variant="outlined" size="small" label="Covered" />
                   )}
                 </Stack>

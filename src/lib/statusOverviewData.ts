@@ -4,6 +4,7 @@ import {
   fetchCurrentMemberUserIdSet,
 } from '@/lib/currentMembers';
 import type { StatusOverviewRow } from '@/lib/statusOverviewTypes';
+import { activePause, isMeetingDatePaused, loadMemberPauses, type MemberPause } from '@/lib/memberPauses';
 import type { UserStatus } from '@/types/coaching';
 
 type CoachAssignmentRow = {
@@ -30,6 +31,7 @@ type MeetingTypeJoin =
 
 type MeetingRow = {
   id: number;
+  date: string;
   meeting_types: MeetingTypeJoin;
 };
 
@@ -203,7 +205,10 @@ async function fetchProfileStatusMap(userIds: string[]): Promise<Map<string, Pro
   return new Map(rows.map((row) => [row.id, row]));
 }
 
-async function fetchAttendanceCounts(userIds: string[]): Promise<Map<string, AttendanceCounts>> {
+async function fetchAttendanceCounts(
+  userIds: string[],
+  pauseMap: Map<string, MemberPause[]>,
+): Promise<Map<string, AttendanceCounts>> {
   const ids = uniqueIds(userIds);
   const counts = new Map<string, AttendanceCounts>();
 
@@ -220,7 +225,7 @@ async function fetchAttendanceCounts(userIds: string[]): Promise<Map<string, Att
 
   const { data: meetingRows, error: meetingError } = await supa
     .from('meetings')
-    .select('id, meeting_types!inner(counts_toward_engagement)')
+    .select('id, date, meeting_types!inner(counts_toward_engagement)')
     .gte('date', from)
     .lte('date', to)
     .eq('meeting_types.counts_toward_engagement', true);
@@ -229,9 +234,10 @@ async function fetchAttendanceCounts(userIds: string[]): Promise<Map<string, Att
     throw new Error(meetingError.message);
   }
 
-  const engagementMeetingIds = ((meetingRows ?? []) as MeetingRow[])
-    .filter((row) => hasEngagementFlag(row.meeting_types))
-    .map((row) => row.id);
+  const engagementMeetings = ((meetingRows ?? []) as MeetingRow[])
+    .filter((row) => hasEngagementFlag(row.meeting_types));
+  const engagementMeetingIds = engagementMeetings.map((row) => row.id);
+  const meetingDateById = new Map(engagementMeetings.map((row) => [row.id, row.date]));
 
   if (engagementMeetingIds.length === 0) {
     return counts;
@@ -253,6 +259,8 @@ async function fetchAttendanceCounts(userIds: string[]): Promise<Map<string, Att
       }
 
       for (const row of (data ?? []) as MeetingAttendanceRow[]) {
+        const meetingDate = meetingDateById.get(row.meeting_id);
+        if (meetingDate && isMeetingDatePaused(meetingDate, pauseMap.get(row.user_id))) continue;
         const current = counts.get(row.user_id) ?? { attended_count: 0, expected_count: 0 };
         current.expected_count += 1;
         if (row.attended) {
@@ -416,9 +424,10 @@ async function buildStatusOverviewRows(userIds: string[]): Promise<StatusOvervie
     return [];
   }
 
+  const pauseMap = await loadMemberPauses(getAdminClient(), ids);
   const [profileMap, attendanceMap, summaryMap] = await Promise.all([
     fetchProfileStatusMap(ids),
-    fetchAttendanceCounts(ids),
+    fetchAttendanceCounts(ids, pauseMap),
     fetchStatusOverviewSummaryMap(ids),
   ]);
 
@@ -429,6 +438,7 @@ async function buildStatusOverviewRows(userIds: string[]): Promise<StatusOvervie
       const summary = summaryMap.get(userId) ?? defaultSummary(userId);
       const manualStatus = profile?.attention_status_manual ?? null;
       const autoStatus = profile?.attention_status_auto ?? null;
+      const pause = activePause(pauseMap.get(userId));
 
       return {
         user_id: userId,
@@ -437,6 +447,7 @@ async function buildStatusOverviewRows(userIds: string[]): Promise<StatusOvervie
         user_status_source: manualStatus ? 'manual' : 'auto',
         user_status_manual: manualStatus,
         user_status_manual_reason: profile?.attention_status_manual_reason ?? null,
+        pause_started_at: pause?.started_at ?? null,
         attended_count: attendance.attended_count,
         expected_count: attendance.expected_count,
         last_kpi_at: summary.last_kpi_at,

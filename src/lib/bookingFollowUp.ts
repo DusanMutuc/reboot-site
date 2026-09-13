@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { GHL } from '@/lib/config';
 import { fetchCoachingWorkspaceUserIds } from '@/lib/currentMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { activeDaysSinceForGroup, activePause, loadMemberPauses, type MemberPause } from '@/lib/memberPauses';
 import type {
   BookingFollowUpGroup,
   BookingFollowUpMember,
@@ -147,6 +148,7 @@ export async function buildBookingFollowUp(
       (studentId) => partnershipMembersByUserId.get(studentId) ?? [studentId],
     ),
   );
+  const pauseHistoryByUserId = await loadMemberPauses(supabase, analysisStudentIds);
   const analysisAssignments = await fetchAssignmentsForStudents(supabase, analysisStudentIds);
 
   const coachIds = unique(analysisAssignments.map((row) => row.coach_id));
@@ -206,6 +208,7 @@ export async function buildBookingFollowUp(
       meetingsByStudentId,
       scanByCoachId,
       partnershipMembersByUserId,
+      pauseHistoryByUserId,
     }))
     .sort((a, b) => a.coachName.localeCompare(b.coachName, undefined, { sensitivity: 'base' }));
 
@@ -733,6 +736,7 @@ function buildCoachGroup({
   meetingsByStudentId,
   scanByCoachId,
   partnershipMembersByUserId,
+  pauseHistoryByUserId,
 }: {
   coachId: string;
   assignments: AssignmentRow[];
@@ -742,6 +746,7 @@ function buildCoachGroup({
   meetingsByStudentId: Map<string, MatchedMeeting[]>;
   scanByCoachId: Map<string, CoachScan>;
   partnershipMembersByUserId: Map<string, string[]>;
+  pauseHistoryByUserId: Map<string, MemberPause[]>;
 }): BookingFollowUpGroup {
   const ownScanError = scanByCoachId.get(coachId)?.error ?? null;
   const analysisByStudentId = groupBy(analysisAssignments, (row) => row.user_id);
@@ -762,27 +767,31 @@ function buildCoachGroup({
   }
 
   const members = Array.from(schedulingUnits.values())
-    .map(({ studentIds, assignments: unitAssignments }) => {
-      const schedulingUnitIds = studentIds;
-      const schedulingUnitAssignments = schedulingUnitIds.flatMap(
-        (unitMemberId) => analysisByStudentId.get(unitMemberId) ?? [],
-      );
-      const schedulingUnitMeetings = collectSchedulingUnitMeetings(
-        schedulingUnitIds,
-        meetingsByStudentId,
-      );
+    .flatMap(({ studentIds, assignments: unitAssignments }) => {
+      const activeIds = studentIds.filter((id) => !activePause(pauseHistoryByUserId.get(id)));
+      const pausedIds = studentIds.filter((id) => activePause(pauseHistoryByUserId.get(id)));
+      const parts = activeIds.length && pausedIds.length ? [activeIds, pausedIds] : [studentIds];
 
-      return buildMemberRow({
-        coachId,
-        studentIds,
-        assignments: unitAssignments,
-        analysisAssignments: schedulingUnitAssignments.length > 0
-          ? schedulingUnitAssignments
-          : unitAssignments,
-        profileById,
-        emailById,
-        meetings: schedulingUnitMeetings,
-        scanByCoachId,
+      return parts.map((schedulingUnitIds) => {
+        const schedulingUnitAssignments = schedulingUnitIds.flatMap(
+          (unitMemberId) => analysisByStudentId.get(unitMemberId) ?? [],
+        );
+        const visibleUnitAssignments = unitAssignments.filter((assignment) =>
+          schedulingUnitIds.includes(assignment.user_id),
+        );
+        return buildMemberRow({
+          coachId,
+          studentIds: schedulingUnitIds,
+          assignments: visibleUnitAssignments.length ? visibleUnitAssignments : unitAssignments,
+          analysisAssignments: schedulingUnitAssignments.length > 0
+            ? schedulingUnitAssignments
+            : unitAssignments,
+          profileById,
+          emailById,
+          meetings: collectSchedulingUnitMeetings(schedulingUnitIds, meetingsByStudentId),
+          scanByCoachId,
+          pauseHistoryByUserId,
+        });
       });
     })
     .sort((a, b) => {
@@ -809,6 +818,7 @@ function buildMemberRow({
   emailById,
   meetings,
   scanByCoachId,
+  pauseHistoryByUserId,
 }: {
   coachId: string;
   studentIds: string[];
@@ -818,8 +828,19 @@ function buildMemberRow({
   emailById: Map<string, string>;
   meetings: MatchedMeeting[];
   scanByCoachId: Map<string, CoachScan>;
+  pauseHistoryByUserId: Map<string, MemberPause[]>;
 }): BookingFollowUpMember {
   const nowMs = Date.now();
+  const pauses = studentIds.map((studentId) => activePause(pauseHistoryByUserId.get(studentId)));
+  const isPaused = pauses.every(Boolean);
+  const pauseStartedAt = isPaused
+    ? pauses.map((pause) => pause!.started_at).sort().at(-1) ?? null
+    : null;
+  const activeDays = (startMs: number) => activeDaysSinceForGroup(
+    startMs,
+    nowMs,
+    studentIds.map((studentId) => pauseHistoryByUserId.get(studentId) ?? []),
+  );
   const people = studentIds
     .map((studentId) => ({
       userId: studentId,
@@ -864,15 +885,15 @@ function buildMemberRow({
   ).length;
   const implementationCycleComplete = implementationsSinceLastM2 >= 3;
   const activeMeetingCount = pastMeetings.length + futureMeetings.length;
-  const isNewMember = allScanErrors.length === 0 && activeMeetingCount === 0;
-  const daysSinceLastMeeting = lastMeeting ? wholeDaysSince(lastMeeting.startMs, nowMs) : null;
-  const daysSinceLastM2 = lastM2 ? wholeDaysSince(lastM2.startMs, nowMs) : null;
+  const isNewMember = !isPaused && allScanErrors.length === 0 && activeMeetingCount === 0;
+  const daysSinceLastMeeting = lastMeeting ? activeDays(lastMeeting.startMs) : null;
+  const daysSinceLastM2 = lastM2 ? activeDays(lastM2.startMs) : null;
   const daysSinceAssigned = schedulingUnitAssignedAt
-    ? wholeDaysSince(isoToMillis(schedulingUnitAssignedAt) ?? nowMs, nowMs)
+    ? activeDays(isoToMillis(schedulingUnitAssignedAt) ?? nowMs)
     : null;
 
   const needsImplementation = Boolean(
-    dataComplete &&
+    !isPaused && dataComplete &&
       !isNewMember &&
       monitorsImplementation &&
       !upcomingImplementation &&
@@ -881,7 +902,7 @@ function buildMemberRow({
       daysSinceLastMeeting >= IMPLEMENTATION_REMINDER_DAYS,
   );
   const needsM2 = Boolean(
-    dataComplete &&
+    !isPaused && dataComplete &&
       !isNewMember &&
       !upcomingM2 &&
       (daysSinceLastM2 !== null
@@ -901,6 +922,7 @@ function buildMemberRow({
     dataWarning: dataComplete
       ? null
       : `Could not scan all related calendars: ${unique(scanErrors).join(' ')}`,
+    pauseStartedAt,
     isNewMember,
     needsImplementation,
     needsM2,

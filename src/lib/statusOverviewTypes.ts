@@ -7,6 +7,7 @@ export type StatusOverviewRow = {
   user_status_source: UserStatusSource;
   user_status_manual: UserStatus | null;
   user_status_manual_reason: string | null;
+  pause_started_at: string | null;
   attended_count: number;
   expected_count: number;
   last_kpi_at: string | null;

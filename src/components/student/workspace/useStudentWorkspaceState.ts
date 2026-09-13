@@ -16,6 +16,8 @@ type CoachRosterRow = {
   full_name: string;
   email?: string | null;
   is_legend?: boolean | null;
+  pause_started_at?: string | null;
+  pause_reason?: string | null;
 };
 
 type AdminListUserRow = {
@@ -23,6 +25,8 @@ type AdminListUserRow = {
   name?: string | null;
   email?: string | null;
   is_legend?: boolean | null;
+  pause_started_at?: string | null;
+  pause_reason?: string | null;
 };
 
 type CoachWorkspaceStudentsResponse = {
@@ -60,6 +64,8 @@ async function loadAdminStudents(requestedId: string | null): Promise<LoadedStud
       full_name: item.name?.trim() || item.email?.trim() || 'Unnamed student',
       email: item.email?.trim() || null,
       is_legend: !!item.is_legend,
+      pause_started_at: item.pause_started_at ?? null,
+      pause_reason: item.pause_reason ?? null,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
@@ -89,6 +95,8 @@ async function loadCoachStudents(requestedId: string | null): Promise<LoadedStud
       full_name: row.full_name || row.email || 'Unnamed student',
       email: row.email ?? null,
       is_legend: !!row.is_legend,
+      pause_started_at: row.pause_started_at ?? null,
+      pause_reason: row.pause_reason ?? null,
     }))
     .sort((a, b) => a.full_name.localeCompare(b.full_name));
 

@@ -28,7 +28,7 @@ type Roster = {
   coach_email: string;
   effective_count: number;
   legend_count: number;
-  users: { user_id: string; name: string; email: string; is_legend: boolean }[];
+  users: { user_id: string; name: string; email: string; is_legend: boolean; pause_started_at: string | null }[];
 };
 
 export default function CoachRosters() {
@@ -148,6 +148,7 @@ export default function CoachRosters() {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 220 }}>
                           <Typography variant="body1">{user.name}</Typography>
                           {user.is_legend ? <LegendMemberIcon /> : null}
+                          {user.pause_started_at ? <Chip label="Paused" size="small" color="info" /> : null}
                         </Box>
                         <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>{user.email}</Typography>
                         <Tooltip title="Copy user email">

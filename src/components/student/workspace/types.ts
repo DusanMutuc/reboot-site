@@ -8,6 +8,8 @@ export type StudentOption = {
   full_name: string;
   email: string | null;
   is_legend: boolean;
+  pause_started_at: string | null;
+  pause_reason: string | null;
 };
 
 export type WorkspaceQueryPatch = Record<string, string | number | null | undefined>;

@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server';
 import { fetchCurrentMemberUserIdSet } from '@/lib/currentMembers';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
+import { activePause, loadMemberPauses } from '@/lib/memberPauses';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
 const COURSE_ID = 2;
 
-type RosterUser = { user_id: string; name: string; email: string; is_legend: boolean };
+type RosterUser = { user_id: string; name: string; email: string; is_legend: boolean; pause_started_at: string | null };
 type Roster = {
   coach_id: string;
   coach_name: string;
@@ -39,7 +40,10 @@ export async function GET() {
   const coachIds = Array.from(new Set(assignments.map((r) => r.coach_id)));
   const userIds  = Array.from(new Set(assignments.map((r) => r.user_id)));
   const allIds   = Array.from(new Set([...coachIds, ...userIds]));
-  const legendUserIdSet = await fetchLegendUserIdSet(supa, userIds);
+  const [legendUserIdSet, pausesByUserId] = await Promise.all([
+    fetchLegendUserIdSet(supa, userIds),
+    loadMemberPauses(supa, userIds, true),
+  ]);
 
   // active partnerships by user (for roster effective counts)
   const { data: partnershipRows, error: partnershipErr } = await supa
@@ -103,6 +107,7 @@ export async function GET() {
       name: user_name,
       email: user_email,
       is_legend: legendUserIdSet.has(r.user_id),
+      pause_started_at: activePause(pausesByUserId.get(r.user_id))?.started_at ?? null,
     });
   }
 

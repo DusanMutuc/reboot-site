@@ -14,6 +14,7 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   Checkbox,
   CircularProgress,
   Dialog,
@@ -78,6 +79,8 @@ type UserDirectoryRow = {
   is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
+  pause_started_at: string | null;
+  pause_reason: string | null;
   primary_coaches: DirectoryPerson[];
   implementation_coaches: DirectoryPerson[];
   assistants: DirectoryPerson[];
@@ -209,6 +212,7 @@ function MembershipSummary({ user }: { user: UserDirectoryRow }) {
         />
         <Typography variant="body2" color="text.secondary">{status}</Typography>
       </Stack>
+      {user.pause_started_at ? <Chip label="Member is paused" color="info" size="small" /> : null}
       {user.is_legend ? (
         <Stack direction="row" spacing={0.5} alignItems="center">
           <StarOutlineIcon sx={{ fontSize: 18, color: '#9a6b16' }} />
@@ -400,6 +404,8 @@ export default function UserProfilesAdmin() {
   const [draft, setDraft] = useState<UserDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<UserDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [pauseBusy, setPauseBusy] = useState(false);
+  const [pauseReason, setPauseReason] = useState('');
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [resetConfirmUser, setResetConfirmUser] = useState<UserDirectoryRow | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -476,12 +482,14 @@ export default function UserProfilesAdmin() {
     setSelectedUser(user);
     setDraft(nextDraft);
     setSavedDraft(nextDraft);
+    setPauseReason('');
   }, []);
 
   const closeDrawer = useCallback(() => {
     setSelectedUser(null);
     setDraft(null);
     setSavedDraft(null);
+    setPauseReason('');
   }, []);
 
   const requestCloseDrawer = useCallback(() => {
@@ -548,6 +556,44 @@ export default function UserProfilesAdmin() {
       setSaving(false);
     }
   }, [draft, selectedUser]);
+
+  const handlePauseChange = useCallback(async () => {
+    if (!selectedUser) return;
+    const wasPaused = Boolean(selectedUser.pause_started_at);
+    setPauseBusy(true);
+    try {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(selectedUser.id)}/pause`, {
+        method: wasPaused ? 'DELETE' : 'POST',
+        ...(wasPaused ? {} : {
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ reason: pauseReason }),
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        pause?: { started_at: string; reason: string | null };
+      };
+      if (!response.ok) throw new Error(data.error || 'Could not update pause.');
+      const updatedUser: UserDirectoryRow = {
+        ...selectedUser,
+        pause_started_at: wasPaused ? null : data.pause?.started_at ?? null,
+        pause_reason: wasPaused ? null : data.pause?.reason ?? null,
+      };
+      setSelectedUser(updatedUser);
+      setUsers((current) => current.map((user) => user.id === updatedUser.id ? updatedUser : user));
+      setRefreshKey((current) => current + 1);
+      setPauseReason('');
+      setSnack({
+        open: true,
+        message: wasPaused ? 'Member resumed.' : 'Member paused.',
+        severity: 'success',
+      });
+    } catch (error) {
+      setSnack({ open: true, message: error instanceof Error ? error.message : 'Could not update pause.', severity: 'error' });
+    } finally {
+      setPauseBusy(false);
+    }
+  }, [pauseReason, selectedUser]);
 
   const handleSendPasswordReset = useCallback(async () => {
     if (!resetConfirmUser) return;
@@ -794,6 +840,7 @@ export default function UserProfilesAdmin() {
                                   </Stack>
                                 </Tooltip>
                               ) : null}
+                              {user.pause_started_at ? <Chip label="Paused" color="info" size="small" /> : null}
                             </Stack>
                             <Typography variant="caption" color="text.secondary" display="block" noWrap>{user.email}</Typography>
                           </Box>
@@ -898,6 +945,37 @@ export default function UserProfilesAdmin() {
                     <Typography variant="adminSectionTitle">Membership</Typography>
                     <Typography variant="body2" color="text.secondary">Access and lifecycle status.</Typography>
                   </Box>
+                  {selectedUser.is_current_member || selectedUser.is_ninety_day_user ? (
+                    selectedUser.pause_started_at ? (
+                      <Alert severity="info" variant="outlined">
+                        <Stack spacing={1} alignItems="flex-start">
+                          <Typography variant="body2" fontWeight={700}>Member is paused</Typography>
+                          <Typography variant="body2">
+                            Since {formatDate(selectedUser.pause_started_at)}. Booking and attention prompts are muted until resumed.
+                          </Typography>
+                          {selectedUser.pause_reason ? <Typography variant="body2">Reason: {selectedUser.pause_reason}</Typography> : null}
+                          <LoadingButton size="small" variant="outlined" loading={pauseBusy} onClick={handlePauseChange}>
+                            Resume member
+                          </LoadingButton>
+                        </Stack>
+                      </Alert>
+                    ) : (
+                      <Stack spacing={1.5}>
+                        <TextField
+                          label="Pause reason (optional)"
+                          value={pauseReason}
+                          onChange={(event) => setPauseReason(event.target.value)}
+                          inputProps={{ maxLength: 1000 }}
+                          multiline
+                          minRows={2}
+                          helperText="A pause keeps membership and coach assignments in place. Resume the member here when they return."
+                        />
+                        <LoadingButton size="small" variant="outlined" loading={pauseBusy} onClick={handlePauseChange} sx={{ alignSelf: 'flex-start' }}>
+                          Pause member
+                        </LoadingButton>
+                      </Stack>
+                    )
+                  ) : null}
                   {selectedUser.is_ninety_day_user ? (
                     <Alert severity="info" variant="outlined">
                       This member&apos;s cycle and promotion are managed from the 90-Day admin tab.

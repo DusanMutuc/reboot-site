@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchCoachingWorkspaceUserIdSet } from '@/lib/currentMembers';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
+import { activePause, loadMemberPauses } from '@/lib/memberPauses';
 import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -71,12 +72,14 @@ export async function GET(request: NextRequest) {
     const [
       { data: profiles, error: profileError },
       legendUserIdSet,
+      pausesByUserId,
     ] = await Promise.all([
       supa
         .from('profiles')
         .select('id, first_name, last_name, ghl_contact_id, ghl_user_id')
         .in('id', userIds),
       fetchLegendUserIdSet(supa, userIds),
+      loadMemberPauses(supa, userIds, true),
     ]);
 
     if (profileError) {
@@ -114,6 +117,7 @@ export async function GET(request: NextRequest) {
           full_name: buildFullName(profileById.get(userId), email),
           email: email || null,
           is_legend: legendUserIdSet.has(userId),
+          pause_started_at: activePause(pausesByUserId.get(userId))?.started_at ?? null,
         };
       })
       .sort((a, b) => a.full_name.localeCompare(b.full_name));

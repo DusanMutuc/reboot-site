@@ -1,5 +1,6 @@
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { fetchCurrentMemberUserIdSet } from '@/lib/currentMembers';
+import { activePause, loadMemberPauses } from '@/lib/memberPauses';
 
 export type AdminDirectoryPerson = {
   id: string;
@@ -26,6 +27,8 @@ export type AdminUserDirectoryRow = {
   is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
+  pause_started_at: string | null;
+  pause_reason: string | null;
   primary_coaches: AdminDirectoryPerson[];
   implementation_coaches: AdminDirectoryPerson[];
   assistants: AdminDirectoryPerson[];
@@ -83,6 +86,7 @@ function buildSearchText(row: AdminUserDirectoryRow) {
     row.is_current_member ? 'current member' : 'inactive member',
     row.is_ninety_day_user ? '90 day ninety day programme member' : '',
     row.is_past_member ? 'past member' : '',
+    row.pause_started_at ? 'paused member' : '',
     row.is_legend ? 'legend' : '',
     row.phone ? '' : 'missing phone',
     row.ghl_user_id ? '' : 'missing ghl',
@@ -146,6 +150,8 @@ function toPublicDirectoryRow(row: AdminUserDirectoryEntry): AdminUserDirectoryR
     is_ninety_day_user: row.is_ninety_day_user,
     is_legend: row.is_legend,
     is_past_member: row.is_past_member,
+    pause_started_at: row.pause_started_at,
+    pause_reason: row.pause_reason,
     primary_coaches: row.primary_coaches,
     implementation_coaches: row.implementation_coaches,
     assistants: row.assistants,
@@ -352,9 +358,10 @@ async function buildAdminUserDirectory() {
   const directoryUserIds = Array.from(new Set([...userIds, ...ninetyDayUserIds]));
   if (directoryUserIds.length === 0) return [];
 
-  const [profiles, support] = await Promise.all([
+  const [profiles, support, pauseMap] = await Promise.all([
     fetchProfilesByIds(directoryUserIds),
     fetchSupportDirectory(directoryUserIds, authUsersMap),
+    loadMemberPauses(supa, directoryUserIds, true),
   ]);
   const fullMemberUserIdSet = new Set(userIds);
   const ninetyDayUserIdSet = new Set(ninetyDayUserIds);
@@ -364,6 +371,7 @@ async function buildAdminUserDirectory() {
   return profiles
     .map((profile) => {
       const auth = authUsersMap.get(profile.id);
+      const pause = activePause(pauseMap.get(profile.id));
       return toDirectoryEntry({
         id: profile.id,
         email: auth?.email ?? '',
@@ -379,6 +387,8 @@ async function buildAdminUserDirectory() {
           ninetyDayUserIdSet.has(profile.id) && !fullMemberUserIdSet.has(profile.id),
         is_legend: legendUserIdSet.has(profile.id),
         is_past_member: pastMemberUserIdSet.has(profile.id),
+        pause_started_at: pause?.started_at ?? null,
+        pause_reason: pause?.reason ?? null,
         primary_coaches: support.primaryCoaches.get(profile.id) || [],
         implementation_coaches: support.implementationCoaches.get(profile.id) || [],
         assistants: support.assistants.get(profile.id) || [],

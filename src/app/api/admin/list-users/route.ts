@@ -4,6 +4,7 @@ import {
   fetchCurrentMemberUserIds,
 } from '@/lib/currentMembers';
 import { fetchLegendUserIdSet } from '@/lib/legendMembers';
+import { activePause, loadMemberPauses } from '@/lib/memberPauses';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -40,7 +41,10 @@ export async function GET(request: NextRequest) {
   }
 
   if (!ids.length) return NextResponse.json({ items: [] });
-  const legendUserIdSet = await fetchLegendUserIdSet(supa, ids);
+  const [legendUserIdSet, pausesByUserId] = await Promise.all([
+    fetchLegendUserIdSet(supa, ids),
+    loadMemberPauses(supa, ids, true),
+  ]);
 
   // Step 2: profiles
   const { data: profs, error: pErr } = await supa
@@ -72,6 +76,8 @@ export async function GET(request: NextRequest) {
       email: emailMap.get(id) || '',
       introduced_at: p?.introduced_at ?? null,
       is_legend: legendUserIdSet.has(id),
+      pause_started_at: activePause(pausesByUserId.get(id))?.started_at ?? null,
+      pause_reason: activePause(pausesByUserId.get(id))?.reason ?? null,
     };
   });
 

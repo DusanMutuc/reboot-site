@@ -414,11 +414,8 @@ export default function CoachingNotesPanel({
                 : a.meeting_date.localeCompare(b.meeting_date),
             );
           const nextSlots = makeEmptyMeetingSlots();
-          const implKeys: MeetingSlotKey[] = ['impl1', 'impl2', 'impl3'];
-
-          implKeys.forEach((key, index) => {
-            const record = implCandidates[index];
-            if (!record) return;
+          implCandidates.forEach((record, index) => {
+            const key = `impl${index + 1}` as const;
 
             nextSlots[key] = {
               meetingId: record.meeting_id,
@@ -476,10 +473,8 @@ export default function CoachingNotesPanel({
           source: syncSources.get(m2MeetingId!) ?? 'manual',
         };
 
-        const implKeys: MeetingSlotKey[] = ['impl1', 'impl2', 'impl3'];
-        implKeys.forEach((key, index) => {
-          const record = implCandidates[index];
-          if (!record) return;
+        implCandidates.forEach((record, index) => {
+          const key = `impl${index + 1}` as const;
 
           nextSlots[key] = {
             meetingId: record.meeting_id,

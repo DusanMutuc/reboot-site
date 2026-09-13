@@ -8,6 +8,7 @@ import {
   Autocomplete,
   Box,
   Button,
+  Chip,
   CircularProgress,
   IconButton,
   Paper,
@@ -229,6 +230,8 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
             userId={activeStudentId}
             refreshSignal={kpiRefreshSignal}
             isLegend={selectedStudent?.is_legend ?? false}
+            pauseStartedAt={selectedStudent.pause_started_at}
+            pauseReason={selectedStudent.pause_reason}
           />
         );
       case 'notes':
@@ -393,6 +396,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
                           ) : null}
                         </Box>
                         {option.is_legend ? <LegendMemberIcon /> : null}
+                        {option.pause_started_at ? <Chip label="Paused" size="small" color="info" /> : null}
                       </Box>
                       );
                     }}
@@ -418,6 +422,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
                         {selectedStudent.full_name}
                       </Typography>
                       {selectedStudent.is_legend ? <LegendMemberIcon /> : null}
+                      {selectedStudent.pause_started_at ? <Chip label="Member is paused" size="small" color="info" /> : null}
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                       {selectedStudent.email ||
@@ -428,6 +433,16 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
               </Stack>
             </Stack>
           </Paper>
+
+          {selectedStudent?.pause_started_at ? (
+            <Alert severity="info" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+              <Typography fontWeight={700}>Member is paused</Typography>
+              <Typography variant="body2">
+                Since {new Date(selectedStudent.pause_started_at).toLocaleDateString()}
+                {selectedStudent.pause_reason ? ` · ${selectedStudent.pause_reason}` : ''}. Status and booking follow-up alerts are muted during the pause.
+              </Typography>
+            </Alert>
+          ) : null}
 
           <Paper
             elevation={0}

@@ -7,6 +7,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Paper,
   Stack,
@@ -18,6 +19,7 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { UserStatusDialog } from '@/components/UserStatusDialog';
@@ -119,6 +121,9 @@ function compareNullableIsoDates(
 function compareRows(left: StatusOverviewRow, right: StatusOverviewRow, sortBy: SortBy, direction: SortDirection): number {
   switch (sortBy) {
     case 'status': {
+      if (Boolean(left.pause_started_at) !== Boolean(right.pause_started_at)) {
+        return left.pause_started_at ? 1 : -1;
+      }
       const value =
         (statusRank[left.user_status] ?? Number.MAX_SAFE_INTEGER) -
         (statusRank[right.user_status] ?? Number.MAX_SAFE_INTEGER);
@@ -397,26 +402,32 @@ export default function StudentStatusOverview({
 
               <TableBody>
                 {visibleRows.map((row) => (
-                  <TableRow key={row.user_id} hover>
+                  <TableRow key={row.user_id} hover sx={row.pause_started_at ? { bgcolor: 'grey.50' } : undefined}>
                     <TableCell>
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
                         {row.full_name || 'Unknown user'}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <UserStatusChip
-                        clickable
-                        onClick={() => setSelectedRow(row)}
-                        reason={row.user_status_manual_reason}
-                        source={row.user_status_source}
-                        status={row.user_status}
-                      />
+                      {row.pause_started_at ? (
+                        <Tooltip title={`Paused since ${formatDateValue(row.pause_started_at)}`}>
+                          <Chip label="Member is paused" size="small" color="info" />
+                        </Tooltip>
+                      ) : (
+                        <UserStatusChip
+                          clickable
+                          onClick={() => setSelectedRow(row)}
+                          reason={row.user_status_manual_reason}
+                          source={row.user_status_source}
+                          status={row.user_status}
+                        />
+                      )}
                     </TableCell>
-                    <TableCell>{row.attended_count}/{row.expected_count}</TableCell>
-                    <TableCell>{formatDateValue(row.last_kpi_at)}</TableCell>
-                    <TableCell>{formatDateValue(row.last_one_on_one_at)}</TableCell>
-                    <TableCell>{formatDateValue(row.last_group_at)}</TableCell>
-                    <TableCell>
+                    <TableCell sx={{ opacity: row.pause_started_at ? 0.45 : 1 }}>{row.attended_count}/{row.expected_count}</TableCell>
+                    <TableCell sx={{ opacity: row.pause_started_at ? 0.45 : 1 }}>{formatDateValue(row.last_kpi_at)}</TableCell>
+                    <TableCell sx={{ opacity: row.pause_started_at ? 0.45 : 1 }}>{formatDateValue(row.last_one_on_one_at)}</TableCell>
+                    <TableCell sx={{ opacity: row.pause_started_at ? 0.45 : 1 }}>{formatDateValue(row.last_group_at)}</TableCell>
+                    <TableCell sx={{ opacity: row.pause_started_at ? 0.45 : 1 }}>
                       {row.completed_courses}/{row.total_courses}
                     </TableCell>
                     <TableCell align="right">

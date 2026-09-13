@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import {
+  type ImplementationSlotKey,
   type MeetingDateInputs,
   type MeetingSlotKey,
   type MeetingSlotsState,
@@ -47,6 +48,9 @@ export default function MeetingSlotsPanel({
   onToggleAttendance,
 }: MeetingSlotsPanelProps) {
   const implementationUnlocked = businessAuditMode || m2Exists;
+  const implementationSlotKeys = Object.keys(meetingSlots)
+    .filter((key): key is ImplementationSlotKey => /^impl[1-9]\d*$/.test(key))
+    .sort((left, right) => Number(left.slice(4)) - Number(right.slice(4)));
 
   const renderStatusChip = (
     slotKey: MeetingSlotKey,
@@ -277,9 +281,9 @@ export default function MeetingSlotsPanel({
             </>
           ) : null}
 
-          {renderSlot('impl1', 'Impl 1')}
-          {renderSlot('impl2', 'Impl 2')}
-          {renderSlot('impl3', 'Impl 3')}
+          {implementationSlotKeys.map((key) =>
+            renderSlot(key, `Impl ${key.slice(4)}`),
+          )}
         </Stack>
       )}
     </Stack>

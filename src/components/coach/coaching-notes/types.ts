@@ -6,7 +6,8 @@ export type ContentNodeInfo = {
   node_type: string | null;
 };
 
-export type MeetingSlotKey = 'm2' | 'impl1' | 'impl2' | 'impl3';
+export type ImplementationSlotKey = `impl${number}`;
+export type MeetingSlotKey = 'm2' | ImplementationSlotKey;
 
 export type MeetingSlotConfig = {
   key: MeetingSlotKey;
@@ -27,8 +28,10 @@ export type MeetingSlotState = {
   source: 'ghl' | 'manual';
 };
 
-export type MeetingSlotsState = Record<MeetingSlotKey, MeetingSlotState | null>;
-export type MeetingDateInputs = Record<MeetingSlotKey, string>;
+export type MeetingSlotsState = { m2: MeetingSlotState | null } &
+  Partial<Record<ImplementationSlotKey, MeetingSlotState | null>>;
+export type MeetingDateInputs = { m2: string } &
+  Partial<Record<ImplementationSlotKey, string>>;
 
 export type CoachingNoteWithM2 = CoachingNote & {
   m2_meeting_id?: number | null;
