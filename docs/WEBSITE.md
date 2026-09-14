@@ -230,8 +230,11 @@ Authenticated `/business-review-prep` uses the signed-in student's ID to resolve
 
 ### Systems Scorecard administration
 
-Admin → Content Management → Systems Scorecard manages Foundation and Legends templates. The
-active version remains editable only for library connections. A new version begins as an inactive
+Admin → Content Management → Systems Scorecard manages Foundation and Legends templates. A
+Business Review gives members their role-based primary scorecard. Coaches and admins can add a Foundation
+scorecard to a Legends review when the member needs to work on basic systems too. Both scorecards
+appear in the same review and share its three implementation-priority slots. The active version
+remains editable only for library connections. A new version begins as an inactive
 copy whose name, categories, systems, order, stable keys, and library connections can be edited.
 Publishing previews every incomplete Business Review for that audience: compatible reviews upgrade
 automatically, while removed priorities or reviewed systems open a resolution dialog. Completed

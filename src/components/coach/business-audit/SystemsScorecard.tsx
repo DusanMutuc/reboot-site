@@ -31,6 +31,7 @@ import type {
 
 type SystemsScorecardProps = {
   scorecard: BusinessReviewSystemScorecard;
+  totalPriorityCount?: number;
   pendingSystemIds: ReadonlySet<number>;
   pendingPrioritySystemIds: ReadonlySet<number>;
   onReviewSystem: (systemId: number, status: SystemScorecardStatus) => void;
@@ -253,6 +254,7 @@ function SystemRow({
 
 function CategoryAccordion({
   category,
+  idPrefix,
   defaultExpanded,
   pendingSystemIds,
   pendingPrioritySystemIds,
@@ -261,6 +263,7 @@ function CategoryAccordion({
   onTogglePriority,
 }: {
   category: SystemScorecardCategory;
+  idPrefix: string;
   defaultExpanded: boolean;
   pendingSystemIds: ReadonlySet<number>;
   pendingPrioritySystemIds: ReadonlySet<number>;
@@ -289,8 +292,8 @@ function CategoryAccordion({
     >
       <AccordionSummary
         expandIcon={<ExpandMoreIcon />}
-        aria-controls={`${category.key}-systems`}
-        id={`${category.key}-header`}
+        aria-controls={`${idPrefix}-${category.key}-systems`}
+        id={`${idPrefix}-${category.key}-header`}
         sx={{
           px: { xs: 1.75, sm: 2.5 },
           py: 0.5,
@@ -354,8 +357,8 @@ function CategoryAccordion({
       </AccordionSummary>
 
       <AccordionDetails
-        id={`${category.key}-systems`}
-        aria-labelledby={`${category.key}-header`}
+        id={`${idPrefix}-${category.key}-systems`}
+        aria-labelledby={`${idPrefix}-${category.key}-header`}
         sx={{ p: 0 }}
       >
         {category.systems.map((system) => (
@@ -376,6 +379,7 @@ function CategoryAccordion({
 
 export default function SystemsScorecard({
   scorecard,
+  totalPriorityCount,
   pendingSystemIds,
   pendingPrioritySystemIds,
   onReviewSystem,
@@ -385,7 +389,7 @@ export default function SystemsScorecard({
   const goodCount = allSystems.filter((system) => isGoodStatus(system.rating.status)).length;
   const reviewedCount = allSystems.filter((system) => system.rating.reviewedAt).length;
   const needReviewCount = allSystems.length - reviewedCount;
-  const priorityCount = allSystems.filter((system) => system.priority).length;
+  const priorityCount = totalPriorityCount ?? allSystems.filter((system) => system.priority).length;
   const priorityLimitReached = priorityCount >= 3;
 
   return (
@@ -425,8 +429,8 @@ export default function SystemsScorecard({
             />
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Review each system individually and select up to three priorities for the next
-            60 days. Categories are summaries only.
+            Review each system individually and select up to three priorities across this review
+            for the next 60 days. Categories are summaries only.
           </Typography>
         </Box>
 
@@ -461,6 +465,7 @@ export default function SystemsScorecard({
           <CategoryAccordion
             key={category.id}
             category={category}
+            idPrefix={scorecard.templateKey}
             defaultExpanded={index === 0}
             pendingSystemIds={pendingSystemIds}
             pendingPrioritySystemIds={pendingPrioritySystemIds}

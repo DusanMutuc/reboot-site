@@ -35,8 +35,10 @@ import type {
   BusinessReviewSystemRating,
   BusinessReviewsPayload,
   FocusFinderDimension,
+  BusinessReviewSystemScorecard,
   SystemScorecardStatus,
 } from '@/lib/businessReviews';
+import { getBusinessReviewScorecards } from '@/lib/businessReviews';
 
 type BusinessAuditTabProps = {
   selectedStudentId: string;
@@ -168,21 +170,23 @@ function replaceSystemRating(
   systemRating: BusinessReviewSystemRating,
 ) {
   return reviews.map((review) => {
-    if (review.id !== reviewId || !review.systemScorecard) return review;
+    if (review.id !== reviewId) return review;
 
-    return {
-      ...review,
-      systemScorecard: {
-        ...review.systemScorecard,
-        categories: review.systemScorecard.categories.map((category) => ({
+    const update = (scorecard: BusinessReviewSystemScorecard) => ({
+      ...scorecard,
+      categories: scorecard.categories.map((category) => ({
           ...category,
           systems: category.systems.map((system) =>
             system.id === systemRating.systemId
               ? { ...system, rating: systemRating }
               : system,
           ),
-        })),
-      },
+      })),
+    });
+    return {
+      ...review,
+      systemScorecard: review.systemScorecard ? update(review.systemScorecard) : null,
+      additionalScorecards: review.additionalScorecards.map(update),
     };
   });
 }
@@ -194,19 +198,21 @@ function replaceSystemPriority(
   priority: BusinessReviewSystemPriority | null,
 ) {
   return reviews.map((review) => {
-    if (review.id !== reviewId || !review.systemScorecard) return review;
+    if (review.id !== reviewId) return review;
 
-    return {
-      ...review,
-      systemScorecard: {
-        ...review.systemScorecard,
-        categories: review.systemScorecard.categories.map((category) => ({
+    const update = (scorecard: BusinessReviewSystemScorecard) => ({
+      ...scorecard,
+      categories: scorecard.categories.map((category) => ({
           ...category,
           systems: category.systems.map((system) =>
             system.id === systemId ? { ...system, priority } : system,
           ),
-        })),
-      },
+      })),
+    });
+    return {
+      ...review,
+      systemScorecard: review.systemScorecard ? update(review.systemScorecard) : null,
+      additionalScorecards: review.additionalScorecards.map(update),
     };
   });
 }
@@ -277,6 +283,8 @@ export default function BusinessAuditTab({
   const [loading, setLoading] = useState(true);
   const [savingReviewStatus, setSavingReviewStatus] = useState(false);
   const [creatingReview, setCreatingReview] = useState(false);
+  const [assigningFoundation, setAssigningFoundation] = useState(false);
+  const [assignFoundationError, setAssignFoundationError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -300,6 +308,7 @@ export default function BusinessAuditTab({
     setLoading(true);
     setLoadError(null);
     setCreateError(null);
+    setAssignFoundationError(null);
     setSaveError(null);
     setSystemSaveError(null);
     setPrioritySaveError(null);
@@ -351,6 +360,15 @@ export default function BusinessAuditTab({
     () => reviews.find((review) => review.id === selectedReviewId) ?? null,
     [reviews, selectedReviewId],
   );
+  const scorecards = useMemo(
+    () => getBusinessReviewScorecards(selectedReview).sort((left, right) =>
+      left.audience === right.audience ? 0 : left.audience === 'foundation' ? -1 : 1,
+    ),
+    [selectedReview],
+  );
+  const totalPriorityCount = scorecards
+    .flatMap((scorecard) => scorecard.categories.flatMap((category) => category.systems))
+    .filter((system) => system.priority).length;
   const values = useMemo(() => valuesToRecord(selectedReview), [selectedReview]);
 
   const saveStatus: FocusFinderSaveStatus =
@@ -544,6 +562,34 @@ export default function BusinessAuditTab({
     [pendingPrioritySystemIds, selectedReviewId, selectedStudentId],
   );
 
+  const assignFoundationScorecard = useCallback(async () => {
+    if (!selectedReviewId || assigningFoundation) return;
+    const studentIdAtSave = selectedStudentId;
+    setAssigningFoundation(true);
+    setAssignFoundationError(null);
+    try {
+      const response = await fetch(
+        `/api/business-reviews/${selectedReviewId}/foundation-scorecard`,
+        { method: 'POST' },
+      );
+      const body = (await response.json()) as BusinessReviewsPayload & ApiErrorBody;
+      if (!response.ok || !body.reviews) {
+        throw new Error(body.error || 'Could not assign the Foundation scorecard.');
+      }
+      if (activeStudentIdRef.current === studentIdAtSave) {
+        setReviews(body.reviews);
+      }
+    } catch (error) {
+      if (activeStudentIdRef.current === studentIdAtSave) {
+        setAssignFoundationError(
+          error instanceof Error ? error.message : 'Could not assign the Foundation scorecard.',
+        );
+      }
+    } finally {
+      setAssigningFoundation(false);
+    }
+  }, [assigningFoundation, selectedReviewId, selectedStudentId]);
+
   // 90-day participants have no GHL appointment to sync from, so a coach opens
   // their review by hand. create_business_review is the same primitive the
   // hourly appointment sync calls, so a manual draft matches a synced one.
@@ -672,6 +718,7 @@ export default function BusinessAuditTab({
 
       {loadError ? <Alert severity="error">{loadError}</Alert> : null}
       {createError ? <Alert severity="error">{createError}</Alert> : null}
+      {assignFoundationError ? <Alert severity="error">{assignFoundationError}</Alert> : null}
       {saveError ? (
         <Alert severity="error">
           {saveError} Your selected score is still visible; choose it again to retry.
@@ -952,18 +999,44 @@ export default function BusinessAuditTab({
                 onValueCommit={persistValue}
               />
 
-              {selectedReview.systemScorecard ? (
-                <SystemsScorecard
-                  scorecard={selectedReview.systemScorecard}
-                  pendingSystemIds={pendingSystemIds}
-                  pendingPrioritySystemIds={pendingPrioritySystemIds}
-                  onReviewSystem={(systemId, status) =>
-                    void persistSystemRating(systemId, status)
-                  }
-                  onTogglePriority={(systemId, selected) =>
-                    void persistSystemPriority(systemId, selected)
-                  }
-                />
+              {scorecards.length > 0 ? (
+                <Stack spacing={2}>
+                  {selectedReview.systemScorecard?.audience === 'legends' &&
+                    !scorecards.some((scorecard) => scorecard.audience === 'foundation') ? (
+                    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                        Work on Foundation systems too
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 1.5 }}>
+                        Add a Foundation scorecard to this review while keeping the Legends scorecard.
+                      </Typography>
+                      <Button
+                        variant="outlined"
+                        startIcon={<AddRoundedIcon />}
+                        disabled={assigningFoundation || selectedReview.meetingCancelled}
+                        onClick={() => void assignFoundationScorecard()}
+                        sx={{ textTransform: 'none', fontWeight: 800 }}
+                      >
+                        {assigningFoundation ? 'Adding Foundation scorecard…' : 'Add Foundation scorecard'}
+                      </Button>
+                    </Paper>
+                  ) : null}
+                  {scorecards.map((scorecard) => (
+                    <SystemsScorecard
+                      key={scorecard.templateKey}
+                      scorecard={scorecard}
+                      totalPriorityCount={totalPriorityCount}
+                      pendingSystemIds={pendingSystemIds}
+                      pendingPrioritySystemIds={pendingPrioritySystemIds}
+                      onReviewSystem={(systemId, status) =>
+                        void persistSystemRating(systemId, status)
+                      }
+                      onTogglePriority={(systemId, selected) =>
+                        void persistSystemPriority(systemId, selected)
+                      }
+                    />
+                  ))}
+                </Stack>
               ) : (
                 <Alert severity="warning">
                   This review does not have a systems scorecard attached.

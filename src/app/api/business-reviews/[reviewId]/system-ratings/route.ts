@@ -111,35 +111,46 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'You do not have access to this review.' }, { status: 403 });
     }
 
-    const [{ data: system, error: systemError }, { data: template, error: templateError }] =
-      await Promise.all([
-        admin
-          .from('system_scorecard_systems')
-          .select('id, key')
-          .eq('id', systemId)
-          .eq('template_key', review.system_scorecard_template_key)
-          .maybeSingle(),
-        admin
-          .from('system_scorecard_templates')
-          .select('audience')
-          .eq('key', review.system_scorecard_template_key)
-          .maybeSingle(),
-      ]);
+    const { data: system, error: systemError } = await admin
+      .from('system_scorecard_systems')
+      .select('id, key, template_key')
+      .eq('id', systemId)
+      .maybeSingle();
 
     if (systemError) {
       return NextResponse.json({ error: systemError.message }, { status: 400 });
     }
 
-    if (templateError) {
-      return NextResponse.json({ error: templateError.message }, { status: 400 });
-    }
-
-    if (!system || !template) {
+    if (!system) {
       return NextResponse.json(
         { error: 'That system does not belong to this review.' },
         { status: 400 },
       );
     }
+
+    if (system.template_key !== review.system_scorecard_template_key) {
+      const { data: extra, error: extraError } = await admin
+        .from('business_review_additional_scorecards')
+        .select('template_key')
+        .eq('business_review_id', reviewId)
+        .eq('template_key', system.template_key)
+        .maybeSingle();
+      if (extraError) throw new Error(extraError.message);
+      if (!extra) {
+        return NextResponse.json(
+          { error: 'That system does not belong to this review.' },
+          { status: 400 },
+        );
+      }
+    }
+
+    const { data: template, error: templateError } = await admin
+      .from('system_scorecard_templates')
+      .select('audience')
+      .eq('key', system.template_key)
+      .maybeSingle();
+    if (templateError) throw new Error(templateError.message);
+    if (!template) throw new Error('Scorecard template not found.');
 
     const now = new Date().toISOString();
     const { data: saved, error: saveError } = await admin
@@ -153,7 +164,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       })
       .eq('business_review_id', reviewId)
       .eq('system_id', systemId)
-      .eq('template_key', review.system_scorecard_template_key)
+      .eq('template_key', system.template_key)
       .select('system_id, status, reviewed_at, reviewed_by, updated_at')
       .maybeSingle();
 

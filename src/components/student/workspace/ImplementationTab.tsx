@@ -22,9 +22,11 @@ import CoachingNotesPanel from '@/components/coach/CoachingNotesPanel';
 import UserWinsPanel from '@/components/coach/UserWinsPanel';
 import type {
   BusinessReview,
+  BusinessReviewSystemScorecard,
   BusinessReviewsPayload,
   SystemScorecardSystem,
 } from '@/lib/businessReviews';
+import { getBusinessReviewScorecards } from '@/lib/businessReviews';
 import type { CoachingCycle, CoachingCyclesPayload } from '@/lib/coachingCycles';
 import type { ActionStepStatus, CoachingNoteActionStep } from '@/types/coaching';
 
@@ -50,10 +52,8 @@ function formatReviewDate(value: string) {
 }
 
 function getPrioritySystems(review: BusinessReview | null): SystemScorecardSystem[] {
-  if (!review?.systemScorecard) return [];
-
-  return review.systemScorecard.categories
-    .flatMap((category) => category.systems)
+  return getBusinessReviewScorecards(review)
+    .flatMap((scorecard) => scorecard.categories.flatMap((category) => category.systems))
     .filter((system) => system.priority)
     .sort(
       (left, right) =>
@@ -225,21 +225,24 @@ export default function ImplementationTab({
 
     setReviews((current) =>
       current.map((review) => {
-        if (review.id !== selectedReview.id || !review.systemScorecard) return review;
+        if (review.id !== selectedReview.id) return review;
+
+        const update = (scorecard: BusinessReviewSystemScorecard) => ({
+          ...scorecard,
+          categories: scorecard.categories.map((category) => ({
+            ...category,
+            systems: category.systems.map((system) =>
+              system.priority?.actionStepId === actionStepId
+                ? { ...system, priority: null }
+                : system,
+            ),
+          })),
+        });
 
         return {
           ...review,
-          systemScorecard: {
-            ...review.systemScorecard,
-            categories: review.systemScorecard.categories.map((category) => ({
-              ...category,
-              systems: category.systems.map((system) =>
-                system.priority?.actionStepId === actionStepId
-                  ? { ...system, priority: null }
-                  : system,
-              ),
-            })),
-          },
+          systemScorecard: review.systemScorecard ? update(review.systemScorecard) : null,
+          additionalScorecards: review.additionalScorecards.map(update),
         };
       }),
     );

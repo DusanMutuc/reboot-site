@@ -91,6 +91,7 @@ export type BusinessReview = {
   updatedAt: string;
   focusValues: BusinessReviewFocusValue[];
   systemScorecard: BusinessReviewSystemScorecard | null;
+  additionalScorecards: BusinessReviewSystemScorecard[];
   preparation: BusinessAuditPreparationAnswers | null;
 };
 
@@ -129,6 +130,21 @@ type SystemScorecardTemplateRow = {
   audience: SystemScorecardAudience;
   name: string;
   version: number;
+};
+
+export function getBusinessReviewScorecards(
+  review: BusinessReview | null,
+): BusinessReviewSystemScorecard[] {
+  if (!review) return [];
+  return [
+    ...(review.systemScorecard ? [review.systemScorecard] : []),
+    ...review.additionalScorecards,
+  ];
+}
+
+type AdditionalScorecardRow = {
+  business_review_id: number;
+  template_key: string;
 };
 
 type SystemScorecardCategoryRow = {
@@ -308,13 +324,7 @@ export async function loadBusinessReviews(
 
   const rows = (reviewRows ?? []) as BusinessReviewRow[];
   const reviewIds = rows.map((row) => Number(row.id));
-  const scorecardTemplateKeys = Array.from(
-    new Set(
-      rows
-        .map((row) => row.system_scorecard_template_key)
-        .filter((key): key is string => Boolean(key)),
-    ),
-  );
+  let additionalScorecardRows: AdditionalScorecardRow[] = [];
   let focusValueRows: BusinessReviewFocusValueRow[] = [];
   let ratingRows: BusinessReviewSystemRatingRow[] = [];
   let priorityRows: BusinessReviewSystemPriorityRow[] = [];
@@ -326,6 +336,13 @@ export async function loadBusinessReviews(
   let preparationRows: BusinessReviewPreparationRow[] = [];
 
   if (reviewIds.length > 0) {
+    const { data: assignedScorecards, error: assignedScorecardsError } = await client
+      .from('business_review_additional_scorecards')
+      .select('business_review_id, template_key')
+      .in('business_review_id', reviewIds);
+    if (assignedScorecardsError) throw new Error(assignedScorecardsError.message);
+    additionalScorecardRows = (assignedScorecards ?? []) as AdditionalScorecardRow[];
+
     const meetingIds = rows
       .map((row) => row.meeting_id)
       .filter((meetingId): meetingId is number => meetingId !== null);
@@ -384,6 +401,15 @@ export async function loadBusinessReviews(
     preparationRows = (preparationResult.data ?? []) as BusinessReviewPreparationRow[];
     meetingRows = (meetingResult.data ?? []) as BusinessReviewMeetingRow[];
   }
+
+  const scorecardTemplateKeys = Array.from(
+    new Set(
+      [
+        ...rows.map((row) => row.system_scorecard_template_key),
+        ...additionalScorecardRows.map((row) => row.template_key),
+      ].filter((key): key is string => Boolean(key)),
+    ),
+  );
 
   if (scorecardTemplateKeys.length > 0) {
     const [templateResult, categoryResult, systemResult, lastReviewResult] =
@@ -472,6 +498,7 @@ export async function loadBusinessReviews(
   const reviews = rows.map((row) => ({
     ...mapBusinessReviewRow(
       row,
+      additionalScorecardRows,
       focusValuesByReviewId,
       templatesByKey,
       categoryRows,
@@ -489,6 +516,7 @@ export async function loadBusinessReviews(
 
 function mapBusinessReviewRow(
   row: BusinessReviewRow,
+  additionalScorecardRows: AdditionalScorecardRow[],
   focusValuesByReviewId: Map<number, BusinessReviewFocusValue[]>,
   templatesByKey: Map<string, SystemScorecardTemplateRow>,
   categoryRows: SystemScorecardCategoryRow[],
@@ -503,12 +531,9 @@ function mapBusinessReviewRow(
   const meetingId = row.meeting_id == null ? null : Number(row.meeting_id);
   const meetingStatus = meetingId == null ? null : (meetingStatusById.get(meetingId) ?? null);
   const preparation = preparationByReviewId.get(reviewId);
-  const scorecardTemplate = row.system_scorecard_template_key
-    ? templatesByKey.get(row.system_scorecard_template_key)
-    : null;
-
-  const systemScorecard: BusinessReviewSystemScorecard | null = scorecardTemplate
-    ? {
+  const buildScorecard = (templateKey: string): BusinessReviewSystemScorecard | null => {
+    const scorecardTemplate = templatesByKey.get(templateKey);
+    return scorecardTemplate ? {
         templateKey: scorecardTemplate.key,
         audience: scorecardTemplate.audience,
         name: scorecardTemplate.name,
@@ -563,8 +588,15 @@ function mapBusinessReviewRow(
                 };
               }),
           })),
-      }
+    } : null;
+  };
+  const systemScorecard = row.system_scorecard_template_key
+    ? buildScorecard(row.system_scorecard_template_key)
     : null;
+  const additionalScorecards = additionalScorecardRows
+    .filter((assignment) => Number(assignment.business_review_id) === reviewId)
+    .map((assignment) => buildScorecard(assignment.template_key))
+    .filter((scorecard): scorecard is BusinessReviewSystemScorecard => scorecard !== null);
 
   return {
     id: reviewId,
@@ -583,6 +615,7 @@ function mapBusinessReviewRow(
     updatedAt: row.updated_at,
     focusValues: focusValuesByReviewId.get(reviewId) ?? [],
     systemScorecard,
+    additionalScorecards,
     preparation: preparation
       ? {
           businessForwardWins: preparation.business_forward_wins,

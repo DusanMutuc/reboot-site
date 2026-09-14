@@ -233,7 +233,10 @@ priority steps from their system mappings.
 ### Systems Scorecard versions
 
 `system_scorecard_templates.key` is the immutable version identifier stored on every
-`business_reviews.system_scorecard_template_key`. Published templates and any template already
+`business_reviews.system_scorecard_template_key`. A Legends review can also have a Foundation
+template in `business_review_additional_scorecards`; its ratings share the review's three priority
+positions with the Legends ratings. The additional assignment is idempotent and coach/admin-only.
+Published templates and any template already
 referenced by a review must not be edited structurally. Admins create an inactive copy, edit its
 categories and systems, then publish it through the service-role-only version-management RPCs.
 Stable `system_scorecard_systems.key` values map retained ratings and priorities between versions.

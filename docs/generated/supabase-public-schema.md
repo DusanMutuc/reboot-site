@@ -1,6 +1,6 @@
 # Generated Supabase public schema
 
-Generated at: `2026-07-29T13:03:20.176Z`
+Generated at: `2026-09-14T18:33:52.410Z`
 
 Source: the configured Supabase project's PostgREST OpenAPI document. The generator reads schema metadata only; it does not read table rows.
 
@@ -13,7 +13,7 @@ Source: the configured Supabase project's PostgREST OpenAPI document. The genera
 - Primary and foreign keys come from PostgREST metadata. Cross-schema links such as `profiles.id` to Supabase Auth may not appear.
 - RLS policies, grants, indexes, triggers, check constraints, and function bodies are not included in OpenAPI.
 
-## Relations (56)
+## Relations (86)
 
 ### `achievement_node_map` (table)
 
@@ -36,6 +36,97 @@ Source: the configured Supabase project's PostgREST OpenAPI document. The genera
 | `created_at` | `timestamptz` | required |  |  |
 | `updated_at` | `timestamptz` | required |  |  |
 
+### `business_review_additional_scorecards` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `business_review_id` | `bigint` | required | PK; FK -> `business_reviews.id` |  |
+| `template_key` | `text` | required | FK -> `system_scorecard_templates.key` |  |
+| `assigned_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+
+### `business_review_focus_values` (table)
+
+The nine Focus Finder ratings for a business audit. Values are integers from 1 to 7.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `business_review_id` | `bigint` | required | PK |  |
+| `template_key` | `text` | required |  |  |
+| `dimension_id` | `bigint` | required | PK |  |
+| `value` | `smallint` | required |  |  |
+| `updated_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `business_review_preparation_responses` (table)
+
+The student-submitted preparation form for one Business Audit. Ownership is derived from business_reviews.user_id.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `business_review_id` | `bigint` | required | PK; FK -> `business_reviews.id` |  |
+| `business_forward_wins` | `text` | required |  |  |
+| `personal_forward_wins` | `text` | required |  |  |
+| `greatest_business_challenge` | `text` | required |  |  |
+| `greatest_personal_challenge` | `text` | required |  |  |
+| `desired_call_outcome` | `text` | required |  |  |
+| `topics_to_discuss` | `text` | required |  |  |
+| `business_rating` | `smallint` | required |  |  |
+| `personal_rating` | `smallint` | required |  |  |
+| `submitted_at` | `timestamptz` | required |  | Timestamp of the most recent complete submission. Students may edit and resubmit answers. |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `business_review_system_priorities` (table)
+
+The maximum three systems selected for a Business Audit implementation cycle. Each selection creates one linked coaching-note action step.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `business_review_id` | `bigint` | required | PK |  |
+| `system_id` | `bigint` | required | PK |  |
+| `position` | `smallint` | required |  |  |
+| `action_step_id` | `bigint` | required | FK -> `coaching_note_action_steps.id` |  |
+| `starting_status` | `public.system_scorecard_status` | required |  | Snapshot of the system status when it became a priority. Completing the linked action step promotes a previously complete system to consistent. |
+| `selected_at` | `timestamptz` | required |  |  |
+| `selected_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+
+### `business_review_system_ratings` (table)
+
+One individual system status inside one Business Audit. Categories are not reviewable entities.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `business_review_id` | `bigint` | required | PK; FK -> `business_reviews.id` |  |
+| `template_key` | `text` | required |  |  |
+| `system_id` | `bigint` | required | PK |  |
+| `status` | `public.system_scorecard_status` | required |  |  |
+| `reviewed_at` | `timestamptz` | nullable/default |  | Null means this individual system has not yet been reviewed during this audit, even when its status was carried forward. |
+| `reviewed_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `updated_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `business_reviews` (table)
+
+One 60 Day Business Audit for a student, backed by exactly one existing coaching note.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `coach_id` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `coaching_note_id` | `bigint` | required | FK -> `coaching_notes_base.id` | The existing coaching note whose comments and action steps belong to this business audit. |
+| `focus_finder_template_key` | `text` | required | FK -> `focus_finder_templates.key` |  |
+| `review_date` | `date` | required |  |  |
+| `status` | `public.business_review_status` | required |  |  |
+| `completed_at` | `timestamptz` | nullable/default |  |  |
+| `completed_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+| `system_scorecard_template_key` | `text` | nullable/default | FK -> `system_scorecard_templates.key` | The versioned Foundation or Legends Systems Scorecard used by this audit. |
+| `meeting_id` | `bigint` | nullable/default | FK -> `meetings.id` | The M2_MEETING record whose scheduled appointment owns this Business Audit. |
+
 ### `coach_profiles` (table)
 
 | Column | Type | Null/default | Key / relation | Comment |
@@ -49,6 +140,23 @@ Source: the configured Supabase project's PostgREST OpenAPI document. The genera
 | `coaching_notes_url` | `text` | nullable/default |  |  |
 | `m2_form_url` | `text` | nullable/default |  |  |
 | `impl_booking_url` | `text` | nullable/default |  |  |
+
+### `coach_resource_suggestions` (table)
+
+Optional coach-selected browse recommendations. They are not required training and resolve only through an explicit coach removal or member preference.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `uuid` | required | PK |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `resource_id` | `bigint` | required | FK -> `resources.id` |  |
+| `coach_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `coaching_note_id` | `bigint` | nullable/default | FK -> `coaching_notes_base.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `removed_at` | `timestamptz` | nullable/default |  |  |
+| `removed_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `member_resolution` | `text` | nullable/default |  |  |
+| `member_resolved_at` | `timestamptz` | nullable/default |  |  |
 
 ### `coaching_note_action_steps` (table)
 
@@ -166,6 +274,11 @@ Source: the configured Supabase project's PostgREST OpenAPI document. The genera
 | `sequential_unlock` | `boolean` | required |  |  |
 | `visibility` | `public.course_visibility` | required |  |  |
 | `is_public` | `boolean` | required |  |  |
+| `is_discoverable` | `boolean` | required |  |  |
+| `catalog_priority` | `smallint` | required |  |  |
+| `tag_text` | `text` | nullable/default |  |  |
+| `tsv_discovery` | `tsvector` | nullable/default |  |  |
+| `search_names` | `text[]` | required |  |  |
 
 ### `course_sort_orders` (table)
 
@@ -185,6 +298,158 @@ Source: the configured Supabase project's PostgREST OpenAPI document. The genera
 | `name` | `text` | nullable/default |  |  |
 | `start_date` | `date` | nullable/default |  |  |
 
+### `discovery_decisions` (table)
+
+One row per (item_kind, item_id, question). Authoritative record of discovery decisions; supersedes resources.discovery_reviewed_at for the placement question.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `item_kind` | `text` | required | PK |  |
+| `item_id` | `bigint` | required | PK |  |
+| `question` | `text` | required | PK |  |
+| `answer` | `text` | required |  |  |
+| `token` | `uuid` | required |  |  |
+| `decided_at` | `timestamptz` | required |  |  |
+| `decided_by` | `uuid` | nullable/default |  |  |
+| `decided_label` | `text` | required |  |  |
+| `evidence` | `jsonb` | required |  |  |
+
+### `discovery_duplicate_dismissals` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `user_id` | `uuid` | required | PK |  |
+| `signature` | `text` | required | PK |  |
+| `created_at` | `timestamptz` | required |  |  |
+
+### `discovery_events` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `event_id` | `uuid` | required | PK |  |
+| `schema_version` | `smallint` | required |  |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `client_session_id` | `text` | required |  |  |
+| `tab_session_id` | `uuid` | required |  |  |
+| `client_sequence` | `bigint` | required |  |  |
+| `event_type` | `text` | required |  |  |
+| `result_set_id` | `uuid` | nullable/default | FK -> `discovery_result_sets.id` |  |
+| `logical_search_id` | `uuid` | nullable/default | FK -> `logical_searches.id` |  |
+| `item_type` | `text` | nullable/default |  |  |
+| `item_key` | `text` | nullable/default |  |  |
+| `item_position` | `integer` | nullable/default |  |  |
+| `visible_fraction` | `numeric` | nullable/default |  |  |
+| `visible_ms` | `integer` | nullable/default |  |  |
+| `client_occurred_at` | `timestamptz` | required |  |  |
+| `server_received_at` | `timestamptz` | required |  |  |
+| `metadata` | `jsonb` | required |  |  |
+| `expires_at` | `timestamptz` | required |  |  |
+
+### `discovery_job_items` (table)
+
+Items governed by discovery jobs: all resources, canonical Library guides and whole courses. Course-internal lessons, parentless lessons, chapters, collections and playlists are excluded.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `kind` | `text` | nullable/default |  |  |
+| `id` | `bigint` | nullable/default |  |  |
+| `title` | `text` | nullable/default |  |  |
+| `description` | `text` | nullable/default |  |  |
+| `media_type` | `text` | nullable/default |  |  |
+| `state` | `text` | nullable/default |  |  |
+| `is_discoverable` | `boolean` | nullable/default |  |  |
+| `is_browsable` | `boolean` | nullable/default |  |  |
+| `discovery_open_mode` | `text` | nullable/default |  |  |
+| `duration` | `integer` | nullable/default |  |  |
+| `has_thumbnail` | `boolean` | nullable/default |  |  |
+| `url` | `text` | nullable/default |  |  |
+| `embedded` | `boolean` | nullable/default |  |  |
+| `has_topics` | `boolean` | nullable/default |  |  |
+
+### `discovery_logical_search_outcomes` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `logical_search_id` | `uuid` | nullable/default | PK |  |
+| `user_id` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `journey_id` | `uuid` | nullable/default |  |  |
+| `created_at` | `timestamptz` | nullable/default |  |  |
+| `qualified_at` | `timestamptz` | nullable/default |  |  |
+| `first_shown_at` | `timestamptz` | nullable/default |  |  |
+| `all_windows_close_at` | `timestamptz` | nullable/default |  |  |
+| `eligible` | `boolean` | nullable/default |  |  |
+| `engaged` | `boolean` | nullable/default |  |  |
+| `no_click` | `boolean` | nullable/default |  |  |
+
+### `discovery_result_set_items` (table)
+
+Only items actually returned in the response/page, never the internal candidate pool.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `result_set_id` | `uuid` | required | PK; FK -> `discovery_result_sets.id` |  |
+| `position` | `integer` | required | PK |  |
+| `item_type` | `text` | required |  |  |
+| `item_key` | `text` | required |  |  |
+| `resource_id` | `bigint` | nullable/default | FK -> `resources.id` |  |
+| `content_node_id` | `bigint` | nullable/default | FK -> `content_nodes.id` |  |
+| `ranking_tier` | `text` | required |  |  |
+| `rank_score` | `numeric` | nullable/default |  |  |
+| `reason_code` | `text` | nullable/default |  |  |
+| `reason_context` | `jsonb` | required |  |  |
+
+### `discovery_result_sets` (table)
+
+One ordered response/page delivered for a member context, including prefetch, empty, insufficient, and error responses.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `uuid` | required | PK |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `logical_search_id` | `uuid` | nullable/default | FK -> `logical_searches.id` |  |
+| `search_execution_id` | `uuid` | nullable/default | FK -> `search_executions.id` |  |
+| `context` | `text` | required |  |  |
+| `context_key` | `text` | nullable/default |  |  |
+| `surface` | `text` | required |  |  |
+| `result_version` | `text` | required |  |  |
+| `page_number` | `integer` | required |  |  |
+| `page_size` | `integer` | required |  |  |
+| `is_prefetched` | `boolean` | required |  | Prefetched result sets do not count as viewed without a result_set_shown event. |
+| `status` | `text` | required |  |  |
+| `eligible_candidate_count` | `integer` | required |  | Accessible candidates before ranking and capping. |
+| `total_match_count` | `integer` | required |  | Matching items available across all pages. |
+| `returned_count` | `integer` | required |  | Items delivered in this response/page. |
+| `error_code` | `text` | nullable/default |  |  |
+| `generated_at` | `timestamptz` | required |  |  |
+| `expires_at` | `timestamptz` | required |  |  |
+
+### `focus_finder_dimensions` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `template_key` | `text` | required | FK -> `focus_finder_templates.key` |  |
+| `key` | `text` | required |  |  |
+| `group_key` | `text` | required |  |  |
+| `group_label` | `text` | required |  |  |
+| `label` | `text` | required |  |  |
+| `subtitle` | `text` | required |  |  |
+| `position` | `integer` | required |  |  |
+| `library_item_id` | `bigint` | nullable/default | FK -> `content_nodes.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `focus_finder_templates` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `key` | `text` | required | PK |  |
+| `name` | `text` | required |  |  |
+| `version` | `integer` | required |  |  |
+| `is_active` | `boolean` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
 ### `kpi_metric_types` (table)
 
 Definition of KPI metrics available in the program (Closed Deals, Gross Revenue, etc).
@@ -196,6 +461,33 @@ Definition of KPI metrics available in the program (Closed Deals, Gross Revenue,
 | `name` | `text` | required |  | Human-readable label shown in the UI. |
 | `description` | `text` | nullable/default |  | Short explanation of what this KPI counts. |
 | `created_at` | `timestamptz` | required |  |  |
+
+### `logical_searches` (table)
+
+A distinct canonical query/category/filter/sort state within a journey; it may later qualify as analytically meaningful.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `uuid` | required | PK |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `journey_id` | `uuid` | required |  |  |
+| `parent_logical_search_id` | `uuid` | nullable/default | FK -> `logical_searches.id` |  |
+| `client_session_id` | `text` | required |  |  |
+| `tab_session_id` | `uuid` | required |  |  |
+| `query_text` | `text` | nullable/default |  |  |
+| `normalized_query` | `text` | required |  |  |
+| `browse_category` | `text` | nullable/default |  |  |
+| `filter_state` | `jsonb` | required |  |  |
+| `canonical_sort` | `text` | required |  |  |
+| `state_hash` | `text` | required |  |  |
+| `change_reason` | `text` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `last_interaction_at` | `timestamptz` | required |  |  |
+| `qualified_at` | `timestamptz` | nullable/default |  | Set only after a result-set shown, impression, or open event; query length is not qualification. |
+| `superseded_at` | `timestamptz` | nullable/default |  |  |
+| `journey_ended_at` | `timestamptz` | nullable/default |  |  |
+| `journey_end_reason` | `text` | nullable/default |  |  |
+| `expires_at` | `timestamptz` | required |  |  |
 
 ### `meeting_attendance` (view)
 
@@ -239,6 +531,27 @@ Definition of KPI metrics available in the program (Closed Deals, Gross Revenue,
 | `title` | `text` | nullable/default |  |  |
 | `created_at` | `timestamptz` | required |  |  |
 | `updated_at` | `timestamptz` | required |  |  |
+| `ghl_appointment_id` | `text` | nullable/default |  | Stable GoHighLevel appointment identifier used for idempotent calendar synchronization. |
+| `ghl_calendar_id` | `text` | nullable/default |  |  |
+| `starts_at` | `timestamptz` | nullable/default |  |  |
+| `ends_at` | `timestamptz` | nullable/default |  |  |
+| `meeting_timezone` | `text` | nullable/default |  | IANA timezone used to derive the meeting date and schedule local-time reminders. |
+| `ghl_status` | `text` | nullable/default |  |  |
+| `ghl_synced_at` | `timestamptz` | nullable/default |  |  |
+
+### `member_pauses` (table)
+
+Intervals when a coaching member has paused the programme. A null ended_at is an active pause; history remains after resumption.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `uuid` | required | PK |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `started_at` | `timestamptz` | required |  |  |
+| `ended_at` | `timestamptz` | nullable/default |  |  |
+| `reason` | `text` | nullable/default |  |  |
+| `started_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `ended_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
 
 ### `monthly_kpi_records` (view)
 
@@ -273,6 +586,54 @@ Actual numeric KPI values per (user, period, metric_type).
 | `monthly_kpi_record_id` | `bigint` | required | FK -> `monthly_kpi_records_base.id` |  |
 | `metric_type_id` | `bigint` | required | FK -> `kpi_metric_types.id` |  |
 | `value` | `numeric` | nullable/default |  |  |
+
+### `ninety_day_cycle_meetings` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `cycle_id` | `bigint` | required | FK -> `ninety_day_cycles.id` |  |
+| `title` | `text` | required |  |  |
+| `starts_at` | `timestamptz` | required |  |  |
+| `ends_at` | `timestamptz` | nullable/default |  |  |
+| `join_url` | `text` | nullable/default |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `ninety_day_cycle_systems` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `cycle_id` | `bigint` | required | PK; FK -> `ninety_day_cycles.id` |  |
+| `node_id` | `bigint` | required | PK; FK -> `content_nodes.id` |  |
+| `position` | `smallint` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+
+### `ninety_day_cycle_users` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `cycle_id` | `bigint` | required | PK; FK -> `ninety_day_cycles.id` |  |
+| `user_id` | `uuid` | required | PK; FK -> `profiles.id` |  |
+| `enrolled_at` | `timestamptz` | required |  |  |
+| `ended_at` | `timestamptz` | nullable/default |  |  |
+| `outcome` | `text` | nullable/default |  |  |
+
+### `ninety_day_cycles` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `name` | `text` | required |  |  |
+| `starts_on` | `date` | required |  |  |
+| `ends_on` | `date` | required |  |  |
+| `timezone` | `text` | required |  |  |
+| `status` | `text` | required |  |  |
+| `active_system_node_id` | `bigint` | nullable/default | FK -> `content_nodes.id` |  |
+| `created_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `updated_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
 
 ### `node_assets_v` (view)
 
@@ -406,6 +767,13 @@ Actual numeric KPI values per (user, period, metric_type).
 | `tsv_simple` | `tsvector` | nullable/default |  |  |
 | `storage_bucket` | `text` | nullable/default |  |  |
 | `storage_path` | `text` | nullable/default |  |  |
+| `is_discoverable` | `boolean` | required |  | Eligible for discovery search, subject to publication and member access. Does not imply homepage browse. |
+| `catalog_priority` | `smallint` | required |  |  |
+| `is_browsable` | `boolean` | required |  | Reviewed supplementary material eligible for homepage browse and algorithmic recommendations. Requires search eligibility. |
+| `discovery_open_mode` | `text` | required |  |  |
+| `search_names` | `text[]` | required |  |  |
+| `discovery_reviewed_at` | `timestamptz` | nullable/default |  | DEPRECATED as the placement authority — see public.discovery_decisions (question = placement). Retained for read compatibility only; the discovery jobs no longer write it. |
+| `discovery_reviewed_by` | `uuid` | nullable/default |  | DEPRECATED alongside discovery_reviewed_at. See public.discovery_decisions.decided_by. |
 
 ### `roles` (table)
 
@@ -424,6 +792,24 @@ Actual numeric KPI values per (user, period, metric_type).
 | `user_id` | `uuid` | nullable/default | FK -> `profiles.id` |  |
 | `searched_at` | `timestamptz` | required |  |  |
 | `session_id` | `text` | nullable/default |  |  |
+
+### `search_executions` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `uuid` | required | PK |  |
+| `logical_search_id` | `uuid` | required | FK -> `logical_searches.id` |  |
+| `execution_number` | `integer` | required |  |  |
+| `search_version` | `text` | required |  |  |
+| `pass` | `text` | required |  |  |
+| `requested_at` | `timestamptz` | required |  |  |
+| `completed_at` | `timestamptz` | nullable/default |  |  |
+| `status` | `text` | required |  |  |
+| `latency_ms` | `integer` | nullable/default |  |  |
+| `eligible_candidate_count` | `integer` | nullable/default |  |  |
+| `total_match_count` | `integer` | nullable/default |  |  |
+| `error_code` | `text` | nullable/default |  |  |
+| `expires_at` | `timestamptz` | required |  |  |
 
 ### `site_announcements` (table)
 
@@ -492,6 +878,61 @@ Actual numeric KPI values per (user, period, metric_type).
 | `created_at` | `timestamptz` | required |  |  |
 | `updated_at` | `timestamptz` | required |  |  |
 
+### `system_scorecard_categories` (table)
+
+Presentational groupings for scorecard systems. Categories do not carry review status or confirmation state.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `template_key` | `text` | required | FK -> `system_scorecard_templates.key` |  |
+| `key` | `text` | required |  |  |
+| `label` | `text` | required |  |  |
+| `position` | `integer` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `system_scorecard_systems` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `template_key` | `text` | required | FK -> `system_scorecard_templates.key` |  |
+| `category_id` | `bigint` | required |  |  |
+| `key` | `text` | required |  | Stable system key used to carry status between template versions. |
+| `label` | `text` | required |  |  |
+| `position` | `integer` | required |  |  |
+| `library_item_id` | `bigint` | nullable/default | FK -> `content_nodes.id` | Optional future link to the detailed training or SOP for this system. |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `system_scorecard_templates` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `key` | `text` | required | PK |  |
+| `audience` | `public.system_scorecard_audience` | required |  |  |
+| `name` | `text` | required |  |  |
+| `version` | `integer` | required |  |  |
+| `is_active` | `boolean` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
+### `system_scorecard_version_migrations` (table)
+
+Audit trail for atomic migrations of incomplete Business Reviews between immutable Systems Scorecard versions.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `business_review_id` | `bigint` | required | FK -> `business_reviews.id` |  |
+| `from_template_key` | `text` | required | FK -> `system_scorecard_templates.key` |  |
+| `to_template_key` | `text` | required | FK -> `system_scorecard_templates.key` |  |
+| `migrated_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `resolution` | `jsonb` | required |  |  |
+| `previous_snapshot` | `jsonb` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+
 ### `tag_usage` (view)
 
 | Column | Type | Null/default | Key / relation | Comment |
@@ -511,6 +952,11 @@ Actual numeric KPI values per (user, period, metric_type).
 | `category` | `text` | nullable/default |  |  |
 | `created_at` | `timestamptz` | required |  |  |
 | `created_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `slug` | `text` | nullable/default |  |  |
+| `tag_kind` | `text` | required |  |  |
+| `browse_category` | `text` | nullable/default |  |  |
+| `canonical_tag_id` | `bigint` | nullable/default | FK -> `tags.id` |  |
+| `is_active` | `boolean` | required |  |  |
 
 ### `user_achievements` (table)
 
@@ -639,12 +1085,52 @@ Grants per-user visibility to specific course content_nodes when content_nodes.i
 | `created_at` | `timestamptz` | required |  |  |
 | `updated_at` | `timestamptz` | required |  |  |
 
+### `user_resource_discovery_preferences` (table)
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `user_id` | `uuid` | required | PK; FK -> `profiles.id` |  |
+| `resource_id` | `bigint` | required | PK; FK -> `resources.id` |  |
+| `preference` | `text` | required |  |  |
+| `created_at` | `timestamptz` | required |  |  |
+| `updated_at` | `timestamptz` | required |  |  |
+
 ### `user_roles` (table)
 
 | Column | Type | Null/default | Key / relation | Comment |
 |---|---|---|---|---|
 | `user_id` | `uuid` | required | PK; FK -> `profiles.id` |  |
 | `role_id` | `bigint` | required | PK; FK -> `roles.id` |  |
+
+### `user_system_scorecard_last_reviews` (table)
+
+Latest individual review date for each user and stable system key, plus a twelve-month overdue indicator.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `user_id` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `audience` | `public.system_scorecard_audience` | nullable/default |  |  |
+| `system_key` | `text` | nullable/default |  |  |
+| `last_reviewed_at` | `timestamptz` | nullable/default |  |  |
+| `review_due_at` | `timestamptz` | nullable/default |  |  |
+| `review_overdue` | `boolean` | nullable/default |  |  |
+
+### `user_training_assignments` (table)
+
+A course explicitly assigned to a member for one coaching-note / 60-day cycle.
+
+| Column | Type | Null/default | Key / relation | Comment |
+|---|---|---|---|---|
+| `id` | `bigint` | required | PK |  |
+| `user_id` | `uuid` | required | FK -> `profiles.id` |  |
+| `course_node_id` | `bigint` | required | FK -> `content_nodes.id` |  |
+| `coaching_note_id` | `bigint` | required | FK -> `coaching_notes_base.id` |  |
+| `assigned_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
+| `assigned_at` | `timestamptz` | required |  |  |
+| `context_label` | `text` | nullable/default |  | Optional member-facing timing note, for example "Before the next session". |
+| `due_at` | `timestamptz` | nullable/default |  |  |
+| `ended_at` | `timestamptz` | nullable/default |  |  |
+| `ended_by` | `uuid` | nullable/default | FK -> `profiles.id` |  |
 
 ### `wins` (table)
 
@@ -680,24 +1166,67 @@ The argument marker is about the RPC request shape: `!` means the key is require
 | `_jsonb_inc` | `c: jsonb!`, `delta: integer!`, `path: text[]!` | — |
 | `_status_rank` | `s: text!` | — |
 | `_validate_node_state` | `_state: text!` | — |
+| `accessible_discovery_nodes` | `_user_id: uuid?` | — |
 | `add_coaching_note_action_step` | `_coaching_note_id: bigint!`, `_label: text!`, `_library_item_id: bigint?` | `src/components/coach/CoachingNotesPanel.tsx` |
 | `add_coaching_note_comment` | `_body: text!`, `_coaching_note_id: bigint!` | `src/components/coach/CoachingNotesPanel.tsx` |
 | `add_win` | `_body: text!`, `_user_id: uuid!` | `src/components/coach/UserWinsPanel.tsx` |
+| `admin_bulk_discovery_topics` | `_actor_id: uuid!`, `_tag_ids: bigint[]!`, `_targets: jsonb!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_clone_system_scorecard_version` | `_actor_id: uuid!`, `_source_template_key: text!` | `src/lib/systemScorecardLibrary.ts` |
+| `admin_discard_system_scorecard_draft` | `_actor_id: uuid!`, `_template_key: text!` | `src/lib/systemScorecardLibrary.ts` |
+| `admin_discovery_browse` | `_actor_id: uuid!`, `_limit: integer?`, `_q: text?` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_browse_candidates` | `_actor_id: uuid!`, `_limit: integer?`, `_offset: integer?`, `_q: text?`, `_sort: text?`, `_view: text?` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_catalogue` | `_actor_id: uuid!`, `_filter: text?`, `_kind: text?`, `_limit: integer?`, `_media_type: text?`, `_offset: integer?`, `_q: text?` | `src/app/api/admin/discovery/route.ts` |
+| `admin_discovery_item_decision` | `_actor_id: uuid!`, `_id: bigint!`, `_kind: text!`, `_question: text!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_job_counts` | `_actor_id: uuid!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_placement_context` | `_actor_id: uuid!`, `_resource_id: bigint!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_placement_groups` | `_actor_id: uuid!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_queue` | `_actor_id: uuid!`, `_limit: integer?`, `_media_type: text?`, `_offset: integer?`, `_q: text?`, `_question: text!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_representatives` | `_actor_id: uuid!`, `_limit: integer?`, `_q: text?` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_discovery_vocabulary` | `_actor_id: uuid!` | `src/app/api/admin/discovery/route.ts` |
+| `admin_merge_discovery_tags` | `_actor_id: uuid!`, `_source_id: bigint!`, `_target_id: bigint!` | `src/app/api/admin/discovery/route.ts` |
+| `admin_publish_system_scorecard_version` | `_actor_id: uuid!`, `_resolutions: jsonb?`, `_template_key: text!` | `src/lib/systemScorecardLibrary.ts` |
+| `admin_record_discovery_decision` | `_actor_id: uuid!`, `_answer: text!`, `_force: boolean?`, `_id: bigint!`, `_kind: text!`, `_question: text!`, `_tag_ids: bigint[]?`, `_token: uuid?` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_replace_system_scorecard_draft` | `_actor_id: uuid!`, `_categories: jsonb!`, `_name: text!`, `_template_key: text!` | `src/lib/systemScorecardLibrary.ts` |
+| `admin_save_discovery_tag` | `_active: boolean!`, `_actor_id: uuid!`, `_browse_category: text!`, `_canonical_id: bigint!`, `_id: bigint!`, `_kind: text!`, `_name: text!` | `src/app/api/admin/discovery/route.ts` |
+| `admin_set_discovery_browse` | `_actor_id: uuid!`, `_approved: boolean!`, `_resource_id: bigint!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_undo_discovery_decisions` | `_actor_id: uuid!`, `_entries: jsonb!` | `src/app/api/admin/discovery/jobs/route.ts` |
+| `admin_update_discovery_items` | `_actor_id: uuid!`, `_node_ids: bigint[]?`, `_open_mode: text?`, `_resource_ids: bigint[]?`, `_search_names: text[]?`, `_tag_action: text?`, `_tag_ids: bigint[]?`, `_visibility: text?` | `src/app/api/admin/discovery/route.ts`<br>`src/app/api/admin/discovery/search/route.ts` |
 | `apply_user_attention_auto` | `p_user_id: uuid!` | — |
+| `assert_discovery_editor` | `_actor_id: uuid!`, `_allow_coach: boolean?` | — |
+| `assign_foundation_scorecard_to_business_review` | `_business_review_id: bigint!` | `src/app/api/business-reviews/[reviewId]/foundation-scorecard/route.ts` |
+| `can_access_discovery_node` | `_node_id: bigint!`, `_user_id: uuid!` | `src/app/api/admin/discovery/search/route.ts` |
+| `can_access_discovery_resource` | `_resource_id: bigint!`, `_user_id: uuid!` | `src/app/api/admin/discovery/search/route.ts`<br>`src/app/api/coach-resource-suggestions/route.ts` |
 | `can_access_owner` | `_domain: public.share_domain!`, `_owner: uuid!`, `_viewer: uuid!` | — |
 | `can_user_access_course` | `p_course_node_id: bigint!`, `p_user_id: uuid!` | `src/lib/courseAccess.ts` |
 | `can_user_access_node_via_course` | `p_node_id: bigint!`, `p_user_id: uuid!` | `src/lib/courseAccess.ts` |
 | `can_view_domain_owner` | `_domain: public.share_domain!`, `_owner: uuid!`, `_viewer: uuid!` | — |
 | `canonical_owner_for` | `_domain: public.share_domain!`, `_user: uuid!` | — |
+| `close_inactive_search_journeys` | `_inactive_before: timestamptz?` | — |
 | `coach_clear_field` | `_content_block_id: bigint!`, `_prompt_id: bigint!`, `_user_id: uuid!` | — |
 | `coach_reset_doc` | `_content_block_id: bigint!`, `_user_id: uuid!` | — |
 | `compute_user_attention_auto_from_attendance` | `p_user_id: uuid!` | — |
+| `configure_ninety_day_cycle` | `p_active_system_node_id: bigint!`, `p_actor_id: uuid?`, `p_cycle_id: bigint!`, `p_name: text!`, `p_starts_on: date!`, `p_status: text!`, `p_system_node_ids: bigint[]!`, `p_timezone: text!` | `src/app/api/admin/ninety-day/route.ts` |
+| `create_business_review` | `_review_date: date?`, `_user_id: uuid!` | `src/app/api/business-reviews/route.ts` |
+| `create_business_review_for_sync` | `_coach_id: uuid!`, `_review_date: date?`, `_user_id: uuid!` | — |
 | `create_coaching_note` | `_user_id: uuid!` | `src/components/coach/CoachingNotesPanel.tsx` |
 | `create_meeting_for_user` | `_created_by: uuid?`, `_date: date!`, `_meeting_type_code: text!`, `_title: text?`, `_user_id: uuid!` | — |
 | `create_meeting_with_attendees` | `_created_by: uuid?`, `_date: date!`, `_meeting_type_code: text!`, `_title: text?`, `_user_ids: uuid[]!` | `src/lib/meetings.ts` |
+| `create_tagged_resource_upload` | `_actor_id: uuid!`, `_browsable: boolean!`, `_bucket: text!`, `_description: text!`, `_discoverable: boolean!`, `_open_mode: text!`, `_path: text!`, `_search_names: text[]!`, `_state: text!`, `_tag_ids: bigint[]!`, `_title: text!`, `_type: text!` | `src/app/api/resources/upload/route.ts` |
 | `delete_win` | `_win_id: bigint!` | `src/components/coach/UserWinsPanel.tsx` |
+| `discovery_block_digest` | `_exclude_block_id: bigint!`, `_node_id: bigint!` | — |
+| `discovery_browse_blocker` | `_embedded: boolean!`, `_has_placement_decision: boolean!`, `_is_discoverable: boolean!`, `_open_mode: text!`, `_state: text!` | — |
+| `discovery_container_home` | `_node_id: bigint!` | `src/app/api/admin/discovery/find/route.ts` |
+| `discovery_entry_condition` | `_embedded: boolean!`, `_has_topics: boolean!`, `_is_discoverable: boolean!`, `_kind: text!`, `_question: text!` | — |
+| `discovery_evidence` | `_id: bigint!`, `_kind: text!`, `_question: text!` | `src/app/api/admin/discovery/find/route.ts`<br>`src/app/api/coach-resource-suggestions/route.ts` |
+| `discovery_in_job_write` | none | — |
+| `discovery_node_paths` | `_user_id: uuid!` | — |
+| `discovery_placement_container` | `_node_id: bigint!` | — |
+| `discovery_queue_rows` | `_question: text!` | — |
+| `discovery_resource_contexts` | `_resource_ids: bigint[]!`, `_user_id: uuid!` | — |
 | `effective_owner_id` | `_domain: public.share_domain!`, `_user: uuid!` | — |
+| `end_user_training_assignment` | `p_coaching_note_id: bigint!`, `p_ended_by: uuid!`, `p_user_id: uuid!` | — |
 | `enforce_strict_sequence` | `_on: boolean?`, `_root_id: bigint!` | `src/app/api/admin/course-builder/nodes/[nodeId]/sequential/route.ts` |
+| `enroll_ninety_day_user` | `p_cycle_id: bigint!`, `p_user_id: uuid!` | `src/app/api/admin/create-user/route.ts`<br>`src/app/api/admin/ninety-day/route.ts` |
 | `ensure_monthly_kpi_record_for_month` | `_period_start_date: date!`, `_user_id: uuid!` | — |
 | `export_smartdoc_answers_for_chapters` | `_chapter_ids: bigint[]!`, `_only_submitted: boolean?` | — |
 | `get_all_users` | `_course_id: integer?` | `src/components/coach/CoachNotesUserList.tsx`<br>`src/components/coach/UserListWithProgress.tsx` |
@@ -709,7 +1238,7 @@ The argument marker is about the RPC request shape: `!` means the key is require
 | `get_containing_course_ids` | `p_node_id: bigint!` | — |
 | `get_current_member_ids` | none | `src/lib/currentMembers.ts` |
 | `get_looker_link_for_user` | `uid: uuid!` | — |
-| `get_monthly_kpi_history_for_year` | `_user_id: uuid!`, `_year: integer?` | `src/components/KpiTracker.tsx`<br>`src/lib/dashboard.ts` |
+| `get_monthly_kpi_history_for_year` | `_user_id: uuid!`, `_year: integer?` | `src/components/KpiTracker.tsx`<br>`src/components/home/TrackerPanel.tsx`<br>`src/lib/dashboard.ts` |
 | `get_monthly_kpi_history_with_values` | `_limit: integer?`, `_user_id: uuid!` | `src/lib/dashboard.ts`<br>`src/lib/statusOverviewData.ts`<br>`src/lib/studentOverview.ts` |
 | `get_monthly_kpi_record_with_values` | `_period_start_date: date!`, `_user_id: uuid!` | `src/lib/dashboard.ts` |
 | `get_my_coach` | `_course_id: bigint?` | `src/components/importantLinks.tsx` |
@@ -721,44 +1250,62 @@ The argument marker is about the RPC request shape: `!` means the key is require
 | `get_status_overview_summary` | `_user_ids: uuid[]!` | `src/lib/statusOverviewData.ts` |
 | `get_user_contact` | `_course_id: bigint?`, `_user_id: uuid!` | — |
 | `get_user_course_completion_detail` | `_course_id: integer!`, `_user_id: uuid!` | `src/components/coach/DetailedUserProgressView.tsx`<br>`src/lib/studentOverview.ts` |
-| `get_user_course_progress` | `_course_id: integer!`, `_user_id: uuid!` | `src/components/coach/UserListWithProgress.tsx`<br>`src/components/course/CoursesLanding.tsx`<br>`src/lib/statusOverviewData.ts`<br>`src/lib/studentOverview.ts` |
+| `get_user_course_progress` | `_course_id: integer!`, `_user_id: uuid!` | `src/components/coach/UserListWithProgress.tsx`<br>`src/components/course/CoursesLanding.tsx`<br>`src/lib/statusOverviewData.ts`<br>`src/lib/studentOverview.ts`<br>`src/lib/trainingAssignments.ts` |
 | `get_user_engagement_summary` | `_from: date?`, `_to: date?`, `_user_id: uuid!` | `src/lib/meetings.ts` |
 | `get_user_engagement_timeseries` | `_from: date!`, `_to: date!`, `_user_id: uuid!` | — |
 | `get_user_meetings` | `_from: date?`, `_to: date?`, `_user_id: uuid!` | `src/lib/dashboard.ts`<br>`src/lib/meetings.ts`<br>`src/lib/statusOverviewData.ts`<br>`src/lib/studentOverview.ts` |
 | `get_user_smartdoc_answers` | `_content_block_id: bigint!`, `_user_id: uuid!` | `src/components/coach/SmartDocsAnswers.tsx` |
 | `has_role` | `role_code: text!` | — |
+| `initialize_business_review_system_scorecard` | `_business_review_id: bigint!` | — |
 | `is_admin` | none | — |
 | `is_admin_or_coach` | none | — |
 | `is_assistant` | `_uid: uuid?` | — |
 | `is_coach` | none | — |
+| `is_discovery_learning_node` | `_node_id: bigint!` | — |
 | `list_user_smartdoc_instances` | `_course_id: bigint!`, `_only_submitted: boolean?`, `_user_id: uuid!` | `src/components/coach/SmartDocsAnswers.tsx` |
+| `maintain_discovery_analytics` | none | `src/app/api/cron/maintain-discovery/route.ts` |
 | `mark_completed_and_cascade` | `_node_id: bigint!` | `src/app/api/progress/route.ts` |
 | `mark_node_completed` | `_node_id: bigint!` | — |
 | `mark_node_started` | `_node_id: bigint!` | `src/app/api/progress/route.ts` |
+| `normalize_discovery_names` | `_names: text[]!` | — |
 | `owner_user_for_bucket` | `_bucket: uuid!` | — |
 | `partnership_for_user` | `_domain: public.share_domain!`, `_user: uuid!` | — |
+| `promote_ninety_day_user` | `p_user_id: uuid!` | `src/app/api/admin/users/[userId]/promote/route.ts` |
+| `recommend_discovery_resources` | `_limit: integer?`, `_user_id: uuid?` | — |
 | `recompute_user_attention_now` | `p_user_id: uuid!` | — |
 | `reconcile_user_achievements_backfill` | none | — |
 | `reconcile_user_achievements_cleanup` | none | — |
+| `record_discovery_event` | `_client_occurred_at: timestamptz!`, `_client_sequence: bigint!`, `_client_session_id: text!`, `_event_id: uuid!`, `_event_type: text!`, `_item_position: integer!`, `_logical_search_id: uuid!`, `_metadata: jsonb!`, `_result_set_id: uuid!`, `_schema_version: smallint!`, `_tab_session_id: uuid!`, `_user_id: uuid!`, `_visible_fraction: numeric!`, `_visible_ms: integer!` | — |
+| `record_discovery_result_set` | `_context: text!`, `_context_key: text!`, `_eligible_candidate_count: integer!`, `_error_code: text!`, `_is_prefetched: boolean!`, `_items: jsonb!`, `_logical_search_id: uuid!`, `_page_number: integer!`, `_page_size: integer!`, `_result_set_id: uuid!`, `_result_version: text!`, `_returned_count: integer!`, `_search_execution_id: uuid!`, `_status: text!`, `_surface: text!`, `_total_match_count: integer!`, `_user_id: uuid!` | — |
+| `record_discovery_search_response` | `_browse_category: text!`, `_canonical_sort: text!`, `_change_reason: text!`, `_client_session_id: text!`, `_completed_at: timestamptz!`, `_eligible_candidate_count: integer!`, `_execution_error_code: text!`, `_execution_id: uuid!`, `_execution_number: integer!`, `_execution_pass: text!`, `_execution_status: text!`, `_filter_state: jsonb!`, `_is_prefetched: boolean!`, `_items: jsonb!`, `_journey_id: uuid!`, `_latency_ms: integer!`, `_logical_search_id: uuid!`, `_page_number: integer!`, `_page_size: integer!`, `_parent_logical_search_id: uuid!`, `_query_text: text!`, `_requested_at: timestamptz!`, `_result_error_code: text!`, `_result_set_id: uuid!`, `_result_status: text!`, `_returned_count: integer!`, `_search_version: text!`, `_surface: text!`, `_tab_session_id: uuid!`, `_total_match_count: integer!`, `_user_id: uuid!` | — |
+| `refresh_content_node_tag_text` | `_node_id: bigint!` | — |
 | `refresh_tag_text` | `_resource_id: bigint!` | — |
 | `resolve_content_node_open_path` | `_node_id: bigint!` | — |
+| `search_discovery_catalogue` | `_browse_category: text?`, `_date_range: text?`, `_duration: text?`, `_include_related: boolean?`, `_limit: integer?`, `_offset: integer?`, `_q: text?`, `_sort: text?`, `_surface: text?`, `_tag_ids: bigint[]?`, `_types: text[]?`, `_user_id: uuid?` | `src/app/api/admin/discovery/search/route.ts` |
+| `search_discovery_items` | `_browse_category: text?`, `_date_range: text?`, `_duration: text?`, `_include_related: boolean?`, `_limit: integer?`, `_offset: integer?`, `_q: text?`, `_sort: text?`, `_tag_ids: bigint[]?`, `_types: text[]?`, `_user_id: uuid?` | — |
+| `search_discovery_items_for_surface` | `_browse_category: text?`, `_date_range: text?`, `_duration: text?`, `_include_related: boolean?`, `_limit: integer?`, `_offset: integer?`, `_q: text?`, `_sort: text?`, `_surface: text?`, `_tag_ids: bigint[]?`, `_types: text[]?`, `_user_id: uuid?` | — |
 | `search_resources` | `_date_range: text?`, `_duration: text?`, `_limit: integer?`, `_mode: text?`, `_offset: integer?`, `_q: text?`, `_sort: text?`, `_tag_ids: bigint[]?`, `_types: text[]?` | `src/components/admin/ResourceLibraryAdmin.tsx` |
 | `search_resources_with_page` | `_date_range: text?`, `_duration: text?`, `_limit: integer?`, `_mode: text?`, `_offset: integer?`, `_q: text?`, `_sort: text?`, `_tag_ids: bigint[]?`, `_types: text[]?` | `src/components/search.tsx` |
+| `set_business_review_system_priority` | `_business_review_id: bigint!`, `_selected: boolean!`, `_system_id: bigint!` | `src/app/api/business-reviews/[reviewId]/system-priorities/route.ts` |
 | `set_course_order` | `_course_ids: bigint[]!` | `src/app/api/admin/course-builder/courses/reorder/route.ts` |
 | `set_custom_jwt_claims` | `uid: uuid!` | — |
 | `set_node_progress` | `_node_id: bigint!`, `_status: public.node_progress_status?` | — |
 | `set_node_state` | `_node_id: bigint!`, `_state: text!` | — |
 | `set_user_attention_manual_status` | `p_reason: text?`, `p_status: public.user_attention_status!`, `p_user_id: uuid!` | `src/components/UserStatusDialog.tsx` |
+| `set_user_training_assignment` | `p_assigned_by: uuid!`, `p_coaching_note_id: bigint!`, `p_context_label: text?`, `p_course_node_id: bigint!`, `p_due_at: timestamptz?`, `p_user_id: uuid!` | — |
 | `show_limit` | none | — |
 | `show_trgm` | `: text!` | — |
 | `slugify` | `_txt: text!` | — |
 | `submit_smart_doc` | `_content_block_id: bigint!`, `_user_id: uuid!` | — |
+| `sync_business_audit_appointment` | `_coach_id: uuid!`, `_ends_at: timestamptz!`, `_ghl_appointment_id: text!`, `_ghl_calendar_id: text!`, `_ghl_status: text!`, `_is_cancelled: boolean?`, `_meeting_timezone: text!`, `_review_date: date!`, `_starts_at: timestamptz!`, `_student_id: uuid!`, `_title: text!` | `src/lib/businessAuditMeetingSync.ts` |
+| `sync_implementation_appointment` | `_coach_id: uuid!`, `_ends_at: timestamptz!`, `_ghl_appointment_id: text!`, `_ghl_calendar_id: text!`, `_ghl_status: text!`, `_is_cancelled: boolean?`, `_meeting_date: date!`, `_meeting_timezone: text!`, `_starts_at: timestamptz!`, `_student_id: uuid!`, `_title: text!` | — |
+| `sync_implementation_appointment_v2` | `_coach_id: uuid!`, `_ends_at: timestamptz!`, `_ghl_appointment_id: text!`, `_ghl_calendar_id: text!`, `_ghl_status: text!`, `_is_cancelled: boolean?`, `_meeting_date: date!`, `_meeting_timezone: text!`, `_starts_at: timestamptz!`, `_student_id: uuid!`, `_title: text!` | `src/lib/businessAuditMeetingSync.ts` |
 | `transfer_user_data` | `_dest: uuid!`, `_options: jsonb?`, `_source: uuid!` | — |
 | `transfer_user_data_admin` | `_dest: uuid!`, `_options: jsonb?`, `_source: uuid!` | `src/app/api/admin/transfer-user-data/route.ts` |
 | `try_delete_user_db` | `p_user_id: uuid!` | `src/app/api/admin/users/[userId]/route.ts` |
 | `update_win` | `_body: text!`, `_win_id: bigint!` | `src/components/coach/UserWinsPanel.tsx` |
 | `upsert_meeting_attendance` | `_attended: boolean!`, `_meeting_id: bigint!`, `_user_id: uuid!` | `src/lib/meetings.ts` |
-| `upsert_monthly_kpi_record` | `_actor_id: uuid?`, `_kpi_values: jsonb!`, `_period_start_date: date!`, `_user_id: uuid!` | `src/components/KpiTracker.tsx` |
+| `upsert_monthly_kpi_record` | `_actor_id: uuid?`, `_kpi_values: jsonb!`, `_period_start_date: date!`, `_user_id: uuid!` | `src/components/KpiTracker.tsx`<br>`src/components/home/TrackerPanel.tsx` |
 | `upsert_smart_field_value` | `_content_block_id: bigint!`, `_prompt_id: bigint!`, `_user_id: uuid!`, `_value: jsonb!` | `src/app/api/smartdoc/field/route.ts`<br>`src/app/api/smartdoc/upsert/route.ts` |
 | `upsert_video_resource` | `_title: text?`, `_url: text!` | — |
 | `user_has_role` | `p_role_code: text!`, `p_user_id: uuid!` | — |

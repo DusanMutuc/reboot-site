@@ -245,6 +245,7 @@ export async function loadScorecardLibraryOptions(): Promise<ScorecardLibraryOpt
 
 async function loadAllReviewVersionRows(): Promise<ReviewVersionRow[]> {
   const rows: ReviewVersionRow[] = [];
+  const additional: Array<{ business_review_id: number; template_key: string }> = [];
   const pageSize = 1000;
 
   for (let offset = 0; ; offset += pageSize) {
@@ -261,6 +262,25 @@ async function loadAllReviewVersionRows(): Promise<ReviewVersionRow[]> {
     const page = (data ?? []) as ReviewVersionRow[];
     rows.push(...page);
     if (page.length < pageSize) break;
+  }
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await adminClient
+      .from('business_review_additional_scorecards')
+      .select('business_review_id, template_key')
+      .range(offset, offset + pageSize - 1);
+    if (error) {
+      throw new SystemScorecardLibraryError(`Failed to load additional scorecards: ${error.message}`, 500);
+    }
+    const page = (data ?? []) as typeof additional;
+    additional.push(...page);
+    if (page.length < pageSize) break;
+  }
+
+  const reviewById = new Map(rows.map((row) => [Number(row.id), row]));
+  for (const assignment of additional) {
+    const review = reviewById.get(Number(assignment.business_review_id));
+    if (review) rows.push({ ...review, system_scorecard_template_key: assignment.template_key });
   }
 
   return rows;
@@ -712,7 +732,7 @@ export async function previewSystemScorecardPublish(
       review.system_scorecard_template_key != null &&
       templateByKey.has(review.system_scorecard_template_key),
   );
-  const reviewIds = eligibleReviews.map((review) => Number(review.id));
+  const reviewIds = Array.from(new Set(eligibleReviews.map((review) => Number(review.id))));
 
   let priorities: PriorityVersionRow[] = [];
   let reviewedRatings: RatingVersionRow[] = [];
@@ -771,7 +791,9 @@ export async function previewSystemScorecardPublish(
 
   eligibleReviews.forEach((review) => {
     const reviewPriorities = priorities.filter(
-      (priority) => Number(priority.business_review_id) === Number(review.id),
+      (priority) =>
+        Number(priority.business_review_id) === Number(review.id) &&
+        systemById.get(Number(priority.system_id))?.template_key === review.system_scorecard_template_key,
     );
     const removedPriorities = reviewPriorities.flatMap((priority) => {
       const system = systemById.get(Number(priority.system_id));
@@ -787,7 +809,10 @@ export async function previewSystemScorecardPublish(
       return system && targetKeys.has(system.key) ? [system.key] : [];
     });
     const removedReviewedSystems = reviewedRatings
-      .filter((rating) => Number(rating.business_review_id) === Number(review.id))
+      .filter((rating) =>
+        Number(rating.business_review_id) === Number(review.id) &&
+        systemById.get(Number(rating.system_id))?.template_key === review.system_scorecard_template_key,
+      )
       .flatMap((rating) => {
         const system = systemById.get(Number(rating.system_id));
         if (!system || targetKeys.has(system.key)) return [];
