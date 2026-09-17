@@ -31,7 +31,24 @@ import type { RequiredTraining } from './types';
  * video, the meta says how much is left, and the button says what pressing it
  * does.
  */
-export default function RequiredTrainingCard({ training }: { training: RequiredTraining }) {
+export default function RequiredTrainingCard({
+  training,
+  label = 'Required core foundational video to watch',
+}: {
+  training: RequiredTraining;
+  /**
+   * The line above the row, naming what this assignment *is*.
+   *
+   * Overridable because the sentence is the one part of this card that does
+   * not survive a change of programme. On the standard home a course is the
+   * training set for this sixty days and the next review replaces it; on the
+   * 90-day offer there is one course for the whole programme, and calling that
+   * "required ... to watch" frames a spine as a chore. Everything below the
+   * label — the small identity mark, the parts count, the single action — is
+   * correct in both cases and is why the card is shared rather than forked.
+   */
+  label?: string;
+}) {
   const { parts } = training;
   const total = parts.length;
   const doneCount = parts.filter((part) => part.done).length;
@@ -56,7 +73,7 @@ export default function RequiredTrainingCard({ training }: { training: RequiredT
         component="h3"
         sx={{ fontSize: { xs: 17, md: 18 }, color: brand.turquoiseDeep, mb: 2 }}
       >
-        Required core foundational video to watch
+        {label}
       </Typography>
 
       <Box

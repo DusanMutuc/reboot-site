@@ -21,6 +21,7 @@ import SearchWithResults from './SearchWithResults';
 import { HubFooter } from './HubSections';
 import type {
   ContentItem,
+  HomeDiscoveryResultSets,
   HomeData,
   MeetingSlot,
   OnePageExtras,
@@ -65,6 +66,8 @@ export default function MomentumShell({
   trainingStanding,
   recommended,
   content,
+  discoveryResultSets,
+  memberDiscoveryEnabled,
   surface = 'neutral',
   accent = 'brand',
   legendAccess = 'standard',
@@ -80,6 +83,9 @@ export default function MomentumShell({
   /** The relatedness algorithm's picks, shown as the browser's default view. */
   recommended: ContentItem[];
   content: ContentItem[];
+  discoveryResultSets: HomeDiscoveryResultSets;
+  /** Enables the new member search, browse, analytics and recommendations. */
+  memberDiscoveryEnabled: boolean;
   /** Which candidate surface the content zone uses, for side-by-side review. */
   surface?: ContentSurface;
   /** Whether the logo's red is in play, for side-by-side review. */
@@ -162,10 +168,20 @@ export default function MomentumShell({
                   "Or look something up" was continuation copy working against
                   the break it sat on. */}
               <Box component="section" id="training">
-                <SearchWithResults index={extras.searchIndex} large live />
+                <SearchWithResults
+                  index={extras.searchIndex}
+                  large
+                  live
+                  discoveryEnabled={memberDiscoveryEnabled}
+                />
               </Box>
 
-              <ContentBrowser items={content} recommended={recommended} />
+              <ContentBrowser
+                items={content}
+                recommended={recommended}
+                resultSets={discoveryResultSets}
+                discoveryEnabled={memberDiscoveryEnabled}
+              />
             </Box>
           </Container>
         </Box>

@@ -74,6 +74,7 @@ async function fetchUserPayload(userId: string) {
       last_name: profile.last_name ?? '',
       ghl_user_id: profile.ghl_user_id?.trim() ?? '',
       introduced_at: profile.introduced_at ?? null,
+      is_ninety_day_user: hasRoleCode(roleCodes, 'ninety-day-user'),
       is_legend: hasRoleCode(roleCodes, 'legend'),
       is_past_member: hasRoleCode(roleCodes, 'past_member'),
     },

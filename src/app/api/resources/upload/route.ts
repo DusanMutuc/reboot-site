@@ -1,106 +1,77 @@
-// src/app/api/resources/upload/route.ts
 export const runtime = 'nodejs';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
-
-const admin = getAdminClient();
-
-type RoleRow = { code: string };
-
-function getErrorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'Unexpected error';
-}
+import { discoveryIds, discoveryNames } from '@/lib/discoveryAdminTypes';
 
 export async function POST(req: NextRequest) {
+  const guard = await requireUser(req);
+  if (!guard.ok) return guard.res;
+  if (!guard.roleCodes.some((code) => ['admin', 'superadmin', 'coach'].includes(code))) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const admin = getAdminClient();
   try {
-    const userSupabase = getSupabaseServer();
     const form = await req.formData();
-
-    const file = form.get('file') as File | null;
-    const resourceType = String(form.get('type') || 'pdf').trim().toLowerCase();
+    const file = form.get('file');
+    const type = String(form.get('type') || 'pdf').trim().toLowerCase();
     const title = String(form.get('title') || '').trim();
     const description = String(form.get('description') || '').trim();
-    // Parsed but not required for insert yet; keep for future use.
-    const tags = JSON.parse(String(form.get('tags') || '[]')) as string[];
-
-    if (!file || !title) {
-      return NextResponse.json({ error: 'Missing file or title.' }, { status: 400 });
+    const state = String(form.get('state') || 'draft');
+    const openMode = String(form.get('discovery_open_mode') || 'context');
+    const discoverable = String(form.get('is_discoverable') || 'false') === 'true';
+    const browsable = String(form.get('is_browsable') || 'false') === 'true';
+    if (!(file instanceof File) || !title || title.length > 500) throw new Error('A file and title are required.');
+    if (!['draft', 'published', 'archived'].includes(state) || !['context', 'direct'].includes(openMode)) {
+      throw new Error('Invalid publication or presentation setting.');
     }
-    const isPdf = resourceType === 'pdf';
-    const isImage = resourceType === 'image';
-    if (!isPdf && !isImage) {
-      return NextResponse.json({ error: 'Unsupported resource type.' }, { status: 400 });
+    if (browsable && !discoverable) throw new Error('Homepage browse requires search eligibility.');
+    if (!['pdf', 'image'].includes(type)) throw new Error('Unsupported resource type.');
+    if (type === 'pdf' ? file.type !== 'application/pdf' : !file.type.startsWith('image/')) {
+      throw new Error('The file must match the selected PDF or image type.');
     }
-
-    if (isPdf && file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Only PDF files allowed.' }, { status: 400 });
-    }
-    if (isImage && !file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image files allowed.' }, { status: 400 });
-    }
-
-    const { data: auth } = await userSupabase.auth.getUser();
-    if (!auth?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const { data: roleRows, error: rolesErr } = await admin
-      .from('roles')
-      .select('code, user_roles!inner(user_id)')
-      .eq('user_roles.user_id', auth.user.id);
-
-    if (rolesErr) {
-      return NextResponse.json({ error: rolesErr.message }, { status: 500 });
+    // Names formerly sent by an old client must fail visibly, never be discarded.
+    const tagIds = discoveryIds(JSON.parse(String(form.get('tag_ids') ?? form.get('tags') ?? '[]')));
+    const searchNames = discoveryNames(JSON.parse(String(form.get('search_names') ?? '[]')));
+    if (tagIds.length) {
+      const tags = await admin.from('tags').select('id').in('id', tagIds).eq('is_active', true).eq('tag_kind', 'topic');
+      if (tags.error) return NextResponse.json({ error: 'Tag validation is unavailable.' }, { status: 503 });
+      if (tags.data.length !== tagIds.length) throw new Error('Choose existing active canonical tags.');
     }
 
-    const roles = (roleRows ?? []) as RoleRow[];
-    const isStaff = roles.some((r) => ['admin', 'superadmin', 'coach'].includes(r.code));
-    if (!isStaff) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
+    const extensionCandidate = (file.name.split('.').pop() || 'img').toLowerCase();
+    const extension = type === 'pdf' ? 'pdf' : /^[a-z0-9]{1,8}$/.test(extensionCandidate) ? extensionCandidate : 'img';
+    const storagePath = `${type}/${randomUUID()}.${extension}`;
     const storageBucket = 'resources';
-    const extension = (file.name.split('.').pop() || (isPdf ? 'pdf' : 'img')).toLowerCase();
-    const storagePath = `${resourceType}/${randomUUID()}.${extension}`;
+    const uploaded = await admin.storage.from(storageBucket)
+      .upload(storagePath, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false });
+    if (uploaded.error) return NextResponse.json({ error: 'File upload failed.' }, { status: 500 });
 
-    const buf = Buffer.from(await file.arrayBuffer());
-    const { error: upErr } = await admin.storage
-      .from(storageBucket)
-      .upload(storagePath, buf, { contentType: file.type || undefined, upsert: false });
-    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
-
-    const { data: inserted, error: insErr } = await admin
-      .from('resources')
-      .insert({
-        title,
-        description,
-        type: resourceType,
-        source: 'manual',
-        state: 'published',
-        created_by: auth.user.id,
-        storage_bucket: storageBucket,
-        storage_path: storagePath,
-      })
-      .select('id, title')
-      .single();
-
-    if (insErr || !inserted) {
-      await admin.storage.from(storageBucket).remove([storagePath]);
-      return NextResponse.json({ error: insErr?.message || 'Insert failed' }, { status: 500 });
+    const inserted = await admin.rpc('create_tagged_resource_upload', {
+      _actor_id: guard.user.id, _title: title, _description: description, _type: type, _state: state,
+      _discoverable: discoverable, _browsable: browsable, _open_mode: openMode,
+      _bucket: storageBucket, _path: storagePath, _tag_ids: tagIds, _search_names: searchNames,
+    });
+    if (inserted.error || !inserted.data) {
+      // A known database rejection rolls back the resource AND tags. On an
+      // ambiguous network failure, retain the file instead of risking a broken
+      // committed resource; do not report successful tagging.
+      if (inserted.error?.code && /^[0-9][0-9A-Z]{4}$/.test(inserted.error.code)) {
+        const cleanup = await admin.storage.from(storageBucket).remove([storagePath]);
+        if (cleanup.error) console.error('[resource-upload] orphan cleanup required', { storagePath });
+      } else {
+        console.error('[resource-upload] upload outcome requires inspection', { storagePath });
+      }
+      return NextResponse.json({ error: 'Could not confirm the resource and tags were saved. Check the resource library before retrying.' }, { status: 500 });
     }
 
-    const filename = `${(title || 'file').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${extension}`;
-    return NextResponse.json({
-      id: inserted.id,
-      openUrl: `/r/${inserted.id}`,
-      downloadUrl: `/r/${inserted.id}?download=${encodeURIComponent(filename)}`,
-      // Keep tags around if you later want to persist them; currently unused.
-      tags,
-    });
-  } catch (e: unknown) {
-    console.error('Upload route error:', e);
-    return NextResponse.json(
-      { error: getErrorMessage(e) },
-      { status: 500 },
-    );
+    const id = inserted.data as number;
+    const filename = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.${extension}`;
+    return NextResponse.json({ id, openUrl: `/r/${id}`,
+      downloadUrl: `/r/${id}?download=${encodeURIComponent(filename)}`, tagIds });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Invalid upload.' }, { status: 400 });
   }
 }

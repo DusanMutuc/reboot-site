@@ -367,10 +367,14 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
                     }}
                     getOptionLabel={(option) => option.full_name}
                     isOptionEqualToValue={(option, value) => option.id === value.id}
-                    renderOption={(props, option) => (
+                    renderOption={(props, option) => {
+                      const { key, ...optionProps } = props;
+
+                      return (
                       <Box
                         component="li"
-                        {...props}
+                        key={key}
+                        {...optionProps}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
@@ -390,7 +394,8 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
                         </Box>
                         {option.is_legend ? <LegendMemberIcon /> : null}
                       </Box>
-                    )}
+                      );
+                    }}
                     renderInput={(params) => (
                       <TextField
                         {...params}

@@ -34,6 +34,7 @@ import CommentsPanel from './coaching-notes/CommentsPanel';
 import MeetingSlotsPanel from './coaching-notes/MeetingSlotsPanel';
 import NoteSelector from './coaching-notes/NoteSelector';
 import TrainingAssignmentPanel from './coaching-notes/TrainingAssignmentPanel';
+import CoachResourceSuggestionPanel from './coaching-notes/CoachResourceSuggestionPanel';
 import {
   makeEmptyMeetingDateInputs,
   makeEmptyMeetingSlots,
@@ -1247,6 +1248,11 @@ export default function CoachingNotesPanel({
               />
 
               <TrainingAssignmentPanel
+                userId={userId}
+                coachingNoteId={selectedNote.id}
+              />
+
+              <CoachResourceSuggestionPanel
                 userId={userId}
                 coachingNoteId={selectedNote.id}
               />

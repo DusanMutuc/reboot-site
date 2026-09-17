@@ -12,6 +12,7 @@ type TransistorEpisodeAttributes = {
 };
 
 type SyncEpisode = {
+  sourceId: string;
   title: string;
   duration: number | null;
   url: string | null;
@@ -58,13 +59,14 @@ async function getAllEpisodes(showId: string, transistorApiKey: string): Promise
     }
 
     const json = (await response.json()) as {
-      data?: Array<{ attributes?: TransistorEpisodeAttributes | null }>;
+      data?: Array<{ id?: string | null; attributes?: TransistorEpisodeAttributes | null }>;
       meta?: { currentPage?: number; totalPages?: number };
     };
 
     const pageItems = json.data ?? [];
     episodes.push(
-      ...pageItems.map(({ attributes }) => ({
+      ...pageItems.flatMap(({ id, attributes }) => id ? [{
+        sourceId: id,
         title: (attributes?.title ?? '').trim() || 'Untitled',
         duration:
           typeof attributes?.duration === 'number' && Number.isFinite(attributes.duration)
@@ -72,7 +74,7 @@ async function getAllEpisodes(showId: string, transistorApiKey: string): Promise
             : null,
         url: attributes?.share_url ?? attributes?.media_url ?? null,
         thumbnail: attributes?.image_url ?? null,
-      })),
+      }] : []),
     );
 
     const currentPage = json.meta?.currentPage ?? page;
@@ -86,28 +88,13 @@ async function getAllEpisodes(showId: string, transistorApiKey: string): Promise
   return episodes;
 }
 
-async function getExistingPodcastTitlesSet(adminClient: ReturnType<typeof getAdminClient>, titles: string[]) {
-  const uniqueTitles = [...new Set(titles.filter(Boolean))];
-  const existingTitlesSet = new Set<string>();
-  const chunkSize = 100;
-
-  for (let index = 0; index < uniqueTitles.length; index += chunkSize) {
-    const chunk = uniqueTitles.slice(index, index + chunkSize);
-    const { data, error } = await adminClient
-      .from('resources')
-      .select('title')
-      .eq('type', 'podcast')
-      .in('title', chunk);
-
-    if (error) throw error;
-
-    for (const row of data ?? []) {
-      if (row.title) existingTitlesSet.add(row.title);
-    }
-  }
-
-  return existingTitlesSet;
-}
+type ExistingPodcast = {
+  id: number;
+  title: string;
+  source: string | null;
+  source_id: string | null;
+  metadata: Record<string, unknown> | null;
+};
 
 export async function GET(req: NextRequest) {
   if (!validateCronSecret(req)) {
@@ -130,14 +117,26 @@ export async function GET(req: NextRequest) {
 
   try {
     const episodes = await getAllEpisodes(transistorShowId, transistorApiKey);
-    const existingTitles = await getExistingPodcastTitlesSet(
-      admin,
-      episodes.map((episode) => episode.title),
+    const { data: existingData, error: existingError } = await admin
+      .from('resources')
+      .select('id,title,source,source_id,metadata')
+      .eq('type', 'podcast');
+    if (existingError) throw existingError;
+
+    const existing = (existingData ?? []) as ExistingPodcast[];
+    const sourcePrefix = `transistor:${transistorShowId}:`;
+    const bySourceId = new Map(
+      existing
+        .filter((resource) => resource.source === 'rss' && resource.source_id)
+        .map((resource) => [resource.source_id!, resource]),
     );
+    const byTitle = new Map(existing.map((resource) => [resource.title.toLowerCase(), resource]));
+    const seenSourceIds = new Set<string>();
 
     let upserted = 0;
     let skippedMissingUrl = 0;
-    let skippedExistingTitle = 0;
+    let adoptedExisting = 0;
+    let archived = 0;
     let failed = 0;
 
     for (const episode of episodes) {
@@ -146,26 +145,46 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      if (existingTitles.has(episode.title)) {
-        skippedExistingTitle += 1;
-        continue;
-      }
+      const sourceId = `${sourcePrefix}${episode.sourceId}`;
+      seenSourceIds.add(sourceId);
+      const stableMatch = bySourceId.get(sourceId);
+      const titleMatch = byTitle.get(episode.title.toLowerCase());
+      const adoptableTitleMatch =
+        !stableMatch && titleMatch && !titleMatch.source_id ? titleMatch : null;
 
-      const { data, error } = await admin
-        .from('resources')
-        .upsert(
-          {
-            title: episode.title,
-            type: 'podcast',
-            url: episode.url,
-            thumbnail: episode.thumbnail,
-            duration: episode.duration,
-            state: 'published',
-          },
-          { onConflict: 'url' },
-        )
-        .select('id')
-        .single();
+      const payload = {
+        title: episode.title,
+        type: 'podcast' as const,
+        url: episode.url,
+        thumbnail: episode.thumbnail,
+        duration: episode.duration,
+        source: 'rss' as const,
+        source_id: sourceId,
+        metadata: {
+          provider: 'transistor',
+          show_id: transistorShowId,
+          episode_id: episode.sourceId,
+        },
+        state: 'published' as const,
+        is_discoverable: true,
+        // Browse is a separate reviewed decision. Omit is_browsable so updates
+        // preserve the admin's choice and new episodes default to search only.
+      };
+
+      const write = stableMatch || adoptableTitleMatch
+        ? admin
+            .from('resources')
+            .update(payload)
+            .eq('id', (stableMatch ?? adoptableTitleMatch)!.id)
+            .select('id,title,source,source_id,metadata')
+            .single()
+        : admin
+            .from('resources')
+            .upsert(payload, { onConflict: 'source,source_id' })
+            .select('id,title,source,source_id,metadata')
+            .single();
+
+      const { data, error } = await write;
 
       if (error || !data) {
         failed += 1;
@@ -174,7 +193,30 @@ export async function GET(req: NextRequest) {
       }
 
       upserted += 1;
-      existingTitles.add(episode.title);
+      if (adoptableTitleMatch) adoptedExisting += 1;
+      const saved = data as ExistingPodcast;
+      bySourceId.set(sourceId, saved);
+      byTitle.set(episode.title.toLowerCase(), saved);
+    }
+
+    const missingIds = existing
+      .filter((resource) => {
+        const managedBySourceId = resource.source_id?.startsWith(sourcePrefix) ?? false;
+        const managedByMetadata =
+          resource.metadata?.provider === 'transistor' &&
+          resource.metadata?.show_id === transistorShowId;
+        return (managedBySourceId || managedByMetadata) &&
+          (!resource.source_id || !seenSourceIds.has(resource.source_id));
+      })
+      .map((resource) => resource.id);
+
+    if (missingIds.length > 0) {
+      const { error: archiveError } = await admin
+        .from('resources')
+        .update({ state: 'archived' })
+        .in('id', missingIds);
+      if (archiveError) throw archiveError;
+      archived = missingIds.length;
     }
 
     return NextResponse.json({
@@ -182,7 +224,8 @@ export async function GET(req: NextRequest) {
       fetched: episodes.length,
       upserted,
       skippedMissingUrl,
-      skippedExistingTitle,
+      adoptedExisting,
+      archived,
       failed,
     });
   } catch (error) {

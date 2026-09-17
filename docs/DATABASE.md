@@ -48,11 +48,31 @@ Supabase Auth email/phone is not duplicated in `profiles`. Cross-schema Auth rel
 | `admin` | Admin application and privileged APIs |
 | `coach` | Coach workspace and assigned members |
 | `user` | Standard member |
+| `ninety-day-user` | Cycle-bound 90-day programme member with restricted content |
 | `assistant` | Assistant-library-only experience |
 | `past_member` | Normal access removed |
 | `legend` | Additional member designation displayed in the UI |
 
 Use codes, not the current numeric IDs.
+
+### 90-day programme cycles
+
+`ninety_day_cycles` is the cohort-level programme record. A cycle is exactly 90 calendar days,
+has one of `draft`, `active`, or `completed` status, and owns the current system shown to every
+enrolled participant. Only one cycle may be active at a time.
+
+- `ninety_day_cycle_systems` stores the ordered set of eight systems for a cycle.
+- `ninety_day_cycle_users` stores enrollment history; an open row has no `ended_at` or `outcome`.
+- `ninety_day_cycle_meetings` stores scheduled group calls and their join links.
+- `enroll_ninety_day_user` assigns the role and opens the cycle enrollment atomically.
+- `promote_ninety_day_user` replaces the programme role with `user` and closes the enrollment as
+  `promoted` atomically.
+
+The browser cannot read or mutate the lifecycle tables directly. Admin API routes use service
+role after `requireAdmin()`. The 90-day website loaders expose only the active cycle's systems and
+descendants, plus the fixed `set-your-compass` course; page routing keeps the account inside those
+programme surfaces. This lifecycle is deliberately independent of the separately staged discovery
+system.
 
 ## Content, courses, and libraries
 
@@ -120,6 +140,8 @@ Server code resolves:
 - Assistant library: `content_nodes.slug = 'assistant-library'`.
 
 The assistant scope includes both roots but requires the `assistant` role.
+For a `ninety-day-user` without the full `user` role, library loaders intersect this hierarchy with
+the systems configured on the account's active cycle.
 
 ## Resources, search, and storage
 

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabaseServer';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/requireUser';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
 type ResourceRow = {
   id: number;
@@ -10,39 +11,39 @@ type ResourceRow = {
   storage_path: string | null;
 };
 
-type RoleWithUsers = { code: string; user_roles: { user_id: string }[] };
-
-async function getUserId(): Promise<string | null> {
-  const supa = getSupabaseServer();
-  const { data } = await supa.auth.getUser();
-  return data?.user?.id ?? null;
+function redirectResource(target: string) {
+  const response = NextResponse.redirect(target, { status: 302 });
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
 }
 
-async function isStaff(userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const supa = getSupabaseServer();
-  const { data } = await supa
-    .from('roles')
-    .select('code, user_roles!inner(user_id)')
-    .eq('user_roles.user_id', userId);
-
-  const codes = (data ?? ([] as RoleWithUsers[])).map((r) => r.code);
-  return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
-}
-
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const guard = await requireUser(req);
+  if (!guard.ok) return guard.res;
   // Extract /r/[id] from the path without using the typed context arg
   const { pathname } = new URL(req.url);
   const match = pathname.match(/\/r\/([^/]+)\/?$/);
   const id = match?.[1];
 
   const numericId = Number(id);
-  if (!id || !Number.isFinite(numericId)) {
-    return NextResponse.redirect(new URL('/', req.url));
+  if (!id || !Number.isSafeInteger(numericId) || numericId <= 0) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const supa = getSupabaseServer();
-  const staff = await isStaff(await getUserId());
+  const supa = getAdminClient();
+  const staff = guard.roleCodes.some((code) => ['admin', 'superadmin', 'coach'].includes(code));
+  if (!staff) {
+    const access = await supa.rpc('can_access_discovery_resource', {
+      _user_id: guard.user.id,
+      _resource_id: numericId,
+    });
+    if (access.error) {
+      return NextResponse.json({ error: 'Resource access is temporarily unavailable' }, { status: 503 });
+    }
+    if (access.data !== true) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+  }
 
   let query = supa
     .from('resources')
@@ -56,13 +57,17 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // External → redirect as-is
+  // A reviewed direct result still passes access checks on every open.
   if (!r.storage_bucket || !r.storage_path) {
-    const target = r.url ?? '/';
-    const resolved = target.startsWith('http')
-      ? target
-      : new URL(target, req.url).toString();
-    return NextResponse.redirect(resolved, { status: 302 });
+    try {
+      const target = new URL(r.url ?? '', req.url);
+      if (!r.url || !['http:', 'https:'].includes(target.protocol) || target.href === req.url) {
+        return NextResponse.json({ error: 'Link unavailable' }, { status: 500 });
+      }
+      return redirectResource(target.toString());
+    } catch {
+      return NextResponse.json({ error: 'Link unavailable' }, { status: 500 });
+    }
   }
 
   // Storage-backed → sign & redirect
@@ -79,5 +84,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Link unavailable' }, { status: 500 });
   }
 
-  return NextResponse.redirect(signed.signedUrl, { status: 302 });
+  return redirectResource(signed.signedUrl);
 }

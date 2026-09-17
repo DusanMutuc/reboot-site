@@ -88,10 +88,13 @@ Do not use `SUPABASE_SERVICE_ROLE_KEY` in any file marked `'use client'`, in a `
 - Supabase Auth owns credentials, email, phone, password reset, and account identity.
 - `public.profiles.id` is the application UUID for the same person and is used by nearly every domain table.
 - Roles are normalized through `roles` and `user_roles`. Use role `code`, not a numeric role ID.
-- Current live role codes are `admin`, `coach`, `user`, `assistant`, `past_member`, and `legend`.
+- Current live role codes are `admin`, `coach`, `user`, `ninety-day-user`, `assistant`, `past_member`, and `legend`.
 - A person may have multiple roles.
 - `past_member` removes normal access even if another role is present. Only the ambassador-hub APIs are explicitly allowed.
 - `assistant` users are routed to the assistant library.
+- `ninety-day-user` accounts without `user` are routed to `/home/ninety-day`. Their access comes
+  from an open enrollment in an active `ninety_day_cycles` row and is limited to the cycle's eight
+  systems plus the fixed Set Your Compass course.
 - “Current member” logic is centralized in `get_current_member_ids`; do not recreate it with an ad hoc role filter.
 - Emails are in Supabase Auth, not `profiles`. Use paginated `auth.admin.listUsers()` or `auth.admin.getUserById()`.
 
@@ -102,8 +105,12 @@ The website’s admin flow is:
 1. Resolve the role by `roles.code`.
 2. Create the Supabase Auth user.
 3. Upsert `profiles` with the Auth UUID.
-4. Upsert `user_roles`.
+4. For `ninety-day-user`, call `enroll_ninety_day_user` with a draft or active cycle; otherwise
+   upsert `user_roles`.
 5. If the role is `coach`, ensure `coach_profiles` exists.
+
+Promote a 90-day participant with `promote_ninety_day_user`; do not manually swap the two role
+rows, because the RPC also closes the cycle enrollment history.
 
 Prefer `POST /api/admin/create-user` for an interactive admin workflow. A script that implements this directly must handle partial failure and be safely retryable.
 

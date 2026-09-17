@@ -180,6 +180,10 @@ export type ContentCategory = 'marketing' | 'systems' | 'hiring' | 'mindset';
 
 export type ContentItem = {
   id: string;
+  containerTitle?: string | null;
+  containerHref?: string | null;
+  /** Present for resource cards that support explicit discovery feedback. */
+  resourceId?: number | null;
   title: string;
   /** Video, Playbook, Recording, Script, Training. */
   typeLabel: string;
@@ -191,7 +195,29 @@ export type ContentItem = {
   thumbnailUrl?: string | null;
   categories: ContentCategory[];
   progressPct: number | null;
+  /** A named human suggestion must never be mistaken for an algorithmic one. */
+  recommendationSource?: 'coach' | 'algorithm';
+  coachName?: string | null;
 };
+
+export type BrowseDiscoverySelection = ContentCategory | 'all' | 'for-you';
+
+/**
+ * Identifies the immutable ordered response behind one browser view. Item
+ * positions are keyed by ContentItem.id so the client can attribute a view or
+ * open without exposing ranking scores or recommendation reasons.
+ */
+export type DiscoveryResultSetRef = {
+  /** Null only when analytics recording was unavailable; the delivered order remains usable. */
+  id: string | null;
+  context: 'catalogue' | 'category' | 'recommendation';
+  contextKey: string | null;
+  itemPositions: Record<string, number>;
+};
+
+export type HomeDiscoveryResultSets = Partial<
+  Record<BrowseDiscoverySelection, DiscoveryResultSetRef>
+>;
 
 /**
  * A course is a container, not an item: sequential, multi-part, and carrying
@@ -220,9 +246,15 @@ export type BrowseRow = {
 
 /** Flattened index backing the inline search demo. */
 export type SearchItem = {
+  containerTitle?: string | null;
+  containerHref?: string | null;
   title: string;
   typeLabel: string;
   href: string;
+  rankingTier?: 'strict' | 'related';
+  resultSetId?: string | null;
+  logicalSearchId?: string | null;
+  position?: number;
 };
 
 /**
@@ -252,7 +284,7 @@ export type Priority = {
  * an unbooked one is a state worth surfacing rather than an empty slot.
  */
 export type MeetingSlot = {
-  id: 'business_review' | 'implementation';
+  id: 'business_review' | 'implementation' | 'weekly_group';
   kind: string;
   /** ISO start, used for ordering. Null when nothing is booked. */
   startsAt: string | null;
@@ -269,6 +301,17 @@ export type MeetingSlot = {
   prepHref: string | null;
   /** Changes the prep action from a task into a review/update action. */
   prepSubmitted: boolean;
+  /**
+   * Whether this meeting is the member's to move. Optional, defaulting to
+   * true, because for every meeting the standard home shows it is.
+   *
+   * A cohort call is not: it runs at a fixed hour for everyone on the
+   * programme, and the band's secondary action — Reschedule — is the one
+   * control on the page that cannot do what it says. An offer that does
+   * nothing is worse than an absent one, so the band drops it and the booked
+   * state becomes what it already was for these members: a statement.
+   */
+  reschedulable?: boolean;
 };
 
 /**
@@ -419,4 +462,67 @@ export type HomeData = {
   latestEpisode: LatestEpisode | null;
   metrics: Metric[];
   utilityLinks: UtilityLink[];
+};
+
+/* ------------------------------------------------- 90-day offer members ---- */
+
+/**
+ * The one thing every member on the 90-day offer is working on this week.
+ *
+ * Shaped like a `Priority` and deliberately not one. A priority is personal —
+ * a coach set it for this member at their business review, and the layout says
+ * so. This is set once for the whole cohort and rotates weekly, which is a
+ * different promise, and a page that renders the two identically is making a
+ * claim about personalisation it cannot keep. The difference is carried by the
+ * module rather than the type: one focus, no list to choose from, and a line
+ * on the surface naming it as shared.
+ *
+ * There is no `status`. Three priorities need one because the member is
+ * tracking a set; a single item that expires on Monday either got done or did
+ * not, and a done-state on it would suggest the next one arrives early.
+ */
+export type CurrentFocus = {
+  id: string;
+  title: string;
+  /** What the first move costs. Empty when there is no system behind it. */
+  detail: string;
+  /** Null when the focus has no library item; the CTA is then omitted. */
+  guideHref: string | null;
+};
+
+/**
+ * Where the member is in the ninety days.
+ *
+ * The offer's product *is* the time — thirteen weeks, then it ends — so the
+ * page can report progress from the calendar alone, without waiting on KPI
+ * history a three-week-old member does not have yet. It is also the frame that
+ * makes a rotating focus legible: a member who can see week three of thirteen
+ * reads this week's item as one of a series rather than as the whole
+ * programme.
+ */
+export type ProgrammeWeek = {
+  /** 1-based, and allowed to exceed `total` on an over-running cohort. */
+  current: number;
+  total: number;
+};
+
+/**
+ * One month of the 90-day programme, as the tracker keys it.
+ *
+ * Only the identity of the month travels: the figures are read and written
+ * live against the member's own KPI record, so there is nothing to pass in and
+ * nothing that can go stale between render and edit. `periodStart` is the
+ * `period_start_date` the RPCs already use rather than a prettier id, so the
+ * card never has to convert between two ways of naming the same month.
+ *
+ * Ninety days is three months, which is why this cohort gets the whole tracker
+ * and a picker rather than the four-figure year snapshot the standard home
+ * shows. A year-to-date total summarises a period longer than the membership;
+ * three months is not a summary of anything, it is just the record.
+ */
+export type ProgrammeMonth = {
+  /** First of the month, e.g. "2026-08-01". */
+  periodStart: string;
+  /** e.g. "August". */
+  label: string;
 };

@@ -27,6 +27,8 @@ import type { SavingState } from '../state/editorStore';
 import type { RenderableResource } from '@/components/course/BlockRenderer';
 import { useUndoRedoInput } from '@/hooks/useUndoRedoInput';
 import { supabase } from '@/lib/supabaseClient';
+import StandaloneUseSection from '@/components/admin/discovery/StandaloneUseSection';
+import NodeDiscoverySection from '@/components/admin/discovery/NodeDiscoverySection';
 import {
   fetchCourseAudience,
   searchAudienceUsers,
@@ -36,13 +38,40 @@ import {
 } from '@/components/admin/courseEditor/api/requests';
 export type NodeDraft = {
   title: string;
-  slug: string;
   description: string;
   hero_image: string;
-  icon: string;
-  objectives: string;
-  metadata: string;
 };
+
+type EditorKind = 'course' | 'library';
+
+function formatTimeInput(milliseconds: number | null | undefined): string {
+  if (milliseconds == null) return '';
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function parseTimeInput(value: string): { milliseconds: number | null; error: string | null } {
+  const trimmed = value.trim();
+  if (!trimmed) return { milliseconds: null, error: null };
+  const parts = trimmed.split(':');
+  if (parts.length < 2 || parts.length > 3 || parts.some((part) => !/^\d+$/.test(part))) {
+    return { milliseconds: null, error: 'Use m:ss or h:mm:ss.' };
+  }
+  const values = parts.map(Number);
+  const seconds = values.at(-1) ?? 0;
+  const minutes = values.at(-2) ?? 0;
+  const hours = values.length === 3 ? values[0] : 0;
+  if (seconds > 59 || (values.length === 3 && minutes > 59)) {
+    return { milliseconds: null, error: 'Seconds and minutes must be below 60.' };
+  }
+  return { milliseconds: (hours * 3600 + minutes * 60 + seconds) * 1000, error: null };
+}
 type AllowedUser = CourseAudienceUser;
 
 function getImageWidthPercent(settings: Record<string, unknown> | null | undefined): number {
@@ -194,8 +223,9 @@ function validateSmartDocDraft(draft: SmartDocDraft | null): string | null {
 export type PropertiesProps = {
   subtree: NodeSubtree | null;
   nodeDraft: NodeDraft | null;
-  metadataError: string | null;
+  editorKind: EditorKind;
   onNodeFieldChange: (field: keyof NodeDraft, value: string) => void;
+  onManageCoverImage: (nodeId: number) => void;
   onRequestAddChild: (mode: 'create' | 'attach', options?: { type?: NodeType }) => void;
   onReorderChild: (childId: number, direction: 'up' | 'down') => void;
   onUpdateChild: (childId: number, updates: Partial<NodeChild>) => void;
@@ -222,8 +252,9 @@ export type PropertiesProps = {
 export default function Properties({
   subtree,
   nodeDraft,
-  metadataError,
+  editorKind,
   onNodeFieldChange,
+  onManageCoverImage,
   onRequestAddChild,
   onReorderChild,
   onUpdateChild,
@@ -241,10 +272,12 @@ export default function Properties({
 
 }: PropertiesProps) {
   const [childType, setChildType] = useState<NodeType>('lesson');
-  const [settingsDraft, setSettingsDraft] = useState('');
-  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [imageWidthDraft, setImageWidthDraft] = useState('100');
   const [imageHeightDraft, setImageHeightDraft] = useState('480');
+  const [startTimeDraft, setStartTimeDraft] = useState('');
+  const [endTimeDraft, setEndTimeDraft] = useState('');
+  const [startTimeError, setStartTimeError] = useState<string | null>(null);
+  const [endTimeError, setEndTimeError] = useState<string | null>(null);
   const [smartDocDraft, setSmartDocDraft] = useState<SmartDocDraft | null>(null);
   const [smartDocLoading, setSmartDocLoading] = useState(false);
   const [smartDocSaving, setSmartDocSaving] = useState(false);
@@ -700,97 +733,11 @@ const renderVisibility = () => {
     onChange: (next) => onNodeFieldChange('title', next),
     scopeKey: nodeScopeKey,
   });
-  const slugInput = useUndoRedoInput({
-    value: nodeDraft?.slug ?? '',
-    onChange: (next) => onNodeFieldChange('slug', next),
-    scopeKey: nodeScopeKey,
-  });
   const descriptionInput = useUndoRedoInput({
     value: nodeDraft?.description ?? '',
     onChange: (next) => onNodeFieldChange('description', next),
     scopeKey: nodeScopeKey,
   });
-  const heroImageInput = useUndoRedoInput({
-    value: nodeDraft?.hero_image ?? '',
-    onChange: (next) => onNodeFieldChange('hero_image', next),
-    scopeKey: nodeScopeKey,
-  });
-  const iconInput = useUndoRedoInput({
-    value: nodeDraft?.icon ?? '',
-    onChange: (next) => onNodeFieldChange('icon', next),
-    scopeKey: nodeScopeKey,
-  });
-  const objectivesInput = useUndoRedoInput({
-    value: nodeDraft?.objectives ?? '',
-    onChange: (next) => onNodeFieldChange('objectives', next),
-    scopeKey: nodeScopeKey,
-  });
-  const metadataInput = useUndoRedoInput({
-    value: nodeDraft?.metadata ?? '',
-    onChange: (next) => onNodeFieldChange('metadata', next),
-    scopeKey: nodeScopeKey,
-  });
-
-  const handleNumericField = useCallback(
-    (field: 'start_ms' | 'end_ms', raw: string) => {
-      if (!selectedBlock || selectedBlock.id < 0) {
-        return;
-      }
-      const value = raw.trim();
-      if (!value) {
-        onUpdateBlock(selectedBlock.id, { [field]: null });
-        return;
-      }
-      const parsed = Number(value);
-      if (Number.isNaN(parsed) || parsed < 0) {
-        return;
-      }
-      onUpdateBlock(selectedBlock.id, { [field]: parsed });
-    },
-    [onUpdateBlock, selectedBlock],
-  );
-
-  const handleLabelChange = useCallback(
-    (value: string) => {
-      if (!selectedBlock || selectedBlock.id < 0) {
-        return;
-      }
-      onUpdateBlock(selectedBlock.id, { label: value ? value : null });
-    },
-    [onUpdateBlock, selectedBlock],
-  );
-
-  const handleNotesChange = useCallback(
-    (value: string) => {
-      if (!selectedBlock || selectedBlock.id < 0) {
-        return;
-      }
-      onUpdateBlock(selectedBlock.id, { notes: value ? value : null });
-    },
-    [onUpdateBlock, selectedBlock],
-  );
-
-  const handleSettingsChange = useCallback(
-    (value: string) => {
-      setSettingsDraft(value);
-      if (!selectedBlock || selectedBlock.id < 0) {
-        return;
-      }
-      if (!value.trim()) {
-        setSettingsError(null);
-        onUpdateBlock(selectedBlock.id, { settings: null });
-        return;
-      }
-      try {
-        const parsed = JSON.parse(value);
-        setSettingsError(null);
-        onUpdateBlock(selectedBlock.id, { settings: parsed });
-      } catch {
-        setSettingsError('Settings must be valid JSON');
-      }
-    },
-    [onUpdateBlock, selectedBlock, setSettingsDraft, setSettingsError],
-  );
 
   useEffect(() => {
     if (!selectedBlock || selectedBlock.block_type !== 'smart_doc') {
@@ -1386,36 +1333,6 @@ const renderVisibility = () => {
     );
   };
 
-  const startInput = useUndoRedoInput({
-    value: selectedBlock && selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : '',
-    onChange: (next) => handleNumericField('start_ms', next),
-    scopeKey: blockScopeKey,
-  });
-
-  const endInput = useUndoRedoInput({
-    value: selectedBlock && selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : '',
-    onChange: (next) => handleNumericField('end_ms', next),
-    scopeKey: blockScopeKey,
-  });
-
-  const labelInput = useUndoRedoInput({
-    value: selectedBlock?.label ?? '',
-    onChange: handleLabelChange,
-    scopeKey: blockScopeKey,
-  });
-
-  const notesInput = useUndoRedoInput({
-    value: selectedBlock?.notes ?? '',
-    onChange: handleNotesChange,
-    scopeKey: blockScopeKey,
-  });
-
-  const settingsInput = useUndoRedoInput({
-    value: settingsDraft,
-    onChange: handleSettingsChange,
-    scopeKey: blockScopeKey,
-  });
-
   useEffect(() => {
     if (availableChildTypes.length > 0 && !availableChildTypes.includes(childType)) {
       setChildType(availableChildTypes[0]);
@@ -1423,18 +1340,26 @@ const renderVisibility = () => {
   }, [availableChildTypes, childType]);
 
   useEffect(() => {
-    if (!selectedBlock) {
-      setSettingsDraft('');
-      setSettingsError(null);
-      return;
-    }
-    if (selectedBlock.settings) {
-      setSettingsDraft(JSON.stringify(selectedBlock.settings, null, 2));
-    } else {
-      setSettingsDraft('');
-    }
-    setSettingsError(null);
-  }, [selectedBlock]);
+    setStartTimeDraft(formatTimeInput(selectedBlock?.start_ms));
+    setEndTimeDraft(formatTimeInput(selectedBlock?.end_ms));
+    setStartTimeError(null);
+    setEndTimeError(null);
+  }, [blockScopeKey, selectedBlock?.start_ms, selectedBlock?.end_ms]);
+
+  const commitTime = useCallback(
+    (field: 'start_ms' | 'end_ms', value: string) => {
+      if (!selectedBlock || selectedBlock.id < 0) return;
+      const result = parseTimeInput(value);
+      if (field === 'start_ms') setStartTimeError(result.error);
+      else setEndTimeError(result.error);
+      if (result.error) return;
+      onUpdateBlock(selectedBlock.id, { [field]: result.milliseconds });
+      const formatted = formatTimeInput(result.milliseconds);
+      if (field === 'start_ms') setStartTimeDraft(formatted);
+      else setEndTimeDraft(formatted);
+    },
+    [onUpdateBlock, selectedBlock],
+  );
 
   const canEditBlocks = subtree ? subtree.children.length === 0 : false;
 
@@ -1522,59 +1447,52 @@ const renderVisibility = () => {
       return <Typography variant="body2" color="text.secondary">Select a node to edit details.</Typography>;
     }
 
+    const isPublicItem =
+      (editorKind === 'course' && subtree.node.node_type === 'course') ||
+      (editorKind === 'library' && subtree.node.node_type === 'lesson');
+    const itemLabel = editorKind === 'library' ? 'Library guide' : 'Course';
     return (
       <Stack spacing={2}>
-        <Typography variant="adminSectionTitle">Node details</Typography>
+        <Box>
+          <Typography variant="adminSectionTitle">{isPublicItem ? `${itemLabel} details` : 'Section details'}</Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {isPublicItem
+              ? `These details help members recognise and understand this ${itemLabel.toLowerCase()}.`
+              : 'This title helps organise the material inside the builder.'}
+          </Typography>
+        </Box>
         <TextField
           label="Title"
           value={nodeDraft.title}
           onChange={(event) => titleInput.handleChange(event.target.value)}
           onKeyDown={titleInput.handleKeyDown}
         />
-        <TextField
-          label="Slug"
-          value={nodeDraft.slug}
-          onChange={(event) => slugInput.handleChange(event.target.value)}
-          onKeyDown={slugInput.handleKeyDown}
-        />
-        <TextField
-          label="Description"
-          multiline
-          minRows={3}
-          value={nodeDraft.description}
-          onChange={(event) => descriptionInput.handleChange(event.target.value)}
-          onKeyDown={descriptionInput.handleKeyDown}
-        />
-        <TextField
-          label="Hero image URL"
-          value={nodeDraft.hero_image}
-          onChange={(event) => heroImageInput.handleChange(event.target.value)}
-          onKeyDown={heroImageInput.handleKeyDown}
-        />
-        <TextField
-          label="Icon"
-          value={nodeDraft.icon}
-          onChange={(event) => iconInput.handleChange(event.target.value)}
-          onKeyDown={iconInput.handleKeyDown}
-        />
-        <TextField
-          label="Objectives"
-          multiline
-          minRows={3}
-          value={nodeDraft.objectives}
-          onChange={(event) => objectivesInput.handleChange(event.target.value)}
-          onKeyDown={objectivesInput.handleKeyDown}
-        />
-        <TextField
-          label="Metadata (JSON)"
-          multiline
-          minRows={4}
-          value={nodeDraft.metadata}
-          onChange={(event) => metadataInput.handleChange(event.target.value)}
-          onKeyDown={metadataInput.handleKeyDown}
-          error={!!metadataError}
-          helperText={metadataError ?? 'Provide structured metadata for this node.'}
-        />
+        {isPublicItem ? (
+          <>
+            <TextField
+              label="Short description"
+              multiline
+              minRows={3}
+              value={nodeDraft.description}
+              onChange={(event) => descriptionInput.handleChange(event.target.value)}
+              onKeyDown={descriptionInput.handleKeyDown}
+              helperText={`Shown to members when this ${itemLabel.toLowerCase()} is presented outside the builder.`}
+            />
+            <Stack spacing={1} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <Typography variant="subtitle2">Cover image</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {nodeDraft.hero_image ? 'A cover image is set.' : 'No cover image is set yet.'}
+              </Typography>
+              <Button variant="outlined" onClick={() => onManageCoverImage(subtree.node.id)}>
+                {nodeDraft.hero_image ? 'Change cover image' : 'Choose cover image'}
+              </Button>
+            </Stack>
+          </>
+        ) : null}
+        {/* Replaces the old "Edit discovery settings" dialog. Topics and search visibility are
+            recorded as real decisions here, so answering in the builder clears the item from its
+            queue instead of superseding what the jobs recorded. */}
+        {isPublicItem ? <NodeDiscoverySection key={subtree.node.id} nodeId={subtree.node.id} /> : null}
       </Stack>
     );
   };
@@ -1702,14 +1620,6 @@ const renderVisibility = () => {
               <>
                 {selectedBlock.block_type === 'asset' && (
                   <Stack spacing={2}>
-                    <Button
-                      variant="outlined"
-                      startIcon={<SearchIcon />}
-                      onClick={() => onOpenResourcePicker('update', selectedBlock.id)}
-                      disabled={isPendingBlock}
-                    >
-                      {selectedBlock.resource_id ? 'Change resource' : 'Select resource'}
-                    </Button>
                     {selectedBlock.resource_id ? (
                       <Stack
                         spacing={1}
@@ -1722,44 +1632,80 @@ const renderVisibility = () => {
                         }}
                       >
                         <Typography variant="caption" color="text.secondary">
-                          Selected resource
+                          Material in this block
                         </Typography>
-                        <TextField
-                          label="Resource title"
-                          value={blockResource?.title ?? `Resource #${selectedBlock.resource_id}`}
-                          InputProps={{ readOnly: true }}
-                        />
-                        <TextField
-                          label="Resource state"
-                          value={blockResource ? formatResourceState(blockResource.state) : 'Loading...'}
-                          InputProps={{ readOnly: true }}
-                        />
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          {blockResource?.title ?? `Resource #${selectedBlock.resource_id}`}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ textTransform: 'capitalize' }}>
+                          {blockResource
+                            ? `${blockResource.type} · ${formatResourceState(blockResource.state)}`
+                            : 'Loading…'}
+                        </Typography>
                       </Stack>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
                         No resource selected
                       </Typography>
                     )}
-                    <Stack direction="row" spacing={2}>
-                      <TextField
-                        label="Start (ms)"
-                        value={selectedBlock.start_ms != null ? String(selectedBlock.start_ms) : ''}
-                        onChange={(event) => startInput.handleChange(event.target.value)}
-                        onKeyDown={startInput.handleKeyDown}
-                        disabled={isPendingBlock}
-                      />
-                      <TextField
-                        label="End (ms)"
-                        value={selectedBlock.end_ms != null ? String(selectedBlock.end_ms) : ''}
-                        onChange={(event) => endInput.handleChange(event.target.value)}
-                        onKeyDown={endInput.handleKeyDown}
-                        disabled={isPendingBlock}
-                      />
-                    </Stack>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SearchIcon />}
+                      onClick={() => onOpenResourcePicker('update', selectedBlock.id)}
+                      disabled={isPendingBlock}
+                    >
+                      {selectedBlock.resource_id ? 'Change material' : 'Choose material'}
+                    </Button>
+                    {(blockResource?.type ?? '').toLowerCase() === 'video' ? (
+                      <Stack spacing={1}>
+                        <Typography variant="subtitle2">Video playback</Typography>
+                        <Stack direction="row" spacing={2}>
+                          <TextField
+                            label="Start video at"
+                            value={startTimeDraft}
+                            placeholder="0:00"
+                            onChange={(event) => {
+                              setStartTimeDraft(event.target.value);
+                              setStartTimeError(null);
+                            }}
+                            onBlur={() => commitTime('start_ms', startTimeDraft)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                commitTime('start_ms', startTimeDraft);
+                              }
+                            }}
+                            error={!!startTimeError}
+                            helperText={startTimeError ?? 'Optional · m:ss'}
+                            disabled={isPendingBlock}
+                          />
+                          <TextField
+                            label="Stop video at"
+                            value={endTimeDraft}
+                            placeholder="5:30"
+                            onChange={(event) => {
+                              setEndTimeDraft(event.target.value);
+                              setEndTimeError(null);
+                            }}
+                            onBlur={() => commitTime('end_ms', endTimeDraft)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault();
+                                commitTime('end_ms', endTimeDraft);
+                              }
+                            }}
+                            error={!!endTimeError}
+                            helperText={endTimeError ?? 'Optional · m:ss'}
+                            disabled={isPendingBlock}
+                          />
+                        </Stack>
+                      </Stack>
+                    ) : null}
                     {selectedAssetIsImage && (
                       <Stack spacing={1.5}>
+                        <Typography variant="subtitle2">Image presentation</Typography>
                         <TextField
-                          label="Image width (%)"
+                          label="Width"
                           type="number"
                           value={imageWidthDraft}
                           onChange={(event) => setImageWidthDraft(event.target.value)}
@@ -1772,11 +1718,11 @@ const renderVisibility = () => {
                             }
                           }}
                           inputProps={{ min: 10, max: 100, step: 5 }}
-                          helperText="Controls horizontal image size in this block (10–100%)."
+                          helperText="Percentage of the available page width (10–100%)."
                           disabled={isPendingBlock}
                         />
                         <TextField
-                          label="Image height (px)"
+                          label="Height"
                           type="number"
                           value={imageHeightDraft}
                           onChange={(event) => setImageHeightDraft(event.target.value)}
@@ -1789,7 +1735,7 @@ const renderVisibility = () => {
                             }
                           }}
                           inputProps={{ min: 120, max: 1200, step: 20 }}
-                          helperText="Sets the rendered image height (120–1200px)."
+                          helperText="Rendered height in pixels (120–1200px)."
                           disabled={isPendingBlock}
                         />
                         <FormControlLabel
@@ -1800,47 +1746,23 @@ const renderVisibility = () => {
                               disabled={isPendingBlock}
                             />
                           }
-                          label="Stretch image to fill container width"
+                          label="Crop image to fill the available width"
                         />
                       </Stack>
                     )}
                   </Stack>
                 )}
 
-                {(selectedBlock.block_type === 'asset' || selectedBlock.block_type === 'divider') && (
-                  <Stack spacing={2}>
-                    <TextField
-                      label="Label"
-                      value={selectedBlock.label ?? ''}
-                      onChange={(event) => labelInput.handleChange(event.target.value)}
-                      onKeyDown={labelInput.handleKeyDown}
-                      disabled={isPendingBlock}
-                    />
-                    <TextField
-                      label="Notes"
-                      multiline
-                      minRows={3}
-                      value={selectedBlock.notes ?? ''}
-                      onChange={(event) => notesInput.handleChange(event.target.value)}
-                      onKeyDown={notesInput.handleKeyDown}
-                      disabled={isPendingBlock}
-                    />
-                  </Stack>
-                )}
-
-                {selectedBlock.block_type === 'asset' && (selectedBlock.settings != null || settingsDraft) && (
-                  <TextField
-                    label="Settings (JSON)"
-                    multiline
-                    minRows={4}
-                    value={settingsDraft}
-                    onChange={(event) => settingsInput.handleChange(event.target.value)}
-                    onKeyDown={settingsInput.handleKeyDown}
-                    error={!!settingsError}
-                    helperText={settingsError ?? 'Optional advanced configuration for this block.'}
-                    disabled={isPendingBlock}
+                {/* Shared by the course builder and the Library editor, which both render this
+                    panel. The decision is recorded through the discovery API — never by writing
+                    discovery_open_mode here, which would supersede and delete the record. */}
+                {selectedBlock.block_type === 'asset' && selectedBlock.resource_id && !isPendingBlock && (
+                  <StandaloneUseSection
+                    key={selectedBlock.resource_id}
+                    resourceId={selectedBlock.resource_id}
                   />
                 )}
+
               </>
             )}
 

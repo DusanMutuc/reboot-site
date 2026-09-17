@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
+  allowsNegativeValue,
+  isMoneyMetric,
+  moneyFormatter,
+} from '@/lib/kpiFormat';
+import {
   Box,
   Card,
   CardContent,
@@ -56,16 +61,6 @@ export type KpiTrackerProps = {
   /** Keeps the tracker on fixedPeriodDate instead of showing period selectors. */
   lockPeriod?: boolean;
 };
-
-const isMoneyMetric = (key: string) =>
-  key === 'gross_revenue' || key === 'profit';
-
-const allowsNegativeValue = (key: string) => key === 'profit';
-
-const moneyFormatter = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const TRACKER_START_YEAR = 2000;
 const MONTH_NAMES = [

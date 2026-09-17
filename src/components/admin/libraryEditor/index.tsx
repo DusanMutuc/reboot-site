@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Alert,
   Box,
@@ -28,7 +29,11 @@ import Properties, { type NodeDraft } from '@/components/admin/courseEditor/Side
 import ResourcePickerDialog from '@/components/admin/courseEditor/Canvas/ResourcePickerDialog';
 import HeroImageManagerDialog from '@/components/admin/courseEditor/HeroImageManagerDialog';
 import DeleteDialog from '@/components/admin/courseEditor/Sidebar/DeleteDialog';
-import { EditorStoreProvider, useEditorStore } from '@/components/admin/courseEditor/state/editorStore';
+import {
+  EditorStoreProvider,
+  parseEditorDeepLinkId,
+  useEditorStore,
+} from '@/components/admin/courseEditor/state/editorStore';
 
 import LibraryList from './libraryList';
 
@@ -223,6 +228,9 @@ async function resolveLibraryEditorRootId(mode: LibraryMode): Promise<number> {
 }
 
 function LibraryEditorInner() {
+  const searchParams = useSearchParams();
+  const deepLinkNodeId = parseEditorDeepLinkId(searchParams.get('node'));
+  const deepLinkBlockId = parseEditorDeepLinkId(searchParams.get('block'));
   const {
     selectedNodeId,
     selectedBlockId,
@@ -246,7 +254,6 @@ function LibraryEditorInner() {
 
   // library-specific
   const [nodeDraft, setNodeDraft] = useState<NodeDraft | null>(null);
-  const [metadataError, setMetadataError] = useState<string | null>(null);
   const [resourceCache, setResourceCache] = useState<Record<number, RenderableResource>>({});
   const [snack, setSnack] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
 
@@ -362,9 +369,14 @@ function LibraryEditorInner() {
       ]);
       setTrees(subtrees);
       setRules(edgeRules);
-
-      setSelectedNodeId(subtrees[0]?.node?.id ?? null);
-      setSelectedBlockId(null);
+      const deepLinkSubtree = deepLinkNodeId == null ? null : findSubtree(subtrees, deepLinkNodeId);
+      setSelectedNodeId(deepLinkSubtree?.node.id ?? subtrees[0]?.node?.id ?? null);
+      setSelectedBlockId(
+        deepLinkSubtree && deepLinkBlockId != null
+          && deepLinkSubtree.blocks.some((block) => block.id === deepLinkBlockId)
+          ? deepLinkBlockId
+          : null,
+      );
       setEditingBlockId(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load library';
@@ -372,7 +384,14 @@ function LibraryEditorInner() {
     } finally {
       setLoading(false);
     }
-  }, [libraryMode, setEditingBlockId, setSelectedBlockId, setSelectedNodeId]);
+  }, [
+    deepLinkBlockId,
+    deepLinkNodeId,
+    libraryMode,
+    setEditingBlockId,
+    setSelectedBlockId,
+    setSelectedNodeId,
+  ]);
 
   useEffect(() => { void loadData(); }, [loadData]);
 
@@ -394,14 +413,9 @@ function LibraryEditorInner() {
     }
     setNodeDraft({
       title: selectedSubtree.node.title ?? '',
-      slug: selectedSubtree.node.slug ?? '',
       description: selectedSubtree.node.description ?? '',
       hero_image: selectedSubtree.node.hero_image ?? '',
-      icon: selectedSubtree.node.icon ?? '',
-      objectives: selectedSubtree.node.objectives ?? '',
-      metadata: selectedSubtree.node.metadata ? JSON.stringify(selectedSubtree.node.metadata, null, 2) : '',
     });
-    setMetadataError(null);
   }, [selectedSubtree]);
 
   // ensure resources cache
@@ -510,22 +524,6 @@ function LibraryEditorInner() {
     if (!selectedSubtree) return;
     setNodeDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
     const nodeId = selectedSubtree.node.id;
-
-    if (field === 'metadata') {
-      if (!value.trim()) {
-        setMetadataError(null);
-        queueNodeUpdate(nodeId, { metadata: null });
-        return;
-      }
-      try {
-        const parsed = JSON.parse(value);
-        setMetadataError(null);
-        queueNodeUpdate(nodeId, { metadata: parsed });
-      } catch {
-        setMetadataError('Metadata must be valid JSON');
-      }
-      return;
-    }
 
     const mapped: Partial<ContentNode> = { [field]: value ? value : null } as Partial<ContentNode>;
     queueNodeUpdate(nodeId, mapped);
@@ -805,8 +803,9 @@ function LibraryEditorInner() {
               <Properties
                 subtree={selectedSubtree}
                 nodeDraft={nodeDraft}
-                metadataError={metadataError}
+                editorKind="library"
                 onNodeFieldChange={handleNodeFieldChange}
+                onManageCoverImage={(nodeId) => setHeroDialog({ open: true, nodeId })}
                 onRequestAddChild={(mode, options) =>
                   selectedSubtree && handleAddChild(selectedSubtree.node.id, {
                     node_type: (options?.type ?? 'lesson') as NodeType,

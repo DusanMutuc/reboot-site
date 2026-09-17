@@ -75,6 +75,7 @@ type UserDirectoryRow = {
   created_at: string | null;
   last_sign_in_at: string | null;
   is_current_member: boolean;
+  is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
   primary_coaches: DirectoryPerson[];
@@ -104,7 +105,7 @@ type SnackbarState = {
   severity: 'success' | 'error' | 'info';
 };
 
-type MembershipFilter = 'all' | 'current' | 'past';
+type MembershipFilter = 'all' | 'current' | 'ninety-day' | 'past';
 type SetupFilter = 'all' | 'missing-phone' | 'missing-primary-coach' | 'missing-ghl';
 type SortOption = 'name' | 'introduced-desc' | 'last-sign-in-desc';
 type AttentionSeverity = 'blocking' | 'secondary';
@@ -182,7 +183,14 @@ function peopleLabel(people: DirectoryPerson[]) {
 }
 
 function MembershipSummary({ user }: { user: UserDirectoryRow }) {
-  const status = user.is_past_member ? 'Past member' : user.is_current_member ? 'Current member' : 'Inactive';
+  const status = user.is_past_member
+    ? 'Past member'
+    : user.is_ninety_day_user
+      ? '90-day programme'
+      : user.is_current_member
+        ? 'Current member'
+        : 'Inactive';
+  const active = user.is_current_member || user.is_ninety_day_user;
 
   return (
     <Stack direction="row" useFlexGap flexWrap="wrap" spacing={2} alignItems="center">
@@ -193,7 +201,9 @@ function MembershipSummary({ user }: { user: UserDirectoryRow }) {
             width: 8,
             height: 8,
             borderRadius: '50%',
-            bgcolor: user.is_current_member && !user.is_past_member ? 'success.main' : 'text.disabled',
+            bgcolor: active && !user.is_past_member
+              ? user.is_ninety_day_user ? 'info.main' : 'success.main'
+              : 'text.disabled',
           }}
         />
         <Typography variant="body2" color="text.secondary">{status}</Typography>
@@ -392,6 +402,8 @@ export default function UserProfilesAdmin() {
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [resetConfirmUser, setResetConfirmUser] = useState<UserDirectoryRow | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [promoteConfirmUser, setPromoteConfirmUser] = useState<UserDirectoryRow | null>(null);
+  const [promoting, setPromoting] = useState(false);
   const [deletingUser, setDeletingUser] = useState<UserDirectoryRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [snack, setSnack] = useState<SnackbarState>({
@@ -581,6 +593,34 @@ export default function UserProfilesAdmin() {
     }
   }, [closeDrawer, deletingUser]);
 
+  const handlePromote = useCallback(async () => {
+    if (!promoteConfirmUser) return;
+    setPromoting(true);
+
+    try {
+      const response = await fetch(
+        `/api/admin/users/${encodeURIComponent(promoteConfirmUser.id)}/promote`,
+        { method: 'POST' },
+      );
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) throw new Error(data.error || response.statusText);
+
+      setPromoteConfirmUser(null);
+      closeDrawer();
+      setRefreshKey((current) => current + 1);
+      setSnack({
+        open: true,
+        message: `${displayName(promoteConfirmUser)} is now a full member.`,
+        severity: 'success',
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to promote member';
+      setSnack({ open: true, message, severity: 'error' });
+    } finally {
+      setPromoting(false);
+    }
+  }, [closeDrawer, promoteConfirmUser]);
+
   function clearFilters() {
     setMembership('current');
     setLegendOnly(false);
@@ -649,6 +689,7 @@ export default function UserProfilesAdmin() {
             }}
           >
             <ToggleButton value="current">Current</ToggleButton>
+            <ToggleButton value="ninety-day">90-day</ToggleButton>
             <ToggleButton value="past">Past</ToggleButton>
             <ToggleButton value="all">All</ToggleButton>
           </ToggleButtonGroup>
@@ -752,13 +793,19 @@ export default function UserProfilesAdmin() {
                                       width: 7,
                                       height: 7,
                                       borderRadius: '50%',
-                                      bgcolor: user.is_current_member && !user.is_past_member
-                                        ? 'success.main'
+                                      bgcolor: (user.is_current_member || user.is_ninety_day_user) && !user.is_past_member
+                                        ? user.is_ninety_day_user ? 'info.main' : 'success.main'
                                         : 'text.disabled',
                                     }}
                                   />
                                   <Typography variant="caption" color="text.secondary">
-                                    {user.is_past_member ? 'Past member' : user.is_current_member ? 'Current' : 'Inactive'}
+                                    {user.is_past_member
+                                      ? 'Past member'
+                                      : user.is_ninety_day_user
+                                        ? '90-day'
+                                        : user.is_current_member
+                                          ? 'Current'
+                                          : 'Inactive'}
                                   </Typography>
                                 </Stack>
                               ) : null}
@@ -888,10 +935,31 @@ export default function UserProfilesAdmin() {
                       <Checkbox
                         checked={draft.is_past_member}
                         onChange={(event) => updateDraft('is_past_member', event.target.checked)}
+                        disabled={selectedUser.is_ninety_day_user}
                       />
                     )}
                     label="Past member"
                   />
+                  {selectedUser.is_ninety_day_user ? (
+                    <Alert severity="info" variant="outlined">
+                      <Stack spacing={1.25} alignItems="flex-start">
+                        <Typography variant="body2">
+                          This account opens the 90-day home. Promotion replaces that access with full member access.
+                        </Typography>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          onClick={() => setPromoteConfirmUser(selectedUser)}
+                          disabled={isDirty || saving}
+                        >
+                          Promote to full member
+                        </Button>
+                        {isDirty ? (
+                          <Typography variant="caption">Save or discard profile edits before promotion.</Typography>
+                        ) : null}
+                      </Stack>
+                    </Alert>
+                  ) : null}
                   {draft.is_past_member !== selectedUser.is_past_member ? (
                     <Alert severity="warning" variant="outlined">
                       This changes the member&apos;s lifecycle access when you save.
@@ -1013,6 +1081,20 @@ export default function UserProfilesAdmin() {
           <Button onClick={() => setResetConfirmUser(null)} disabled={resetting}>Cancel</Button>
           <LoadingButton variant="contained" onClick={handleSendPasswordReset} loading={resetting}>
             Send email
+          </LoadingButton>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(promoteConfirmUser)} onClose={() => !promoting && setPromoteConfirmUser(null)}>
+        <DialogTitle>Promote to full member?</DialogTitle>
+        <DialogContent>
+          {promoteConfirmUser ? displayName(promoteConfirmUser) : 'This person'} will leave the 90-day
+          programme role and receive standard member access. Their account and saved data stay in place.
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPromoteConfirmUser(null)} disabled={promoting}>Cancel</Button>
+          <LoadingButton variant="contained" onClick={handlePromote} loading={promoting}>
+            Promote member
           </LoadingButton>
         </DialogActions>
       </Dialog>

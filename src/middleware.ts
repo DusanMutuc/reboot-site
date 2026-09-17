@@ -7,6 +7,7 @@ import {
   hasRoleCode,
   isPastMemberAllowedApiPath,
   isPastMemberRole,
+  NINETY_DAY_HOME_PATH,
   resolveHomePathForRoleCodes,
 } from '@/lib/userRoles';
 
@@ -29,6 +30,25 @@ const PUBLIC_PREFIXES = [
   '/images',
   '/api/webhooks',
 ];
+
+const NINETY_DAY_PAGE_PREFIXES = [
+  NINETY_DAY_HOME_PATH,
+  '/library',
+  '/courses',
+  '/tracker',
+  '/support',
+  '/reset-password',
+  '/r',
+];
+
+const NINETY_DAY_BLOCKED_API_PREFIXES = [
+  '/api/discovery',
+  '/api/home/search',
+];
+
+function isPathAtOrBelow(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(`${prefix}/`);
+}
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -106,6 +126,38 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = RESET_PATH;
     return NextResponse.redirect(url);
+  }
+
+  const resolvedHomePath = resolveHomePathForRoleCodes(roleCodes);
+  const isNinetyDayHome =
+    pathname === NINETY_DAY_HOME_PATH || pathname.startsWith(`${NINETY_DAY_HOME_PATH}/`);
+
+  // The ninety-day home is an entitlement, not an alternate public layout.
+  if (isNinetyDayHome && !hasRoleCode(roleCodes, 'ninety-day-user')) {
+    const url = req.nextUrl.clone();
+    url.pathname = resolvedHomePath;
+    return NextResponse.redirect(url);
+  }
+
+  // Keep a ninety-day member on their own home even when they follow an old
+  // bookmark or the shared logo link to /home.
+  if (pathname === '/home' && resolvedHomePath === NINETY_DAY_HOME_PATH) {
+    const url = req.nextUrl.clone();
+    url.pathname = NINETY_DAY_HOME_PATH;
+    return NextResponse.redirect(url);
+  }
+
+  if (resolvedHomePath === NINETY_DAY_HOME_PATH) {
+    if (isApiRequest && NINETY_DAY_BLOCKED_API_PREFIXES.some((prefix) => isPathAtOrBelow(pathname, prefix))) {
+      return NextResponse.json({ error: 'Not available in the 90-day programme' }, { status: 403 });
+    }
+
+    const isAllowedPage = NINETY_DAY_PAGE_PREFIXES.some((prefix) => isPathAtOrBelow(pathname, prefix));
+    if (!isApiRequest && !isAllowedPage) {
+      const url = req.nextUrl.clone();
+      url.pathname = NINETY_DAY_HOME_PATH;
+      return NextResponse.redirect(url);
+    }
   }
 
   const assistantAllowed =

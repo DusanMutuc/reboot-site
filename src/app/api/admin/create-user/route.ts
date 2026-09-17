@@ -8,7 +8,16 @@ type CreateUserBody = {
   role: string;
   first_name?: string;
   last_name?: string;
+  ninety_day_cycle_id?: number;
 };
+
+const ONBOARDING_ROLE_CODES = new Set([
+  'user',
+  'ninety-day-user',
+  'coach',
+  'admin',
+  'assistant',
+]);
 
 export async function POST(request: NextRequest) {
   console.log('create-user: Starting request');
@@ -18,14 +27,36 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = (await request.json()) as CreateUserBody;
-    const { email, first_name = '', last_name = '', role } = body;
+    const { email, first_name = '', last_name = '', role, ninety_day_cycle_id } = body;
 
     if (!email || !role) {
       return NextResponse.json({ error: 'Missing email or role' }, { status: 400 });
     }
 
+    if (!ONBOARDING_ROLE_CODES.has(role)) {
+      return NextResponse.json({ error: 'Unsupported onboarding role' }, { status: 400 });
+    }
+
     console.log('create-user: Creating user with role:', role);
     const supa = getAdminClient();
+
+    const cycleId = Number(ninety_day_cycle_id);
+    let cycleStart: string | null = null;
+    if (role === 'ninety-day-user') {
+      if (!Number.isSafeInteger(cycleId) || cycleId <= 0) {
+        return NextResponse.json({ error: 'A 90-day cycle is required' }, { status: 400 });
+      }
+
+      const { data: cycle, error: cycleError } = await supa
+        .from('ninety_day_cycles')
+        .select('starts_on, status')
+        .eq('id', cycleId)
+        .in('status', ['draft', 'active'])
+        .maybeSingle();
+      if (cycleError) return NextResponse.json({ error: cycleError.message }, { status: 400 });
+      if (!cycle) return NextResponse.json({ error: '90-day cycle not found or closed' }, { status: 400 });
+      cycleStart = cycle.starts_on;
+    }
 
     const { data: roleRow, error: roleErr } = await supa
       .from('roles')
@@ -67,19 +98,30 @@ export async function POST(request: NextRequest) {
     console.log('create-user: Creating profile');
     const { error: profErr } = await supa
       .from('profiles')
-      .upsert({ id: userId, first_name, last_name }, { onConflict: 'id' });
+      .upsert(
+        { id: userId, first_name, last_name, introduced_at: cycleStart },
+        { onConflict: 'id' },
+      );
     if (profErr) {
       console.error('create-user: Profile creation error:', profErr);
       return NextResponse.json({ error: profErr.message }, { status: 400 });
     }
 
     console.log('create-user: Assigning role');
-    const { error: linkErr } = await supa.from('user_roles').upsert(
-      { user_id: userId, role_id: roleRow.id },
-      { onConflict: 'user_id,role_id', ignoreDuplicates: true }
-    );
+    const { error: linkErr } = role === 'ninety-day-user'
+      ? await supa.rpc('enroll_ninety_day_user', { p_user_id: userId, p_cycle_id: cycleId })
+      : await supa.from('user_roles').upsert(
+          { user_id: userId, role_id: roleRow.id },
+          { onConflict: 'user_id,role_id', ignoreDuplicates: true },
+        );
     if (linkErr) {
       console.error('create-user: Role assignment error:', linkErr);
+      if (role === 'ninety-day-user') {
+        const cleanup = await supa.auth.admin.deleteUser(userId);
+        if (cleanup.error) {
+          console.error('create-user: Failed to clean up incomplete 90-day user:', cleanup.error);
+        }
+      }
       return NextResponse.json({ error: linkErr.message }, { status: 400 });
     }
 

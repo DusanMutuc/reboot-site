@@ -8,6 +8,7 @@ import type {
   CoachingAttendance,
   ContentItem,
   HelpStep,
+  HomeDiscoveryResultSets,
   HomeData,
   MeetingSlot,
   Metric,
@@ -22,6 +23,7 @@ import { isCancelledGhlStatus } from '@/lib/businessReviews';
 import { loadCoachingCycles, type CoachingCycle } from '@/lib/coachingCycles';
 import { getAvailableCourseIdsForUser } from '@/lib/courseAccess';
 import { getContentNodeHref } from '@/lib/contentNodeLinks';
+import { loadHomeDiscovery } from '@/lib/discovery';
 import { loadBusinessAuditPreparation } from '@/lib/businessAuditPreparation';
 import { GHL } from '@/lib/config';
 import { requireUser } from '@/lib/requireUser';
@@ -48,6 +50,7 @@ export type MomentumHomePayload = {
   trainingStanding: TrainingStanding;
   recommended: ContentItem[];
   content: ContentItem[];
+  discoveryResultSets: HomeDiscoveryResultSets;
   isLegend: boolean;
   year: number;
 };
@@ -822,7 +825,8 @@ function resourceTypeLabel(type: string): string {
   return labels[type.toLowerCase()] ?? type;
 }
 
-async function loadUncategorisedCatalogue(client: SupabaseClient): Promise<ContentItem[]> {
+/** The catalogue used by the member home before the discovery redesign is enabled. */
+async function loadLegacyCatalogue(client: SupabaseClient): Promise<ContentItem[]> {
   const { data, error } = await client.rpc('search_resources_with_page', {
     _q: '',
     _types: null,
@@ -836,12 +840,13 @@ async function loadUncategorisedCatalogue(client: SupabaseClient): Promise<Conte
   });
 
   if (error) {
-    console.error('[momentum-home] catalogue', error);
+    console.error('[momentum-home] legacy catalogue', error);
     return [];
   }
 
   return ((data ?? []) as CatalogueResourceRow[]).map((resource, index) => ({
     id: `resource-${resource.id}`,
+    resourceId: resource.id,
     title: resource.title,
     typeLabel: resourceTypeLabel(resource.type),
     metaLabel: formatResourceDuration(resource.duration),
@@ -852,7 +857,6 @@ async function loadUncategorisedCatalogue(client: SupabaseClient): Promise<Conte
         : normalizeUrl(resource.url) ?? `/r/${resource.id}`,
     thumbIndex: index + 1,
     thumbnailUrl: normalizeUrl(resource.thumbnail),
-    // Required next pass: populate from admin-managed canonical category tags.
     categories: [],
     progressPct: null,
   }));
@@ -916,7 +920,11 @@ function buildCallData(meetings: MeetingSlot[], support: SupportLinks) {
   };
 }
 
-export async function getMomentumHomeData(): Promise<MomentumHomePayload> {
+export async function getMomentumHomeData({
+  memberDiscoveryEnabled = false,
+}: {
+  memberDiscoveryEnabled?: boolean;
+} = {}): Promise<MomentumHomePayload> {
   const guard = await requireUser();
   if (!guard.ok) {
     throw new Error('A signed-in member is required to load the Momentum home.');
@@ -925,7 +933,14 @@ export async function getMomentumHomeData(): Promise<MomentumHomePayload> {
   const admin = getAdminClient();
   const userId = guard.user.id;
   const year = DateTime.now().setZone(BUSINESS_AUDIT_TIMEZONE).year;
-  const [profile, support, cycles, metrics, trainingStanding, content] = await Promise.all([
+  const [
+    profile,
+    support,
+    cycles,
+    metrics,
+    trainingStanding,
+    catalogue,
+  ] = await Promise.all([
     loadProfile(admin, userId),
     loadSupportLinks(admin, userId),
     loadCoachingCycles(admin, userId).catch((error) => {
@@ -934,7 +949,9 @@ export async function getMomentumHomeData(): Promise<MomentumHomePayload> {
     }),
     loadMetrics(guard.supabase, userId, year),
     loadTrainingStanding(admin, userId),
-    loadUncategorisedCatalogue(guard.supabase),
+    memberDiscoveryEnabled
+      ? loadHomeDiscovery(admin, userId)
+      : loadLegacyCatalogue(guard.supabase),
   ]);
   const memberFirstName = firstName(profile, guard.user);
   const activeCycle = getActiveCycle(cycles);
@@ -1018,9 +1035,13 @@ export async function getMomentumHomeData(): Promise<MomentumHomePayload> {
     priorities,
     requiredTraining,
     trainingStanding,
-    // Required next pass: rank the tagged catalogue against the active sprint.
-    recommended: [],
-    content,
+    recommended: memberDiscoveryEnabled && !Array.isArray(catalogue)
+      ? catalogue?.recommended ?? []
+      : [],
+    content: Array.isArray(catalogue) ? catalogue : (catalogue?.content ?? []),
+    discoveryResultSets: memberDiscoveryEnabled && !Array.isArray(catalogue)
+      ? catalogue?.resultSets ?? {}
+      : {},
     isLegend: guard.roleCodes.includes('legend'),
     year,
   };

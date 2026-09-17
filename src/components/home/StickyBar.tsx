@@ -110,6 +110,8 @@ const legendItemSx = (unlocked: boolean) => ({
 const BAND_ID = 'now';
 
 type Props = {
+  /** The signed-in member's role-aware home route. */
+  homeHref?: string;
   memberFirstName: string;
   status: CallStatus;
   nextCall: NextCall | null;
@@ -123,6 +125,7 @@ type Props = {
 };
 
 export default function StickyBar({
+  homeHref = '/home',
   memberFirstName,
   status,
   nextCall,
@@ -263,7 +266,7 @@ export default function StickyBar({
               the bar also has to hold the burger and the booking chip. */}
           <Box
             component={Link}
-            href="/home"
+            href={homeHref}
             aria-label="Reboot Coaching home"
             sx={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}
           >

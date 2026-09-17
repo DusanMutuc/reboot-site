@@ -26,7 +26,23 @@ import BrandRosette from './BrandRosette';
  * across the room. It is also the one large surface on the page with no datum
  * on it, which is precisely why it can afford the colour.
  */
-export default function ContentZoneBanner() {
+export default function ContentZoneBanner({
+  title = 'The Reboot Search Engine',
+  subtitle = 'Find every system, training, playbook and replay.',
+}: {
+  /** Overridable so the banner can name whatever zone it actually opens. */
+  title?: string;
+  /**
+   * The promise under the title, and the reason these are props at all.
+   *
+   * "Find every system, training, playbook and replay" is true for a full
+   * member and false for one on a limited catalogue, and a member who reads a
+   * promise the library cannot keep finds out by searching for something they
+   * cannot open — which is the worst possible moment to learn what you have
+   * bought. A zone marker has to describe the zone underneath it.
+   */
+  subtitle?: string;
+} = {}) {
   const isBrand = useIsBrandAccent();
 
   return (
@@ -113,11 +129,11 @@ export default function ContentZoneBanner() {
           component="h2"
           sx={{ fontSize: { xs: 32, md: 44 }, color: '#ffffff', mb: 1 }}
         >
-          The Reboot Search Engine
+          {title}
         </Typography>
 
         <Typography sx={{ fontSize: { xs: 15.5, md: 17 }, color: 'rgba(255,255,255,0.8)' }}>
-          Find every system, training, playbook and replay.
+          {subtitle}
         </Typography>
       </Container>
     </Box>

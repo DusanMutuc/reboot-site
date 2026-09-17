@@ -8,6 +8,7 @@ Reboot is a Next.js 15 portal backed by Supabase Auth, Postgres, PostgREST RPCs,
 - [Database architecture](docs/DATABASE.md) — identity model, domain relationships, lookups, storage, and mutation rules.
 - [Generated public schema](docs/generated/supabase-public-schema.md) — live public relations, columns, keys, and RPC signatures.
 - [Website architecture and API](docs/WEBSITE.md) — routes, authentication, authorization, handlers, and integrations.
+- [Discovery administration handbook](docs/discovery-admin-guide.md) — the operating guide for topics, synonyms, search, browse, recommendations, and catalogue curation.
 
 The generated schema is a snapshot, not a migration history. Refresh it after database changes:
 

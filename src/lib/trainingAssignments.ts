@@ -333,49 +333,91 @@ export async function loadRequiredTraining(
     const assignment = await loadActiveTrainingAssignment(client, userId, activeCycle.noteId);
     if (!assignment) return null;
 
-    const { nodes, children } = await loadCourseTree(client, assignment.course.id);
-    const course = nodes.get(assignment.course.id);
-    if (!course || course.state !== 'published') return null;
-
-    const partNodes = collectOrderedPartNodes(assignment.course.id, nodes, children);
-    const partIds = partNodes.map((part) => Number(part.id));
-    const [minutesByPart, progressResult] = await Promise.all([
-      loadPartDurations(client, partIds),
-      partIds.length > 0
-        ? client
-            .from('user_node_progress')
-            .select('node_id, status')
-            .eq('user_id', userId)
-            .in('node_id', partIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    if (progressResult.error) {
-      throw new Error(`Failed to load assigned training progress: ${progressResult.error.message}`);
-    }
-
-    const statusByNode = new Map(
-      ((progressResult.data ?? []) as ProgressRow[]).map((progress) => [
-        Number(progress.node_id),
-        progress.status,
-      ]),
+    return await loadCourseAsRequiredTraining(
+      client,
+      userId,
+      assignment.course,
+      assignment.contextLabel,
     );
-    const parts: TrainingPart[] = partNodes.map((part) => ({
-      title: part.title?.trim() || 'Untitled part',
-      minutes: minutesByPart.get(Number(part.id)) ?? 0,
-      description: part.description?.trim() || '',
-      done: statusByNode.get(Number(part.id)) === 'completed',
-    }));
-
-    return {
-      title: assignment.course.title,
-      href: `/courses/${encodeURIComponent(assignment.course.slug)}`,
-      heroUrl: resolveHeroUrl(client, course.hero_image),
-      parts,
-      contextLabel: assignment.contextLabel,
-    };
   } catch (error) {
     console.error('[momentum-home] required training', error);
+    return null;
+  }
+}
+
+async function loadCourseAsRequiredTraining(
+  client: SupabaseClient,
+  userId: string,
+  courseOption: TrainingCourseOption,
+  contextLabel: string | null,
+): Promise<RequiredTraining | null> {
+  const { nodes, children } = await loadCourseTree(client, courseOption.id);
+  const course = nodes.get(courseOption.id);
+  if (!course || course.state !== 'published') return null;
+
+  const partNodes = collectOrderedPartNodes(courseOption.id, nodes, children);
+  const partIds = partNodes.map((part) => Number(part.id));
+  const [minutesByPart, progressResult] = await Promise.all([
+    loadPartDurations(client, partIds),
+    partIds.length > 0
+      ? client
+          .from('user_node_progress')
+          .select('node_id, status')
+          .eq('user_id', userId)
+          .in('node_id', partIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (progressResult.error) {
+    throw new Error(`Failed to load assigned training progress: ${progressResult.error.message}`);
+  }
+
+  const statusByNode = new Map(
+    ((progressResult.data ?? []) as ProgressRow[]).map((progress) => [
+      Number(progress.node_id),
+      progress.status,
+    ]),
+  );
+  const parts: TrainingPart[] = partNodes.map((part) => ({
+    title: part.title?.trim() || 'Untitled part',
+    minutes: minutesByPart.get(Number(part.id)) ?? 0,
+    description: part.description?.trim() || '',
+    done: statusByNode.get(Number(part.id)) === 'completed',
+  }));
+
+  return {
+    title: courseOption.title,
+    href: `/courses/${encodeURIComponent(courseOption.slug)}`,
+    heroUrl: resolveHeroUrl(client, course.hero_image),
+    parts,
+    contextLabel,
+  };
+}
+
+/** The one fixed course included with every 90-day cycle. */
+export async function loadNinetyDayCompassCourse(
+  client: SupabaseClient,
+  userId: string,
+): Promise<RequiredTraining | null> {
+  try {
+    const { data, error } = await client
+      .from('content_nodes')
+      .select('id, title, slug, description')
+      .eq('node_type', 'course')
+      .eq('state', 'published')
+      .eq('slug', 'set-your-compass')
+      .maybeSingle();
+
+    if (error) throw new Error(`Failed to load Set Your Compass: ${error.message}`);
+    if (!data) return null;
+
+    const progressPercent = await loadCourseProgressPercent(client, userId, Number(data.id));
+    const course = asCourseOption(data as CourseRow, progressPercent);
+    if (!course) return null;
+
+    return await loadCourseAsRequiredTraining(client, userId, course, 'Runs the whole programme');
+  } catch (error) {
+    console.error('[ninety-day-home] Set Your Compass', error);
     return null;
   }
 }

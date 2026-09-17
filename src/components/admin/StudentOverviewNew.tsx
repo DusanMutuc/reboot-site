@@ -768,10 +768,14 @@ export default function StudentOverviewNew({
                   onChange={(_event, nextValue) => setInternalSelectedStudentId(nextValue?.id ?? '')}
                   isOptionEqualToValue={(option, value) => option.id === value.id}
                   getOptionLabel={(option) => option.full_name}
-                  renderOption={(props, option) => (
+                  renderOption={(props, option) => {
+                    const { key, ...optionProps } = props;
+
+                    return (
                     <Box
                       component="li"
-                      {...props}
+                      key={key}
+                      {...optionProps}
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
@@ -783,7 +787,8 @@ export default function StudentOverviewNew({
                       </Typography>
                       {option.is_legend ? <LegendMemberIcon /> : null}
                     </Box>
-                  )}
+                    );
+                  }}
                   renderInput={(params) => (
                     <TextField
                       {...params}

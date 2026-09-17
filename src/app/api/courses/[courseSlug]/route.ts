@@ -49,8 +49,8 @@ export async function GET(req: NextRequest, context: unknown) {
     return guard.res;
   }
 
-  const { params } = context as { params: { courseSlug?: string } };
-  const courseSlug = params.courseSlug;
+  const { params } = context as { params: Promise<{ courseSlug?: string }> };
+  const { courseSlug } = await params;
 
   try {
     const courseRow = await resolveAccessibleCourseBySlug(guard.user.id, courseSlug ?? '');

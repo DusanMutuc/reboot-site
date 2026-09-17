@@ -21,6 +21,12 @@ import type { MeetingSlot } from './types';
  *   1  starting within the join window -> join it
  *   2  nothing booked at all           -> book it
  *   3  otherwise                       -> the sooner one, with its date
+ *
+ * A meeting the member cannot move (`reschedulable: false`) reaches state 3
+ * with no action beside it, which is correct rather than unfinished: a fixed
+ * cohort call is something the band reports, not something it can act on. An
+ * add-to-calendar link would be the one action that still makes sense there,
+ * and is worth adding once a recurring event has a URL to point at.
  */
 export function resolveBand(meetings: MeetingSlot[]) {
   const imminent = meetings.find((m) => m.imminent && m.joinUrl);
@@ -206,7 +212,7 @@ export default function MeetingBand({ meetings }: { meetings: MeetingSlot[] }) {
               >
                 Book a call
               </Button>
-            ) : (
+            ) : primary.reschedulable === false ? null : (
               <Button
                 href={primary.bookUrl}
                 sx={{
