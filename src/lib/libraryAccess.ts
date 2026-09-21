@@ -529,7 +529,8 @@ export async function fetchLibraryDetailDataForScope(
     const { data: resourceRows, error: resourcesError } = await adminClient
       .from('resources')
       .select('id, title, type, url, thumbnail, duration, state')
-      .in('id', resourceIds);
+      .in('id', resourceIds)
+      .eq('state', 'published');
 
     if (resourcesError) {
       throw new LibraryAccessError(`Failed to load library resources: ${resourcesError.message}`, 500);
