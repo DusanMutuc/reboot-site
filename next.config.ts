@@ -1,6 +1,8 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // Keep local database testing separate from another dev/build process.
+  distDir: process.env.REBOOT_NEXT_DIST_DIR || '.next',
   outputFileTracingIncludes: {
     '/api/admin/discovery/guide': ['./docs/discovery-admin-quickref.html'],
   },
