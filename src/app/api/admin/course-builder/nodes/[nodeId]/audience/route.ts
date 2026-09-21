@@ -204,6 +204,25 @@ export async function PUT(
     const mode = normalizeMode(body?.mode);
     const userIds = Array.from(new Set((body?.userIds ?? []).filter((value) => typeof value === 'string')));
 
+    // Resolve required training access before changing the course audience.
+    const { data: assignedRows, error: assignedRowsError } = await adminClient
+      .from('user_training_assignments')
+      .select('user_id')
+      .eq('course_node_id', nodeId)
+      .is('ended_at', null);
+
+    if (assignedRowsError) {
+      throw new CourseBuilderError('Failed to preserve assigned training access', 500, {
+        details: assignedRowsError.message,
+        nodeId,
+      });
+    }
+
+    const accessUserIds = Array.from(new Set([
+      ...(mode === 'specific_users' ? userIds : []),
+      ...(assignedRows ?? []).map((row) => row.user_id),
+    ]));
+
     const nextVisibility = mode === 'public' ? 'public' : 'limited';
     const { error: updateError } = await adminClient
       .from('content_nodes')
@@ -263,13 +282,13 @@ export async function PUT(
       }
     }
 
-    if (mode === 'specific_users' && userIds.length > 0) {
+    if (accessUserIds.length > 0) {
       const { error: insertUsersError } = await adminClient
         .from('user_course_visibility')
-        .insert(userIds.map((userId) => ({ user_id: userId, course_node_id: nodeId })));
+        .insert(accessUserIds.map((userId) => ({ user_id: userId, course_node_id: nodeId })));
 
       if (insertUsersError) {
-        throw new CourseBuilderError('Failed to assign course audience users', 500, {
+        throw new CourseBuilderError('Failed to assign course audience and training access', 500, {
           details: insertUsersError.message,
           nodeId,
         });

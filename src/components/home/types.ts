@@ -194,6 +194,9 @@ export type ContentItem = {
   thumbnailUrl?: string | null;
   categories: ContentCategory[];
   progressPct: number | null;
+  /** A named human suggestion must never be mistaken for an algorithmic one. */
+  recommendationSource?: 'coach' | 'algorithm';
+  coachName?: string | null;
 };
 
 export type BrowseDiscoverySelection = ContentCategory | 'all' | 'for-you';

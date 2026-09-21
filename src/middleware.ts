@@ -31,6 +31,8 @@ const PUBLIC_PREFIXES = [
   '/api/webhooks',
 ];
 
+const NINETY_DAY_BLOCKED_API_PREFIXES = ['/api/discovery', '/api/home/search'];
+
 const NINETY_DAY_PAGE_PREFIXES = [
   NINETY_DAY_HOME_PATH,
   '/library',
@@ -133,6 +135,13 @@ export async function middleware(req: NextRequest) {
   }
 
   if (resolvedHomePath === NINETY_DAY_HOME_PATH) {
+    if (isApiRequest && NINETY_DAY_BLOCKED_API_PREFIXES.some((prefix) => isPathAtOrBelow(pathname, prefix))) {
+      return NextResponse.json(
+        { error: 'Not available in the 90-day programme' },
+        { status: 403 },
+      );
+    }
+
     const allowed = NINETY_DAY_PAGE_PREFIXES.some((prefix) => isPathAtOrBelow(pathname, prefix));
     if (!isApiRequest && !allowed) {
       const url = req.nextUrl.clone();

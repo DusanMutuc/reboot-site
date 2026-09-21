@@ -19,7 +19,7 @@ export default async function Home() {
   try {
     codes = await fetchUserRoleCodes(supabase, user.id);
   } catch {
-    redirect('/dashboard');
+    redirect('/home');
   }
 
   redirect(resolveHomePathForRoleCodes(codes));

@@ -246,7 +246,7 @@ export default function BusinessAuditPreparationForm() {
           <Box component="nav" aria-label="Back navigation" sx={{ mb: { xs: 3, md: 4 } }}>
             <Button
               component={Link}
-              href="/dashboard"
+              href="/home"
               color="inherit"
               startIcon={<ArrowBackRoundedIcon />}
               sx={{
@@ -255,7 +255,7 @@ export default function BusinessAuditPreparationForm() {
                 border: '1px solid rgba(255,255,255,0.24)',
                 borderRadius: 2,
                 bgcolor: 'rgba(255,255,255,0.06)',
-                fontSize: '1.05rem',
+                fontSize: 15,
                 fontWeight: 800,
                 textTransform: 'none',
                 '&:hover': { bgcolor: 'rgba(255,255,255,0.12)' },
@@ -275,7 +275,7 @@ export default function BusinessAuditPreparationForm() {
             sx={{
               mt: 0.75,
               fontFamily: 'League Spartan, sans-serif',
-              fontSize: { xs: '2.6rem', sm: '3.7rem' },
+              fontSize: { xs: 34, sm: 42 },
               fontWeight: 800,
               lineHeight: 0.98,
             }}
@@ -309,7 +309,7 @@ export default function BusinessAuditPreparationForm() {
               If you only just booked the meeting, synchronization can take up to one hour. You
               can return using the reminder link once the appointment has been connected.
             </Typography>
-            <Button component={Link} href="/dashboard" variant="contained" sx={{ mt: 3 }}>
+            <Button component={Link} href="/home" variant="contained" sx={{ mt: 3 }}>
               Return to Member Hub
             </Button>
           </Paper>
@@ -614,7 +614,7 @@ function QuestionField({
           display: 'block',
           mb: 1.25,
           maxWidth: 720,
-          fontSize: { xs: '1.1rem', sm: '1.3rem' },
+          fontSize: { xs: 16, sm: 17 },
           fontWeight: 850,
           lineHeight: 1.4,
           letterSpacing: '-0.01em',
@@ -645,7 +645,7 @@ function QuestionField({
             borderRadius: 2.5,
           },
           '& .MuiInputBase-inputMultiline': {
-            fontSize: '1.1rem',
+            fontSize: 16,
             lineHeight: 1.65,
           },
         }}
@@ -673,7 +673,7 @@ function RatingField({
         <Box sx={{ color: 'primary.main', display: 'flex' }}>{icon}</Box>
         <Typography
           sx={{
-            fontSize: { xs: '1.1rem', sm: '1.2rem' },
+            fontSize: { xs: 16, sm: 17 },
             fontWeight: 850,
             lineHeight: 1.4,
           }}
