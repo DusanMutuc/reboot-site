@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { parseResourceId, resolveResourceRedirectTarget } from '@/lib/resourceRedirect';
 import { adminClient } from '@/lib/courseBuilder';
 import { canUserAccessNodeViaCourse } from '@/lib/courseAccess';
 import { getNinetyDayAccessibleNodeIds } from '@/lib/ninetyDayProgramme';
@@ -54,15 +55,21 @@ async function canAccessNinetyDayResource(userId: string, resourceId: number): P
   return courseAccess.some(Boolean);
 }
 
+function redirectResource(target: string) {
+  const response = NextResponse.redirect(target, { status: 302 });
+  response.headers.set('Cache-Control', 'private, no-store');
+  return response;
+}
+
 export async function GET(req: Request) {
   // Extract /r/[id] from the path without using the typed context arg
   const { pathname } = new URL(req.url);
   const match = pathname.match(/\/r\/([^/]+)\/?$/);
   const id = match?.[1];
 
-  const numericId = Number(id);
-  if (!id || !Number.isFinite(numericId)) {
-    return NextResponse.redirect(new URL('/', req.url));
+  const numericId = parseResourceId(id);
+  if (numericId === null) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
   const supa = getSupabaseServer();
@@ -84,13 +91,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // External → redirect as-is
+  // Validate the stored destination without fetching it.
   if (!r.storage_bucket || !r.storage_path) {
-    const target = r.url ?? '/';
-    const resolved = target.startsWith('http')
-      ? target
-      : new URL(target, req.url).toString();
-    return NextResponse.redirect(resolved, { status: 302 });
+    const target = resolveResourceRedirectTarget(r.url, req.url);
+    if (!target) {
+      return NextResponse.json({ error: 'Link unavailable' }, { status: 500 });
+    }
+    return redirectResource(target);
   }
 
   // Storage-backed → sign & redirect
@@ -107,5 +114,5 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Link unavailable' }, { status: 500 });
   }
 
-  return NextResponse.redirect(signed.signedUrl, { status: 302 });
+  return redirectResource(signed.signedUrl);
 }
