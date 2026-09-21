@@ -103,7 +103,7 @@ const FIELD_SX = {
 
 const LABEL_SX = {
   fontWeight: 700,
-  fontSize: '1.6rem',
+  fontSize: 17,
   lineHeight: 1.3,
   color: 'text.primary',
   mb: 1,
@@ -384,7 +384,7 @@ function SmartDocPreview({
       <Typography
         component="h2"
         variant="h2"
-        sx={{ fontWeight: 650, fontSize: { xs: '1.35rem', sm: '2rem' }, lineHeight: 1.25 }}
+        sx={{ fontWeight: 650, fontSize: { xs: 22, sm: 30 }, lineHeight: 1.25 }}
       >
         {title}
       </Typography>

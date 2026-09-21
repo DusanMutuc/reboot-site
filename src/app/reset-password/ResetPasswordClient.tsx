@@ -96,7 +96,7 @@ export default function ResetPasswordClient() {
     setLoading(false);
 
     const cameViaRecovery = !!searchParams.get('access_token') || !!searchParams.get('refresh_token');
-    router.replace(cameViaRecovery ? '/login' : '/dashboard');
+    router.replace(cameViaRecovery ? '/login' : '/home');
   };
 
   return (

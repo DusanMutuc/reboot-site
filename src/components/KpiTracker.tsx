@@ -637,7 +637,7 @@ export default function KpiTracker({
                 }}
                 disabled={yearLoading || saving}
               >
-                <InputLabel id="year-select-label" sx={{ fontSize: '1.25rem' }}>
+                <InputLabel id="year-select-label" sx={{ fontSize: 15 }}>
                   Year
                 </InputLabel>
                 <Select
@@ -645,13 +645,13 @@ export default function KpiTracker({
                   label="Year"
                   value={String(selectedYear)}
                   onChange={handleChangeYear}
-                  sx={{ fontSize: '1.25rem' }}
+                  sx={{ fontSize: 15 }}
                 >
                   {yearOptions.map((year) => (
                     <MenuItem
                       key={year}
                       value={String(year)}
-                      sx={{ fontSize: '1.25rem' }}
+                      sx={{ fontSize: 15 }}
                     >
                       {year}
                     </MenuItem>
@@ -672,7 +672,7 @@ export default function KpiTracker({
                 }}
                 disabled={yearLoading || saving}
               >
-                <InputLabel id="month-select-label" sx={{ fontSize: '1.25rem' }}>
+                <InputLabel id="month-select-label" sx={{ fontSize: 15 }}>
                   Month
                 </InputLabel>
                 <Select
@@ -680,13 +680,13 @@ export default function KpiTracker({
                   label="Month"
                   value={String(selectedMonth)}
                   onChange={handleChangeMonth}
-                  sx={{ fontSize: '1.25rem' }}
+                  sx={{ fontSize: 15 }}
                 >
                   {monthOptions.map((month) => (
                     <MenuItem
                       key={month.value}
                       value={String(month.value)}
-                      sx={{ fontSize: '1.25rem' }}
+                      sx={{ fontSize: 15 }}
                     >
                       {month.name}
                     </MenuItem>
@@ -810,7 +810,7 @@ export default function KpiTracker({
                             left: 14,
                             top: '50%',
                             transform: 'translateY(-50%)',
-                            fontSize: '2rem',
+                            fontSize: 24,
                             fontWeight: 700,
                             color: 'text.secondary',
                             pointerEvents: 'none',
@@ -846,7 +846,7 @@ export default function KpiTracker({
                         placeholder="0"
                         sx={{
                           '& .MuiOutlinedInput-root': {
-                            fontSize: '2rem',
+                            fontSize: 24,
                             fontWeight: 700,
                             '& input': {
                               textAlign: 'left',

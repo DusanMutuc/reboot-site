@@ -132,7 +132,7 @@ export default function LibraryDetailPage({ scope }: LibraryDetailPageProps) {
                 <Typography
                   variant="body1"
                   color="text.secondary"
-                  sx={{ fontSize: '1.125rem', lineHeight: 1.6 }}
+                  sx={{ fontSize: 17, lineHeight: 1.6 }}
                 >
                   {node.description}
                 </Typography>
