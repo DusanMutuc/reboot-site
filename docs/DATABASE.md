@@ -140,6 +140,16 @@ legend scope includes the main and Legends roots and requires the `legend` role.
 
 The upload route accepts `pdf` and `image`, writes under `<type>/<random UUID>.<extension>`, inserts the `resources` row, and removes the object if the insert fails.
 
+## 90-day programme cycles
+
+Multiple 90-day cycles can be active at once. Each cycle has its own systems,
+current focus, meetings, and enrolled members. The member home selects the cycle
+through that member's open enrollment, rather than a global active-cycle lookup.
+
+`ninety_day_cycle_users_one_open_enrollment_idx` still limits each member to one
+open enrollment. End an enrollment before transferring the member to another
+cycle. Activation still requires exactly eight systems and a current system.
+
 ## Meetings and attendance
 
 ```text
