@@ -3,7 +3,10 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import {
   ACCESS_REMOVED_PATH,
+  canSwitchMemberViews,
+  fetchMemberHomeContext,
   fetchUserRoleCodes,
+  hasDualMembership,
   hasRoleCode,
   isPastMemberAllowedApiPath,
   isPastMemberRole,
@@ -99,7 +102,7 @@ export async function middleware(req: NextRequest) {
     }
 
     const url = req.nextUrl.clone();
-    url.pathname = resolveHomePathForRoleCodes(roleCodes);
+    url.pathname = '/';
     return NextResponse.redirect(url);
   }
 
@@ -123,16 +126,19 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  const resolvedHomePath = resolveHomePathForRoleCodes(roleCodes);
+  const homeContext = hasDualMembership(roleCodes) ? await fetchMemberHomeContext(supabase) : undefined;
+  const resolvedHomePath = resolveHomePathForRoleCodes(roleCodes, homeContext);
   const isNinetyDayHome = isPathAtOrBelow(pathname, NINETY_DAY_HOME_PATH);
+  const ninetyDayOnly = hasRoleCode(roleCodes, 'ninety-day-user') && !hasRoleCode(roleCodes, 'user')
+    && resolvedHomePath === NINETY_DAY_HOME_PATH;
 
-  if (isNinetyDayHome && resolvedHomePath !== NINETY_DAY_HOME_PATH) {
+  if (isNinetyDayHome && !ninetyDayOnly && !canSwitchMemberViews(roleCodes, homeContext)) {
     const url = req.nextUrl.clone();
     url.pathname = resolvedHomePath;
     return NextResponse.redirect(url);
   }
 
-  if (resolvedHomePath === NINETY_DAY_HOME_PATH) {
+  if (ninetyDayOnly) {
     const allowed = NINETY_DAY_PAGE_PREFIXES.some((prefix) => isPathAtOrBelow(pathname, prefix));
     if (!isApiRequest && !allowed) {
       const url = req.nextUrl.clone();

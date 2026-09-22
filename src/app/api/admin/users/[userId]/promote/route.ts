@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'Invalid user id' }, { status: 400 });
   }
 
-  const { data, error } = await getAdminClient().rpc('promote_ninety_day_user', {
+  const { data, error } = await getAdminClient().rpc('grant_full_membership', {
     p_user_id: userId,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

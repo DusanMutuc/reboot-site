@@ -45,6 +45,7 @@ export default async function NinetyDayHomePage() {
 
   const programme = await loadNinetyDayProgramme(user.id);
   if (!programme) {
+    if (hasRoleCode(roleCodes, 'user')) redirect('/dashboard');
     return <NinetyDaySetupPending memberFirstName={memberFirstName} />;
   }
 

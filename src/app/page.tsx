@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabaseServer';
-import { fetchUserRoleCodes, resolveHomePathForRoleCodes } from '@/lib/userRoles';
+import { fetchMemberHomeContext, fetchUserRoleCodes, hasDualMembership, resolveHomePathForRoleCodes } from '@/lib/userRoles';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -22,5 +22,6 @@ export default async function Home() {
     redirect('/dashboard');
   }
 
-  redirect(resolveHomePathForRoleCodes(codes));
+  const homeContext = hasDualMembership(codes) ? await fetchMemberHomeContext(supabase) : undefined;
+  redirect(resolveHomePathForRoleCodes(codes, homeContext));
 }

@@ -363,7 +363,6 @@ async function buildAdminUserDirectory() {
     fetchSupportDirectory(directoryUserIds, authUsersMap),
     loadMemberPauses(supa, directoryUserIds, true),
   ]);
-  const fullMemberUserIdSet = new Set(userIds);
   const ninetyDayUserIdSet = new Set(ninetyDayUserIds);
   const legendUserIdSet = new Set(legendUserIds);
   const pastMemberUserIdSet = new Set(pastMemberUserIds);
@@ -384,7 +383,7 @@ async function buildAdminUserDirectory() {
         last_sign_in_at: auth?.last_sign_in_at ?? null,
         is_current_member: currentMemberUserIdSet.has(profile.id),
         is_ninety_day_user:
-          ninetyDayUserIdSet.has(profile.id) && !fullMemberUserIdSet.has(profile.id),
+          ninetyDayUserIdSet.has(profile.id),
         is_legend: legendUserIdSet.has(profile.id),
         is_past_member: pastMemberUserIdSet.has(profile.id),
         pause_started_at: pause?.started_at ?? null,

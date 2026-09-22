@@ -25,6 +25,7 @@ import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
 import { supabase } from '@/lib/supabaseClient';
 import type { BookingOption, CalendarLink, CallStatus, NextCall, RoomOption } from './types';
 import rebootLogo from '../../../public/Reboot Logo - Color.png';
+import MembershipViewSwitcher from '@/components/MembershipViewSwitcher';
 
 /** The programme content and tracker are already present on this page. */
 
@@ -342,6 +343,7 @@ export default function StickyBar({
             <MenuRoundedIcon />
           </IconButton>
         </Box>
+        <MembershipViewSwitcher currentView="ninety-day" />
       </Container>
 
       {/* The nav block is desktop-only, so without this a phone got the logo,

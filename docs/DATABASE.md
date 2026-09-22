@@ -150,6 +150,25 @@ through that member's open enrollment, rather than a global active-cycle lookup.
 open enrollment. End an enrollment before transferring the member to another
 cycle. Activation still requires exactly eight systems and a current system.
 
+Full membership (`user`) and programme membership (`ninety-day-user`) are additive.
+Enrolling a full member retains their full access. `grant_full_membership` adds
+full access without ending an enrollment; `end_ninety_day_enrollment` closes only
+the specified enrollment and retains roles and history. The older promotion RPC
+is retained for compatibility but is no longer called by the website.
+
+`member_home_preferences` stores the admin-selected default home. Members can
+read only their own preference, and only service-role admin operations can write
+it. `admin_enroll_ninety_day_user` can enroll and select the programme default in
+one transaction. That default requires an active cycle. Ending an enrollment or
+completing its cycle resets the preference to the member dashboard.
+
+`get_my_member_home_context` returns only the signed-in member's preference and
+whether they have an open enrollment in an active cycle. Dual members with such
+an enrollment can switch dashboards from the header; navigation does not change
+their default or access. Without an active enrollment, dual members fall back to
+the member dashboard. Programme-only members retain the programme/setup view
+and never receive full membership automatically.
+
 ## Meetings and attendance
 
 ```text

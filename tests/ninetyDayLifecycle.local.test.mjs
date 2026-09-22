@@ -204,28 +204,51 @@ test('local 90-day lifecycle stays isolated from ordinary members', {
       .from('user_roles')
       .select('roles(code)')
       .eq('user_id', onboarded.user_id));
-    assert.deepEqual(promotedRoles.map((row) => row.roles.code), ['user']);
+    assert.deepEqual(promotedRoles.map((row) => row.roles.code).sort(), ['ninety-day-user', 'user']);
     const history = checked(await service
       .from('ninety_day_cycle_users')
       .select('ended_at,outcome')
       .eq('user_id', onboarded.user_id)
       .single());
-    assert.ok(history.ended_at);
-    assert.equal(history.outcome, 'promoted');
+    assert.equal(history.ended_at, null);
+    assert.equal(history.outcome, null);
     const promotedNinetyDayDirectory = await json(await call(
       `/api/admin/users?membership=ninety-day&query=${encodeURIComponent(programmeEmail)}`,
       admin,
     ));
-    assert.equal(promotedNinetyDayDirectory.total, 0);
+    assert.equal(promotedNinetyDayDirectory.total, 1);
     const promotedMemberDirectory = await json(await call(
       `/api/admin/users?membership=current&query=${encodeURIComponent(programmeEmail)}`,
       admin,
     ));
     assert.equal(promotedMemberDirectory.total, 1);
-    assert.equal(promotedMemberDirectory.items[0].is_ninety_day_user, false);
+    assert.equal(promotedMemberDirectory.items[0].is_ninety_day_user, true);
     const promotedHome = await follow('/home/ninety-day', programmeUser);
     assert.equal(promotedHome.status, 200);
-    assert.equal(new URL(promotedHome.url).pathname, '/dashboard');
+    assert.equal(new URL(promotedHome.url).pathname, '/home/ninety-day');
+    assert.equal((await call('/dashboard', programmeUser)).status, 200);
+
+    // A full member can join, use either dashboard, and keep their library access.
+    const ordinaryCoursesBefore = await json(await call('/api/courses', ordinaryUser));
+    await json(await call('/api/admin/ninety-day', admin, {
+      action: 'enroll-user', user_id: ordinary.user_id, cycle_id: cycleId, make_default: true,
+    }));
+    assert.equal(new URL((await follow('/', ordinaryUser)).url).pathname, '/home/ninety-day');
+    assert.equal((await call('/dashboard', ordinaryUser)).status, 200);
+    assert.equal((await call('/home/ninety-day', ordinaryUser)).status, 200);
+    const ordinaryCoursesAfter = await json(await call('/api/courses', ordinaryUser));
+    for (const course of ordinaryCoursesBefore.courses) {
+      assert.ok(ordinaryCoursesAfter.courses.some((item) => item.id === course.id));
+    }
+    await json(await call('/api/admin/ninety-day', admin, {
+      action: 'set-default-home', user_id: ordinary.user_id, default_home: 'member',
+    }));
+    assert.equal(new URL((await follow('/', ordinaryUser)).url).pathname, '/dashboard');
+    assert.equal((await call('/home/ninety-day', ordinaryUser)).status, 200);
+    await json(await call('/api/admin/ninety-day', admin, {
+      action: 'end-enrollment', user_id: ordinary.user_id, cycle_id: cycleId,
+    }));
+    assert.equal(new URL((await follow('/home/ninety-day', ordinaryUser)).url).pathname, '/dashboard');
   } finally {
     for (const userId of createdUserIds.reverse()) {
       await service.auth.admin.deleteUser(userId);

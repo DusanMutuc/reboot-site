@@ -76,6 +76,8 @@ async function fetchUserPayload(userId: string) {
       introduced_at: profile.introduced_at ?? null,
       is_legend: hasRoleCode(roleCodes, 'legend'),
       is_past_member: hasRoleCode(roleCodes, 'past_member'),
+      is_current_member: hasRoleCode(roleCodes, 'user') && !hasRoleCode(roleCodes, 'past_member'),
+      is_ninety_day_user: hasRoleCode(roleCodes, 'ninety-day-user'),
     },
   } as const;
 }

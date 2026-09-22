@@ -69,37 +69,57 @@ export async function GET(request: NextRequest) {
         .not('slug', 'is', null)
         .in('node_type', ['lesson', 'chapter', 'playlist'])
         .order('title'),
-      supa.from('roles').select('id').eq('code', 'ninety-day-user').maybeSingle(),
+      supa.from('roles').select('id, code').in('code', ['user', 'ninety-day-user', 'past_member']),
     ]);
 
   for (const result of [cyclesResult, systemsResult, meetingsResult, enrollmentsResult, optionsResult, roleResult]) {
     if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 });
   }
 
-  const roleId = roleResult.data?.id ?? null;
-  const { data: roleAssignments, error: assignmentsError } = roleId
-    ? await supa.from('user_roles').select('user_id').eq('role_id', roleId)
-    : { data: [], error: null };
-  if (assignmentsError) return NextResponse.json({ error: assignmentsError.message }, { status: 400 });
+  const roleById = new Map((roleResult.data ?? []).map((role) => [role.id, role.code]));
+  const fullMemberIds = new Set<string>();
+  const programmeMemberIds = new Set<string>();
+  const pastMemberIds = new Set<string>();
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await supa.from('user_roles').select('user_id, role_id')
+      .in('role_id', [...roleById.keys()]).order('user_id').order('role_id').range(offset, offset + 499);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    for (const row of data ?? []) {
+      const code = roleById.get(row.role_id);
+      if (code === 'user') fullMemberIds.add(row.user_id);
+      if (code === 'ninety-day-user') programmeMemberIds.add(row.user_id);
+      if (code === 'past_member') pastMemberIds.add(row.user_id);
+    }
+    if (!data || data.length < 500) break;
+  }
 
   const enrollmentRows = enrollmentsResult.data ?? [];
-  const ninetyDayUserIds = Array.from(new Set([
-    ...(roleAssignments ?? []).map((row) => row.user_id),
-    ...enrollmentRows.map((row) => row.user_id),
+  const memberIds = Array.from(new Set([
+    ...fullMemberIds, ...programmeMemberIds, ...enrollmentRows.map((row) => row.user_id),
   ]));
-  const { data: profiles, error: profilesError } = ninetyDayUserIds.length > 0
-    ? await supa.from('profiles').select('id, first_name, last_name').in('id', ninetyDayUserIds)
-    : { data: [], error: null };
-  if (profilesError) return NextResponse.json({ error: profilesError.message }, { status: 400 });
-
-  const profileMap = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
-  const people = ninetyDayUserIds.map((id) => {
-    const profile = profileMap.get(id);
-    return {
-      id,
-      name: `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim() || 'Unnamed user',
-    };
-  });
+  const people: Array<{ id: string; name: string; has_full_membership: boolean; default_home: string }> = [];
+  for (let offset = 0; offset < memberIds.length; offset += 200) {
+    const ids = memberIds.slice(offset, offset + 200);
+    const [profilesResult, preferencesResult] = await Promise.all([
+      supa.from('profiles').select('id, first_name, last_name').in('id', ids),
+      supa.from('member_home_preferences').select('user_id, default_home').in('user_id', ids),
+    ]);
+    const error = profilesResult.error ?? preferencesResult.error;
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    const preferences = new Map((preferencesResult.data ?? []).map((row) => [row.user_id, row.default_home]));
+    for (const profile of profilesResult.data ?? []) {
+      const hasActiveCycle = enrollmentRows.some((row) => row.user_id === profile.id && row.ended_at === null
+        && cyclesResult.data?.some((cycle) => cycle.id === row.cycle_id && cycle.status === 'active'));
+      people.push({
+        id: profile.id,
+        name: `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim() || 'Unnamed user',
+        has_full_membership: fullMemberIds.has(profile.id),
+        default_home: !fullMemberIds.has(profile.id) || (hasActiveCycle && preferences.get(profile.id) === 'ninety-day')
+          ? 'ninety-day' : 'member',
+      });
+    }
+  }
+  people.sort((a, b) => a.name.localeCompare(b.name));
   const openEnrollmentIds = new Set(
     enrollmentRows.filter((row) => row.ended_at === null).map((row) => row.user_id),
   );
@@ -113,13 +133,15 @@ export async function GET(request: NextRequest) {
       .map((row) => ({
         ...row,
         name: people.find((person) => person.id === row.user_id)?.name ?? 'Unnamed user',
+        has_full_membership: fullMemberIds.has(row.user_id),
+        default_home: people.find((person) => person.id === row.user_id)?.default_home ?? 'member',
       })),
   }));
 
   return NextResponse.json({
     cycles,
     systemOptions: optionsResult.data ?? [],
-    availableUsers: people.filter((person) => !openEnrollmentIds.has(person.id)),
+    availableUsers: people.filter((person) => !openEnrollmentIds.has(person.id) && !pastMemberIds.has(person.id)),
   });
 }
 
@@ -194,11 +216,33 @@ export async function POST(request: NextRequest) {
     if (!cycleId || !validUuid(body.user_id)) {
       return NextResponse.json({ error: 'Cycle and user are required' }, { status: 400 });
     }
-    const { error } = await supa.rpc('enroll_ninety_day_user', {
+    const { error } = await supa.rpc('admin_enroll_ninety_day_user', {
       p_user_id: body.user_id,
       p_cycle_id: cycleId,
+      p_make_default: body.make_default === true,
     });
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    invalidateAdminUserDirectory();
+    return NextResponse.json({ ok: true });
+  }
+
+  if (['set-default-home', 'grant-full-membership', 'end-enrollment'].includes(action)) {
+    if (!validUuid(body.user_id)) {
+      return NextResponse.json({ error: 'A valid user is required' }, { status: 400 });
+    }
+    if (action === 'set-default-home' && !['member', 'ninety-day'].includes(stringValue(body.default_home))) {
+      return NextResponse.json({ error: 'Invalid default home' }, { status: 400 });
+    }
+    const cycleId = positiveInteger(body.cycle_id);
+    if (action === 'end-enrollment' && !cycleId) {
+      return NextResponse.json({ error: 'A cycle is required' }, { status: 400 });
+    }
+    const result = action === 'set-default-home'
+      ? await supa.rpc('set_member_default_home', { p_user_id: body.user_id, p_default_home: body.default_home })
+      : action === 'grant-full-membership'
+        ? await supa.rpc('grant_full_membership', { p_user_id: body.user_id })
+        : await supa.rpc('end_ninety_day_enrollment', { p_user_id: body.user_id, p_cycle_id: cycleId });
+    if (result.error) return NextResponse.json({ error: result.error.message }, { status: 400 });
     invalidateAdminUserDirectory();
     return NextResponse.json({ ok: true });
   }

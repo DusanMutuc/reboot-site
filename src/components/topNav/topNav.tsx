@@ -10,6 +10,7 @@ import {
 import MenuIcon from '@mui/icons-material/Menu';
 import { supabase } from '@/lib/supabaseClient';
 import { extractRoleCodes } from '@/lib/userRoles';
+import MembershipViewSwitcher from '@/components/MembershipViewSwitcher';
 import type { Theme } from '@mui/material/styles';
 import type { SystemStyleObject } from '@mui/system';
 
@@ -189,12 +190,14 @@ export default function TopNav({
               }}
             >
               {/* Logo */}
-              <Box
-                component="img"
-                src="/Reboot Logo - Color.png"
-                alt="Reboot logo"
-                sx={{ height: { xs: 28, sm: 32, md: 45 }, width: 'auto', order: { xs: 0, md: 2 } }}
-              />
+              <Box component={Link} href="/" aria-label="Reboot home" sx={{ order: { xs: 0, md: 2 }, display: 'flex' }}>
+                <Box
+                  component="img"
+                  src="/Reboot Logo - Color.png"
+                  alt="Reboot logo"
+                  sx={{ height: { xs: 28, sm: 32, md: 45 }, width: 'auto' }}
+                />
+              </Box>
 
               {/* Title */}
               <Typography
@@ -220,6 +223,8 @@ export default function TopNav({
                 </IconButton>
               </Box>
             </Box>
+
+            <MembershipViewSwitcher currentView="member" />
 
             {/* DESKTOP NAV */}
             <Box

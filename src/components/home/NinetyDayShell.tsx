@@ -128,7 +128,7 @@ export default function NinetyDayShell({
     <AccentProvider accent={accent}>
       <Box sx={{ minHeight: '100dvh', bgcolor: brand.page, display: 'flex', flexDirection: 'column' }}>
         <StickyBar
-          homeHref="/home/ninety-day"
+          homeHref="/"
           memberFirstName={data.memberFirstName}
           status={data.callStatus}
           nextCall={nextCall}

@@ -27,6 +27,30 @@ export type AppHomePath =
 
 type RoleQueryClient = Pick<SupabaseClient, 'from'>;
 
+export type MemberHomeContext = {
+  default_home: 'member' | 'ninety-day';
+  has_active_ninety_day_enrollment: boolean;
+};
+
+export async function fetchMemberHomeContext(
+  client: Pick<SupabaseClient, 'rpc'>,
+): Promise<MemberHomeContext> {
+  const { data, error } = await client.rpc('get_my_member_home_context');
+  if (error) throw new Error(error.message);
+  return {
+    default_home: data?.default_home === 'ninety-day' ? 'ninety-day' : 'member',
+    has_active_ninety_day_enrollment: data?.has_active_ninety_day_enrollment === true,
+  };
+}
+
+export function hasDualMembership(codes: readonly string[]): boolean {
+  return codes.includes('user') && codes.includes(NINETY_DAY_USER_ROLE_CODE) && !isPastMemberRole(codes);
+}
+
+export function canSwitchMemberViews(codes: readonly string[], context?: MemberHomeContext): boolean {
+  return hasDualMembership(codes) && context?.has_active_ninety_day_enrollment === true;
+}
+
 export function extractRoleCodes(rows: UserRoleRow[] | null | undefined): string[] {
   return (rows ?? [])
     .flatMap((row) => {
@@ -69,7 +93,7 @@ export function isPastMemberAllowedApiPath(pathname: string): boolean {
   return PAST_MEMBER_ALLOWED_API_PATHS.has(pathname);
 }
 
-export function resolveHomePathForRoleCodes(codes: readonly string[]): AppHomePath {
+export function resolveHomePathForRoleCodes(codes: readonly string[], context?: MemberHomeContext): AppHomePath {
   if (isPastMemberRole(codes)) {
     return ACCESS_REMOVED_PATH;
   }
@@ -86,8 +110,11 @@ export function resolveHomePathForRoleCodes(codes: readonly string[]): AppHomePa
     return '/assistant-library';
   }
 
-  // Full membership wins if both roles are ever present during a manual repair.
-  // The promotion RPC normally swaps them atomically.
+  if (canSwitchMemberViews(codes, context) && context?.default_home === 'ninety-day') {
+    return NINETY_DAY_HOME_PATH;
+  }
+
+  // Programme-only members keep their programme home, including setup pending.
   if (isNinetyDayUserRole(codes) && !hasRoleCode(codes, 'user')) {
     return NINETY_DAY_HOME_PATH;
   }

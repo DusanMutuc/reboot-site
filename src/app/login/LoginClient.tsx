@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { extractRoleCodes, resolveHomePathForRoleCodes } from '@/lib/userRoles';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -76,24 +75,9 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
       return;
     }
   
-    try {
-      const { data: rolesRows, error } = await supabase
-        .from('user_roles')
-        .select('roles ( code )')
-        .eq('user_id', user.id);
-
-      if (error) {
-        router.push(redirectTo || '/dashboard');
-        return;
-      }
-
-      const codes = extractRoleCodes(rolesRows);
-      router.replace(redirectTo || resolveHomePathForRoleCodes(codes));
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e);
-      setError(`Role check failed: ${message}`);
-      router.push(redirectTo || '/dashboard');
-    }
+    // The root route resolves membership and the admin-selected default home.
+    router.replace(redirectTo || '/');
+    router.refresh();
   };
 
   const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {

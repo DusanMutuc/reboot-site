@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { LoadingButton } from '@mui/lab';
+import ProgrammeMembershipControls from './ProgrammeMembershipControls';
 import {
   Alert,
   Autocomplete,
   Box,
   Button,
   Chip,
+  Checkbox,
+  FormControlLabel,
   Dialog,
   DialogActions,
   DialogContent,
@@ -39,6 +42,8 @@ type Member = {
   enrolled_at: string;
   ended_at: string | null;
   outcome: string | null;
+  has_full_membership: boolean;
+  default_home: 'member' | 'ninety-day';
 };
 type Cycle = {
   id: number;
@@ -52,7 +57,7 @@ type Cycle = {
   meetings: Meeting[];
   members: Member[];
 };
-type Person = { id: string; name: string };
+type Person = { id: string; name: string; has_full_membership: boolean };
 type Payload = { cycles: Cycle[]; systemOptions: SystemOption[]; availableUsers: Person[] };
 type Draft = {
   name: string;
@@ -95,7 +100,7 @@ export default function NinetyDayAdmin() {
   const [meetingBusy, setMeetingBusy] = useState(false);
   const [enrollUser, setEnrollUser] = useState<Person | null>(null);
   const [enrolling, setEnrolling] = useState(false);
-  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [enrollDefaultHome, setEnrollDefaultHome] = useState(false);
   const [snack, setSnack] = useState<{
     open: boolean;
     message: string;
@@ -248,6 +253,7 @@ export default function NinetyDayAdmin() {
         action: 'enroll-user',
         cycle_id: selected.id,
         user_id: enrollUser.id,
+        make_default: Boolean(enrollDefaultHome && enrollUser.has_full_membership && selected.status === 'active'),
       });
       setEnrollUser(null);
       await load(selected.id);
@@ -259,21 +265,6 @@ export default function NinetyDayAdmin() {
     }
   }
 
-  async function promote(member: Member) {
-    if (!window.confirm(`Promote ${member.name} to a full Reboot member?`)) return;
-    setPromotingId(member.user_id);
-    try {
-      const response = await fetch(`/api/admin/users/${member.user_id}/promote`, { method: 'POST' });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || response.statusText);
-      await load(selected?.id);
-      setSnack({ open: true, message: `${member.name} is now a full member.`, severity: 'success' });
-    } catch (error) {
-      showError(error, 'Failed to promote member');
-    } finally {
-      setPromotingId(null);
-    }
-  }
 
   return (
     <Stack spacing={3}>
@@ -394,7 +385,7 @@ export default function NinetyDayAdmin() {
               <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" spacing={2}>
                 <Box>
                   <Typography variant="adminSectionTitle">Cycle users</Typography>
-                  <Typography variant="body2" color="text.secondary">Onboard, enroll, and promote members from this cycle.</Typography>
+                  <Typography variant="body2" color="text.secondary">Enroll members, manage membership access, and choose their default home.</Typography>
                 </Box>
                 <Button component={Link} href="/admin/add-user" variant="contained">Onboard new user</Button>
               </Stack>
@@ -402,13 +393,17 @@ export default function NinetyDayAdmin() {
                 <Autocomplete
                   options={payload.availableUsers}
                   value={enrollUser}
-                  onChange={(_event, value) => setEnrollUser(value)}
+                  onChange={(_event, value) => { setEnrollUser(value); setEnrollDefaultHome(false); }}
                   getOptionLabel={(option) => option.name}
                   sx={{ flex: 1 }}
-                  renderInput={(params) => <TextField {...params} label="Existing unassigned 90-day user" />}
+                  renderInput={(params) => <TextField {...params} label="Existing member to enroll" />}
                 />
                 <LoadingButton variant="outlined" onClick={enrollExisting} loading={enrolling} disabled={!enrollUser}>Add to cycle</LoadingButton>
               </Stack>
+              {enrollUser?.has_full_membership && selected.status === 'active' ? (
+                <FormControlLabel control={<Checkbox checked={enrollDefaultHome} onChange={(event) => setEnrollDefaultHome(event.target.checked)} />}
+                  label="Make the 90-day programme their default home" />
+              ) : null}
               {selected.members.length === 0 ? <Alert severity="info">No users enrolled yet.</Alert> : (
                 <Stack divider={<Divider flexItem />}>
                   {selected.members.map((member) => (
@@ -424,16 +419,7 @@ export default function NinetyDayAdmin() {
                         <Typography variant="caption" color="text.secondary">Enrolled {new Date(member.enrolled_at).toLocaleDateString()}</Typography>
                       </Box>
                       <Chip size="small" label={member.ended_at ? member.outcome ?? 'ended' : 'active'} color={member.ended_at ? 'default' : 'success'} />
-                      {!member.ended_at ? (
-                        <LoadingButton
-                          size="small"
-                          variant="outlined"
-                          loading={promotingId === member.user_id}
-                          onClick={() => void promote(member)}
-                        >
-                          Promote to full member
-                        </LoadingButton>
-                      ) : null}
+                      <ProgrammeMembershipControls member={member} cycle={selected} onChanged={() => load(selected.id)} />
                     </Stack>
                   ))}
                 </Stack>

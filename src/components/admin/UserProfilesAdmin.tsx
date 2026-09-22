@@ -1,5 +1,7 @@
 'use client';
 
+import MemberProgrammeSettings from './MemberProgrammeSettings';
+
 import {
   ChangeEvent,
   useCallback,
@@ -186,10 +188,10 @@ function peopleLabel(people: DirectoryPerson[]) {
 }
 
 function MembershipSummary({ user }: { user: UserDirectoryRow }) {
-  const status = user.is_ninety_day_user
-    ? '90-Day programme member'
-    : user.is_past_member
-      ? 'Past member'
+  const status = user.is_past_member
+    ? 'Past member'
+    : user.is_ninety_day_user
+      ? user.is_current_member ? 'Full member + 90-Day programme' : '90-Day programme member'
       : user.is_current_member
         ? 'Current member'
         : 'Inactive';
@@ -517,7 +519,7 @@ export default function UserProfilesAdmin() {
         ghl_user_id: draft.ghl_user_id.trim() || null,
         introduced_at: draft.introduced_at || null,
       };
-      if (!selectedUser.is_ninety_day_user) {
+      if (!selectedUser.is_ninety_day_user || selectedUser.is_current_member || selectedUser.is_past_member) {
         profilePayload.is_legend = draft.is_legend;
         profilePayload.is_past_member = draft.is_past_member;
       }
@@ -540,7 +542,8 @@ export default function UserProfilesAdmin() {
         introduced_at: data.introduced_at ?? null,
         is_legend: data.is_legend ?? false,
         is_past_member: data.is_past_member ?? false,
-        is_current_member: data.is_past_member ? false : selectedUser.is_current_member,
+        is_current_member: data.is_current_member ?? selectedUser.is_current_member,
+        is_ninety_day_user: data.is_ninety_day_user ?? selectedUser.is_ninety_day_user,
       };
       const nextDraft = toDraft(updatedUser);
       setSelectedUser(updatedUser);
@@ -822,10 +825,10 @@ export default function UserProfilesAdmin() {
                                     }}
                                   />
                                   <Typography variant="caption" color="text.secondary">
-                                    {user.is_ninety_day_user
-                                      ? '90-Day'
-                                      : user.is_past_member
-                                        ? 'Past member'
+                                    {user.is_past_member
+                                      ? 'Past member'
+                                      : user.is_ninety_day_user
+                                        ? user.is_current_member ? 'Current + 90-Day' : '90-Day'
                                         : user.is_current_member
                                           ? 'Current'
                                           : 'Inactive'}
@@ -976,9 +979,9 @@ export default function UserProfilesAdmin() {
                       </Stack>
                     )
                   ) : null}
-                  {selectedUser.is_ninety_day_user ? (
+                  {selectedUser.is_ninety_day_user && !selectedUser.is_current_member && !selectedUser.is_past_member ? (
                     <Alert severity="info" variant="outlined">
-                      This member&apos;s cycle and promotion are managed from the 90-Day admin tab.
+                      Manage this member&apos;s programme and full membership below.
                     </Alert>
                   ) : (
                     <>
@@ -1008,6 +1011,13 @@ export default function UserProfilesAdmin() {
                     </>
                   )}
                 </Stack>
+
+                <MemberProgrammeSettings key={selectedUser.id} userId={selectedUser.id} onChanged={(hasFullMembership) => {
+                  const updated = { ...selectedUser, is_current_member: hasFullMembership && !selectedUser.is_past_member, is_ninety_day_user: true };
+                  setSelectedUser(updated);
+                  setUsers((current) => current.map((user) => user.id === updated.id ? updated : user));
+                  setRefreshKey((current) => current + 1);
+                }} />
 
                 <Stack spacing={2}>
                   <Box>
