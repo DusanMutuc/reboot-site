@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Container } from '@mui/material';
+import { formatNinetyDayMeetingTime } from '@/lib/ninetyDayMeetingTime';
 import {
   brand,
   contentSurfaces,
@@ -99,6 +101,28 @@ export default function NinetyDayShell({
   accent?: Accent;
 }) {
   const contentBg = contentSurfaces[surface] ?? contentSurfaces.neutral;
+  const [viewerTimezone, setViewerTimezone] = useState<string | null>(null);
+
+  useEffect(() => {
+    setViewerTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  }, []);
+
+  // Keep the server label for hydration, then show the saved instant in the
+  // viewer's browser timezone in both the main banner and the sticky bar.
+  const localMeetings = useMemo(
+    () => viewerTimezone
+      ? meetings.map((meeting) => ({
+          ...meeting,
+          whenLabel: meeting.startsAt
+            ? formatNinetyDayMeetingTime(meeting.startsAt, viewerTimezone)
+            : meeting.whenLabel,
+        }))
+      : meetings,
+    [meetings, viewerTimezone],
+  );
+  const nextCall = data.nextCall
+    ? { ...data.nextCall, whenLabel: localMeetings[0]?.whenLabel ?? data.nextCall.whenLabel }
+    : null;
 
   return (
     <AccentProvider accent={accent}>
@@ -107,13 +131,13 @@ export default function NinetyDayShell({
           homeHref="/home/ninety-day"
           memberFirstName={data.memberFirstName}
           status={data.callStatus}
-          nextCall={data.nextCall}
+          nextCall={nextCall}
           bookingOptions={data.bookingOptions}
           roomOptions={data.roomOptions}
           calendar={data.calendar}
         />
 
-        <MeetingBand meetings={meetings} />
+        <MeetingBand meetings={localMeetings} />
 
         <Box component="main" sx={{ flex: 1 }}>
           {/* Zone one: the member. */}

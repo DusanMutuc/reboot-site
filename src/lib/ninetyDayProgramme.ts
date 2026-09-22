@@ -13,6 +13,7 @@ import type {
 } from '@/components/home/types';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { loadNinetyDayCompassCourse } from '@/lib/trainingAssignments';
+import { formatNinetyDayMeetingTime } from '@/lib/ninetyDayMeetingTime';
 
 type CycleRow = {
   id: number;
@@ -153,7 +154,7 @@ async function loadNextMeeting(cycle: CycleRow, focusTitle: string | null): Prom
     id: 'weekly_group',
     kind: meeting.title || 'Weekly group call',
     startsAt: meeting.starts_at,
-    whenLabel: starts.toFormat('cccc d LLLL, h:mm a'),
+    whenLabel: formatNinetyDayMeetingTime(meeting.starts_at, cycle.timezone),
     relativeLabel: starts.toRelative({ base: cycleNow }) ?? '',
     joinUrl: meeting.join_url,
     bookUrl: meeting.join_url ?? '#weekly-call',
