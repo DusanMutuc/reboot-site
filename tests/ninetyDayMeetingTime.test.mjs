@@ -1,7 +1,36 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Settings } from 'luxon';
-import { formatNinetyDayMeetingTime } from '../src/lib/ninetyDayMeetingTime.ts';
+import { cycleMeetingTimeToUtc, formatNinetyDayMeetingTime } from '../src/lib/ninetyDayMeetingTime.ts';
+
+test('admin inputs use the cycle timezone regardless of the admin timezone', () => {
+  const originalZone = Settings.defaultZone;
+  try {
+    for (const hostZone of ['Europe/Belgrade', 'Europe/Moscow', 'UTC', 'America/Los_Angeles']) {
+      Settings.defaultZone = hostZone;
+      const saved = cycleMeetingTimeToUtc('2026-09-24T09:00', 'America/Edmonton');
+      assert.equal(saved, '2026-09-24T15:00:00.000Z');
+      assert.equal(formatNinetyDayMeetingTime(saved, 'America/Edmonton'), 'Thursday 24 September, 9:00 AM MDT');
+      assert.match(formatNinetyDayMeetingTime(saved, 'Europe/Belgrade'), /5:00 PM/);
+    }
+  } finally {
+    Settings.defaultZone = originalZone;
+  }
+});
+
+test('admin inputs use date-specific daylight saving and fractional offsets', () => {
+  assert.equal(cycleMeetingTimeToUtc('2026-12-24T09:00', 'America/Edmonton'), '2026-12-24T16:00:00.000Z');
+  assert.equal(cycleMeetingTimeToUtc('2026-09-24T00:15', 'Asia/Kolkata'), '2026-09-23T18:45:00.000Z');
+});
+
+test('invalid, nonexistent and ambiguous local meeting times are rejected', () => {
+  for (const value of ['', '2026-02-30T09:00', '2026-09-24T09:00Z']) {
+    assert.throws(() => cycleMeetingTimeToUtc(value, 'America/Edmonton'), /valid meeting/);
+  }
+  assert.throws(() => cycleMeetingTimeToUtc('2026-09-24T09:00', 'Invalid/Zone'), /valid meeting/);
+  assert.throws(() => cycleMeetingTimeToUtc('2026-03-08T02:30', 'America/Edmonton'), /does not exist/);
+  assert.throws(() => cycleMeetingTimeToUtc('2026-11-01T01:30', 'America/Edmonton'), /occurs twice/);
+});
 
 test('the September 24 meeting displays in the viewer zone instead of the cycle zone', () => {
   const saved = '2026-09-24T06:00:00+00:00';

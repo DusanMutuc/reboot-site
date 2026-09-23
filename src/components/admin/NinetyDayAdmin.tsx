@@ -5,6 +5,7 @@ import Link from 'next/link';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import { LoadingButton } from '@mui/lab';
 import ProgrammeMembershipControls from './ProgrammeMembershipControls';
+import { cycleMeetingTimeToUtc, formatNinetyDayMeetingTime } from '@/lib/ninetyDayMeetingTime';
 import {
   Alert,
   Autocomplete,
@@ -209,15 +210,18 @@ export default function NinetyDayAdmin() {
   }
 
   async function addMeeting() {
-    if (!selected) return;
+    if (!selected || !draft || draft.timezone !== selected.timezone) return;
     setMeetingBusy(true);
     try {
+      const startsAt = cycleMeetingTimeToUtc(meetingStart, selected.timezone);
+      const endsAt = meetingEnd ? cycleMeetingTimeToUtc(meetingEnd, selected.timezone) : null;
+      if (endsAt && endsAt <= startsAt) throw new Error('Meeting end must be after its start.');
       await requestJson('POST', {
         action: 'create-meeting',
         cycle_id: selected.id,
         title: meetingTitle,
-        starts_at: meetingStart ? new Date(meetingStart).toISOString() : '',
-        ends_at: meetingEnd ? new Date(meetingEnd).toISOString() : null,
+        starts_at: startsAt,
+        ends_at: endsAt,
         join_url: meetingUrl,
       });
       setMeetingStart('');
@@ -352,7 +356,13 @@ export default function NinetyDayAdmin() {
               <Box>
                 <Typography variant="adminSectionTitle">Group meetings</Typography>
                 <Typography variant="body2" color="text.secondary">The next scheduled meeting appears for everyone in this cycle.</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Entered and listed times use {selected.timezone}. Members see meetings in their own local timezone.
+                </Typography>
               </Box>
+              {draft.timezone !== selected.timezone && (
+                <Alert severity="info">Save the cycle timezone change before adding a meeting.</Alert>
+              )}
               {selected.meetings.length === 0 ? <Alert severity="info">No meetings scheduled.</Alert> : (
                 <Stack divider={<Divider flexItem />}>
                   {selected.meetings.map((meeting) => (
@@ -360,7 +370,7 @@ export default function NinetyDayAdmin() {
                       <Box sx={{ flex: 1 }}>
                         <Typography variant="body2" fontWeight={600}>{meeting.title}</Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {new Date(meeting.starts_at).toLocaleString()} {meeting.join_url ? '· Link ready' : '· No join link'}
+                          {formatNinetyDayMeetingTime(meeting.starts_at, selected.timezone)} {meeting.join_url ? '· Link ready' : '· No join link'}
                         </Typography>
                       </Box>
                       <IconButton aria-label="Delete meeting" onClick={() => void deleteMeeting(meeting.id)}><DeleteOutlineIcon /></IconButton>
@@ -370,11 +380,11 @@ export default function NinetyDayAdmin() {
               )}
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.5fr 1fr 1fr' }, gap: 2 }}>
                 <TextField label="Meeting title" value={meetingTitle} onChange={(e) => setMeetingTitle(e.target.value)} />
-                <TextField type="datetime-local" label="Starts" value={meetingStart} onChange={(e) => setMeetingStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
-                <TextField type="datetime-local" label="Ends (optional)" value={meetingEnd} onChange={(e) => setMeetingEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+                <TextField type="datetime-local" label="Starts" helperText={selected.timezone} value={meetingStart} onChange={(e) => setMeetingStart(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
+                <TextField type="datetime-local" label="Ends (optional)" helperText={selected.timezone} value={meetingEnd} onChange={(e) => setMeetingEnd(e.target.value)} slotProps={{ inputLabel: { shrink: true } }} />
               </Box>
               <TextField label="Join URL (optional)" value={meetingUrl} onChange={(e) => setMeetingUrl(e.target.value)} placeholder="https://…" />
-              <LoadingButton variant="outlined" onClick={addMeeting} loading={meetingBusy} disabled={!meetingStart} sx={{ alignSelf: 'flex-start' }}>
+              <LoadingButton variant="outlined" onClick={addMeeting} loading={meetingBusy} disabled={!meetingStart || saving || draft.timezone !== selected.timezone} sx={{ alignSelf: 'flex-start' }}>
                 Add meeting
               </LoadingButton>
             </Stack>
