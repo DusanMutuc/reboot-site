@@ -261,6 +261,14 @@ priority steps from their system mappings.
 
 ### Systems Scorecard versions
 
+Completing a priority-linked implementation action step promotes its original audit's system
+to `complete` (or `consistent` when the priority began complete). It also refreshes the same
+system in the next non-cancelled audit if that audit is a draft and the system has not been
+manually reviewed. Matching uses audience and stable system key across template versions.
+This does not set review timestamps, downgrade `consistent`, or skip over a completed or
+reassessed audit into a later cycle. Newly created audits still inherit statuses at creation.
+The completion carry-forward migration also repairs existing eligible stale snapshots.
+
 `system_scorecard_templates.key` is the immutable version identifier stored on every
 `business_reviews.system_scorecard_template_key`. A Legends review can also have a Foundation
 template in `business_review_additional_scorecards`; its ratings share the review's three priority
