@@ -121,7 +121,9 @@ begin
     '      insert into public.business_review_system_priorities (',
     '  _target public.system_scorecard_templates%rowtype;'
   ] loop
-    if position(_fragment in _definition)=0 then
+    -- The SQL Editor may paste this script with Windows CRLF line endings.
+    -- Normalize both operands while retaining the exact prerequisite check.
+    if position(replace(_fragment,chr(13),'') in _definition)=0 then
       raise exception 'Scorecard publication prerequisite does not match migration 20260925020000.';
     end if;
   end loop;
