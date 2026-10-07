@@ -25,8 +25,11 @@ async function assertCanCoach(actorId: string, roleCodes: string[], userId: stri
   if (note.error) throw new SuggestionRouteError(`Could not validate the coaching cycle: ${note.error.message}`, 500);
   if (!note.data) throw new SuggestionRouteError('Coaching cycle not found for this member.', 404);
   if (roleCodes.some((code) => code === 'admin' || code === 'superadmin')) return;
-  if (!roleCodes.includes('coach')) throw new SuggestionRouteError('Coach or admin access is required.', 403);
-  const roster = await admin.from('user_coaches').select('id').eq('user_id', userId).eq('coach_id', actorId).eq('is_active', true).limit(1).maybeSingle();
+  if (!roleCodes.some((code) => code === 'coach' || code === 'implementation_coach')) {
+    throw new SuggestionRouteError('Coach or admin access is required.', 403);
+  }
+  const roster = await admin.from('user_coaches').select('id').eq('user_id', userId).eq('coach_id', actorId)
+    .eq('is_active', true).or(`ended_at.is.null,ended_at.gt.${new Date().toISOString()}`).limit(1).maybeSingle();
   if (roster.error) throw new SuggestionRouteError(`Could not validate the coach roster: ${roster.error.message}`, 500);
   if (!roster.data) throw new SuggestionRouteError('This member is not on your active roster.', 403);
 }

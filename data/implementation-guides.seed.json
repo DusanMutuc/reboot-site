@@ -1,0 +1,903 @@
+[
+  {
+    "audience": "foundation",
+    "systemKey": "hire_first_assistant",
+    "steps": [
+      {
+        "id": "e51b6d83-997f-5be8-b1b2-f50e8b7fcaf5",
+        "title": "Choose the work your first assistant will own",
+        "description": "List the tasks in your business and mark which energize you, feel neutral or drain you. Use that audit to choose a focused first role and write down what you want off your plate. The guide suggests starting with one or two tasks or a defined project when that fits your needs; keep administrative and sales responsibilities distinct.",
+        "resources": [
+          {
+            "resourceId": 181,
+            "pageStart": 2,
+            "pageEnd": 2
+          },
+          {
+            "resourceId": 181,
+            "pageStart": 5,
+            "pageEnd": 5
+          }
+        ]
+      },
+      {
+        "id": "615f4f2b-3013-56d9-b1fb-090a60840167",
+        "title": "Write the role, working arrangement and candidate criteria",
+        "description": "Document the responsibilities, required skills, hours, work location and compensation you will actually offer. Complete the hiring worksheet's must-haves and ideal-person sections using criteria relevant to the work. Decide how much experience and training the role needs. Confirm the appropriate employment or contractor arrangement for your situation before advertising; the source's sample wages, hours and classification examples are not defaults for your business.",
+        "resources": [
+          {
+            "resourceId": 181,
+            "pageStart": 2,
+            "pageEnd": 5
+          },
+          {
+            "resourceId": 183,
+            "pageStart": 4,
+            "pageEnd": 4
+          }
+        ]
+      },
+      {
+        "id": "f91b06b3-a776-5cec-8cf5-226f6de597e8",
+        "title": "Create and publish the job advertisement",
+        "description": "Turn the role into an advertisement with a clear title, an honest introduction to your business and culture, the work involved, your ideal candidate, hours, compensation and application questions. Use the sample ads for structure and replace their employer-specific details. Publish the finished ad through the channels you choose for this role. A draft alone does not complete this step.",
+        "resources": [
+          {
+            "resourceId": 181,
+            "pageStart": 5,
+            "pageEnd": 8
+          },
+          {
+            "resourceId": 182,
+            "pageStart": 1,
+            "pageEnd": 5
+          }
+        ]
+      },
+      {
+        "id": "fca7886a-cda8-5418-a0a7-288d62d1ac04",
+        "title": "Review applications and complete introductory calls",
+        "description": "Read the applications and their answers against your role criteria. Hold the short introductory phone conversations described in the guide to assess communication and initial fit, then choose who to invite to a fuller interview. Record the shortlist and what you learned rather than checking this off when calls are only booked.",
+        "resources": [
+          {
+            "resourceId": 181,
+            "pageStart": 8,
+            "pageEnd": 9
+          },
+          {
+            "resourceId": 183,
+            "pageStart": 2,
+            "pageEnd": 3
+          }
+        ]
+      },
+      {
+        "id": "d6e37e13-7475-554d-86c8-916f06a16297",
+        "title": "Interview the shortlist and choose your candidate",
+        "description": "Use a conversational interview to explore the candidate's application answers, administrative experience, problem solving, ability to learn, communication and expectations. The question bank is a set of prompts, not a requirement to ask every question. Compare what you learned with the role's must-haves and record your hiring decision.",
+        "resources": [
+          {
+            "resourceId": 181,
+            "pageStart": 9,
+            "pageEnd": 9
+          },
+          {
+            "resourceId": 183,
+            "pageStart": 2,
+            "pageEnd": 4
+          }
+        ]
+      },
+      {
+        "id": "e07a93cc-e6f3-5c3e-8cb9-5174ba907dd1",
+        "title": "Confirm the hire and arrange the two-way review",
+        "description": "Confirm that the chosen person has accepted the agreed role and working arrangement. Explain that you will both review the fit after working together, and book the guide's two-week re-interview so the assistant can also give feedback on working with you. Mark this complete when the hire is confirmed and the review is arranged, not when an offer is merely planned.",
+        "resources": [
+          {
+            "resourceId": 181,
+            "pageStart": 3,
+            "pageEnd": 5
+          },
+          {
+            "resourceId": 181,
+            "pageStart": 9,
+            "pageEnd": 9
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "foundation",
+    "systemKey": "red_carpet_champagne_close",
+    "steps": [
+      {
+        "id": "25eaf601-f5dd-5a68-ab15-0b65f491b4b4",
+        "title": "Assemble the red carpet closing kit",
+        "description": "Get the supplies together: a red carpet, two stanchions and a traditional sold sign. The guide uses a 10-foot by 3-foot carpet. Keep the sign free of your logo, contact details or promotional copy so the moment celebrates the client. Complete this when the kit is ready to use.",
+        "resources": [
+          {
+            "resourceId": 188,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "d9ff5919-4398-53c1-a608-135267248db0",
+        "title": "Prepare the possession-day experience",
+        "description": "Work through how you will arrive early, place the carpet and stanchions facing the front door, welcome the clients and photograph them holding the sold sign. Include the photo-sharing approach: send the picture to the clients promptly and ask permission before posting it yourself. Save the agreed process so everyone involved understands what will happen.",
+        "resources": [
+          {
+            "resourceId": 188,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "ccde65e9-8cb0-5e8b-a9b3-4024329020d6",
+        "title": "Deliver the closing experience and share the photo",
+        "description": "Use the prepared kit at an actual possession handover, celebrate the clients and send them their photo. If they agree to a public post, tell their story and tag them only with their permission; posting is not required. Keep this step open until the experience has happened. Retain the closing photo for the 90 Day Magnet follow-up if that system is also being implemented.",
+        "resources": [
+          {
+            "resourceId": 188,
+            "pageStart": 2,
+            "pageEnd": 2
+          },
+          {
+            "resourceId": 189,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "foundation",
+    "systemKey": "ninety_day_magnet",
+    "steps": [
+      {
+        "id": "f02a0650-ca7d-56d8-8afe-a31bb5690d0a",
+        "title": "Organize the closing photos and mailing batch",
+        "description": "Gather the client-focused photos from your red carpet or closing experiences and identify the clients whose follow-up is due. The source sends the keepsake about three months later or in the next quarterly batch. Match the photos to their recipients and mailing details so you know which completed closings the batch covers.",
+        "resources": [
+          {
+            "resourceId": 189,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "c5cfb2d2-7ca4-5551-9313-ef65d632b2d5",
+        "title": "Choose the print format and obtain supplies",
+        "description": "Choose between a 4-by-6 photo in a magnetic sleeve and a photo printed directly onto a magnet. Obtain the supplies for your chosen version, including the prints or printing service, mailing envelopes and postage. For the sleeve version, have business cards and a metallic marker available.",
+        "resources": [
+          {
+            "resourceId": 189,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "51dd1819-f9ac-5dbd-95fe-12c8323c08f6",
+        "title": "Produce and assemble the client magnets",
+        "description": "Print the selected closing photos using the chosen format. If using sleeves, place each photo inside and put your business card behind it. Add your name and phone number on the back as described in the guide, keeping the client's photo as the focus. Address and stamp the envelopes for the prepared batch.",
+        "resources": [
+          {
+            "resourceId": 189,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "a785ff6a-9a67-5594-a50c-0e23cd8c6bd8",
+        "title": "Mail the completed batch",
+        "description": "Send the assembled magnets to the selected clients. Record which batch was sent and when so the next implementation meeting can distinguish work already mailed from the next quarterly batch. Preparing or ordering magnets alone does not complete this step.",
+        "resources": [
+          {
+            "resourceId": 189,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "foundation",
+    "systemKey": "birthday_system",
+    "steps": [
+      {
+        "id": "307eba0d-4d02-57ee-93b8-3a00649028df",
+        "title": "Build and check the birthday client list",
+        "description": "Create the working list of clients and past clients with their full names, birthdays, mailing addresses and phone numbers. Organize it by birthday month and confirm the information you will use for the first delivery batch. Note any missing details that still need to be obtained.",
+        "resources": [
+          {
+            "resourceId": 192,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "1c4f49e2-ce8a-5697-b41c-39eb54c5926a",
+        "title": "Arrange the gift supplier and delivery process",
+        "description": "Select a local company that can supply and deliver your chosen birthday gift. The guide offers cookies, peanut brittle, chocolate bars and cupcakes as examples rather than required choices. Confirm how the company wants to receive the cards and delivery list, including any information it needs on the envelopes.",
+        "resources": [
+          {
+            "resourceId": 192,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "f2a9906f-9386-591e-a2e9-d6455300e0d2",
+        "title": "Prepare the next month's cards and delivery list",
+        "description": "Audit the addresses for the upcoming birthday batch and prepare its cards and master delivery list. Use birthday cards or printable blank cards, include your business card and add the recipient details required by the delivery company. The guide prepares the next month's batch in the last week of the current month.",
+        "resources": [
+          {
+            "resourceId": 192,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "dca09b95-2ec5-504e-9672-0c77850b7b0c",
+        "title": "Hand off the prepared birthday batch",
+        "description": "Give the completed cards and master list to the supplier for the next month's deliveries. Confirm that the company has what it needs to run the batch. This marks the handoff as done; it does not claim that birthdays or deliveries scheduled for later have already happened.",
+        "resources": [
+          {
+            "resourceId": 192,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "foundation",
+    "systemKey": "deal_flow_emails_installed",
+    "steps": [
+      {
+        "id": "516318aa-bcda-5b1c-afb8-92d4a193a7f3",
+        "title": "Map the buyer and seller email milestones",
+        "description": "Write down the transaction events that should prompt each email in your business. The source provides buyer emails for pending, purchased and key release, plus seller emails for newly listed, pending, sold and key release. Put them in your actual transaction order and identify who will recognize each event and send the message.",
+        "resources": [
+          {
+            "resourceId": 197,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "d9976863-995e-5b99-b3dc-ec1fe28f806c",
+        "title": "Adapt and save the buyer email templates",
+        "description": "Create your three buyer templates from the pending, purchased and key-release examples. Replace the sample business identity, contacts, attachments and service promises with your own. Check that the financing, inspection, document, possession and key-release wording accurately describes the requirements, timing and arrangements for your transactions. Save the finished templates where they will be used.",
+        "resources": [
+          {
+            "resourceId": 197,
+            "pageStart": 3,
+            "pageEnd": 5
+          }
+        ]
+      },
+      {
+        "id": "99e08967-38b1-53d0-8be7-843036d64ada",
+        "title": "Adapt and save the seller email templates",
+        "description": "Create your newly listed, pending, sold and key-release templates. Use the examples to explain what the client needs to know and do at each stage. Replace sample marketing commitments, provider details, pricing claims, transaction requirements and possession arrangements with those that apply to your service. Save the completed versions with any attachments they reference.",
+        "resources": [
+          {
+            "resourceId": 197,
+            "pageStart": 6,
+            "pageEnd": 10
+          }
+        ]
+      },
+      {
+        "id": "079cd196-1135-5a72-8793-6db41ff3fda1",
+        "title": "Hand over the templates and sending responsibilities",
+        "description": "Walk the assistant or person sending the emails through the saved buyer and seller templates and the agreed milestones. Confirm which client-specific details and attachments must be added each time. Complete this when the sender has the templates and understands when to use them; a future client email does not need to be marked as already sent to finish installing the system.",
+        "resources": [
+          {
+            "resourceId": 197,
+            "pageStart": 2,
+            "pageEnd": 10
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "deal_by_deal_feedback_tracking",
+    "steps": [
+      {
+        "id": "0bf6c23d-6c4c-5fda-9a6e-1537356b96c6",
+        "title": "Prepare the client list and choose the survey trigger",
+        "description": "If you are catching up, assemble the clients who bought, sold or leased through you in the period you choose; the guide starts with the last year and allows going further back. With your coach, choose and record the transaction milestone that will trigger surveys for new deals. Make clear whether you mean conditions waived, completion or another appropriate point in your process, so the person sending surveys can act consistently.",
+        "resources": [
+          {
+            "resourceId": 198,
+            "pageStart": 2,
+            "pageEnd": 4
+          },
+          {
+            "resourceId": 199,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "b8799238-316d-571f-8287-8b7c17bb1e25",
+        "title": "Build the client experience survey",
+        "description": "Create the questionnaire and its shareable link. Adapt the source prompts covering client and agent identity, satisfaction, service ratings, memorable experiences, likelihood of recommendation and what could be better. Keep any marketing testimonial request optional. Review the finished questions so your invitation describes the survey you actually built.",
+        "resources": [
+          {
+            "resourceId": 198,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "52e66d5e-e4d7-5d01-931d-f357d76b8a07",
+        "title": "Prepare the invitations, reminders and sending responsibility",
+        "description": "Adapt the catch-up and ongoing invitations for a solo agent, team or assistant, using the versions that fit your business. Include the survey link and leave room for a genuine personal detail. Prepare a reminder for non-responders and agree who sends each message at the trigger you selected. These are reusable templates; no invitation is counted as sent in this step.",
+        "resources": [
+          {
+            "resourceId": 198,
+            "pageStart": 3,
+            "pageEnd": 6
+          },
+          {
+            "resourceId": 199,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "ad6daab4-b0ca-5a04-896c-4ea986f7206a",
+        "title": "Send the first survey invitations",
+        "description": "Send personalized invitations to your selected catch-up clients or the first clients who reach the agreed transaction milestone, using their suitable communication channel. Record which clients were contacted and send the prepared reminders where needed. Keep this step open until the invitations have actually gone out.",
+        "resources": [
+          {
+            "resourceId": 198,
+            "pageStart": 3,
+            "pageEnd": 6
+          },
+          {
+            "resourceId": 199,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "c02046cd-f4fc-56b8-a483-0788ec7ba6fd",
+        "title": "Review responses and complete the client thank-yous",
+        "description": "Read the received feedback, capture the improvements it reveals and save any testimonial the client provided for marketing use. Send a simple thank-you card to respondents. The guide suggests a small coffee gift card if affordable; it is optional. For a team, use the feedback to identify relevant coaching. Complete this after reviewing real responses and sending the thank-yous, not merely agreeing to do so later.",
+        "resources": [
+          {
+            "resourceId": 198,
+            "pageStart": 7,
+            "pageEnd": 8
+          },
+          {
+            "resourceId": 199,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "lottery_ticket_anniversary",
+    "steps": [
+      {
+        "id": "adfccd96-d70a-5a6e-86ad-3b1978818d3c",
+        "title": "Organize the anniversary client list by month",
+        "description": "Build the anniversary spreadsheet with a tab for each month. Include the clients' full names, current mailing address, the year they bought and the relationship type needed to choose a suitable message. Use the actual anniversary month to place each household in the right batch.",
+        "resources": [
+          {
+            "resourceId": 200,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "edfa5142-a5ff-5312-8c77-14fc9d67c282",
+        "title": "Adapt the anniversary messages for your clients",
+        "description": "Choose and personalize the scripts for the relationship and anniversary year: the source distinguishes new buyers and personal friends, with wording for individuals, couples and families. Preserve that personal fit rather than sending every household the same message. Note the fourth-year small-gift variation and the milestone-year messages you intend to use.",
+        "resources": [
+          {
+            "resourceId": 200,
+            "pageStart": 3,
+            "pageEnd": 8
+          }
+        ]
+      },
+      {
+        "id": "2a843948-d5dd-57a7-a826-361399acde31",
+        "title": "Prepare the anniversary cards and gifts",
+        "description": "Prepare the upcoming month's batch in the last week of the current month: write the selected messages, address the cards and include the anniversary gift. The guide's standard version uses blank thank-you cards and $2 lottery tickets, with one ticket for each anniversary year; its fourth-year script includes a small-gift variation. Use the version you have chosen for each client and finish assembling the batch.",
+        "resources": [
+          {
+            "resourceId": 200,
+            "pageStart": 2,
+            "pageEnd": 8
+          }
+        ]
+      },
+      {
+        "id": "616d4ded-6ef3-5253-84cf-e36df1c9bef0",
+        "title": "Send the prepared anniversary batch",
+        "description": "Mail the completed anniversary cards and carry out any selected gift drop-offs. Record the batch and recipients so the following meeting can pick up with the next month. Ordering supplies or writing cards does not by itself complete the mailing.",
+        "resources": [
+          {
+            "resourceId": 200,
+            "pageStart": 2,
+            "pageEnd": 8
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "client_feedback_insulator",
+    "steps": [
+      {
+        "id": "4cdfb101-7e16-5f42-be16-5f2a4adb6c3b",
+        "title": "Prepare the client list and delegate the project",
+        "description": "Review your past-client list and make straightforward updates. The guide allows a deliberate decision to proceed with the existing list if a larger cleanup would delay the project. Walk the assistant through the guide and available training, agree the intended result and use an Impact Filter if helpful to make the work and definition of done clear.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 2,
+            "pageEnd": 2
+          },
+          {
+            "resourceId": 194,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "9847843f-ef3e-5251-a355-e9a1cc9ea580",
+        "title": "Create your feedback form",
+        "description": "Make your own copy of the Reboot feedback-form example and adapt it to your business. Enable the form setting that sends respondents a copy of their answers, as the guide specifies. Have the final form and response link ready before creating messages around it.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "e207cdd5-df3c-5b28-b03c-660743eed969",
+        "title": "Prepare the campaign messages and schedule",
+        "description": "Set the launch, response deadline and prize-draw details for this campaign, then adapt the launch email, reminder email/text, countdown messages and winner announcement. Replace all blanks with your own details and form link. Decide the actual incentives before promising them in the copy. Prepare a short newsletter item explaining why you value feedback. Use your chosen dates rather than the example date on the Impact Filter.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 2,
+            "pageEnd": 5
+          },
+          {
+            "resourceId": 194,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "6f236aaa-7bf4-5e84-9208-360c6de3393a",
+        "title": "Launch the feedback request and follow up",
+        "description": "Send the launch email to the chosen client list and include the feedback request in your newsletter. Follow up with clients who have not responded using the prepared email or text, and send the planned countdown messages. This step records an actual campaign launch and follow-up, not simply a ready-to-send draft.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 2,
+            "pageEnd": 2
+          },
+          {
+            "resourceId": 193,
+            "pageStart": 4,
+            "pageEnd": 5
+          }
+        ]
+      },
+      {
+        "id": "1fc88f09-49e9-5d9c-b4d7-826eceb3e80e",
+        "title": "Run the draw and announce the winner",
+        "description": "Carry out the prize draw you described to clients. The guide offers either a live session or a recording shared afterwards, using a digital wheel as one possible tool. Announce the actual winner with the prepared message and share the recording or result as planned. Leave this open until the draw has happened.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 3,
+            "pageEnd": 3
+          },
+          {
+            "resourceId": 193,
+            "pageStart": 5,
+            "pageEnd": 5
+          }
+        ]
+      },
+      {
+        "id": "51b6ae6d-5673-5606-80d5-e1fcea010757",
+        "title": "Write the feedback findings and improvement actions",
+        "description": "Read the responses and summarize what is working and what you will change, adjust or improve. A clear list or a few honest paragraphs is enough; the goal is to show clients that their opinions affected your decisions. The results-example PDF illustrates one possible presentation, not a requirement to create a long report or copy its scores.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 3,
+            "pageEnd": 3
+          },
+          {
+            "resourceId": 277,
+            "pageStart": 2,
+            "pageEnd": 16
+          }
+        ]
+      },
+      {
+        "id": "0ef83c9a-1a4c-5d7f-9de1-7d7aea4b5590",
+        "title": "Send the thank-you cards and findings",
+        "description": "Prepare and send the respondent thank-you mailout with the findings report. Personalize the card and include the appreciation gift you promised; the guide illustrates this with a small coffee gift card. Complete this only once the mailout has been sent, so the work remains visible if it carries into the next meeting.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 3,
+            "pageEnd": 3
+          }
+        ]
+      },
+      {
+        "id": "22bc3ba7-d221-5466-ad99-d53319a48c98",
+        "title": "Put the next annual campaign on the calendar",
+        "description": "Add the recurring campaign to the team's calendar and make clear who will execute it. The guide recommends a November campaign as an annual client touch; choose and save the dates for your business. This completes scheduling the next cycle without marking that future campaign as already run.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 3,
+            "pageEnd": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "newsletter_system",
+    "steps": [
+      {
+        "id": "95c1310c-56e0-51d5-afb0-1636ad12c4a7",
+        "title": "Choose the sending platform, cadence and responsibilities",
+        "description": "Choose the email platform or an existing CRM that supports the newsletter. Set a weekly, fortnightly or monthly cadence that you can maintain. Agree who supplies content, prepares the draft, reviews it and sends it; if an assistant helps, set content reminders and a clear review/send arrangement. Save the schedule rather than copying the example times in the guide.",
+        "resources": [
+          {
+            "resourceId": 202,
+            "pageStart": 3,
+            "pageEnd": 3
+          },
+          {
+            "resourceId": 203,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "7c572efa-b81f-5538-bfc8-f768af4b95c9",
+        "title": "Prepare and load the newsletter audience",
+        "description": "Organize the contacts you intend to include, with email address, name and useful source or category information. Confirm who belongs on the mailing list, address missing or invalid details and import the prepared list into your chosen platform. Decide how new contacts will join, such as manual additions or a sign-up form. Preserve unsubscribe choices when maintaining the list.",
+        "resources": [
+          {
+            "resourceId": 202,
+            "pageStart": 4,
+            "pageEnd": 5
+          },
+          {
+            "resourceId": 202,
+            "pageStart": 7,
+            "pageEnd": 7
+          }
+        ]
+      },
+      {
+        "id": "45a82abd-681c-531c-b1c3-66c6a7c44cac",
+        "title": "Build the reusable newsletter template",
+        "description": "Create a template with space for a personal photo and opening message, useful business content, a clear next action and a short introduction to you. Add a video section only if you have relevant video content. Use a recognizable sender, make replies reach the inbox you monitor and include an unsubscribe link.",
+        "resources": [
+          {
+            "resourceId": 202,
+            "pageStart": 5,
+            "pageEnd": 7
+          }
+        ]
+      },
+      {
+        "id": "bbad9325-2159-5024-9ad9-34ef79fc71a7",
+        "title": "Write and test the first newsletter",
+        "description": "Create the subject line, preview text, personal opening and useful content for the first issue. The guide suggests explaining a market insight, sharing an appropriate client story or answering a common question. Add a clear invitation to reply, book a conversation or take the relevant next step. Send yourself a test and check the content, links and display on desktop and mobile before approving it.",
+        "resources": [
+          {
+            "resourceId": 202,
+            "pageStart": 6,
+            "pageEnd": 7
+          }
+        ]
+      },
+      {
+        "id": "d5710450-7921-5753-8bd3-c2ad5bf5e719",
+        "title": "Send the first issue using the agreed process",
+        "description": "Complete the review and send the approved newsletter to the prepared audience. Record which issue was sent and confirm that the next content and sending dates are in the schedule. Keep this open while the issue is only drafted or scheduled for a future send; the checkbox confirms that the first issue has gone out.",
+        "resources": [
+          {
+            "resourceId": 202,
+            "pageStart": 3,
+            "pageEnd": 3
+          },
+          {
+            "resourceId": 203,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "four_quadrant_team_offer",
+    "steps": [
+      {
+        "id": "cb689233-9b9e-59ee-b075-9c7dbfddcc16",
+        "title": "Define the team administration offer",
+        "description": "Complete the administration quadrant with the support your team actually provides or is committing to provide. The examples include paperwork, deal-flow emails, showing feedback, client-care systems, booking support and CRM management. Describe the offer clearly enough that a prospective team member can understand what work is handled for them; the example list is not a requirement to install every named system.",
+        "resources": [
+          {
+            "resourceId": 240,
+            "pageStart": 1,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "2c706979-944a-59b8-a149-0817d84a677d",
+        "title": "Define the lead-flow offer",
+        "description": "Complete the lead-flow quadrant with the opportunities your team can offer, using the sample as a prompt. Examples include mailouts, open houses, referral relationships, existing clients and exclusive listings. Replace the sample with your own offer and distinguish existing sources from anything you still intend to build.",
+        "resources": [
+          {
+            "resourceId": 240,
+            "pageStart": 1,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "c63472b7-e52e-58db-851a-0fc139348fc6",
+        "title": "Write the culture and values offer",
+        "description": "Describe the team culture and values you want members to experience. Use the five statement pillars to make the wording specific: client experience, work ethic, team character, what you will not do and what matters beyond real estate. Write your own beliefs instead of adopting the sample team's mission statement.",
+        "resources": [
+          {
+            "resourceId": 240,
+            "pageStart": 1,
+            "pageEnd": 4
+          }
+        ]
+      },
+      {
+        "id": "f5d56483-ecc9-5568-ac11-99b9f6d8bec3",
+        "title": "Complete the coaching offer and assemble the four quadrants",
+        "description": "Define the coaching and training support included in the offer, such as individual coaching, team meetings, listing training or deal reviews where those fit your team. Bring the four completed quadrants together in the offer worksheet and review the whole offer for clarity and consistency. This completes the offer document; it does not claim that every example service or a team-member hire has already been implemented.",
+        "resources": [
+          {
+            "resourceId": 240,
+            "pageStart": 1,
+            "pageEnd": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "relationship_energy_audit",
+    "steps": [
+      {
+        "id": "8e9bdb9a-462d-5db4-8e2d-aec38463d533",
+        "title": "List and rate your influential relationships",
+        "description": "Use the People in Your Life worksheet to list up to ten influential relationships, including both energizing and draining ones. Rate each from 1 to 10, where 1 is strongly draining and 10 is strongly energizing. Complete the ratings before moving to the reflection questions.",
+        "resources": [
+          {
+            "resourceId": 237,
+            "pageStart": 7,
+            "pageEnd": 7
+          }
+        ]
+      },
+      {
+        "id": "43364a95-8116-5cc0-97ea-369ac1554e18",
+        "title": "Complete the reflection and identify what needs to change",
+        "description": "Work through the prompts about defending people, filtering what you say, giving more than you receive and avoiding honest conversations. Consider whether these relationships strengthen or weaken you, then write what you want to change. Completing the audit means you have made these observations and identified changes; it does not mean a conversation or relationship change has already happened.",
+        "resources": [
+          {
+            "resourceId": 237,
+            "pageStart": 7,
+            "pageEnd": 8
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "environmental_energy_audit",
+    "steps": [
+      {
+        "id": "a12f17b7-a936-503e-86bf-b3fac21a1e02",
+        "title": "Rate the parts of your environment",
+        "description": "Rate how your office location and space, brokerage, commute, car, clothes, home, city, neighbourhood and holidays affect your energy. Use 1 for draining and 10 for energizing, avoiding 5 and 7 as the worksheet instructs. Record an honest rating for each relevant area.",
+        "resources": [
+          {
+            "resourceId": 237,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "afdcd9f7-09f1-558b-b818-f4349aac666e",
+        "title": "Write the environmental changes you want to make",
+        "description": "Review the ratings and answer the worksheet's question about what needs to change to improve your energy. Record specific changes in the areas that matter most to you. This completes the audit and its decisions; any subsequent move, purchase or change to your environment remains separate work.",
+        "resources": [
+          {
+            "resourceId": 237,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "business_task_energy_audit",
+    "steps": [
+      {
+        "id": "fef6c7ed-0e88-53b7-aa3d-9a2f629dde4d",
+        "title": "Complete the business-task energy table",
+        "description": "Work through the task table and mark each activity as Fuels Me, N/A or Drains Me. It includes activities such as booking showings, managing listings and CRM, client care, documents, negotiations, prospecting, content and bookkeeping. Use the table to distinguish the work that gives you energy from the work that takes it away.",
+        "resources": [
+          {
+            "resourceId": 237,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "ca975aad-213a-582a-ab40-2a34caf596a4",
+        "title": "Complete the work reflection and identify changes",
+        "description": "Rate how much you enjoy your work from 1 to 10 and write what would make it a 10. Reflect on what else you would choose to do, which parts of the business drain you and where you gain the most energy. Finish by recording what needs to change in your work. Identifying a task to change or delegate does not mean the delegation itself is finished.",
+        "resources": [
+          {
+            "resourceId": 237,
+            "pageStart": 3,
+            "pageEnd": 3
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "relationship_with_fear_write_letter",
+    "steps": [
+      {
+        "id": "8817640b-c397-5897-9d73-b536260d9a1e",
+        "title": "Reflect on your relationship with fear",
+        "description": "Identify where fear has helped protect you and where it has been directing choices you want to make differently. Use the lesson's distinction between fear as a reference and fear as the driver to capture what your relationship has been like and what you want it to become.",
+        "resources": [
+          {
+            "resourceId": 230,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      },
+      {
+        "id": "cf88bc13-c48e-596b-bd35-2e368573807d",
+        "title": "Write the letter to fear",
+        "description": "Write your own complete letter using the worksheet's three prompts: what you thank fear for, what your relationship has been over the years and what that relationship will look like going forward. Put the reflection into your own words and finish the letter. This step confirms that the letter exists; it does not claim completion of the separate training, questionnaire or growth-action assignment.",
+        "resources": [
+          {
+            "resourceId": 228,
+            "pageStart": 1,
+            "pageEnd": 1
+          },
+          {
+            "resourceId": 230,
+            "pageStart": 2,
+            "pageEnd": 2
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "audience": "legends",
+    "systemKey": "impact_filter_used_for_delegation",
+    "steps": [
+      {
+        "id": "27444294-c392-5b25-9a4a-3e73a3dec228",
+        "title": "Define the delegated project's purpose and result",
+        "description": "Choose a real piece of work to delegate and complete the Impact Filter's problem, impact and completed-result fields. Describe why the work matters and what the finished output will look like. Use a completed example for the format, while writing the purpose and result for your own project.",
+        "resources": [
+          {
+            "resourceId": 185,
+            "pageStart": 1,
+            "pageEnd": 1
+          },
+          {
+            "resourceId": 194,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "1a2ab71b-9a0a-5926-a5b4-d58c1b0f286f",
+        "title": "Complete the work plan and success criteria",
+        "description": "Fill in the best- and worst-case outcomes, the five main chunks of work, success criteria, first actions and project completion date. Make the success criteria concrete enough to recognize when the result is complete. Choose the date for this project; do not reuse the date printed on a sample Impact Filter.",
+        "resources": [
+          {
+            "resourceId": 185,
+            "pageStart": 1,
+            "pageEnd": 1
+          },
+          {
+            "resourceId": 194,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      },
+      {
+        "id": "5771c408-265f-5aa4-8252-c16111adae27",
+        "title": "Use the completed filter in the delegation conversation",
+        "description": "Meet with the person taking on the work and walk them through the completed filter, supporting instructions, main steps and what done looks like. Clarify the result and next actions together. Check this off after that handoff conversation has happened; completing the form alone is not yet using it for delegation, and the delegated project may still be in progress.",
+        "resources": [
+          {
+            "resourceId": 193,
+            "pageStart": 2,
+            "pageEnd": 2
+          },
+          {
+            "resourceId": 185,
+            "pageStart": 1,
+            "pageEnd": 1
+          }
+        ]
+      }
+    ]
+  }
+]

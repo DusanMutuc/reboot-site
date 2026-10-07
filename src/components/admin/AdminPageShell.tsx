@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Loading from '@/components/loading';
@@ -9,6 +9,7 @@ import AssignAssistantPanel from '@/components/admin/AssignAssistantPanel';
 import AssignCoachPanel from '@/components/admin/AssignCoachPanel';
 import CoachRosters from '@/components/admin/CoachRosters';
 import ResourceLibraryAdmin from '@/components/admin/ResourceLibraryAdmin';
+import ImplementationGuidesAdmin from '@/components/admin/ImplementationGuidesAdmin';
 import DiscoveryAdminPanel from '@/components/admin/discovery/DiscoveryAdminPanel';
 import { fetchJobCounts } from '@/lib/discoveryJobsClient';
 import type { DiscoveryJobCounts } from '@/lib/discoveryJobsClient';
@@ -67,6 +68,7 @@ import {
   Timelapse as TimelapseIcon,
   Search as SearchIcon,
   Troubleshoot as TroubleshootIcon,
+  ChecklistRounded as ChecklistIcon,
 } from '@mui/icons-material';
 
 type AdminNavChild = {
@@ -136,6 +138,7 @@ const navigationStructure: AdminNavSection[] = [
     icon: LibraryBooksIcon,
     children: [
       { id: 'resource-library', label: 'Resource Library', icon: LibraryBooksIcon, component: 'ResourceLibraryAdmin' },
+      { id: 'implementation-guides', label: 'Implementation Guides', icon: ChecklistIcon, component: 'ImplementationGuidesAdmin' },
       { id: 'discovery-topics', label: 'Assign topics', icon: LocalOfferIcon, component: 'DiscoveryAdminPanel', badge: 'topics' },
       { id: 'discovery-standalone', label: 'Check standalone use', icon: UnfoldMoreIcon, component: 'DiscoveryAdminPanel', badge: 'placement' },
       { id: 'discovery-hidden', label: 'Not in search yet', icon: VisibilityOffIcon, component: 'DiscoveryAdminPanel', badge: 'visibility' },
@@ -222,6 +225,10 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const implementationNavigationGuard = useRef<((run: () => void) => void) | null>(null);
+  const registerImplementationNavigationGuard = useCallback((guard: ((run: () => void) => void) | null) => {
+    implementationNavigationGuard.current = guard;
+  }, []);
   const selectedView = useMemo(() => normalizeAdminView(currentView), [currentView]);
   const [expandedSections, setExpandedSections] = useState<string[]>(() => {
     const sectionId = getSectionIdForView(selectedView);
@@ -319,7 +326,9 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
 
   const navigateToView = (viewId: string) => {
     if (viewId === selectedView) return;
-    navigateWithDiscoveryGuard(() => router.push(getAdminViewPath(viewId)));
+    const run = () => navigateWithDiscoveryGuard(() => router.push(getAdminViewPath(viewId)));
+    if (implementationNavigationGuard.current) implementationNavigationGuard.current(run);
+    else run();
   };
 
   const inResources = !!DISCOVERY_VIEWS[selectedView] || selectedView === 'resource-library';
@@ -369,6 +378,8 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
         return <CourseEditor />;
       case 'resource-library':
         return <ResourceLibraryAdmin />;
+      case 'implementation-guides':
+        return <ImplementationGuidesAdmin onNavigationGuardChange={registerImplementationNavigationGuard} />;
       case 'library-editor':
         return <LibraryEditor />;
       case 'scorecard-library':
@@ -378,7 +389,7 @@ export default function AdminPageShell({ currentView }: { currentView?: string |
       case 'status-overview':
         return <StudentStatusOverview courseId={2} workspaceMode="admin" />;
       case 'student-workspace':
-        return <StudentWorkspace mode="admin" />;
+        return <StudentWorkspace mode="admin" onNavigationGuardChange={registerImplementationNavigationGuard} />;
       case 'meetings':
         return <AdminMeetingsPanel />;
       case 'achievements-admin':

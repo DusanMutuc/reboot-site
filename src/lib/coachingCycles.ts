@@ -40,13 +40,6 @@ type MeetingRow = {
   ghl_status: string | null;
 };
 
-function toDateOnly(value: string): string {
-  const dateOnly = value.slice(0, 10);
-  return /^\d{4}-\d{2}-\d{2}$/.test(dateOnly)
-    ? dateOnly
-    : getBusinessAuditLocalDate(new Date(value));
-}
-
 export function selectActiveCoachingCycle(
   cycles: CoachingCycle[],
   today = getBusinessAuditLocalDate(),
@@ -148,10 +141,10 @@ export async function loadCoachingCycles(
         };
       }
 
-      const meetingDate = note.m2_meeting_id
-        ? meetingById.get(Number(note.m2_meeting_id))?.date
+      const meeting = note.m2_meeting_id
+        ? meetingById.get(Number(note.m2_meeting_id))
         : null;
-      const cycleDate = meetingDate ?? toDateOnly(note.created_at);
+      const cycleDate = meeting?.date ?? getBusinessAuditLocalDate(new Date(note.created_at));
 
       return {
         id: `m2:${noteId}`,
@@ -159,7 +152,7 @@ export async function loadCoachingCycles(
         kind: 'm2',
         cycleDate,
         businessReviewId: null,
-        cancelled: false,
+        cancelled: isCancelledGhlStatus(meeting?.ghl_status),
         isFuture: cycleDate > today,
       };
     })

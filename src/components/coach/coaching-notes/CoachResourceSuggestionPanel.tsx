@@ -9,7 +9,7 @@ import RecommendRoundedIcon from '@mui/icons-material/RecommendRounded';
 import type { CoachResourceOption, CoachResourceSuggestion } from '@/lib/discoveryRemainingTypes';
 import SectionCard from './SectionCard';
 
-type Props = { userId: string; coachingNoteId: number };
+type Props = { userId: string; coachingNoteId: number; compact?: boolean };
 
 async function readJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({})) as T & { error?: string };
@@ -30,7 +30,7 @@ function resolutionLabel(value: CoachResourceSuggestion['resolution']) {
   return 'Active';
 }
 
-export default function CoachResourceSuggestionPanel({ userId, coachingNoteId }: Props) {
+export default function CoachResourceSuggestionPanel({ userId, coachingNoteId, compact = false }: Props) {
   const [suggestions, setSuggestions] = useState<CoachResourceSuggestion[]>([]);
   const [options, setOptions] = useState<CoachResourceOption[]>([]);
   const [selected, setSelected] = useState<CoachResourceOption | null>(null);
@@ -78,13 +78,13 @@ export default function CoachResourceSuggestionPanel({ userId, coachingNoteId }:
         {error ? <Alert severity="error">{error}</Alert> : null}
         {message ? <Alert severity="success">{message}</Alert> : null}
         {active.map((suggestion) => <Paper key={suggestion.id} variant="outlined" sx={{ p: 1.75 }}>
-          <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} justifyContent="space-between" alignItems={{ sm: 'center' }}>
-            <Box sx={{ minWidth: 0 }}><Stack direction="row" gap={1} alignItems="center" flexWrap="wrap"><Typography sx={{ fontWeight: 700 }}>{suggestion.title}</Typography><Chip size="small" color="primary" label="Suggested" /></Stack><Typography variant="caption" color="text.secondary">{suggestion.mediaType} · {suggestion.coachName} · {new Date(suggestion.createdAt).toLocaleDateString()}</Typography></Box>
-            <Button size="small" disabled={saving} onClick={() => void mutate({ operation: 'remove', suggestionId: suggestion.id }, 'Suggestion removed.')}>Remove</Button>
+          <Stack direction={compact ? 'column' : { xs: 'column', sm: 'row' }} gap={1.5} justifyContent="space-between" alignItems={compact ? 'stretch' : { sm: 'center' }}>
+            <Box sx={{ minWidth: 0, overflowWrap: compact ? 'anywhere' : undefined }}><Stack direction="row" gap={1} alignItems="center" flexWrap="wrap"><Typography sx={{ fontWeight: 700 }}>{suggestion.title}</Typography><Chip size="small" color="primary" label="Suggested" /></Stack><Typography variant="caption" color="text.secondary">{suggestion.mediaType} · {suggestion.coachName} · {new Date(suggestion.createdAt).toLocaleDateString()}</Typography></Box>
+            <Button size="small" disabled={saving} sx={compact ? { alignSelf: 'flex-end' } : undefined} onClick={() => void mutate({ operation: 'remove', suggestionId: suggestion.id }, 'Suggestion removed.')}>Remove</Button>
           </Stack>
         </Paper>)}
 
-        <Stack direction={{ xs: 'column', sm: 'row' }} gap={1} alignItems={{ sm: 'flex-start' }}>
+        <Stack direction={compact ? 'column' : { xs: 'column', sm: 'row' }} gap={1} alignItems={compact ? 'stretch' : { sm: 'flex-start' }}>
           <Autocomplete<CoachResourceOption> fullWidth options={options} value={selected} inputValue={inputValue}
             loading={loading} filterOptions={(available) => available}
             onInputChange={(_, value, reason) => { if (reason !== 'reset') setInputValue(value); }}
@@ -94,10 +94,10 @@ export default function CoachResourceSuggestionPanel({ userId, coachingNoteId }:
             noOptionsText={inputValue ? 'No matching resources' : 'No resources available'}
             renderOption={(props, option) => { const { key, ...rest } = props; return <Box component="li" key={key} {...rest} sx={{ display: 'block!important' }}><Typography variant="body2" sx={{ fontWeight: 600 }}>{option.title}</Typography><Typography variant="caption" color={option.eligible ? 'text.secondary' : 'warning.dark'}>{option.mediaType}{option.reason ? ` · ${option.reason}` : ''}</Typography></Box>; }}
             renderInput={(params) => <TextField {...params} label="Resource" placeholder="Search published resources" helperText={selected?.reason ?? 'Homepage browse approval is not required.'} InputProps={{ ...params.InputProps, endAdornment: <>{loading ? <CircularProgress size={17} /> : null}{params.InputProps.endAdornment}</> }} />} />
-          <Button variant="contained" disabled={saving || !selected?.eligible} sx={{ minWidth: 110, mt: { sm: 1 } }} onClick={() => selected && void mutate({ operation: 'add', resourceId: selected.id }, 'Resource suggested.')}>{saving ? 'Saving…' : 'Suggest'}</Button>
+          <Button variant="contained" disabled={saving || !selected?.eligible} sx={{ minWidth: 110, mt: compact ? 0 : { sm: 1 } }} onClick={() => selected && void mutate({ operation: 'add', resourceId: selected.id }, 'Resource suggested.')}>{saving ? 'Saving…' : 'Suggest'}</Button>
         </Stack>
 
-        {resolved.length ? <><Divider /><Box><Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Recent outcomes</Typography><Stack gap={0.75}>{resolved.map((suggestion) => <Stack key={suggestion.id} direction="row" gap={1} alignItems="center"><Typography variant="body2" sx={{ flex: 1 }}>{suggestion.title}</Typography><Chip size="small" variant="outlined" color={suggestion.resolution === 'finished' ? 'success' : 'default'} label={resolutionLabel(suggestion.resolution)} /></Stack>)}</Stack></Box></> : null}
+        {resolved.length ? <><Divider /><Box><Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 700 }}>Recent outcomes</Typography><Stack gap={0.75}>{resolved.map((suggestion) => <Stack key={suggestion.id} direction={compact ? 'column' : 'row'} gap={1} alignItems={compact ? 'flex-start' : 'center'}><Typography variant="body2" sx={{ flex: compact ? undefined : 1, overflowWrap: compact ? 'anywhere' : undefined }}>{suggestion.title}</Typography><Chip size="small" variant="outlined" color={suggestion.resolution === 'finished' ? 'success' : 'default'} label={resolutionLabel(suggestion.resolution)} /></Stack>)}</Stack></Box></> : null}
       </Stack>
     </SectionCard>
   );

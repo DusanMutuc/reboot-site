@@ -24,6 +24,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import LegendMemberIcon from '@/components/LegendMemberIcon';
 import PrivateNotesPanel from '@/components/coach/PrivateNotesPanel';
 import BusinessAuditTab from '@/components/student/workspace/BusinessAuditTab';
+import CoachingNotesTab from '@/components/student/workspace/CoachingNotesTab';
 import ImplementationTab from '@/components/student/workspace/ImplementationTab';
 import KpiTab from '@/components/student/workspace/KpiTab';
 import OverviewTab from '@/components/student/workspace/OverviewTab';
@@ -35,7 +36,7 @@ import type {
 } from '@/components/student/workspace/types';
 import { useStudentWorkspaceState } from '@/components/student/workspace/useStudentWorkspaceState';
 
-const TABS: StudentWorkspaceTab[] = ['overview', 'audit', 'notes', 'progress', 'kpi'];
+const TABS: StudentWorkspaceTab[] = ['overview', 'audit', 'notes', 'progress', 'kpi', 'coaching-notes'];
 const NOTES_SIDEBAR_WIDTH = 360;
 const COACH_WORKSPACE_SHELL_MAX_WIDTH = 1200;
 const PRIVATE_NOTES_OFFSET_BREAKPOINT = 1200;
@@ -69,11 +70,19 @@ function EmptyStudentState() {
   );
 }
 
-export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode }) {
+export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
+  mode: StudentWorkspaceMode;
+  onNavigationGuardChange?: (guard: ((run: () => void) => void) | null) => void;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaceRootRef = useRef<HTMLDivElement | null>(null);
+  const workspaceNavigationGuard = useRef<((run: () => void) => void) | null>(null);
+  const registerWorkspaceNavigationGuard = useCallback((guard: ((run: () => void) => void) | null) => {
+    workspaceNavigationGuard.current = guard;
+    onNavigationGuardChange?.(guard);
+  }, [onNavigationGuardChange]);
 
   const tab = normalizeTab(searchParams.get('tab'));
   const selectedStudentId = searchParams.get('userId');
@@ -98,7 +107,9 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
       });
 
       const next = params.toString();
-      router.replace(next ? `${pathname}?${next}` : pathname);
+      const navigate = () => router.replace(next ? `${pathname}?${next}` : pathname);
+      if (workspaceNavigationGuard.current) workspaceNavigationGuard.current(navigate);
+      else navigate();
     },
     [pathname, router, searchParams],
   );
@@ -237,8 +248,20 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
       case 'notes':
         return (
           <ImplementationTab
+            key={activeStudentId}
             selectedStudentId={activeStudentId}
             studentName={selectedStudent.full_name}
+            studentEmail={selectedStudent.email}
+            onNavigationGuardChange={registerWorkspaceNavigationGuard}
+          />
+        );
+      case 'coaching-notes':
+        return (
+          <CoachingNotesTab
+            key={activeStudentId}
+            selectedStudentId={activeStudentId}
+            studentName={selectedStudent.full_name}
+            onNavigationGuardChange={registerWorkspaceNavigationGuard}
           />
         );
       case 'audit':
@@ -470,6 +493,7 @@ export default function StudentWorkspace({ mode }: { mode: StudentWorkspaceMode 
               <Tab value="notes" label="Implementation" />
               <Tab value="progress" label="Progress" />
               <Tab value="kpi" label="KPI Tracker" />
+              <Tab value="coaching-notes" label="Coaching notes" />
             </Tabs>
 
             <Box sx={{ p: { xs: 2, md: 3 } }}>
