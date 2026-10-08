@@ -123,7 +123,7 @@ $$;
 notify pgrst, 'reload config';
 notify pgrst, 'reload schema';
 
-insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008019000','secure_onboarding',array[$migration_20261008019000$-- Pending accounts cannot use a legacy password session to reach application
+insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008019000','secure_onboarding',array[replace($migration_20261008019000$-- Pending accounts cannot use a legacy password session to reach application
 -- data. Auth recovery endpoints remain available, including to past members.
 begin;
 create function public.account_setup_complete(_user_id uuid)
@@ -229,7 +229,7 @@ $$;
 notify pgrst, 'reload config';
 notify pgrst, 'reload schema';
 commit;
-$migration_20261008019000$]::text[]);
+$migration_20261008019000$,chr(13)||chr(10),chr(10))]::text[]);
 
 -- 20261008020000_content_access_and_progress; SHA-256(LF): 9753ab1c48da4ed40c614b7ddf0b53f25168990e285c99fc1d765b22ba8ffb1c
 -- Membership is checked inside the database as well as in website middleware.
@@ -568,7 +568,7 @@ begin
 end;
 $$;
 
-insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008020000','content_access_and_progress',array[$migration_20261008020000$begin;
+insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008020000','content_access_and_progress',array[replace($migration_20261008020000$begin;
 
 -- Membership is checked inside the database as well as in website middleware.
 -- A revoked/merged account wins over every other role, including staff roles.
@@ -907,7 +907,7 @@ end;
 $$;
 
 commit;
-$migration_20261008020000$]::text[]);
+$migration_20261008020000$,chr(13)||chr(10),chr(10))]::text[]);
 
 -- 20261008021000_smartdoc_submission_integrity; SHA-256(LF): 01df7c995da492f844ecd58e633be3c951c214b87d81364165eed71810a6bc8b
 -- Smart Doc submission and field writes share a response-row lock. These RPCs
@@ -1364,7 +1364,7 @@ grant execute on function public.upsert_smart_field_value(bigint, bigint, uuid, 
 grant execute on function public.get_user_smartdoc_answers(uuid,bigint) to authenticated,service_role;
 grant execute on function public.list_user_smartdoc_instances(uuid,bigint,boolean) to authenticated,service_role;
 
-insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008021000','smartdoc_submission_integrity',array[$migration_20261008021000$-- Smart Doc submission and field writes share a response-row lock. These RPCs
+insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008021000','smartdoc_submission_integrity',array[replace($migration_20261008021000$-- Smart Doc submission and field writes share a response-row lock. These RPCs
 -- remain SECURITY INVOKER so membership, content and archive RLS still apply.
 begin;
 
@@ -1821,7 +1821,7 @@ grant execute on function public.list_user_smartdoc_instances(uuid,bigint,boolea
 
 commit;
 
-$migration_20261008021000$]::text[]);
+$migration_20261008021000$,chr(13)||chr(10),chr(10))]::text[]);
 
 -- 20261008022000_atomic_partnership_management; SHA-256(LF): e4e377035e76741e9ae7f1a681bd3959c099aaa126e834a184cd9fe2b7d66820
 -- One logical partnership edit is one transaction. Active sharing ownership is
@@ -2055,7 +2055,7 @@ grant execute on function public.save_partnership_admin(uuid,jsonb) to service_r
 
 notify pgrst, 'reload schema';
 
-insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008022000','atomic_partnership_management',array[$migration_20261008022000$-- One logical partnership edit is one transaction. Active sharing ownership is
+insert into supabase_migrations.schema_migrations(version,name,statements) values ('20261008022000','atomic_partnership_management',array[replace($migration_20261008022000$-- One logical partnership edit is one transaction. Active sharing ownership is
 -- unique for each member/domain, including parent flag changes and concurrent writes.
 begin;
 
@@ -2287,7 +2287,7 @@ grant execute on function public.save_partnership_admin(uuid,jsonb) to service_r
 
 notify pgrst, 'reload schema';
 commit;
-$migration_20261008022000$]::text[]);
+$migration_20261008022000$,chr(13)||chr(10),chr(10))]::text[]);
 
 do $verify$
 declare r record; entrypoint text;

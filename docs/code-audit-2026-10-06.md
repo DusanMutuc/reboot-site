@@ -1,8 +1,8 @@
 # Code audit — 6 October 2026
 
-Reviewed checkout: `main` at `30bb87b`, plus the local fixes described below. This is a source and local-behavior audit, not a claim that every workflow is defect-free. Production data, deployed functions, GHL calendars, and the work pending on the other PC were not inspected or changed.
+Originally reviewed checkout: `main` at `30bb87b`, plus the local fixes described below. This is a source and local-behavior audit, not a claim that every workflow is defect-free. During that original review, production data, deployed functions, GHL calendars, and the work pending on the other PC were not inspected or changed. The original evidence and limits below are retained as history; subsequent release verification is recorded separately.
 
-**8 October release follow-up:** The implementation-tab update is integrated at `02f839c`, and the account-transfer release is deployed at `f422e86`. The subsequent stabilization release includes the booking/member filtering, partnership authorization, and KPI A1/A2 fixes described here. These fixes require no database migration. A read-only live check confirmed A3's deployed entitlement mismatch (authenticated RLS policy wiring remains unverified); The remaining findings are addressed by the follow-up audit repair release; A12 was already fixed with merged accounts. See [the repair record](audit-fixes-2026-10-08.md) for implementation and deployment status. See [the stabilization record](stabilization-2026-10-08.md) for compatibility notes, live-check limits, and release validation.
+**8 October release follow-up:** The implementation-tab update is integrated at `02f839c`, and the account-transfer release is deployed at `f422e86`. The subsequent stabilization release includes the booking/member filtering, partnership authorization, and KPI A1/A2 fixes described here; those fixes require no database migration. A12 was fixed with merged accounts. The remaining ten findings are now repaired and deployed in `49b9e59`, with four production migrations and remediation of 42 remaining legacy-password accounts. See [the repair record](audit-fixes-2026-10-08.md) for database checks, credential verification and test limits. See [the stabilization record](stabilization-2026-10-08.md) for the earlier release validation.
 
 ## Changes made in this review
 
@@ -34,7 +34,7 @@ P1 means prioritize promptly because data or access boundaries are at risk. P2 m
 |---|---|---|---|
 | A1 | P1, fixed | Failed KPI history loads can lead to deletion of existing values | 8 October regression coverage |
 | A2 | P1, fixed | KPI autosave responses erase newer typing | 8 October regression coverage in both editors |
-| A3 | P1, fixed | Database content rules omit revoked/programme membership restrictions | Deployed entitlement functions checked 8 October; RLS policy wiring unverified |
+| A3 | P1, fixed | Database content rules omit revoked/programme membership restrictions | SQL/RLS regression coverage and production migration verification; see repair record |
 | A4 | P2, fixed | Unpublished library content is returned to members | Executed library-loader reproduction |
 | A5 | P2, fixed | Smart Doc submission can succeed before required answers are saved | Executed API reproduction + client lifecycle trace |
 | A6 | P2, fixed | Failed partnership edits partially commit | API write sequence + database constraints |
@@ -44,7 +44,7 @@ P1 means prioritize promptly because data or access boundaries are at risk. P2 m
 | A10 | P2, fixed | Smart Doc loading can display another person's answers to staff | Client query + checked-in response policies |
 | A11 | P2, fixed | A 90-day programme can omit its final KPI month | Executed date-function reproduction |
 | A12 | P3, fixed | Bearer authentication returns an anonymous database client | Installed SDK with mocked transport |
-| A13 | P1, fixed | New accounts share a bootstrap password | Current provisioning/reset code |
+| A13 | P1, fixed | New accounts share a bootstrap password | Unique provisioning credentials; 42 legacy accounts remediated; zero non-archived legacy matches |
 
 ### A1 — Failed KPI history loads can lead to deletion of existing values
 

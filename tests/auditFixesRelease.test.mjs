@@ -31,7 +31,9 @@ test('combined audit release installs all four migrations atomically and preserv
   const { pg_trgm }=await import(moduleUrl('dist/contrib/pg_trgm.js'));
   const db=new PGlite({extensions:{pg_trgm}});
   const canonical=await sources();
-  const release=renderAuditRelease(canonical);
+  // Monaco/Windows clipboard may turn every pasted newline into CRLF,
+  // including dollar-quoted migration history. History remains canonical LF.
+  const release=renderAuditRelease(canonical).replaceAll('\n','\r\n');
   const rows=async(sql,args=[]) => (await db.query(sql,args)).rows;
   const scalar=async(sql,args=[]) => Object.values((await rows(sql,args))[0])[0];
   const history=()=>rows("select version,name,statements from supabase_migrations.schema_migrations where version>='20261008019000' order by version");

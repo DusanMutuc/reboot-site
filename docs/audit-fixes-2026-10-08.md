@@ -1,6 +1,6 @@
 # Remaining audit repairs — 8 October 2026
 
-Status: implementation and release validation complete; production rollout in progress.
+Status: implemented and deployed to production; database and credential remediation verified.
 
 This follows the booking/KPI stabilization, complete account transfers, and merged-account releases. The historical findings and reproductions remain in [the audit](code-audit-2026-10-06.md). A12's bearer binding was already repaired in `d91dc86`.
 
@@ -24,7 +24,7 @@ Four canonical migrations are bundled by `node tools/build-audit-fixes-release.m
 3. `20261008021000_smartdoc_submission_integrity`
 4. `20261008022000_atomic_partnership_management`
 
-The bundle installs and verifies all four in one transaction, records each exact canonical migration, preserves the archive/pre-existing request-hook chain, and rejects partial or repeated installation. A late failure rolls back schema, grants, policies, derived partnership claims, hook settings, and history registration together. The bundle does not change passwords or send emails.
+The bundle installs and verifies all four in one transaction, records each exact canonical migration, preserves the archive/pre-existing request-hook chain, and rejects partial or repeated installation. A late failure rolls back schema, grants, policies, derived partnership claims, hook settings, and history registration together. Migration-history registration normalizes Windows clipboard line endings to canonical LF; the replay test simulates CRLF input. The bundle does not change passwords or send emails.
 
 Production metadata was saved privately before changes. Relevant deployed function definitions matched the migration baseline. Preflight found 14 partnerships/28 member rows with no overlapping sharing domains or archived active sharing memberships. All four library/Compass roots were published, and every active assigned programme system had a published Library path. Existing public image buckets remain public.
 
@@ -40,4 +40,15 @@ The official Auth implementation documents the relevant behavior in [admin updat
 
 Regression tests exercise actual components and route handlers, installed Supabase transport, and PostgreSQL/RLS through PGlite. They cover failed/late writes, navigation, owner isolation, publication ancestry, membership permutations, direct role/resource access, atomic partnership failures, setup proof and expiry, stale tokens, and combined migration rollback. A separate opt-in PostgreSQL test exercises actual multi-session partnership concurrency; it requires a dedicated test database and was not run on this host.
 
-Final local run: **629 tests total, 626 passed, 3 optional integration tests skipped, no failures**. TypeScript, changed-file ESLint, diff checks and the production build passed. The final generated release also passed a rollback-only rehearsal against production; no migration history remained after rollback. Production migration/credential verification is recorded below after rollout.
+Final local run: **629 tests total, 626 passed, 3 optional integration tests skipped, no failures**. TypeScript, changed-file ESLint and the production build passed. The final generated release also passed a rollback-only rehearsal against production; no migration history remained after rollback. The subsequent Windows line-ending regression passed all seven combined-release checks.
+
+## Production verification
+
+- Application commit `49b9e59cd109cfb659a8362e566509117f243613` deployed successfully to Vercel Production on 8 October 2026. The rendered [production login](https://hub.rebootmembers.com/login) exposes **Set up or reset password**, and its email dialog opens. Unauthenticated setup completion returns HTTP 401. The login is client-rendered, so the rendered browser check is used for the button rather than a raw HTML substring check.
+- All four migrations are registered, and their stored source fingerprints match canonical LF files. A bounded, hash-checked transaction normalized only their history line endings after the Windows SQL Editor paste. No migration was reapplied.
+- Both the setup guard and the existing archive guard cover 86 tables. The authenticator request hook is `public.account_setup_pre_request`, with the archive/predecessor chain preserved. The original 14 partnerships and 28 membership rows remain.
+- Anonymous calls to the three restricted legacy content mutation RPCs return HTTP 401 / PostgreSQL `42501`.
+- The fresh password-hash snapshot contained **42** eligible non-archived accounts; one of the initial 43 no longer matched before remediation. Dry-run revalidation confirmed 42 eligible accounts. The Auth rotation completed **42 updates, zero failures**, preserving other metadata and requiring email password setup. No bulk email was sent.
+- Final read-only database checks confirmed **zero non-archived accounts using the legacy credential**, **42 accounts requiring setup**, and **zero remaining Auth sessions for those 42 accounts**. Private schema backups, bounded snapshots and per-account remediation results are retained outside the repository.
+
+Members affected by the rotation must use the login page's setup/reset action to choose their own password. No one whose password already differed was included.
