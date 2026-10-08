@@ -70,6 +70,7 @@ test('concurrent PostgreSQL sessions cannot establish overlapping partnerships',
         for each row execute function public.enforce_single_active_partnership_per_domain(); commit;`);
     installed = true;
     await run(await read('supabase/migrations/20261008022000_atomic_partnership_management.sql'));
+    await run(await read('supabase/migrations/20261008023000_safe_partnership_claim_refresh.sql'));
 
     await t.test('two creates sharing a member serialize; loser leaves no orphan', async () => {
       const first = start(`begin; ${saveSql({shared_kpis:true,user_ids:[firstId,secondId]})};

@@ -12,7 +12,7 @@ insert into public.roles values(1,'admin');
 insert into public.user_roles values('00000000-0000-0000-0000-000000000006',1);
 create type public.share_domain as enum ('kpis','attendance','notes');
 create table public.profiles (
-  id uuid primary key references auth.users(id), first_name text, last_name text,
+  id uuid primary key references auth.users(id) on update cascade on delete cascade, first_name text, last_name text,
   merged_at timestamptz, merged_into_user_id uuid
 );
 create table public.partnerships (

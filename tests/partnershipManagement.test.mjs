@@ -6,6 +6,7 @@ import path from 'node:path';
 
 const ids = Array.from({ length: 6 }, (_, i) => `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`);
 const migrationPath = 'supabase/migrations/20261008022000_atomic_partnership_management.sql';
+const refreshMigrationPath = 'supabase/migrations/20261008023000_safe_partnership_claim_refresh.sql';
 const read = (file) => readFile(new URL(`../${file}`, import.meta.url), 'utf8');
 const definition = (sql, name) => {
   const expression = new RegExp(`CREATE OR REPLACE FUNCTION "public"\\."${name}"[\\s\\S]*?\\$\\$;`, 'i');
@@ -55,6 +56,11 @@ test('partnership edits and sharing invariants execute atomically in PostgreSQL'
     await db.exec(`create trigger reject_merged_member_write before insert or update or delete on public.partnership_users
       for each row execute function public.reject_merged_member_write('user_id');`);
     await db.exec(await read(migrationPath));
+    const functionSecurity = () => rows(`select proowner,proacl,prosecdef,proconfig from pg_proc
+      where oid='public.refresh_partnership_domain_claims()'::regprocedure`);
+    const securityBefore = await functionSecurity();
+    await db.exec(await read(refreshMigrationPath));
+    assert.deepEqual(await functionSecurity(), securityBefore, 'follow-up preserves function owner, ACLs, security and search path');
 
     await isolated('create returns full member shape and deduplicates member IDs', async () => {
       const created = await save({ name: '  Partners  ', shared_kpis: true, user_ids: [ids[0],ids[1],ids[0]] });
@@ -130,6 +136,46 @@ test('partnership edits and sharing invariants execute atomically in PostgreSQL'
       const third = await save({ shared_attendance: true, user_ids: [ids[0],ids[3]] });
       await db.query('delete from partnerships where id=$1', [third.id]);
       assert.equal(await scalar('select count(*) from partnership_domain_claims where user_id=$1', [ids[0]]), 0);
+    });
+
+    await isolated('refresh preserves existing claim rows while removing only disabled domains', async () => {
+      const first = await save({ shared_kpis:true, shared_notes:true, user_ids:[ids[0],ids[1]] });
+      const stableClaims = () => rows("select user_id,domain,partnership_id,ctid::text from partnership_domain_claims where domain='notes' order by user_id");
+      const before = await stableClaims();
+      await save({ name:'Renamed' }, first.id);
+      assert.deepEqual(await stableClaims(), before, 'renaming does not delete and recreate claims');
+      await save({ shared_kpis:false }, first.id);
+      assert.deepEqual(await stableClaims(), before, 'unaffected domains retain their existing rows');
+      assert.equal(await scalar("select count(*) from partnership_domain_claims where domain='kpis'"), 0);
+      assert.equal(await scalar('select count(*) from partnership_domain_claims'), 2);
+    });
+
+    await isolated('a multirow owner replacement releases obsolete claims before inserting the new owner', async () => {
+      const oldOwner = await save({ shared_notes:true, user_ids:[ids[0],ids[1]] });
+      const newOwner = await save({ shared_notes:true, is_active:false, user_ids:[ids[0],ids[1]] });
+      await db.query('update partnerships set is_active=(id=$1) where id in ($1,$2)', [newOwner.id,oldOwner.id]);
+      assert.deepEqual(await rows('select user_id,partnership_id from partnership_domain_claims order by user_id'),
+        [ids[0],ids[1]].map((user_id) => ({ user_id, partnership_id:newOwner.id })));
+      assert.equal(await scalar("select canonical_owner_for($1,'notes')",[ids[1]]),ids[0]);
+    });
+
+    await isolated('Auth deletion with an empty membership cascade leaves unrelated claims untouched', async () => {
+      await save({ shared_attendance:true, user_ids:[ids[0],ids[1]] });
+      const before = await rows('select user_id,domain,partnership_id,ctid::text from partnership_domain_claims order by user_id');
+      const revision = await scalar('select revision from partnership_write_guard');
+      await db.query('delete from auth.users where id=$1',[ids[4]]);
+      assert.equal(await scalar('select count(*) from profiles where id=$1',[ids[4]]),0);
+      assert.ok(await scalar('select revision from partnership_write_guard') > revision, 'empty FK cascade reaches statement triggers');
+      assert.deepEqual(await rows('select user_id,domain,partnership_id,ctid::text from partnership_domain_claims order by user_id'),before);
+    });
+
+    await isolated('Auth deletion cascades only the deleted member claims and retains the partner', async () => {
+      const partnership = await save({ shared_notes:true, user_ids:[ids[0],ids[1]] });
+      const before = await rows('select user_id,domain,partnership_id,ctid::text from partnership_domain_claims where user_id=$1',[ids[1]]);
+      await db.query('delete from auth.users where id=$1',[ids[0]]);
+      assert.deepEqual(await rows('select user_id from partnership_users where partnership_id=$1',[partnership.id]),[{user_id:ids[1]}]);
+      assert.equal(await scalar('select count(*) from partnership_domain_claims'),1);
+      assert.deepEqual(await rows('select user_id,domain,partnership_id,ctid::text from partnership_domain_claims where user_id=$1',[ids[1]]),before);
     });
 
     await isolated('archived members and archived partnership history remain protected', async () => {
