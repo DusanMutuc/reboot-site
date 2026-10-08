@@ -249,45 +249,58 @@ test('assignment and profile lookup failures reject instead of appearing as abse
 
 test('workspace GET blocks unauthorized link resolution and forwards the selected member for allowed reads', async () => {
   const roles = loadModule('../src/lib/userRoles.ts');
-  const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': roles });
+  const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': roles, '@/lib/partnershipScope': {} });
   const implementationApi = loadModule('../src/lib/implementationApi.ts');
   const actorId = coachId(900);
-  for (const mode of ['unauthenticated', 'denied', 'allowed']) {
+  for (const mode of ['unauthenticated', 'denied', 'allowed', 'notes-only', 'malformed-attendance', 'attendance-error']) {
     const client = clientFor({
       assignments: [assignment(10), assignment(99, 'implementation', { user_id: actorId })],
       profiles: [profile(10), profile(99)], bookingProfiles: [bookingProfile(10), bookingProfile(99)],
     });
     const accessCalls = [];
     const loadCalls = [];
+    const attendanceCalls = [];
+    const guard = { ok: true, user: { id: actorId }, roleCodes: ['implementation_coach'] };
     const route = loadModule('../src/app/api/implementation-workspace/route.ts', {
       '@/lib/requireUser': { requireUser: async () => mode === 'unauthenticated'
         ? { ok: false, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-        : { ok: true, user: { id: actorId }, roleCodes: ['implementation_coach'] } },
+        : guard },
       '@/lib/supabaseAdmin': { getAdminClient: () => client },
       '@/lib/businessReviews': businessReviews,
-      '@/lib/implementationApi': implementationApi,
+      '@/lib/implementationApi': { ...implementationApi, implementationActorClient(_request, actualGuard) {
+        assert.equal(actualGuard, guard);
+        return { async rpc(name, args) {
+          assert.equal(name, 'can_manage_coaching_attendance');
+          attendanceCalls.push(plain(args));
+          return { data: mode === 'allowed' ? true : mode === 'malformed-attendance' ? 'true' : false,
+            error: mode === 'attendance-error' ? { code: 'XX000', message: 'Scope read failed' } : null };
+        } };
+      } },
       '@/lib/implementationWorkspaceServer': {
         async canAccessImplementationWorkspace(actualClient, actualActorId, roleCodes, userId) {
           assert.equal(actualClient, client);
           accessCalls.push({ actorId: actualActorId, roleCodes, userId });
-          return mode === 'allowed';
+          return mode !== 'denied';
         },
-        async loadImplementationWorkspace(actualClient, userId, noteId) {
+        async loadImplementationWorkspace(actualClient, userId, noteId, options) {
           assert.equal(actualClient, client);
-          loadCalls.push({ userId, noteId });
+          loadCalls.push({ userId, noteId, options: plain(options) });
           return { bookingCoaches: await loadImplementationBookingCoaches(client, userId, now) };
         },
       },
     });
     const response = await route.GET(new NextRequest(`https://reboot.example/api/implementation-workspace?userId=${memberId}&noteId=42`));
-    assert.equal(response.status, mode === 'unauthenticated' ? 401 : mode === 'denied' ? 403 : 200);
-    if (mode !== 'allowed') {
+    assert.equal(response.status, mode === 'unauthenticated' ? 401 : mode === 'denied' ? 403 : mode === 'attendance-error' ? 500 : 200);
+    if (['unauthenticated', 'denied', 'attendance-error'].includes(mode)) {
       assert.equal(client.calls.length, 0, 'Denied callers must not query assignments or booking profiles');
       assert.equal(loadCalls.length, 0);
       if (mode === 'unauthenticated') assert.equal(accessCalls.length, 0);
+      if (mode === 'attendance-error') assert.deepEqual(attendanceCalls, [{ _user_id: memberId }]);
+      else assert.equal(attendanceCalls.length, 0, 'Member authorization runs before attendance lookup');
     } else {
       assert.deepEqual(plain(accessCalls), [{ actorId, roleCodes: ['implementation_coach'], userId: memberId }]);
-      assert.deepEqual(loadCalls, [{ userId: memberId, noteId: 42 }]);
+      assert.deepEqual(attendanceCalls, [{ _user_id: memberId }]);
+      assert.deepEqual(loadCalls, [{ userId: memberId, noteId: 42, options: { canReadAttendance: mode === 'allowed' } }]);
       assert.equal((await response.json()).bookingCoaches.implementation.coachId, coachId(10));
     }
   }

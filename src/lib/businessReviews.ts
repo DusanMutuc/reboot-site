@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import type { BusinessAuditPreparationAnswers } from '@/lib/businessAuditPreparationShared';
 import { hasRoleCode } from '@/lib/userRoles';
+import { getNotesScopeUserIds, loadVisibleCoachingNotes, readRowsForIds } from '@/lib/partnershipScope';
 
 export const FOCUS_FINDER_TEMPLATE_KEY = 'focus_finder_v1';
 
@@ -186,7 +187,6 @@ type BusinessReviewSystemPriorityRow = {
 };
 
 type UserSystemScorecardLastReviewRow = {
-  user_id: string;
   audience: SystemScorecardAudience;
   system_key: string;
   last_reviewed_at: string | null;
@@ -219,6 +219,36 @@ type BusinessReviewPreparationRow = {
   submitted_at: string;
   updated_at: string;
 };
+
+async function loadReviewRatings(client: SupabaseClient, reviewIds: number[]): Promise<BusinessReviewSystemRatingRow[]> {
+  const rows: BusinessReviewSystemRatingRow[] = [];
+  for (let offset = 0; offset < reviewIds.length; offset += 100) {
+    const batch = reviewIds.slice(offset, offset + 100);
+    let start = 0;
+    while (true) {
+      const result = await client.from('business_review_system_ratings')
+        .select('business_review_id,system_id,status,reviewed_at,reviewed_by,updated_at')
+        .in('business_review_id', batch).order('business_review_id').order('system_id').range(start, start + 199);
+      if (result.error) throw result.error;
+      if (!result.data?.length) break;
+      rows.push(...result.data as BusinessReviewSystemRatingRow[]);
+      start += result.data.length;
+    }
+  }
+  return rows;
+}
+
+function shiftUtcYear(date: Date, years: number): Date {
+  const result = new Date(date);
+  result.setUTCFullYear(date.getUTCFullYear() + years);
+  // Match PostgreSQL's calendar-year interval for leap-day review dates.
+  if (result.getUTCMonth() !== date.getUTCMonth()) result.setUTCDate(0);
+  return result;
+}
+
+export function getBusinessReviewDueAt(reviewedAt: string): string {
+  return shiftUtcYear(new Date(reviewedAt), 1).toISOString();
+}
 
 export function isCancelledGhlStatus(status: string | null | undefined): boolean {
   if (!status) return false;
@@ -266,51 +296,51 @@ export async function canManageBusinessReviews(
     return false;
   }
 
-  const { data, error } = await client
-    .from('user_coaches')
-    .select('id')
-    .eq('coach_id', actorId)
-    .eq('user_id', studentId)
-    .eq('is_active', true)
-    .limit(1)
-    .maybeSingle();
+  const memberIds = await getNotesScopeUserIds(client, studentId);
+  if (!memberIds.length) return false;
 
-  if (error) {
-    throw new Error(error.message);
+  for (let offset = 0; offset < memberIds.length; offset += 100) {
+    const { data, error } = await client
+      .from('user_coaches').select('id').eq('coach_id', actorId)
+      .in('user_id', memberIds.slice(offset, offset + 100)).eq('is_active', true)
+      .or(`ended_at.is.null,ended_at.gt.${new Date().toISOString()}`).limit(1).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (data) return true;
   }
+  return false;
+}
 
-  return Boolean(data);
+export async function canManageBusinessReviewRecord(
+  client: SupabaseClient, actorId: string, roleCodes: readonly string[], coachingNoteId: number,
+): Promise<boolean> {
+  const note = await client.from('coaching_notes_base').select('user_id')
+    .eq('id', coachingNoteId).is('deleted_at', null).maybeSingle();
+  if (note.error) throw note.error;
+  if (!note.data) return false;
+  return canManageBusinessReviews(client, actorId, roleCodes, note.data.user_id);
 }
 
 export async function loadBusinessReviews(
   client: SupabaseClient,
   studentId: string,
 ): Promise<BusinessReviewsPayload> {
+  const notes = await loadVisibleCoachingNotes(client, studentId);
   const [
     { data: dimensionRows, error: dimensionError },
-    { data: reviewRows, error: reviewError },
+    reviewRows,
   ] = await Promise.all([
     client
       .from('focus_finder_dimensions')
       .select('id, key, group_key, group_label, label, subtitle, position')
       .eq('template_key', FOCUS_FINDER_TEMPLATE_KEY)
       .order('position', { ascending: true }),
-    client
-      .from('business_reviews')
-      .select(
-        'id, user_id, coach_id, meeting_id, archived_meeting_id, coaching_note_id, focus_finder_template_key, system_scorecard_template_key, review_date, status, completed_at, created_at, updated_at',
-      )
-      .eq('user_id', studentId)
-      .order('review_date', { ascending: false })
-      .order('id', { ascending: false }),
+    readRowsForIds<BusinessReviewRow>(client, 'business_reviews',
+      'id, user_id, coach_id, meeting_id, archived_meeting_id, coaching_note_id, focus_finder_template_key, system_scorecard_template_key, review_date, status, completed_at, created_at, updated_at',
+      'coaching_note_id', notes.map((note) => note.id)),
   ]);
 
   if (dimensionError) {
     throw new Error(dimensionError.message);
-  }
-
-  if (reviewError) {
-    throw new Error(reviewError.message);
   }
 
   const dimensions = ((dimensionRows ?? []) as FocusFinderDimensionRow[]).map((row) => ({
@@ -323,7 +353,7 @@ export async function loadBusinessReviews(
     position: row.position,
   }));
 
-  const rows = (reviewRows ?? []) as BusinessReviewRow[];
+  const rows = reviewRows.sort((left, right) => right.review_date.localeCompare(left.review_date) || Number(right.id) - Number(left.id));
   const reviewIds = rows.map((row) => Number(row.id));
   let additionalScorecardRows: AdditionalScorecardRow[] = [];
   let focusValueRows: BusinessReviewFocusValueRow[] = [];
@@ -332,7 +362,6 @@ export async function loadBusinessReviews(
   let templateRows: SystemScorecardTemplateRow[] = [];
   let categoryRows: SystemScorecardCategoryRow[] = [];
   let systemRows: SystemScorecardSystemRow[] = [];
-  let lastReviewRows: UserSystemScorecardLastReviewRow[] = [];
   let meetingRows: BusinessReviewMeetingRow[] = [];
   let preparationRows: BusinessReviewPreparationRow[] = [];
 
@@ -353,12 +382,7 @@ export async function loadBusinessReviews(
         .from('business_review_focus_values')
         .select('business_review_id, dimension_id, value, updated_at')
         .in('business_review_id', reviewIds),
-      client
-        .from('business_review_system_ratings')
-        .select(
-          'business_review_id, system_id, status, reviewed_at, reviewed_by, updated_at',
-        )
-        .in('business_review_id', reviewIds),
+      loadReviewRatings(client, reviewIds),
       client
         .from('business_review_system_priorities')
         .select(
@@ -380,10 +404,6 @@ export async function loadBusinessReviews(
       throw new Error(focusResult.error.message);
     }
 
-    if (ratingResult.error) {
-      throw new Error(ratingResult.error.message);
-    }
-
     if (priorityResult.error) {
       throw new Error(priorityResult.error.message);
     }
@@ -397,7 +417,7 @@ export async function loadBusinessReviews(
     }
 
     focusValueRows = (focusResult.data ?? []) as BusinessReviewFocusValueRow[];
-    ratingRows = (ratingResult.data ?? []) as BusinessReviewSystemRatingRow[];
+    ratingRows = ratingResult;
     priorityRows = (priorityResult.data ?? []) as BusinessReviewSystemPriorityRow[];
     preparationRows = (preparationResult.data ?? []) as BusinessReviewPreparationRow[];
     meetingRows = (meetingResult.data ?? []) as BusinessReviewMeetingRow[];
@@ -413,7 +433,7 @@ export async function loadBusinessReviews(
   );
 
   if (scorecardTemplateKeys.length > 0) {
-    const [templateResult, categoryResult, systemResult, lastReviewResult] =
+    const [templateResult, categoryResult, systemResult] =
       await Promise.all([
         client
           .from('system_scorecard_templates')
@@ -429,12 +449,6 @@ export async function loadBusinessReviews(
           .select('id, template_key, category_id, key, label, position, library_item_id')
           .in('template_key', scorecardTemplateKeys)
           .order('position', { ascending: true }),
-        client
-          .from('user_system_scorecard_last_reviews')
-          .select(
-            'user_id, audience, system_key, last_reviewed_at, review_due_at, review_overdue',
-          )
-          .eq('user_id', studentId),
       ]);
 
     if (templateResult.error) {
@@ -449,14 +463,9 @@ export async function loadBusinessReviews(
       throw new Error(systemResult.error.message);
     }
 
-    if (lastReviewResult.error) {
-      throw new Error(lastReviewResult.error.message);
-    }
-
     templateRows = (templateResult.data ?? []) as SystemScorecardTemplateRow[];
     categoryRows = (categoryResult.data ?? []) as SystemScorecardCategoryRow[];
     systemRows = (systemResult.data ?? []) as SystemScorecardSystemRow[];
-    lastReviewRows = (lastReviewResult.data ?? []) as UserSystemScorecardLastReviewRow[];
   }
 
   const focusValuesByReviewId = new Map<number, BusinessReviewFocusValue[]>();
@@ -486,9 +495,26 @@ export async function loadBusinessReviews(
       row,
     ]),
   );
-  const lastReviewsByAudienceAndSystem = new Map(
-    lastReviewRows.map((row) => [`${row.audience}:${row.system_key}`, row]),
-  );
+  const lastReviewsByAudienceAndSystem = new Map<string, UserSystemScorecardLastReviewRow>();
+  const systemById = new Map(systemRows.map((row) => [Number(row.id), row]));
+  const overdueBefore = shiftUtcYear(new Date(), -1).getTime();
+  // Aggregate only reviews attached to this member's visible notes. Review
+  // user_id can differ from note ownership after a partnership stops sharing.
+  for (const row of ratingRows) {
+    if (!row.reviewed_at) continue;
+    const system = systemById.get(Number(row.system_id));
+    const template = system ? templatesByKey.get(system.template_key) : null;
+    if (!system || !template) continue;
+    const key = `${template.audience}:${system.key}`;
+    const previous = lastReviewsByAudienceAndSystem.get(key);
+    if (!previous || Date.parse(row.reviewed_at) > Date.parse(previous.last_reviewed_at ?? '')) {
+      const reviewedAt = new Date(row.reviewed_at);
+      lastReviewsByAudienceAndSystem.set(key, {
+        audience: template.audience, system_key: system.key, last_reviewed_at: row.reviewed_at,
+        review_due_at: getBusinessReviewDueAt(row.reviewed_at), review_overdue: reviewedAt.getTime() < overdueBefore,
+      });
+    }
+  }
   const meetingStatusById = new Map(
     meetingRows.map((row) => [Number(row.id), row.ghl_status]),
   );

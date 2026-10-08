@@ -3,12 +3,14 @@ import test from 'node:test';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
+import * as partnershipScope from '../src/lib/partnershipScope.ts';
 
 const exports = {};
 const source = ts.transpileModule(fs.readFileSync(new URL('../src/lib/businessReviews.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
 vm.runInNewContext(source, { exports, require(name) {
+  if (name === '@/lib/partnershipScope') return partnershipScope;
   assert.equal(name, '@/lib/userRoles');
   return { hasRoleCode: (codes, code) => codes.includes(code) };
 } });
@@ -20,6 +22,7 @@ function fixture({ meeting_id = null, archived_meeting_id = null, meetings = [] 
     review_date: '2026-10-08', status: 'completed', completed_at: '2026-10-08T12:00:00Z',
     created_at: '2026-10-01T12:00:00Z', updated_at: '2026-10-08T12:00:00Z' };
   const tables = { focus_finder_dimensions: [], business_reviews: [review], meetings,
+    coaching_notes: [{ id: 50, user_id: 'archived-member', created_at: review.created_at, m2_meeting_id: null }],
     business_review_additional_scorecards: [], business_review_focus_values: [],
     business_review_system_ratings: [], business_review_system_priorities: [], business_review_preparation_responses: [] };
   return { calls, client: { from(table) {
@@ -31,7 +34,10 @@ function fixture({ meeting_id = null, archived_meeting_id = null, meetings = [] 
     const query = {
       select(value) { columns = value.split(',').map((column) => column.trim()); return query; },
       eq(column, value) { rows = rows.filter((row) => row[column] === value); return query; },
-      in(column, values) { call.filters.push({ column, values: Array.from(values) }); rows = rows.filter((row) => values.includes(row[column])); return query; },
+      in(column, values) { call.filters.push({ column, values: Array.from(values) }); rows = rows.filter((row) => values.some((value) => String(value) === String(row[column]))); return query; },
+      gt(column, value) { rows = rows.filter((row) => row[column] > value); return query; },
+      limit(count) { rows = rows.slice(0, count); return query; },
+      range(start, end) { rows = rows.slice(start, end + 1); return query; },
       order() { return query; },
       then(resolve, reject) {
         return Promise.resolve({ data: rows.map((row) => Object.fromEntries(columns.map((column) => [column, row[column]]))), error: null }).then(resolve, reject);

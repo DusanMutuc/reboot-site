@@ -19,7 +19,7 @@ function loadModule(path, imports = {}) {
   return exports;
 }
 const userRoles = loadModule('../src/lib/userRoles.ts');
-const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles });
+const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles, '@/lib/partnershipScope': {} });
 const implementationApi = loadModule('../src/lib/implementationApi.ts');
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
@@ -33,7 +33,7 @@ function apiFor({
   authenticated = true, allowed = true, accessError = null,
   cycle = { id: 42, user_id: memberId }, cycleError = null,
   rpcError = null, rpcData = { meeting_id: 123, created: true },
-  loadErrors = [],
+  loadErrors = [], attendanceAllowed = true, attendanceError = null,
 } = {}) {
   const calls = [];
   const workspace = {
@@ -63,6 +63,11 @@ function apiFor({
   };
   const actor = {
     async rpc(name, args) {
+      if (name === 'can_manage_coaching_attendance') {
+        calls.push({ kind: 'attendance-access', args });
+        return { data: attendanceAllowed, error: attendanceError };
+      }
+      assert.equal(name, 'create_implementation_meeting');
       calls.push({ kind: 'rpc', name, args });
       return { data: typeof rpcData === 'function' ? rpcData(args) : rpcData, error: rpcError };
     },
@@ -86,9 +91,9 @@ function apiFor({
         if (accessError) throw accessError;
         return allowed;
       },
-      async loadImplementationWorkspace(client, userId, noteId) {
+      async loadImplementationWorkspace(client, userId, noteId, options) {
         assert.equal(client, admin);
-        calls.push({ kind: 'load', userId, noteId });
+        calls.push({ kind: 'load', userId, noteId, options });
         const error = loadErrors[loadCount++];
         if (error) throw error;
         return workspace;
@@ -170,7 +175,8 @@ test('creation forwards the authenticated actor and request ID, then reloads the
     { kind: 'rpc', name: 'create_implementation_meeting', args: {
       _user_id: memberId, _note_id: 42, _meeting_date: '2026-09-29', _request_id: requestId,
     } },
-    { kind: 'load', userId: memberId, noteId: 42 },
+    { kind: 'attendance-access', args: { _user_id: memberId } },
+    { kind: 'load', userId: memberId, noteId: 42, options: { canReadAttendance: true } },
   ]);
 });
 
@@ -244,4 +250,25 @@ test('a reload failure after commit can be retried with the original request ID'
   assert.equal(mutations.length, 2);
   assert.deepEqual(plain(mutations[0].args), plain(mutations[1].args));
   assert.equal(mutations[1].args._request_id, requestId);
+});
+
+test('meeting creation rechecks attendance permission for its response and does not treat malformed grants as true', async () => {
+  for (const attendanceAllowed of [false, null, 'true', {}, []]) {
+    const api = apiFor({ attendanceAllowed });
+    assert.equal((await api.post()).status, 200);
+    assert.deepEqual(plain(api.calls.find((call) => call.kind === 'attendance-access').args), { _user_id: memberId });
+    assert.deepEqual(plain(api.calls.find((call) => call.kind === 'load').options), { canReadAttendance: false });
+    assert.equal(api.calls.filter((call) => call.kind === 'actor').length, 1);
+    assert.equal(api.calls.filter((call) => call.kind === 'rpc').length, 1);
+  }
+});
+
+test('attendance authorization errors after meeting creation cannot return an unrestricted workspace', async () => {
+  for (const [code, status] of [['XX000', 500], ['PGRST202', 503], ['42501', 403]]) {
+    const api = apiFor({ attendanceError: { code, message: 'Attendance authorization failed' } });
+    assert.equal((await api.post()).status, status);
+    assert.equal(api.calls.filter((call) => call.kind === 'rpc').length, 1);
+    assert.equal(api.calls.filter((call) => call.kind === 'attendance-access').length, 1);
+    assert.ok(!api.calls.some((call) => call.kind === 'load'));
+  }
 });

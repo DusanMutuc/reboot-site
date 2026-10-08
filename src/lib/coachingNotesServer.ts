@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getNotesScopeUserIds } from '@/lib/partnershipScope';
 import type { CoachingHistoryNote, CoachingNotesResponse } from '@/types/coachingNotes';
 
 type RowId = number | string;
@@ -51,21 +52,23 @@ async function readRelated<T extends { id: RowId }>(
 }
 
 export async function loadCoachingNotes(client: SupabaseClient, userId: string): Promise<CoachingNotesResponse> {
-  const [cycles, sessions, general] = await Promise.all([
+  const [cycles, memberIds] = await Promise.all([
     // This view preserves existing shared-partner notes and omits deleted cycles.
     readAll<CycleRow>(() => client.from('coaching_notes').select('id,m2_meeting_id').eq('user_id', userId)),
-    readAll<SessionRow>(() => client.from('implementation_meeting_sessions')
-      .select('id,note_id,meeting_id,notes,commitments,notes_written_at,notes_author_id,notes_updated_at,notes_updated_by')
-      .eq('user_id', userId)),
-    readAll<GeneralRow>(() => client.from('general_coaching_notes').select('id,author_id,body,created_at').eq('user_id', userId)),
+    getNotesScopeUserIds(client, userId),
   ]);
   const cycleById = new Map(cycles.map((row) => [String(row.id), row]));
-  const visibleSessions = sessions.filter((row) => cycleById.has(String(row.note_id)) && (row.notes.trim() || row.commitments.trim()));
   const cycleIds = cycles.map((row) => row.id);
-  const [comments, reviews] = await Promise.all([
+  const [comments, reviews, sessions, general] = await Promise.all([
     readRelated<CommentRow>(client, 'coaching_note_comments', 'id,coaching_note_id,author_id,body,created_at', 'coaching_note_id', cycleIds),
     readRelated<ReviewRow>(client, 'business_reviews', 'id,coaching_note_id,meeting_id,review_date', 'coaching_note_id', cycleIds),
+    readRelated<SessionRow>(client, 'implementation_meeting_sessions',
+      'id,note_id,meeting_id,notes,commitments,notes_written_at,notes_author_id,notes_updated_at,notes_updated_by', 'note_id', cycleIds),
+    // An authorized admin can still inspect an archived account's own history;
+    // it must never gain another member's notes through sharing.
+    readRelated<GeneralRow>(client, 'general_coaching_notes', 'id,author_id,body,created_at', 'user_id', memberIds.length ? memberIds : [userId]),
   ]);
+  const visibleSessions = sessions.filter((row) => row.notes.trim() || row.commitments.trim());
   const reviewByCycle = new Map<string, ReviewRow>();
   for (const row of reviews) {
     const previous = reviewByCycle.get(String(row.coaching_note_id));

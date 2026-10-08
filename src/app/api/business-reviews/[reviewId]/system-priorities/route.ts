@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
-  canManageBusinessReviews,
+  canManageBusinessReviewRecord,
   parsePositiveInteger,
   type BusinessReviewSystemPriority,
   type SystemScorecardStatus,
@@ -72,7 +72,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const { data: review, error: reviewError } = await admin
       .from('business_reviews')
-      .select('id, user_id')
+      .select('id, user_id, coaching_note_id')
       .eq('id', reviewId)
       .maybeSingle();
 
@@ -84,11 +84,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Business review not found.' }, { status: 404 });
     }
 
-    const allowed = await canManageBusinessReviews(
+    const allowed = await canManageBusinessReviewRecord(
       admin,
       guard.user.id,
       guard.roleCodes,
-      review.user_id,
+      Number(review.coaching_note_id),
     );
 
     if (!allowed) {

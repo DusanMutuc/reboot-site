@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import {
-  canManageBusinessReviews,
+  canManageBusinessReviewRecord,
+  getBusinessReviewDueAt,
   parsePositiveInteger,
   type BusinessReviewSystemRating,
-  type SystemScorecardAudience,
   type SystemScorecardStatus,
 } from '@/lib/businessReviews';
 import { requireUser } from '@/lib/requireUser';
@@ -26,12 +26,6 @@ type RouteContext = {
 type SaveSystemRatingBody = {
   systemId?: unknown;
   status?: unknown;
-};
-
-type LastReviewRow = {
-  last_reviewed_at: string | null;
-  review_due_at: string | null;
-  review_overdue: boolean;
 };
 
 async function readReviewId(context: RouteContext): Promise<number | null> {
@@ -81,7 +75,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const { data: review, error: reviewError } = await admin
       .from('business_reviews')
-      .select('id, user_id, system_scorecard_template_key')
+      .select('id, user_id, coaching_note_id, system_scorecard_template_key')
       .eq('id', reviewId)
       .maybeSingle();
 
@@ -100,11 +94,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const allowed = await canManageBusinessReviews(
+    const allowed = await canManageBusinessReviewRecord(
       admin,
       guard.user.id,
       guard.roleCodes,
-      review.user_id,
+      Number(review.coaching_note_id),
     );
 
     if (!allowed) {
@@ -179,29 +173,15 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
-    const audience = template.audience as SystemScorecardAudience;
-    const { data: lastReview, error: lastReviewError } = await admin
-      .from('user_system_scorecard_last_reviews')
-      .select('last_reviewed_at, review_due_at, review_overdue')
-      .eq('user_id', review.user_id)
-      .eq('audience', audience)
-      .eq('system_key', system.key)
-      .maybeSingle();
-
-    if (lastReviewError) {
-      return NextResponse.json({ error: lastReviewError.message }, { status: 400 });
-    }
-
-    const latest = lastReview as LastReviewRow | null;
     const systemRating: BusinessReviewSystemRating = {
       systemId: Number(saved.system_id),
       status: saved.status as SystemScorecardStatus,
       reviewedAt: saved.reviewed_at,
       reviewedBy: saved.reviewed_by,
       updatedAt: saved.updated_at,
-      lastReviewedAt: latest?.last_reviewed_at ?? saved.reviewed_at,
-      reviewDueAt: latest?.review_due_at ?? null,
-      reviewOverdue: latest?.review_overdue ?? false,
+      lastReviewedAt: saved.reviewed_at,
+      reviewDueAt: getBusinessReviewDueAt(saved.reviewed_at),
+      reviewOverdue: false,
     };
 
     return NextResponse.json({ systemRating });

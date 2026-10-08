@@ -18,7 +18,7 @@ function loadModule(path, imports = {}) {
   return exports;
 }
 const userRoles = loadModule('../src/lib/userRoles.ts');
-const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles });
+const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles, '@/lib/partnershipScope': {} });
 const businessAuditConfig = loadModule('../src/lib/businessAuditConfig.ts');
 const meetingSelection = loadModule('../src/lib/implementationMeetingSelection.ts');
 const { loadUpcomingBusinessReview } = loadModule('../src/lib/upcomingBusinessReview.ts', {
@@ -42,7 +42,7 @@ function m2(date, options = {}) {
   return cycle(null, date, { id: 'm2:1', noteId: 1, kind: 'm2', businessReviewId: null, ...options });
 }
 function review(id, date, options = {}) {
-  return { id, user_id: memberId, meeting_id: null, review_date: date, status: 'draft', ...options };
+  return { id, user_id: memberId, coaching_note_id: id + 1000, meeting_id: null, review_date: date, status: 'draft', ...options };
 }
 function meeting(id, date, options = {}) {
   return { id, date, title: 'Business review', starts_at: null, meeting_timezone: 'America/Edmonton', ghl_status: null, ...options };
@@ -90,14 +90,14 @@ test('the selected cycle uses its next review and fetches that member’s actual
   });
   assert.deepEqual(plain(cycles), before, 'Selecting a boundary must not reorder the caller’s cycles');
   assert.deepEqual(plain(client.calls.map(({ table, filters }) => ({ table, filters }))), [
-    { table: 'business_reviews', filters: [{ column: 'id', value: 30 }, { column: 'user_id', value: memberId }] },
+    { table: 'business_reviews', filters: [{ column: 'id', value: 30 }, { column: 'coaching_note_id', value: 1030 }] },
     { table: 'meetings', filters: [{ column: 'id', value: 300 }] },
   ]);
 });
 
 test('business reviews on the same date advance by review ID, not note ID or input order', async () => {
   const selected = cycle(20, '2026-09-29', { noteId: 9999 });
-  const client = clientFor({ reviews: [review(21, '2026-09-29'), review(22, '2026-09-29')] });
+  const client = clientFor({ reviews: [review(21, '2026-09-29', { coaching_note_id: 2 }), review(22, '2026-09-29', { coaching_note_id: 1 })] });
   const result = await loadUpcomingBusinessReview(client, memberId, [
     cycle(22, '2026-09-29', { noteId: 1 }), selected, cycle(19, '2026-09-29'),
     cycle(21, '2026-09-29', { noteId: 2 }), cycle(30, '2026-10-01'),
@@ -123,7 +123,7 @@ test('a completed, missing, cancelled, or past next boundary never exposes a lat
   const cases = [
     { label: 'completed review', review: review(20, '2026-09-30', { status: 'completed' }) },
     { label: 'missing review', review: null },
-    { label: 'review belonging to another member', review: review(20, '2026-09-30', { user_id: otherMemberId }) },
+    { label: 'review belonging to another coaching cycle', review: review(20, '2026-09-30', { coaching_note_id: 99999 }) },
     { label: 'missing linked meeting', review: review(20, '2026-09-30', { meeting_id: 200 }) },
     { label: 'cancelled linked meeting', review: review(20, '2026-09-30', { meeting_id: 200 }), meeting: meeting(200, '2026-09-30', { ghl_status: 'No_Show' }) },
     { label: 'past linked meeting', review: review(20, '2026-10-01', { meeting_id: 200 }), meeting: meeting(200, '2026-09-28') },
@@ -210,8 +210,8 @@ test('without a selected cycle, ineligible candidates can be skipped to the firs
   const client = clientFor({
     reviews: [
       review(10, '2026-09-30', { status: 'completed' }),
-      // Review 20 is missing; review 30 belongs to another member.
-      review(30, '2026-09-30', { user_id: otherMemberId }),
+      // Review 20 is missing; review 30 does not belong to its visible cycle.
+      review(30, '2026-09-30', { coaching_note_id: 99999 }),
       review(40, '2026-09-30', { meeting_id: 400 }),
       review(50, '2026-09-30', { meeting_id: 500 }),
       review(60, '2026-09-28'),
@@ -249,4 +249,14 @@ test('database errors reject instead of quietly hiding an upcoming review', asyn
     await assert.rejects(() => loadUpcomingBusinessReview(client, memberId, [selected, next], selected, now),
       (error) => error.message === `${failTable} failed`);
   }
+});
+
+test('a partner-owned upcoming review remains visible through its shared coaching cycle', async () => {
+  const selected = cycle(10, '2026-09-01');
+  const next = cycle(20, '2026-09-30');
+  const client = clientFor({ reviews: [review(20, '2026-09-30', { user_id: otherMemberId })] });
+  const result = await loadUpcomingBusinessReview(client, memberId, [selected, next], selected, now);
+  assert.equal(result.reviewId, 20);
+  assert.equal(result.date, '2026-09-30');
+  assert.ok(client.calls.every((call) => call.filters.every((filter) => filter.column !== 'user_id')));
 });

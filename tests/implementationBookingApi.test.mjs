@@ -19,7 +19,7 @@ function loadModule(path, imports = {}) {
   return exports;
 }
 const userRoles = loadModule('../src/lib/userRoles.ts');
-const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles });
+const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles, '@/lib/partnershipScope': {} });
 const implementationApi = loadModule('../src/lib/implementationApi.ts');
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const memberId = 'bb8f369e-c343-4b6a-9c9c-5e15c54c1641';
@@ -33,7 +33,7 @@ const validRequest = {
 function apiFor({
   authenticated = true, allowed = true,
   cycle = { id: 42, user_id: memberId }, cycleError = null,
-  rpcError = null, loadError = null, booked = true,
+  rpcError = null, loadError = null, booked = true, attendanceAllowed = true, attendanceError = null,
 } = {}) {
   const calls = [];
   const workspace = {
@@ -67,6 +67,11 @@ function apiFor({
   };
   const actor = {
     async rpc(name, args) {
+      if (name === 'can_manage_coaching_attendance') {
+        calls.push({ kind: 'attendance-access', args });
+        return { data: attendanceAllowed, error: attendanceError };
+      }
+      assert.equal(name, 'mutate_implementation_workspace');
       calls.push({ kind: 'rpc', name, args });
       return { data: { id: 'mutation-result', revision: 8 }, error: rpcError };
     },
@@ -88,9 +93,9 @@ function apiFor({
         calls.push({ kind: 'access', actorId: actualActorId, roles, userId });
         return allowed;
       },
-      async loadImplementationWorkspace(client, userId, noteId) {
+      async loadImplementationWorkspace(client, userId, noteId, options) {
         assert.equal(client, admin);
-        calls.push({ kind: 'load', userId, noteId });
+        calls.push({ kind: 'load', userId, noteId, options });
         if (loadError) throw loadError;
         return workspace;
       },
@@ -168,10 +173,11 @@ test('both checking and unchecking target only the selected meeting and return t
       { kind: 'cycle', columns: 'id', filters: [{ column: 'id', value: 42 }, { column: 'user_id', value: memberId }] },
       { kind: 'actor', authorization: 'Bearer actor-token' },
       { kind: 'rpc', name: 'mutate_implementation_workspace', args: {
-        _note_id: 42, _meeting_id: 123, _operation: 'set_next_meeting_booked',
+        _user_id: memberId, _note_id: 42, _meeting_id: 123, _operation: 'set_next_meeting_booked',
         _payload: { booked }, _expected_revision: 7,
       } },
-      { kind: 'load', userId: memberId, noteId: 42 },
+      { kind: 'attendance-access', args: { _user_id: memberId } },
+      { kind: 'load', userId: memberId, noteId: 42, options: { canReadAttendance: true } },
     ]);
   }
 });
@@ -200,4 +206,25 @@ test('a workspace reload failure after the mutation is surfaced as an error', as
   const api = apiFor({ loadError: { code: 'XX000', message: 'Reload failed' } });
   assert.equal((await api.post()).status, 500);
   assert.deepEqual(api.calls.filter((call) => ['rpc', 'load'].includes(call.kind)).map((call) => call.kind), ['rpc', 'load']);
+});
+
+test('a notes-shared booking update reloads without attendance unless the actor receives an explicit boolean grant', async () => {
+  for (const attendanceAllowed of [false, null, 'true', {}, []]) {
+    const api = apiFor({ attendanceAllowed });
+    assert.equal((await api.post()).status, 200);
+    assert.deepEqual(plain(api.calls.find((call) => call.kind === 'attendance-access').args), { _user_id: memberId });
+    assert.deepEqual(plain(api.calls.find((call) => call.kind === 'load').options), { canReadAttendance: false });
+    assert.equal(api.calls.filter((call) => call.kind === 'actor').length, 1, 'Mutation and scope read use the same authenticated actor');
+    assert.equal(api.calls.filter((call) => call.kind === 'rpc').length, 1);
+  }
+});
+
+test('attendance authorization failures after a booking save never fall back to privileged attendance reads', async () => {
+  for (const [code, status] of [['XX000', 500], ['PGRST202', 503], ['42501', 403]]) {
+    const api = apiFor({ attendanceError: { code, message: 'Attendance authorization failed' } });
+    assert.equal((await api.post()).status, status);
+    assert.equal(api.calls.filter((call) => call.kind === 'rpc').length, 1, 'The booking save already ran; the caller can reconcile its result');
+    assert.equal(api.calls.filter((call) => call.kind === 'attendance-access').length, 1);
+    assert.ok(!api.calls.some((call) => call.kind === 'load'));
+  }
 });

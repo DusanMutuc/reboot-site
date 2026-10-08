@@ -19,7 +19,10 @@ export async function GET(request: NextRequest) {
     if (!await canAccessImplementationWorkspace(admin, guard.user.id, guard.roleCodes, userId)) {
       return NextResponse.json({ error: 'You do not have access to this implementation workspace.' }, { status: 403 });
     }
-    return NextResponse.json(await loadImplementationWorkspace(admin, userId, noteId ?? undefined));
+    const attendanceAccess = await implementationActorClient(request, guard).rpc('can_manage_coaching_attendance', { _user_id: userId });
+    if (attendanceAccess.error) throw attendanceAccess.error;
+    return NextResponse.json(await loadImplementationWorkspace(admin, userId, noteId ?? undefined,
+      { canReadAttendance: attendanceAccess.data === true }));
   } catch (error) { return implementationError(error); }
 }
 
@@ -47,11 +50,15 @@ export async function POST(request: NextRequest) {
     const note = await admin.from('coaching_notes').select('id').eq('id', body.noteId).eq('user_id', body.userId).maybeSingle();
     if (note.error) throw note.error;
     if (!note.data) invalidImplementationRequest('This coaching cycle does not belong to the member.');
-    const { error } = await implementationActorClient(request, guard).rpc('mutate_implementation_workspace', {
-      _note_id: body.noteId, _meeting_id: body.meetingId, _operation: body.operation,
+    const actor = implementationActorClient(request, guard);
+    const { error } = await actor.rpc('mutate_implementation_workspace', {
+      _user_id: body.userId, _note_id: body.noteId, _meeting_id: body.meetingId, _operation: body.operation,
       _payload: body.payload ?? {}, _expected_revision: body.expectedRevision,
     });
     if (error) throw error;
-    return NextResponse.json(await loadImplementationWorkspace(admin, body.userId, body.noteId));
+    const attendanceAccess = await actor.rpc('can_manage_coaching_attendance', { _user_id: body.userId });
+    if (attendanceAccess.error) throw attendanceAccess.error;
+    return NextResponse.json(await loadImplementationWorkspace(admin, body.userId, body.noteId,
+      { canReadAttendance: attendanceAccess.data === true }));
   } catch (error) { return implementationError(error); }
 }

@@ -39,6 +39,7 @@ export type ImplementationMeeting = {
   startsAt: string | null;
   timezone: string;
   attended: boolean;
+  attendanceAvailable: boolean;
   cancelled: boolean;
   isToday: boolean;
   isFuture: boolean;
@@ -67,6 +68,7 @@ export type ImplementationBookingCoaches = {
 };
 
 export type ImplementationWorkspaceResponse = CoachingCyclesPayload & {
+  canManageAttendance: boolean;
   selectedNoteId: number | null;
   cycleEndDate: string | null;
   meetings: ImplementationMeeting[];

@@ -21,12 +21,14 @@ const cycle = { id: 'business_audit:9', noteId: 1, kind: 'business_audit', cycle
 const nextReview = { reviewId: 10, meetingId: 103, date: '2026-10-13', startsAt: null, timezone: 'America/Edmonton', title: 'Next review', isToday: false };
 const bookingCoaches = { implementation: { coachId: 'implementation-coach', name: 'Implementation Coach', url: 'https://booking.example/implementation' },
   businessReview: { coachId: 'review-coach', name: 'Review Coach', url: null } };
-function fixture({ cycleList = [cycle], activeCycleId = cycle.id } = {}) {
+const partnershipScope = loadModule('../src/lib/partnershipScope.ts', {});
+function fixture({ cycleList = [cycle], activeCycleId = cycle.id, selectedMember = 'member', scope = ['member'] } = {}) {
   const frozenAction = { actionStepId: 10, label: 'Historical label', status: 'complete', priorityPosition: 1,
     systemKey: 'system', audience: 'foundation', guideRevision: 1,
     steps: [{ id: 'step', title: 'Pinned historical step', resources: [] }], progress: { step: { completed: true } } };
   const tables = {
-    meeting_attendance_base: [{ meeting_id: 101, user_id: 'member', attended: false }, { meeting_id: 102, user_id: 'member', attended: true }],
+    meeting_attendance: [{ meeting_id: 101, user_id: 'member', attended: false }, { meeting_id: 102, user_id: 'member', attended: true }],
+    profiles: scope.map((id) => ({ id, merged_at: null })), user_coaches: [],
     implementation_meeting_sessions: [
       { id: 'history', note_id: 1, meeting_id: 101, user_id: 'member', status: 'completed', revision: 4,
         started_at: '2026-09-20T10:00:00Z', updated_at: '2026-09-20T11:00:00Z', completed_at: '2026-09-20T11:00:00Z', notes: 'Old notes', commitments: '', next_meeting_booked: true, progress_snapshot: [frozenAction] },
@@ -47,15 +49,36 @@ function fixture({ cycleList = [cycle], activeCycleId = cycle.id } = {}) {
       { id: 21, title: 'Full course', slug: 'full-course', node_type: 'course' }],
   };
   const reads = [];
-  const client = { from(table) {
+  const client = { async rpc(name, args) {
+    assert.equal(name, 'view_user_ids_for_owner');
+    assert.equal(args._owner, selectedMember); assert.equal(args._domain, 'notes');
+    return { data: scope.map((user_id) => ({ user_id })), error: null };
+  }, from(table) {
     assert.ok(table in tables, `Unexpected table ${table}`);
     const filters = [];
+    let count = Infinity;
+    let orderBy = null;
     const query = {
       select(columns) { reads.push({ table, columns }); return query; },
       eq(key, value) { filters.push((row) => String(row[key]) === String(value)); return query; },
       in(key, values) { filters.push((row) => values.some((value) => String(row[key]) === String(value))); return query; },
-      order() { return query; },
-      then(resolve, reject) { return Promise.resolve({ data: tables[table].filter((row) => filters.every((filter) => filter(row))), error: null }).then(resolve, reject); },
+      gt(key, value) { filters.push((row) => row[key] > value); return query; },
+      order(key, options = {}) { orderBy = { key, ascending: options.ascending !== false }; return query; },
+      limit(value) { count = value; return query; },
+      or(expression) {
+        const prefix = 'ended_at.is.null,ended_at.gt.';
+        assert.ok(expression.startsWith(prefix));
+        filters.push((row) => row.ended_at == null || row.ended_at > expression.slice(prefix.length));
+        return query;
+      },
+      then(resolve, reject) {
+        let data = tables[table].filter((row) => filters.every((filter) => filter(row)));
+        if (orderBy) data.sort((left, right) => {
+          const direction = orderBy.ascending ? 1 : -1;
+          return left[orderBy.key] < right[orderBy.key] ? -direction : left[orderBy.key] > right[orderBy.key] ? direction : 0;
+        });
+        return Promise.resolve({ data: data.slice(0, count), error: null }).then(resolve, reject);
+      },
     };
     return query;
   } };
@@ -65,15 +88,16 @@ function fixture({ cycleList = [cycle], activeCycleId = cycle.id } = {}) {
     '@/lib/implementationGuidesServer': { loadImplementationGuides: async () => new Map() },
     '@/lib/implementationMeetingSelection': { implementationLocalDate, selectImplementationMeeting },
     '@/lib/upcomingBusinessReview': { loadUpcomingBusinessReview: async (_client, memberId, _cycles, selected) => {
-      assert.equal(memberId, 'member'); assert.equal(selected?.noteId ?? null, activeCycleId ? 1 : null); return nextReview;
+      assert.equal(memberId, selectedMember); assert.equal(selected?.noteId ?? null, activeCycleId ? 1 : null); return nextReview;
     } },
     '@/lib/implementationBookingCoaches': { loadImplementationBookingCoaches: async (_client, memberId) => {
-      assert.equal(memberId, 'member'); return bookingCoaches;
+      assert.equal(memberId, selectedMember); return bookingCoaches;
     } },
     '@/lib/contentNodeLinks': { getContentNodeHref },
-    '@/lib/implementationApi': { invalidImplementationRequest: (message) => { throw new Error(message); }, isImplementationAdmin: () => false },
+    '@/lib/implementationApi': { invalidImplementationRequest: (message) => { throw new Error(message); }, isImplementationAdmin: (roles) => roles.includes('admin') },
+    '@/lib/partnershipScope': partnershipScope,
   });
-  return { tables, client, reads, frozenAction, load: server.loadImplementationWorkspace };
+  return { tables, client, reads, frozenAction, load: server.loadImplementationWorkspace, canAccess: server.canAccessImplementationWorkspace };
 }
 
 test('workspace includes the scheduled review and preserves existing course/library links even without checklist guides', async () => {
@@ -124,4 +148,83 @@ test('booking coaches remain available before any cycle or active cycle exists',
     assert.equal(result.meetings.length, 0);
     assert.deepEqual(result.bookingCoaches, bookingCoaches);
   }
+});
+
+test('a secondary partner sees shared sessions, actions and attendance while retaining their own booking identity', async () => {
+  const { tables, client, load, reads } = fixture({ selectedMember: 'partner', scope: ['member', 'partner'] });
+  tables.meeting_attendance.push(...tables.meeting_attendance.map((row) => ({ ...row, user_id: 'partner' })));
+  const result = await load(client, 'partner', 1);
+  assert.equal(result.meetings.length, 2);
+  assert.equal(result.meetings.find((meeting) => meeting.id === 101).session.notes, 'Old notes');
+  assert.equal(result.meetings.find((meeting) => meeting.id === 102).attended, true);
+  assert.ok(result.meetings.every((meeting) => meeting.attendanceAvailable));
+  assert.equal(result.latestSessionId, 'live');
+  assert.equal(result.actions.length, 3);
+  assert.deepEqual(result.bookingCoaches, bookingCoaches);
+  assert.ok(reads.some((read) => read.table === 'meeting_attendance'));
+  assert.ok(!reads.some((read) => read.table === 'meeting_attendance_base'));
+});
+
+test('shared session history survives independent attendance sharing without borrowing another member’s attendance', async () => {
+  const { tables, client, load } = fixture({ selectedMember: 'partner', scope: ['member', 'partner'] });
+  tables.meeting_attendance.push({ user_id: 'member', meeting_id: 103, attended: true });
+  tables.meetings.push({ ...tables.meetings[0], id: 103 });
+  const result = await load(client, 'partner', 1);
+  assert.equal(result.meetings.length, 2, 'A partner-only unsessioned appointment is not shared through notes');
+  assert.ok(result.meetings.every((meeting) => !meeting.attendanceAvailable && !meeting.attended));
+  assert.equal(result.meetings.find((meeting) => meeting.id === 101).session.notes, 'Old notes');
+});
+
+test('historical duplicate shared attendance is combined deterministically instead of trusting the first row', async () => {
+  const { tables, client, load } = fixture();
+  tables.meeting_attendance.push({ meeting_id: 101, user_id: 'member', attended: true });
+  for (let pass = 0; pass < 2; pass += 1) {
+    const result = await load(client, 'member', 1);
+    assert.equal(result.meetings.filter((meeting) => meeting.id === 101).length, 1);
+    const meeting = result.meetings.find((meeting) => meeting.id === 101);
+    assert.equal(meeting.attended, true);
+    assert.equal(meeting.attendanceAvailable, true);
+    tables.meeting_attendance.reverse();
+  }
+});
+
+test('notes-only coach access omits attendance reads and unstarted appointments while preserving shared session history', async () => {
+  const { tables, client, load, reads } = fixture();
+  tables.meeting_attendance.push({ meeting_id: 103, user_id: 'member', attended: true });
+  tables.meetings.push({ ...tables.meetings[0], id: 103 });
+  const result = await load(client, 'member', 1, { canReadAttendance: false });
+  assert.equal(result.canManageAttendance, false, 'The UI must not offer meeting creation without attendance access');
+  assert.equal(result.meetings.length, 2);
+  assert.ok(result.meetings.every((meeting) => !meeting.attendanceAvailable && !meeting.attended));
+  assert.equal(result.meetings.find((meeting) => meeting.id === 101).session.notes, 'Old notes');
+  assert.ok(!reads.some((read) => read.table === 'meeting_attendance'));
+});
+
+test('sessions outside the visible note scope never enter the workspace even for the same stored user', async () => {
+  const { tables, client, load } = fixture();
+  tables.implementation_meeting_sessions.push({ ...tables.implementation_meeting_sessions[0], id: 'unshared', note_id: 999, meeting_id: 999, notes: 'Private partner note' });
+  tables.meetings.push({ ...tables.meetings[0], id: 999 });
+  const result = await load(client, 'member', 1);
+  assert.equal(result.meetings.length, 2);
+  assert.ok(!JSON.stringify(result).includes('Private partner note'));
+  await assert.rejects(() => load(client, 'member', 999), /does not belong to the member/);
+});
+
+test('workspace access follows active notes-sharing assignments and rejects unrelated, expired and archived targets', async () => {
+  const { tables, client, canAccess } = fixture({ selectedMember: 'partner', scope: ['member', 'partner'] });
+  tables.user_coaches.push({ id: 1, coach_id: 'coach', user_id: 'member', is_active: true, ended_at: null });
+  assert.equal(await canAccess(client, 'coach', ['coach'], 'partner'), true);
+  assert.equal(await canAccess(client, 'other-coach', ['coach'], 'partner'), false);
+  assert.equal(await canAccess(client, 'coach', ['user'], 'partner'), false);
+  tables.user_coaches[0].ended_at = '2000-01-01T00:00:00Z';
+  assert.equal(await canAccess(client, 'coach', ['coach'], 'partner'), false);
+  tables.user_coaches[0].ended_at = null;
+  tables.profiles.find((row) => row.id === 'partner').merged_at = '2026-10-01T00:00:00Z';
+  assert.equal(await canAccess(client, 'coach', ['coach'], 'partner'), false);
+});
+
+test('a partner relationship without active notes sharing grants no coach access', async () => {
+  const { tables, client, canAccess } = fixture({ selectedMember: 'partner', scope: ['partner'] });
+  tables.user_coaches.push({ id: 1, coach_id: 'coach', user_id: 'member', is_active: true, ended_at: null });
+  assert.equal(await canAccess(client, 'coach', ['coach'], 'partner'), false);
 });

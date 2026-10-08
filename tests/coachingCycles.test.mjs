@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import * as businessAuditConfig from '../src/lib/businessAuditConfig.ts';
 import * as userRoles from '../src/lib/userRoles.ts';
+import * as partnershipScope from '../src/lib/partnershipScope.ts';
 
 function loadModule(path, imports) {
   const source = ts.transpileModule(fs.readFileSync(new URL(path, import.meta.url), 'utf8'), {
@@ -17,19 +18,27 @@ function loadModule(path, imports) {
   } });
   return exports;
 }
-const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles });
+const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles, '@/lib/partnershipScope': partnershipScope });
 const { loadCoachingCycles } = loadModule('../src/lib/coachingCycles.ts', {
   '@/lib/businessAuditConfig': businessAuditConfig,
   '@/lib/businessReviews': businessReviews,
+  '@/lib/partnershipScope': partnershipScope,
 });
 
 function clientFor({ notes = [], reviews = [], meetings = [] }) {
-  const tables = { coaching_notes: notes, business_reviews: reviews, meetings };
+  const tables = { coaching_notes: notes.map((row) => ({ user_id: 'member', ...row })), business_reviews: reviews, meetings };
   return { from(table) {
     assert.ok(table in tables);
+    let rows = tables[table];
+    let size = Infinity;
     const query = {
-      select() { return query; }, eq() { return query; }, order() { return query; }, in() { return query; },
-      then(resolve, reject) { return Promise.resolve({ data: tables[table], error: null }).then(resolve, reject); },
+      select() { return query; },
+      eq(key, value) { rows = rows.filter((row) => String(row[key]) === String(value)); return query; },
+      in(key, values) { rows = rows.filter((row) => values.some((value) => String(row[key]) === String(value))); return query; },
+      gt(key, value) { rows = rows.filter((row) => row[key] > value); return query; },
+      order(key, { ascending = true } = {}) { rows = [...rows].sort((a, b) => (a[key] > b[key] ? 1 : a[key] < b[key] ? -1 : 0) * (ascending ? 1 : -1)); return query; },
+      limit(count) { size = count; return query; },
+      then(resolve, reject) { return Promise.resolve({ data: rows.slice(0, size), error: null }).then(resolve, reject); },
     };
     return query;
   } };

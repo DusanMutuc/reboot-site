@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { canManageBusinessReviews, parsePositiveInteger } from '@/lib/businessReviews';
+import { canManageBusinessReviewRecord, parsePositiveInteger } from '@/lib/businessReviews';
 import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
@@ -41,7 +41,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
   try {
     const { data: review, error: reviewError } = await admin
       .from('business_reviews')
-      .select('id, user_id')
+      .select('id, user_id, coaching_note_id')
       .eq('id', reviewId)
       .maybeSingle();
 
@@ -50,11 +50,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Business Review not found.' }, { status: 404 });
     }
 
-    const allowed = await canManageBusinessReviews(
+    const allowed = await canManageBusinessReviewRecord(
       admin,
       guard.user.id,
       guard.roleCodes,
-      review.user_id,
+      Number(review.coaching_note_id),
     );
     if (!allowed) {
       return NextResponse.json({ error: 'You do not have access to this review.' }, { status: 403 });

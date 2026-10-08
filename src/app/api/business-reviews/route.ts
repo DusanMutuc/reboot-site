@@ -96,19 +96,10 @@ export async function POST(request: NextRequest) {
     // A repeated click should reopen the draft the coach already has instead of
     // leaving two identical reviews on the same date. The GHL sync adopts an
     // unlinked manual draft the same way when the appointment finally arrives.
-    const { data: existing, error: existingError } = await admin
-      .from('business_reviews')
-      .select('id')
-      .eq('user_id', studentId)
-      .eq('review_date', reviewDate)
-      .eq('status', 'draft')
-      .is('meeting_id', null)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existingError) throw new Error(existingError.message);
+    const visible = await loadBusinessReviews(admin, studentId);
+    const existing = visible.reviews.filter((review) => review.reviewDate === reviewDate
+      && review.status === 'draft' && review.meetingId === null)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id - left.id)[0] ?? null;
 
     let reviewId = existing ? Number(existing.id) : null;
 
@@ -146,7 +137,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       reviewId,
       created: existing === null,
-      ...(await loadBusinessReviews(admin, studentId)),
+      ...(existing ? visible : await loadBusinessReviews(admin, studentId)),
     });
   } catch (error) {
     const message =

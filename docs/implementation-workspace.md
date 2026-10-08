@@ -46,6 +46,26 @@ This aggregate and new standalone notes are available to admins and actively ass
 
 ## Storage and access
 
+Active partnerships with `shared_notes` enabled expose the same Business Reviews,
+coaching cycles, implementation sessions, and standalone coaching notes from either
+member's profile. Reads follow the expanded coaching-note view, preserving records
+originally created under either partner. Review edits authorize against the attached
+note rather than the review's original member ID. Disabling notes sharing removes
+that access immediately; it does not copy, move, or delete history.
+
+Attendance remains an independent domain. Workspace requests check the signed-in
+coach's assignment through the selected member's attendance-sharing scope before
+loading attendance or offering meeting creation. Shared session notes and progress
+remain accessible when attendance is unavailable, but those edits cannot create or
+change an unauthorized attendance record. Mutations pass the selected `_user_id`
+to the six-argument `mutate_implementation_workspace`; the old five-argument call
+remains compatible and enforces the same actor permissions. Booking links and
+prefilled identity continue to use the selected member.
+
+Apply `20261008024000_shared_coaching_workspaces.sql` before deploying the matching
+application change. It follows the October account-lifecycle and partnership repairs
+and preserves existing record identities. See [repair verification](shared-coaching-repair-2026-10-08.md).
+
 `system_implementation_guides` identifies a guide by audience and stable system key. `system_implementation_guide_versions` stores ordered immutable content revisions. Guide saves run through `save_system_implementation_guide` using the authenticated administrator and an expected revision.
 
 `implementation_action_checklists` pins content and cumulative progress. `implementation_meeting_sessions` owns meeting notes, revision and progress snapshots. `implementation_session_actions` protects referenced actions; `implementation_step_notes` retains historical step notes and `implementation_step_events` records checkbox transitions. `mutate_implementation_workspace` serializes writes on the coaching note, checks session revisions and enforces member/meeting/cycle ownership. `create_implementation_meeting` validates the same cycle date bounds, derives the actor from authentication, and uses the importer's member/date lock to prevent duplicate recovery appointments.

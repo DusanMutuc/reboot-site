@@ -20,12 +20,13 @@ function loadModule(path, imports = {}) {
   });
   return exports;
 }
-const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles });
+const businessReviews = loadModule('../src/lib/businessReviews.ts', { '@/lib/userRoles': userRoles, '@/lib/partnershipScope': {} });
 const implementationApi = loadModule('../src/lib/implementationApi.ts');
 const coachingNotesTypes = loadModule('../src/types/coachingNotes.ts');
 const { loadCoachingNotes } = loadModule('../src/lib/coachingNotesServer.ts', {
   '@/lib/businessAuditConfig': businessAuditConfig,
   '@/lib/businessReviews': businessReviews,
+  '@/lib/partnershipScope': { getNotesScopeUserIds: async (client, userId) => client.sharedMemberIds ?? [userId] },
 });
 
 const memberId = 'bb8f369e-c343-4b6a-9c9c-5e15c54c1611';
@@ -117,7 +118,7 @@ test('the feed combines all note sources while preserving original authors and w
         notes_written_at: '2026-01-30T10:00:00Z', notes_author_id: authorId },
       { id: uuid(5), user_id: memberId, note_id: 999, meeting_id: 34, notes: 'Deleted cycle session', commitments: '',
         notes_written_at: '2026-01-30T10:00:00Z', notes_author_id: authorId },
-      { id: uuid(6), user_id: otherMemberId, note_id: 1, meeting_id: 35, notes: 'Other member session', commitments: '',
+      { id: uuid(6), user_id: otherMemberId, note_id: 4, meeting_id: 35, notes: 'Other member session', commitments: '',
         notes_written_at: '2026-01-30T10:00:00Z', notes_author_id: authorId },
     ],
     general_coaching_notes: [
@@ -165,6 +166,38 @@ test('the feed combines all note sources while preserving original authors and w
   assert.equal(legacy.updatedAt ?? null, null);
   assert.equal(legacy.updatedByName ?? null, null);
   assert.equal(notes[0].source, 'coaching');
+});
+
+test('shared implementation history follows visible cycles regardless of the session owner', async () => {
+  const shared = { id: uuid(8), user_id: otherMemberId, note_id: 8, meeting_id: 80,
+    notes: 'Shared meeting notes', commitments: '', notes_written_at: '2026-09-10T10:00:00Z',
+    notes_author_id: authorId, notes_updated_at: null, notes_updated_by: null };
+  for (const visible of [true, false]) {
+    const client = clientFor({
+      coaching_notes: visible ? [{ id: 8, user_id: memberId, m2_meeting_id: null }] : [],
+      implementation_meeting_sessions: [shared, { ...shared, id: uuid(9), note_id: 9, notes: 'Unrelated private meeting' }],
+      meetings: [{ id: 80, date: '2026-09-10' }],
+      profiles: [{ id: authorId, first_name: 'Shared', last_name: 'Coach' }],
+    });
+    const { notes } = await loadCoachingNotes(client, memberId);
+    assert.deepEqual(plain(notes.map((note) => note.body)), visible ? ['Shared meeting notes'] : []);
+    if (visible) assert.equal(notes[0].authorName, 'Shared Coach');
+  }
+});
+
+test('standalone notes follow active notes-sharing scope in both directions', async () => {
+  const rows = { general_coaching_notes: [
+    { id: uuid(1), user_id: memberId, author_id: authorId, body: 'First partner', created_at: '2026-09-10T10:00:00Z' },
+    { id: uuid(2), user_id: otherMemberId, author_id: authorId, body: 'Second partner', created_at: '2026-09-11T10:00:00Z' },
+  ] };
+  for (const userId of [memberId, otherMemberId]) {
+    const client = clientFor(rows);
+    client.sharedMemberIds = [memberId, otherMemberId];
+    assert.equal((await loadCoachingNotes(client, userId)).notes.length, 2);
+    client.sharedMemberIds = [userId];
+    const { notes } = await loadCoachingNotes(client, userId);
+    assert.deepEqual(plain(notes.map((note) => note.body)), [userId === memberId ? 'First partner' : 'Second partner']);
+  }
 });
 
 test('all source and lookup pages survive short server pages and more than one ID batch', async () => {

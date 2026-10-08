@@ -341,14 +341,15 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
           <FormControl size="small" sx={{ minWidth: 270 }} disabled={!!busy || loading}><InputLabel id="implementation-cycle-label">Coaching cycle</InputLabel><Select labelId="implementation-cycle-label" label="Coaching cycle" value={cycle?.noteId ?? ''} onChange={(event) => leave(() => { void load(Number(event.target.value), true, true); })}>{workspace.cycles.filter((item) => !item.cancelled && !item.isFuture).map((item) => <MenuItem key={item.id} value={item.noteId}>{item.kind === 'business_audit' ? 'Business Review' : 'M2'} · {shortDate(item.cycleDate)}{item.id === workspace.activeCycleId ? ' · Active' : ''}</MenuItem>)}</Select></FormControl>
         </Stack>
         {(cycle || workspace.upcomingBusinessReview) && <ImplementationMeetings meetings={workspace.meetings} upcomingBusinessReview={workspace.upcomingBusinessReview} selectedMeetingId={meetingId}
-          latestSessionId={workspace.latestSessionId} disabled={!!busy || loading} canAdd={!!cycle && !cycle.cancelled} onSelect={switchMeeting} onAdd={openCreateMeeting} />}
+          latestSessionId={workspace.latestSessionId} disabled={!!busy || loading} canAdd={workspace.canManageAttendance && !!cycle && !cycle.cancelled} onSelect={switchMeeting} onAdd={openCreateMeeting} />}
         {meeting && <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ mt: 3 }}>
           <Box><Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1.8 }}>Implementation meeting for</Typography>
             <Stack direction="row" alignItems="center" spacing={1.5}><Typography variant="h5" fontWeight={800}>{new Date(`${meeting.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}</Typography>
               <Chip size="small" color={meeting.cancelled ? 'error' : meeting.isToday ? 'primary' : 'default'} label={`${meetingPosition(meeting)} · ${implementationMeetingStatus(meeting, workspace.latestSessionId)}`} /></Stack>
             <Typography variant="caption" color="text.secondary">{meeting.title || 'Implementation meeting'}{meetingTime(meeting) ? ` · ${meetingTime(meeting)}` : ''} · {meeting.timezone}</Typography>
           </Box>
-          <FormControlLabel sx={{ mr: 0, flexShrink: 0 }} control={<Checkbox size="small" checked={meeting.attended} disabled={disabled || !session || meeting.cancelled} onChange={(_, attended) => void mutate('set_attendance', { attended })} />} label={<Typography variant="body2">Attended</Typography>} />
+          {meeting.attendanceAvailable ? <FormControlLabel sx={{ mr: 0, flexShrink: 0 }} control={<Checkbox size="small" checked={meeting.attended} disabled={disabled || !session || meeting.cancelled} onChange={(_, attended) => void mutate('set_attendance', { attended })} />} label={<Typography variant="body2">Attended</Typography>} />
+            : <Typography variant="body2" color="text.secondary">Attendance is unavailable in this profile.</Typography>}
         </Stack>}
       </Paper>
       {loading && <LinearProgress aria-label="Loading coaching cycle" />}
@@ -356,7 +357,7 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
       {message && <Alert severity="success" onClose={() => setMessage(null)}>{message}</Alert>}
       {conflict && <Alert severity="warning" action={<Button color="inherit" onClick={() => void load(workspace.selectedNoteId, false, true)}>Refresh meeting</Button>}>This meeting changed while you were working. Refresh its progress before continuing. Your unsaved notes will be kept.</Alert>}
       {!cycle && <Alert severity="info">{workspace.nextAuditDate ? `The next implementation cycle begins with the Business Review on ${shortDate(workspace.nextAuditDate)}.` : 'No active M2 or Business Review coaching cycle was found.'}</Alert>}
-      {cycle && !meeting && <Alert severity="info" action={<Button color="inherit" disabled={!!busy || loading || cycle.cancelled} onClick={openCreateMeeting}>Add meeting</Button>}>No implementation meeting is scheduled in this cycle yet. Add a meeting if your appointment has not appeared.</Alert>}
+      {cycle && !meeting && <Alert severity="info" action={workspace.canManageAttendance ? <Button color="inherit" disabled={!!busy || loading || cycle.cancelled} onClick={openCreateMeeting}>Add meeting</Button> : undefined}>No implementation meeting is scheduled in this cycle yet.{workspace.canManageAttendance ? ' Add a meeting if your appointment has not appeared.' : ''}</Alert>}
 
       {cycle && meeting && <>
         {!session ? <Alert severity="info" action={<Button color="inherit" variant="outlined" startIcon={<PlayArrowRounded />} disabled={disabled || meeting.cancelled} onClick={() => { if (!meeting.isToday) setStartOpen(true); else void mutate('start'); }}>Start meeting</Button>}>{meeting.cancelled ? 'This meeting was cancelled. Select another meeting to record implementation work.' : `You are previewing ${meeting.isToday ? "today's meeting" : `the meeting on ${shortDate(meeting.date)}`}. Start it when you are ready to record work and notes.`}</Alert>

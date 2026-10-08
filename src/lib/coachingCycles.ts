@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { getBusinessAuditLocalDate } from '@/lib/businessAuditConfig';
 import { isCancelledGhlStatus } from '@/lib/businessReviews';
+import { loadVisibleCoachingNotes, readRowsForIds } from '@/lib/partnershipScope';
 
 export type CoachingCycleKind = 'business_audit' | 'm2';
 
@@ -19,12 +20,6 @@ export type CoachingCyclesPayload = {
   cycles: CoachingCycle[];
   activeCycleId: string | null;
   nextAuditDate: string | null;
-};
-
-type CoachingNoteRow = {
-  id: number;
-  created_at: string;
-  m2_meeting_id: number | null;
 };
 
 type BusinessReviewRow = {
@@ -61,29 +56,10 @@ export async function loadCoachingCycles(
   client: SupabaseClient,
   studentId: string,
 ): Promise<CoachingCyclesPayload> {
-  const [notesResult, reviewsResult] = await Promise.all([
-    client
-      .from('coaching_notes')
-      .select('id, created_at, m2_meeting_id')
-      .eq('user_id', studentId),
-    client
-      .from('business_reviews')
-      .select('id, coaching_note_id, meeting_id, review_date')
-      .eq('user_id', studentId)
-      .order('review_date', { ascending: false })
-      .order('id', { ascending: false }),
-  ]);
-
-  if (notesResult.error) {
-    throw new Error(notesResult.error.message);
-  }
-
-  if (reviewsResult.error) {
-    throw new Error(reviewsResult.error.message);
-  }
-
-  const notes = (notesResult.data ?? []) as CoachingNoteRow[];
-  const reviews = (reviewsResult.data ?? []) as BusinessReviewRow[];
+  const notes = await loadVisibleCoachingNotes(client, studentId);
+  const reviews = (await readRowsForIds<BusinessReviewRow>(client, 'business_reviews',
+    'id,coaching_note_id,meeting_id,review_date', 'coaching_note_id', notes.map((note) => note.id)))
+    .sort((left, right) => right.review_date.localeCompare(left.review_date) || Number(right.id) - Number(left.id));
   const meetingIds = Array.from(
     new Set(
       [

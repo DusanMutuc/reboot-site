@@ -7,6 +7,7 @@ import { loadUpcomingBusinessReview } from '@/lib/upcomingBusinessReview';
 import { loadImplementationBookingCoaches } from '@/lib/implementationBookingCoaches';
 import { getContentNodeHref } from '@/lib/contentNodeLinks';
 import { invalidImplementationRequest, isImplementationAdmin } from '@/lib/implementationApi';
+import { getNotesScopeUserIds, readRowsForIds } from '@/lib/partnershipScope';
 import type { ImplementationGuideAudience, ImplementationGuideStep } from '@/types/implementationGuides';
 import type { ImplementationAction, ImplementationSession, ImplementationWorkspaceResponse } from '@/types/implementationWorkspace';
 import type { ActionStepStatus } from '@/types/coaching';
@@ -20,31 +21,42 @@ type SessionRow = {
 export async function canAccessImplementationWorkspace(client: SupabaseClient, actorId: string, roles: readonly string[], userId: string) {
   if (isImplementationAdmin(roles)) return true;
   if (!roles.some((role) => ['coach', 'implementation_coach'].includes(role))) return false;
-  const pair = await client.from('user_coaches').select('id').eq('coach_id', actorId).eq('user_id', userId)
+  const memberIds = await getNotesScopeUserIds(client, userId);
+  if (!memberIds.length) return false;
+  const pair = await client.from('user_coaches').select('id').eq('coach_id', actorId).in('user_id', memberIds)
     .eq('is_active', true).or(`ended_at.is.null,ended_at.gt.${new Date().toISOString()}`).limit(1);
   if (pair.error) throw pair.error;
   return Boolean(pair.data.length);
 }
 
-export async function loadImplementationWorkspace(client: SupabaseClient, userId: string, requestedNoteId?: number): Promise<ImplementationWorkspaceResponse> {
-  const [cycles, attendance, sessionResult, meetingTypes, bookingCoaches] = await Promise.all([
+export async function loadImplementationWorkspace(
+  client: SupabaseClient,
+  userId: string,
+  requestedNoteId?: number,
+  options: { canReadAttendance: boolean } = { canReadAttendance: true },
+): Promise<ImplementationWorkspaceResponse> {
+  const [cycles, attendance, meetingTypes, bookingCoaches] = await Promise.all([
     loadCoachingCycles(client, userId),
-    client.from('meeting_attendance_base').select('meeting_id,attended').eq('user_id', userId),
-    client.from('implementation_meeting_sessions').select('*').eq('user_id', userId),
+    options.canReadAttendance
+      ? client.from('meeting_attendance').select('meeting_id,attended').eq('user_id', userId)
+      : Promise.resolve({ data: [], error: null }),
     client.from('meeting_types').select('id').eq('code', 'IMPLEMENTATION_MEETING'),
     loadImplementationBookingCoaches(client, userId),
   ]);
-  for (const result of [attendance, sessionResult, meetingTypes]) if (result.error) throw result.error;
+  for (const result of [attendance, meetingTypes]) if (result.error) throw result.error;
   const cycle = requestedNoteId ? cycles.cycles.find((item) => item.noteId === requestedNoteId)
     : cycles.cycles.find((item) => item.id === cycles.activeCycleId);
   if (requestedNoteId && !cycle) invalidImplementationRequest('This coaching cycle does not belong to the member.');
-  const empty = { ...cycles, selectedNoteId: null, cycleEndDate: null, meetings: [], upcomingBusinessReview: null, bookingCoaches, suggestedMeetingId: null, latestSessionId: null, actions: [], stepNotes: [], resources: [] };
+  const empty = { ...cycles, canManageAttendance: options.canReadAttendance, selectedNoteId: null, cycleEndDate: null, meetings: [], upcomingBusinessReview: null, bookingCoaches, suggestedMeetingId: null, latestSessionId: null, actions: [], stepNotes: [], resources: [] };
   if (!cycle) return { ...empty, upcomingBusinessReview: await loadUpcomingBusinessReview(client, userId, cycles.cycles, null) };
   const cycleEndDate = cycles.cycles.filter((item) => !item.cancelled
     && (item.cycleDate > cycle.cycleDate || (cycle.kind === 'business_audit' && item.kind === 'business_audit'
       && item.cycleDate === cycle.cycleDate && (item.businessReviewId ?? 0) > (cycle.businessReviewId ?? 0)))
     && (cycle.kind === 'm2' || item.kind === 'business_audit')).sort((a, b) => a.cycleDate.localeCompare(b.cycleDate))[0]?.cycleDate ?? null;
-  const allSessions = sessionResult.data as SessionRow[];
+  // Notes and attendance have separate sharing settings. Shared sessions belong
+  // to the visible cycle, even when their owner's attendance is not shared.
+  const allSessions = await readRowsForIds<SessionRow>(client, 'implementation_meeting_sessions', '*', 'note_id',
+    cycles.cycles.map((item) => item.noteId));
   const sessions = allSessions.filter((session) => Number(session.note_id) === cycle.noteId)
     .sort((a, b) => b.started_at.localeCompare(a.started_at) || b.id.localeCompare(a.id));
   const latestSession = sessions[0];
@@ -110,8 +122,11 @@ export async function loadImplementationWorkspace(client: SupabaseClient, userId
     const timezone = row.meeting_timezone || 'America/Edmonton';
     const today = implementationLocalDate(timezone);
     const session = sessions.find((item) => Number(item.meeting_id) === Number(row.id));
+    // Historical partners may each have an attendance row for the same meeting.
+    // The shared view can expand both; one recorded attendance means attended.
+    const attendanceRows = attendance.data!.filter((item) => Number(item.meeting_id) === Number(row.id));
     return { id: Number(row.id), date: row.date, title: row.title, startsAt: row.starts_at, timezone,
-      attended: attendance.data!.find((item) => Number(item.meeting_id) === Number(row.id))?.attended ?? false,
+      attended: attendanceRows.some((item) => item.attended), attendanceAvailable: attendanceRows.length > 0,
       cancelled: isCancelledGhlStatus(row.ghl_status), isToday: row.date === today, isFuture: row.date > today,
       session: session ? mapSession(session) : null };
   }).sort((a, b) => a.date.localeCompare(b.date) || (a.startsAt ?? '').localeCompare(b.startsAt ?? '') || a.id - b.id);
@@ -119,7 +134,7 @@ export async function loadImplementationWorkspace(client: SupabaseClient, userId
     .flatMap((action) => action.steps.flatMap((step) => step.resources.map((source) => source.resourceId))))];
   const resources = resourceIds.length ? await client.from('resources').select('id,title,type').in('id', resourceIds) : { data: [], error: null };
   if (resources.error) throw resources.error;
-  return { ...cycles, selectedNoteId: cycle.noteId, cycleEndDate, meetings, upcomingBusinessReview, bookingCoaches,
+  return { ...cycles, canManageAttendance: options.canReadAttendance, selectedNoteId: cycle.noteId, cycleEndDate, meetings, upcomingBusinessReview, bookingCoaches,
     suggestedMeetingId: selectImplementationMeeting(meetings, new Date(), latestSession?.id ?? null), latestSessionId: latestSession?.id ?? null, actions,
     stepNotes: notes.data!.map((row) => ({ id: row.id, sessionId: row.session_id, actionStepId: Number(row.action_step_id),
       stepId: row.step_id, body: row.body, authorId: row.author_id, createdAt: row.created_at })), resources: resources.data };

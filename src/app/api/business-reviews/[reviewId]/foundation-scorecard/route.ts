@@ -37,15 +37,28 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const admin = getAdminClient();
   const { data: review, error: reviewError } = await admin
     .from('business_reviews')
-    .select('user_id')
+    .select('coaching_note_id')
     .eq('id', reviewId)
     .single();
   if (reviewError) {
     return NextResponse.json({ error: reviewError.message }, { status: 500 });
   }
 
+  // The RPC authorizes the attached note's current sharing scope. A historical
+  // review can retain a different user_id after a partnership stops sharing.
+  // Reload that same authorized note owner, never the stale review identity.
+  const { data: note, error: noteError } = await admin
+    .from('coaching_notes_base').select('user_id')
+    .eq('id', review.coaching_note_id).is('deleted_at', null).maybeSingle();
+  if (noteError) {
+    return NextResponse.json({ error: noteError.message }, { status: 500 });
+  }
+  if (!note) {
+    return NextResponse.json({ error: 'The review’s coaching cycle is unavailable.' }, { status: 404 });
+  }
+
   try {
-    return NextResponse.json(await loadBusinessReviews(admin, review.user_id));
+    return NextResponse.json(await loadBusinessReviews(admin, note.user_id));
   } catch (loadError) {
     const message = loadError instanceof Error ? loadError.message : 'Could not load the scorecard.';
     return NextResponse.json({ error: message }, { status: 500 });

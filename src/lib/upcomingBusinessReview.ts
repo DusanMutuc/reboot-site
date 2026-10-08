@@ -14,7 +14,7 @@ function reviewTimezone(value: string | null): string {
 
 export async function loadUpcomingBusinessReview(
   client: SupabaseClient,
-  userId: string,
+  _userId: string,
   cycles: CoachingCycle[],
   selectedCycle: CoachingCycle | null,
   now = new Date(),
@@ -29,8 +29,10 @@ export async function loadUpcomingBusinessReview(
   // completed boundary with an unrelated review from a later coaching cycle.
   const candidates = selectedCycle ? following.slice(0, 1) : following;
   for (const cycle of candidates) {
+    // Cycles are loaded through the selected member's shared coaching-note view.
+    // The review's stored owner may be a partner; keep its visible note binding.
     const review = await client.from('business_reviews').select('id,meeting_id,review_date,status')
-      .eq('id', cycle.businessReviewId).eq('user_id', userId).maybeSingle();
+      .eq('id', cycle.businessReviewId).eq('coaching_note_id', cycle.noteId).maybeSingle();
     if (review.error) throw review.error;
     if (!review.data || review.data.status !== 'draft') continue;
     let upcoming: Omit<UpcomingBusinessReview, 'isToday'> = {

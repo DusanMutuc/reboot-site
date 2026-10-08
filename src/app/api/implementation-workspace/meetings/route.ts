@@ -27,14 +27,18 @@ export async function POST(request: NextRequest) {
     const note = await admin.from('coaching_notes').select('id').eq('id', body.noteId).eq('user_id', body.userId).maybeSingle();
     if (note.error) throw note.error;
     if (!note.data) invalidImplementationRequest('This coaching cycle does not belong to the member.');
-    const { data, error } = await implementationActorClient(request, guard).rpc('create_implementation_meeting', {
+    const actor = implementationActorClient(request, guard);
+    const { data, error } = await actor.rpc('create_implementation_meeting', {
       _user_id: body.userId, _note_id: body.noteId, _meeting_date: body.meetingDate, _request_id: body.requestId,
     });
     if (error) throw error;
     if (!data || Array.isArray(data) || !Number.isSafeInteger(data.meeting_id) || data.meeting_id <= 0 || typeof data.created !== 'boolean') {
       throw new Error('Implementation meeting creation returned an invalid result.');
     }
+    const attendanceAccess = await actor.rpc('can_manage_coaching_attendance', { _user_id: body.userId });
+    if (attendanceAccess.error) throw attendanceAccess.error;
     return NextResponse.json({ meetingId: data.meeting_id, created: data.created,
-      ...(await loadImplementationWorkspace(admin, body.userId, body.noteId)) });
+      ...(await loadImplementationWorkspace(admin, body.userId, body.noteId,
+        { canReadAttendance: attendanceAccess.data === true })) });
   } catch (error) { return implementationError(error); }
 }
