@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
+import { KpiDrafts } from '@/lib/kpiDrafts';
+import { acceptKpiInput, allowsNegativeValue, formatKpiValue, isMoneyMetric, parseKpiValue } from '@/lib/kpiFormat';
 import {
   Box,
   Card,
@@ -56,16 +58,6 @@ export type KpiTrackerProps = {
   /** Keeps the tracker on fixedPeriodDate instead of showing period selectors. */
   lockPeriod?: boolean;
 };
-
-const isMoneyMetric = (key: string) =>
-  key === 'gross_revenue' || key === 'profit';
-
-const allowsNegativeValue = (key: string) => key === 'profit';
-
-const moneyFormatter = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const TRACKER_START_YEAR = 2000;
 const MONTH_NAMES = [
@@ -146,13 +138,15 @@ export default function KpiTracker({
   const yearHistoryCacheRef = useRef(new Map<string, HistoryRow[]>());
   const yearRequestIdRef = useRef(0);
   const selectedYearRef = useRef(selectedYear);
-  const selectedPeriodRef = useRef(getPeriodStart(selectedYear, selectedMonth));
   const userIdRef = useRef(userId);
+  const draftsRef = useRef(new KpiDrafts());
+  const activeDraftKeyRef = useRef<string | null>(null);
 
   const selectedPeriod = getPeriodStart(selectedYear, selectedMonth);
   selectedYearRef.current = selectedYear;
-  selectedPeriodRef.current = selectedPeriod;
   userIdRef.current = userId;
+  const draftKey = userId ? `${userId}:${selectedPeriod}` : null;
+  activeDraftKeyRef.current = userIdOverride && userIdOverride !== userId ? null : draftKey;
 
   const yearOptions = useMemo(
     () =>
@@ -175,6 +169,7 @@ export default function KpiTracker({
     const requestId = ++yearRequestIdRef.current;
     const cacheKey = getYearCacheKey(uid, year);
     const cachedRows = yearHistoryCacheRef.current.get(cacheKey);
+    const draftCheckpoint = draftsRef.current.checkpoint();
 
     setYearLoading(true);
     setLoadedYearKey(null);
@@ -190,29 +185,35 @@ export default function KpiTracker({
     }
 
     setHistory([]);
-    const { data, error: historyError } = await supabase.rpc(
-      'get_monthly_kpi_history_for_year',
-      {
-        _user_id: uid,
-        _year: year,
+    try {
+      const { data, error: historyError } = await supabase.rpc(
+        'get_monthly_kpi_history_for_year',
+        { _user_id: uid, _year: year },
+      );
+      if (requestId !== yearRequestIdRef.current) return;
+      if (historyError) throw new Error(historyError.message);
+
+      const rows = (data ?? []) as HistoryRow[];
+      for (let month = 1; month <= 12; month += 1) {
+        const period = getPeriodStart(year, month);
+        const row = rows.find((entry) => entry.period_start_date === period);
+        const fresh = Object.fromEntries(metrics.map((metric) => [
+          metric.key, formatKpiValue(metric.key, row?.kpi_values?.[metric.key]),
+        ]));
+        draftsRef.current.refresh(`${uid}:${period}`, fresh, draftCheckpoint);
       }
-    );
-
-    if (requestId !== yearRequestIdRef.current) return;
-
-    if (historyError) {
-      setError(historyError.message);
-      setHistory([]);
-      setYearLoading(false);
-      return;
+      yearHistoryCacheRef.current.set(cacheKey, rows);
+      setHistory(rows);
+      setLoadedYearKey(cacheKey);
+    } catch (error) {
+      if (requestId === yearRequestIdRef.current) {
+        setError(error instanceof Error ? error.message : 'Could not load saved KPI values.');
+        setHistory([]);
+      }
+    } finally {
+      if (requestId === yearRequestIdRef.current) setYearLoading(false);
     }
-
-    const rows = (data ?? []) as HistoryRow[];
-    yearHistoryCacheRef.current.set(cacheKey, rows);
-    setHistory(rows);
-    setLoadedYearKey(cacheKey);
-    setYearLoading(false);
-  }, []);
+  }, [metrics]);
 
   // Initial load + re-load when the target user changes
   useEffect(() => {
@@ -292,16 +293,17 @@ export default function KpiTracker({
   }, [initialMonth, initialYear, userIdOverride]);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || initialLoading || metrics.length === 0) return;
 
     void loadYearHistory(userId, selectedYear);
 
     return () => {
       yearRequestIdRef.current += 1;
     };
-  }, [loadYearHistory, selectedYear, userId]);
+  }, [initialLoading, loadYearHistory, metrics.length, selectedYear, userId]);
 
-  // When selectedPeriod / metrics / history change -> hydrate form values
+  // History supplies the initial values; retained drafts take precedence over
+  // acknowledgements of earlier saves and survive a period/member switch.
   useEffect(() => {
     const expectedYearKey = userId
       ? getYearCacheKey(userId, selectedYear)
@@ -309,6 +311,7 @@ export default function KpiTracker({
 
     if (
       !selectedPeriod ||
+      !draftKey ||
       metrics.length === 0 ||
       yearLoading ||
       loadedYearKey !== expectedYearKey
@@ -324,97 +327,72 @@ export default function KpiTracker({
     const nextValues: Record<string, string> = {};
 
     metrics.forEach((m) => {
-      const rawVal = row?.kpi_values?.[m.key];
-      if (rawVal === null || rawVal === undefined) {
-        nextValues[m.key] = '';
-      } else if (isMoneyMetric(m.key)) {
-        // Format money from DB into US money style on load
-        nextValues[m.key] = moneyFormatter.format(rawVal);
-      } else {
-        nextValues[m.key] = String(rawVal);
-      }
+      nextValues[m.key] = formatKpiValue(m.key, row?.kpi_values?.[m.key]);
     });
 
-    setValues(nextValues);
+    setValues(draftsRef.current.seed(draftKey, nextValues));
+    const status = draftsRef.current.status(draftKey);
+    setSaving(status.state === 'saving');
+    setError(status.error);
     setLastUpdatedAt(row?.last_updated_at ?? null);
     setPeriodReady(true);
-  }, [history, loadedYearKey, metrics, selectedPeriod, selectedYear, userId, yearLoading]);
+  }, [draftKey, history, loadedYearKey, metrics, selectedPeriod, selectedYear, userId, yearLoading]);
 
   // Core save function (used by both autosave + button)
-  const saveValues = async (opts?: { silent?: boolean }) => {
-    if (!userId || !selectedPeriod || !periodReady || yearLoading) return;
+  const saveValues = async (opts?: { silent?: boolean; field?: string }) => {
+    if (!userId || !draftKey || !periodReady || yearLoading ||
+      loadedYearKey !== getYearCacheKey(userId, selectedYear) ||
+      activeDraftKeyRef.current !== draftKey) return;
 
     const targetUserId = userId;
     const targetYear = selectedYear;
     const targetPeriod = selectedPeriod;
+    const targetKey = draftKey;
+    setSaving(true);
+    setSuccess(null);
 
-    if (!opts?.silent) {
-      setSaving(true);
-      setError(null);
-      setSuccess(null);
-    }
+    try {
+      let savedAt = new Date().toISOString();
+      const patch = await draftsRef.current.save(targetKey, opts?.field ? [opts.field] : undefined, async (payload) => {
+        const { data, error: rpcError } = await supabase.rpc('upsert_monthly_kpi_record', {
+          _user_id: targetUserId,
+          _period_start_date: targetPeriod,
+          _kpi_values: payload,
+        });
+        if (rpcError) throw new Error(rpcError.message);
+        savedAt = data?.[0]?.last_updated_at ?? new Date().toISOString();
+      });
 
-    // Build payload: { metric_key: number|null }
-    const payload: Record<string, number | null> = {};
-    metrics.forEach((m) => {
-      const raw = values[m.key];
-      if (raw === undefined || raw === '') {
-        payload[m.key] = null;
-      } else {
-        // Strip commas and currency-like characters
-        const cleaned = raw.replace(/,/g, '').trim();
-        const num = Number(cleaned);
-        // Profit may be negative; all other KPI values must remain non-negative.
-        if (!Number.isFinite(num) || (num < 0 && !allowsNegativeValue(m.key))) {
-          payload[m.key] = null;
-        } else {
-          payload[m.key] = num;
+      if (Object.keys(patch).length) {
+        const cacheKey = getYearCacheKey(targetUserId, targetYear);
+        const cachedRows = yearHistoryCacheRef.current.get(cacheKey) ?? [];
+        const previous = cachedRows.find((row) => row.period_start_date === targetPeriod);
+        const nextRows = upsertHistoryRow(cachedRows, {
+          user_id: targetUserId,
+          period_start_date: targetPeriod,
+          last_updated_at: savedAt,
+          kpi_values: { ...previous?.kpi_values, ...patch },
+        });
+        yearHistoryCacheRef.current.set(cacheKey, nextRows);
+        if (userIdRef.current === targetUserId && selectedYearRef.current === targetYear) {
+          setHistory(nextRows);
         }
+        if (activeDraftKeyRef.current === targetKey) setLastUpdatedAt(savedAt);
       }
-    });
 
-    const { error: rpcError } = await supabase.rpc('upsert_monthly_kpi_record', {
-      _user_id: targetUserId,
-      _period_start_date: targetPeriod,
-      _kpi_values: payload,
-    });
-
-    if (rpcError) {
-      setError(rpcError.message);
-      if (!opts?.silent) {
-        setSaving(false);
+      if (activeDraftKeyRef.current === targetKey && !opts?.silent) {
+        if (draftsRef.current.status(targetKey).state === 'saved') setSuccess('KPI values saved.');
+        // Preserve explicit-save refresh even if blur already saved the patch.
+        onSaved?.();
       }
-      return;
-    }
-
-    const savedAt = new Date().toISOString();
-    const savedRow: HistoryRow = {
-      user_id: targetUserId,
-      period_start_date: targetPeriod,
-      last_updated_at: savedAt,
-      kpi_values: payload,
-    };
-    const cacheKey = getYearCacheKey(targetUserId, targetYear);
-    const cachedRows = yearHistoryCacheRef.current.get(cacheKey) ?? [];
-    const nextRows = upsertHistoryRow(cachedRows, savedRow);
-    yearHistoryCacheRef.current.set(cacheKey, nextRows);
-
-    if (
-      userIdRef.current === targetUserId &&
-      selectedYearRef.current === targetYear
-    ) {
-      setHistory(nextRows);
-    }
-
-    if (selectedPeriodRef.current === targetPeriod) {
-      setLastUpdatedAt(savedAt);
-    }
-
-    if (!opts?.silent) {
-      setSuccess('KPI values saved.');
-      setSaving(false);
-      // Notify parent only after explicit save
-      onSaved?.();
+    } catch {
+      // The store retains the failed edit and its error for retry.
+    } finally {
+      if (activeDraftKeyRef.current === targetKey) {
+        const status = draftsRef.current.status(targetKey);
+        setSaving(status.state === 'saving');
+        setError(status.error);
+      }
     }
   };
 
@@ -425,59 +403,19 @@ export default function KpiTracker({
 
   // Change handler with basic validation; only profit may have a leading minus.
   const handleChangeValue = (key: string, raw: string) => {
-    setValues((prev) => {
-      const isMoney = isMoneyMetric(key);
-      // Allow clearing the field
-      if (raw === '') {
-        return {
-          ...prev,
-          [key]: '',
-        };
-      }
-
-      // Strip commas from formatted values so user can edit
-      const cleaned = raw.replace(/,/g, '');
-
-      // Regex: digits with optional single decimal point (for money)
-      const numericRegex = isMoney
-        ? allowsNegativeValue(key)
-          ? /^-?\d*\.?\d*$/
-          : /^\d*\.?\d*$/
-        : /^\d*$/;
-      if (!numericRegex.test(cleaned)) {
-        return prev; // reject letters / weird symbols
-      }
-
-      return {
-        ...prev,
-        [key]: cleaned,
-      };
-    });
+    if (!draftKey || !periodReady || activeDraftKeyRef.current !== draftKey) return;
+    const accepted = acceptKpiInput(key, raw);
+    if (accepted === null) return;
+    setValues(draftsRef.current.edit(draftKey, key, accepted));
+    setSuccess(null);
   };
 
   // On blur: format money fields as US-style money + autosave silently
   const handleFieldBlur = (key: string) => {
-    if (isMoneyMetric(key)) {
-      setValues((prev) => {
-        const raw = prev[key];
-        if (!raw) return prev;
-
-        const cleaned = raw.replace(/,/g, '').trim();
-        const num = Number(cleaned);
-        if (!Number.isFinite(num) || (num < 0 && !allowsNegativeValue(key))) {
-          return { ...prev, [key]: '' };
-        }
-
-        // Format as 1,234.56 style (US)
-        return {
-          ...prev,
-          [key]: moneyFormatter.format(num),
-        };
-      });
-    }
-
-    // Auto-save silently when they leave a field
-    void saveValues({ silent: true });
+    if (!draftKey || !periodReady || activeDraftKeyRef.current !== draftKey) return;
+    const raw = draftsRef.current.values(draftKey)[key];
+    setValues(draftsRef.current.format(draftKey, key, formatKpiValue(key, parseKpiValue(key, raw))));
+    void saveValues({ silent: true, field: key });
   };
 
   const handleChangeYear = (e: SelectChangeEvent<string>) => {
@@ -538,7 +476,7 @@ export default function KpiTracker({
     );
   }
 
-  const canEditPeriod = periodReady && !yearLoading;
+  const canEditPeriod = periodReady && !yearLoading && activeDraftKeyRef.current === draftKey;
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto', px: { xs: 2, sm: 3 }, py: 0 }}>
@@ -563,6 +501,11 @@ export default function KpiTracker({
               <Alert
                 severity="error"
                 onClose={() => setError(null)}
+                action={!yearLoading && !periodReady ? (
+                  <Button color="inherit" size="small" onClick={() => void loadYearHistory(userId, selectedYear)}>
+                    Retry
+                  </Button>
+                ) : undefined}
                 sx={{ borderRadius: 2 }}
               >
                 {error}
@@ -635,7 +578,7 @@ export default function KpiTracker({
                     },
                   },
                 }}
-                disabled={yearLoading || saving}
+                disabled={yearLoading}
               >
                 <InputLabel id="year-select-label" sx={{ fontSize: '1.25rem' }}>
                   Year
@@ -670,7 +613,7 @@ export default function KpiTracker({
                     },
                   },
                 }}
-                disabled={yearLoading || saving}
+                disabled={yearLoading}
               >
                 <InputLabel id="month-select-label" sx={{ fontSize: '1.25rem' }}>
                   Month
@@ -870,7 +813,7 @@ export default function KpiTracker({
           variant="contained"
           size="large"
           onClick={handleSaveClick}
-          disabled={saving || !canEditPeriod || !selectedPeriod}
+          disabled={!canEditPeriod || !selectedPeriod}
           startIcon={
             saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />
           }

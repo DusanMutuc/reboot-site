@@ -186,7 +186,7 @@ The existing `scripts/replace-zoom-meetings.mjs` is a useful safety example: dry
 - `coaching_notes`, `meeting_attendance`, and `monthly_kpi_records` are views. Their writable bases use the `_base` suffix.
 - Dashboard display keys `total_closed` and `fifteen_thirty` map to database KPI keys `closed_deals` and `pipeline_15_30`.
 - The Zoom replacement script’s help text mentions an npm script that is not present in `package.json`. Run it directly with `node scripts/replace-zoom-meetings.mjs` unless a script alias is added.
-- The partnership API handlers call `requireAdmin()` but currently ignore its returned failure result. Middleware requires a session but does not enforce the admin role. Treat `/api/admin/partnerships` and `/api/admin/partnerships/[partnershipId]` as an open security issue until the handlers return `guard.res` on failure.
+- Partnership API handlers enforce `requireAdmin(request)` and return `guard.res` on failure before creating a service-role client. Middleware alone does not enforce the admin role; preserve the handler checks when changing these routes.
 - Admin and GHL user provisioning currently use a shared bootstrap password in source and rely on `must_reset_password`. Do not copy that pattern into scripts; generate a strong random temporary credential or use an invite/reset flow.
 - OpenAPI metadata does not include RLS policies, grants, indexes, triggers, checks, or function bodies. Never infer those from the generated reference.
 - The generated schema contains public relations only. `auth.users` and Supabase Storage metadata are managed outside the public schema.

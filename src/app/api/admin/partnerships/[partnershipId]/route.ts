@@ -1,9 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { requireAdmin } from '@/lib/requireAdmin';
-
-const supabaseAdmin = getAdminClient();
 
 type PartnershipRow = {
   id: string;
@@ -48,7 +46,10 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unexpected error';
 }
 
-async function buildPartnershipWithMembers(row: PartnershipRow): Promise<Partnership> {
+async function buildPartnershipWithMembers(
+  supabaseAdmin: ReturnType<typeof getAdminClient>,
+  row: PartnershipRow,
+): Promise<Partnership> {
   const { data: membershipRows, error: membershipError } = await supabaseAdmin
     .from('partnership_users')
     .select('partnership_id, user_id')
@@ -110,11 +111,13 @@ async function buildPartnershipWithMembers(row: PartnershipRow): Promise<Partner
 }
 
 export async function PATCH(
-  request: Request,
+  request: NextRequest,
   segmentData: { params: RouteParams },
 ) {
   try {
-    await requireAdmin();
+    const guard = await requireAdmin(request);
+    if (!guard.ok) return guard.res;
+    const supabaseAdmin = getAdminClient();
 
     const params = await segmentData.params;
     const id = params.partnershipId;
@@ -267,7 +270,7 @@ export async function PATCH(
       );
     }
 
-    const full = await buildPartnershipWithMembers(row as PartnershipRow);
+    const full = await buildPartnershipWithMembers(supabaseAdmin, row as PartnershipRow);
     invalidateAdminUserDirectory();
     return NextResponse.json(full);
   } catch (err: unknown) {
@@ -280,11 +283,13 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: NextRequest,
   segmentData: { params: RouteParams },
 ) {
   try {
-    await requireAdmin();
+    const guard = await requireAdmin(request);
+    if (!guard.ok) return guard.res;
+    const supabaseAdmin = getAdminClient();
 
     const params = await segmentData.params;
     const id = params.partnershipId;

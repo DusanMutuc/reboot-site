@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
+import { Box, Button, Typography } from '@mui/material';
 import { brand, CARD_RADIUS } from '@/lib/homeTheme';
 import { supabase } from '@/lib/supabaseClient';
+import { KpiDrafts } from '@/lib/kpiDrafts';
 import {
   acceptKpiInput,
   formatKpiValue,
@@ -74,137 +75,162 @@ export default function TrackerPanel({ months }: { months: ProgrammeMonth[] }) {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadedPeriodsKey, setLoadedPeriodsKey] = useState<string | null>(null);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const [hydratedKey, setHydratedKey] = useState<string | null>(null);
 
-  const [selectedPeriod, setSelectedPeriod] = useState(
+  const [requestedPeriod, setSelectedPeriod] = useState(
     () => months[months.length - 1]?.periodStart ?? '',
   );
   const [values, setValues] = useState<Record<string, string>>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  /* Read inside the async save without making it a dependency: the blur that
-     triggers a save is the same event that can move focus to another field. */
-  const valuesRef = useRef(values);
-  valuesRef.current = values;
-
-  const years = useMemo(
-    () => [...new Set(months.map((month) => Number(month.periodStart.slice(0, 4))))],
-    [months],
-  );
+  const selected = months.find((month) => month.periodStart === requestedPeriod) ?? months[months.length - 1];
+  const selectedPeriod = selected?.periodStart ?? '';
+  const periodsKey = months.map((month) => month.periodStart).join('|');
+  const draftsRef = useRef(new KpiDrafts());
+  const draftKey = userId && selectedPeriod ? `${userId}:${selectedPeriod}` : null;
+  const activeDraftKeyRef = useRef(draftKey);
+  activeDraftKeyRef.current = draftKey;
 
   useEffect(() => {
     let cancelled = false;
+    const checkpoint = draftsRef.current.checkpoint();
+    const periods = periodsKey.split('|').filter(Boolean);
+    const years = [...new Set(periods.map((period) => Number(period.slice(0, 4))))];
 
     async function load() {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (cancelled) return;
+      setLoading(true);
+      setLoadError(null);
+      setLoadedPeriodsKey(null);
+      setHydratedKey(null);
+      try {
+        const { data: authData, error: authError } = await supabase.auth.getUser();
+        if (cancelled) return;
 
-      if (authError || !authData?.user) {
-        setLoadError('Sign in to see and update your numbers.');
-        setLoading(false);
-        return;
+        if (authError || !authData?.user) {
+          throw new Error('Sign in to see and update your numbers.');
+        }
+
+        const uid = authData.user.id;
+        setUserId(uid);
+
+        // Every requested year must load before any blank fields are editable.
+        const [metricResult, ...historyResults] = await Promise.all([
+          supabase.from('kpi_metric_types').select('id, key, name').order('id', { ascending: true }),
+          ...years.map((year) =>
+            supabase.rpc('get_monthly_kpi_history_for_year', { _user_id: uid, _year: year }),
+          ),
+        ]);
+        if (cancelled) return;
+
+        if (metricResult.error) {
+          throw new Error(metricResult.error.message);
+        }
+        const historyError = historyResults.find((result) => result.error)?.error;
+        if (historyError) throw new Error(`Could not load saved KPI values: ${historyError.message}`);
+
+        const metricRows = (metricResult.data as MetricType[]) ?? [];
+        const rows = historyResults.flatMap((result) => (result.data as HistoryRow[]) ?? []);
+        for (const period of periods) {
+          const row = rows.find((entry) => entry.period_start_date === period);
+          const fresh = Object.fromEntries(metricRows.map((metric) => [
+            metric.key, formatKpiValue(metric.key, row?.kpi_values?.[metric.key]),
+          ]));
+          draftsRef.current.refresh(`${uid}:${period}`, fresh, checkpoint);
+        }
+        setMetrics(metricRows);
+        setHistory(rows);
+        setLoadedPeriodsKey(periodsKey);
+      } catch (error) {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load saved KPI values.');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const uid = authData.user.id;
-      setUserId(uid);
-
-      /* The programme's three months can straddle a year end, and the history
-         RPC is keyed by year — so ask for each year the set touches. Usually
-         one request, occasionally two. */
-      const [metricResult, ...historyResults] = await Promise.all([
-        supabase.from('kpi_metric_types').select('id, key, name').order('id', { ascending: true }),
-        ...years.map((year) =>
-          supabase.rpc('get_monthly_kpi_history_for_year', { _user_id: uid, _year: year }),
-        ),
-      ]);
-      if (cancelled) return;
-
-      if (metricResult.error) {
-        setLoadError(metricResult.error.message);
-        setLoading(false);
-        return;
-      }
-
-      setMetrics((metricResult.data as MetricType[]) ?? []);
-      setHistory(
-        historyResults.flatMap((result) =>
-          result.error ? [] : ((result.data as HistoryRow[]) ?? []),
-        ),
-      );
-      setLoading(false);
     }
 
     void load();
     return () => {
       cancelled = true;
     };
-  }, [years]);
+  }, [periodsKey, retryVersion]);
 
-  /* Hydrate the fields whenever the month or the loaded history changes. */
+  // Reading an acknowledgement never replaces newer edits retained in a draft.
   useEffect(() => {
-    if (metrics.length === 0) return;
+    if (!draftKey || loading || loadError || loadedPeriodsKey !== periodsKey || metrics.length === 0) {
+      setHydratedKey(null);
+      return;
+    }
     const row = history.find((entry) => entry.period_start_date === selectedPeriod) ?? null;
     const next: Record<string, string> = {};
     metrics.forEach((metric) => {
       next[metric.key] = formatKpiValue(metric.key, row?.kpi_values?.[metric.key]);
     });
-    setValues(next);
-    setSaveState('idle');
-    setSaveError(null);
-  }, [history, metrics, selectedPeriod]);
+    setValues(draftsRef.current.seed(draftKey, next));
+    const status = draftsRef.current.status(draftKey);
+    setSaveState(status.state);
+    setSaveError(status.error);
+    setHydratedKey(draftKey);
+  }, [draftKey, history, loadError, loadedPeriodsKey, loading, metrics, periodsKey, selectedPeriod]);
 
-  const save = useCallback(async () => {
-    if (!userId || metrics.length === 0 || !selectedPeriod) return;
+  const editable = !loading && !loadError && loadedPeriodsKey === periodsKey &&
+    metrics.length > 0 && draftKey !== null && hydratedKey === draftKey;
+
+  const save = async (field?: string) => {
+    if (!editable || !userId || !draftKey || activeDraftKeyRef.current !== draftKey) return;
 
     const period = selectedPeriod;
-    const payload: Record<string, number | null> = {};
-    metrics.forEach((metric) => {
-      payload[metric.key] = parseKpiValue(metric.key, valuesRef.current[metric.key]);
-    });
-
+    const targetKey = draftKey;
+    const targetUserId = userId;
     setSaveState('saving');
-    setSaveError(null);
-
-    const { error } = await supabase.rpc('upsert_monthly_kpi_record', {
-      _user_id: userId,
-      _period_start_date: period,
-      _kpi_values: payload,
-    });
-
-    if (error) {
-      setSaveState('error');
-      setSaveError(error.message);
-      return;
+    try {
+      const patch = await draftsRef.current.save(targetKey, field ? [field] : undefined, async (payload) => {
+        const { error } = await supabase.rpc('upsert_monthly_kpi_record', {
+          _user_id: targetUserId,
+          _period_start_date: period,
+          _kpi_values: payload,
+        });
+        if (error) throw new Error(error.message);
+      });
+      if (Object.keys(patch).length && activeDraftKeyRef.current?.startsWith(`${targetUserId}:`)) {
+        setHistory((rows) => [
+          ...rows.filter((row) => row.period_start_date !== period),
+          { period_start_date: period, kpi_values: {
+            ...rows.find((row) => row.period_start_date === period)?.kpi_values, ...patch,
+          } },
+        ]);
+      }
+    } catch {
+      // Failed drafts remain available for Retry and survive month switches.
+    } finally {
+      if (activeDraftKeyRef.current === targetKey) {
+        const status = draftsRef.current.status(targetKey);
+        setSaveState(status.state);
+        setSaveError(status.error);
+      }
     }
-
-    /* Keep the local history in step, so switching months and back shows what
-       was just entered rather than what the page loaded with. */
-    setHistory((rows) => [
-      ...rows.filter((row) => row.period_start_date !== period),
-      { period_start_date: period, kpi_values: payload },
-    ]);
-    setSaveState('saved');
-  }, [metrics, selectedPeriod, userId]);
+  };
 
   function handleChange(key: string, raw: string) {
+    if (!editable || !draftKey) return;
     const accepted = acceptKpiInput(key, raw);
     if (accepted === null) return;
-    setValues((prev) => ({ ...prev, [key]: accepted }));
+    setValues(draftsRef.current.edit(draftKey, key, accepted));
+    const status = draftsRef.current.status(draftKey);
+    setSaveState(status.state);
   }
 
   function handleBlur(key: string) {
-    setValues((prev) => {
-      const parsed = parseKpiValue(key, prev[key]);
-      return { ...prev, [key]: formatKpiValue(key, parsed) };
-    });
-    void save();
+    if (!editable || !draftKey) return;
+    const raw = draftsRef.current.values(draftKey)[key];
+    setValues(draftsRef.current.format(draftKey, key, formatKpiValue(key, parseKpiValue(key, raw))));
+    void save(key);
   }
 
   if (months.length === 0) return null;
 
-  const selected = months.find((month) => month.periodStart === selectedPeriod) ?? months[0];
   const rows = loading || metrics.length === 0 ? PLACEHOLDER_ROWS : metrics;
-  const editable = !loading && metrics.length > 0 && userId !== null;
 
   return (
     <Box
@@ -401,6 +427,11 @@ export default function TrackerPanel({ months }: { months: ProgrammeMonth[] }) {
                   ? (saveError ?? 'Could not save that.')
                   : ''}
         </Typography>
+        {loadError ? (
+          <Button size="small" onClick={() => setRetryVersion((version) => version + 1)}>Retry loading</Button>
+        ) : saveState === 'error' ? (
+          <Button size="small" onClick={() => void save()}>Retry saving</Button>
+        ) : null}
       </Box>
     </Box>
   );

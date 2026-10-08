@@ -47,11 +47,30 @@ export async function fetchCoachingWorkspaceUserIds(
     throw new Error(error.message);
   }
 
-  const ninetyDayUserIds = ((data ?? []) as CurrentMemberRow[])
+  const ninetyDayUserIds = Array.from(new Set(((data ?? []) as CurrentMemberRow[])
     .map((row) => row.user_id)
-    .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0);
+    .filter((userId): userId is string => typeof userId === 'string' && userId.length > 0)));
 
-  return Array.from(new Set([...currentMemberIds, ...ninetyDayUserIds]));
+  // Removing access does not end a programme enrollment. As with the current
+  // member RPC, past_member must take precedence over that remaining enrollment.
+  const pastMemberIds = new Set<string>();
+  for (let index = 0; index < ninetyDayUserIds.length; index += 200) {
+    const { data: pastMembers, error: pastMembersError } = await client
+      .from('user_roles')
+      .select('user_id, roles!inner(code)')
+      .eq('roles.code', 'past_member')
+      .in('user_id', ninetyDayUserIds.slice(index, index + 200));
+
+    if (pastMembersError) throw new Error(pastMembersError.message);
+    for (const row of (pastMembers ?? []) as CurrentMemberRow[]) {
+      pastMemberIds.add(row.user_id);
+    }
+  }
+
+  return Array.from(new Set([
+    ...currentMemberIds,
+    ...ninetyDayUserIds.filter((userId) => !pastMemberIds.has(userId)),
+  ]));
 }
 
 export async function fetchCoachingWorkspaceUserIdSet(

@@ -92,8 +92,8 @@ API handlers still need their own guards. A middleware-public API prefix does no
 | `/api/admin/users` | GET | Admin user directory |
 | `/api/admin/users/[userId]` | GET, PATCH, DELETE | Person details, profile/Auth updates, role flags, deletion |
 | `/api/admin/users/[userId]/reset-password` | POST | Send password reset |
-| `/api/admin/partnerships` | GET, POST | List/create partnerships; intended admin guard is currently not enforced correctly |
-| `/api/admin/partnerships/[partnershipId]` | PATCH, DELETE | Update/delete partnership and members; intended admin guard is currently not enforced correctly |
+| `/api/admin/partnerships` | GET, POST | List/create partnerships; admin guard enforced before privileged queries |
+| `/api/admin/partnerships/[partnershipId]` | PATCH, DELETE | Update/delete partnership and members; admin guard enforced before privileged queries |
 | `/api/admin/resources/placements` | POST | Resolve resource placements |
 | `/api/admin/system-scorecard-library` | GET, PATCH | Manage scorecard-system library mappings |
 | `/api/admin/status-overview` | GET | All-member status overview |
@@ -124,7 +124,7 @@ All admin routes above are intended to be admin-only. Most call `requireAdmin`; 
 
 ### Known authorization issue
 
-The partnership handlers call `await requireAdmin()` but do not inspect the returned `{ ok, res }` result. `requireAdmin` returns a failure response; it does not throw. As a result, those handlers continue into service-role queries after a failed admin check. Middleware only proves that a normal `/api/admin/**` request has a session, not that the user is an admin. Fix this before relying on the partnership routes as an authorization boundary.
+The partnership handlers check the `{ ok, res }` result from `requireAdmin(request)` and return failures before creating a service-role client. `requireAdmin` returns a failure response; it does not throw. Middleware only proves that a normal `/api/admin/**` request has a session, not that the user is an admin, so each handler must preserve its explicit guard.
 
 ## Member, coach, and content APIs
 

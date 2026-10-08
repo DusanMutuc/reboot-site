@@ -3,8 +3,6 @@ import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { requireAdmin } from '@/lib/requireAdmin';
 
-const supabaseAdmin = getAdminClient();
-
 type PartnershipRow = {
   id: string;
   name: string | null;
@@ -49,7 +47,10 @@ function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unexpected error';
 }
 
-async function buildPartnershipsWithMembers(rows: PartnershipRow[]): Promise<Partnership[]> {
+async function buildPartnershipsWithMembers(
+  supabaseAdmin: ReturnType<typeof getAdminClient>,
+  rows: PartnershipRow[],
+): Promise<Partnership[]> {
   if (rows.length === 0) return [];
 
   const partnershipIds = rows.map((p) => p.id);
@@ -121,9 +122,11 @@ async function buildPartnershipsWithMembers(rows: PartnershipRow[]): Promise<Par
   }));
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
-    await requireAdmin();
+    const guard = await requireAdmin(req);
+    if (!guard.ok) return guard.res;
+    const supabaseAdmin = getAdminClient();
 
     const { data, error } = await supabaseAdmin
       .from('partnerships')
@@ -141,7 +144,7 @@ export async function GET(_req: NextRequest) {
     }
 
     const baseRows = (data ?? []) as PartnershipRow[];
-    const items = await buildPartnershipsWithMembers(baseRows);
+    const items = await buildPartnershipsWithMembers(supabaseAdmin, baseRows);
 
     return NextResponse.json({ items });
   } catch (err: unknown) {
@@ -155,7 +158,9 @@ export async function GET(_req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    await requireAdmin();
+    const guard = await requireAdmin(req);
+    if (!guard.ok) return guard.res;
+    const supabaseAdmin = getAdminClient();
 
     const raw = (await req.json().catch(() => ({} as unknown))) ?? {};
     const body = raw as Record<string, unknown>;
@@ -221,7 +226,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const [withMembers] = await buildPartnershipsWithMembers([base]);
+    const [withMembers] = await buildPartnershipsWithMembers(supabaseAdmin, [base]);
     invalidateAdminUserDirectory();
     return NextResponse.json(withMembers, { status: 201 });
   } catch (err: unknown) {

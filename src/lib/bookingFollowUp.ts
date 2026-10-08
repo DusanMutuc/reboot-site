@@ -132,7 +132,12 @@ export async function buildBookingFollowUp(
   options: BuildOptions = {},
 ): Promise<BookingFollowUpResponse> {
   const supabase = getAdminClient();
-  const visibleAssignments = await fetchAssignments(supabase, options.coachId);
+  const [assignments, eligibleUserIds] = await Promise.all([
+    fetchAssignments(supabase, options.coachId),
+    fetchCoachingWorkspaceUserIds(supabase),
+  ]);
+  const eligibleUserIdSet = new Set(eligibleUserIds);
+  const visibleAssignments = assignments.filter((row) => eligibleUserIdSet.has(row.user_id));
 
   if (visibleAssignments.length === 0) {
     return { generatedAt: new Date().toISOString(), groups: [] };
@@ -142,6 +147,7 @@ export async function buildBookingFollowUp(
   const partnershipMembersByUserId = await fetchActivePartnershipMembers(
     supabase,
     visibleStudentIds,
+    eligibleUserIdSet,
   );
   const analysisStudentIds = unique(
     visibleStudentIds.flatMap(
@@ -385,6 +391,7 @@ async function fetchAssignmentsForStudents(
 async function fetchActivePartnershipMembers(
   supabase: SupabaseClient,
   visibleStudentIds: string[],
+  eligibleUserIds: ReadonlySet<string>,
 ): Promise<Map<string, string[]>> {
   const membersByUserId = new Map<string, string[]>();
   if (visibleStudentIds.length === 0) return membersByUserId;
@@ -415,7 +422,8 @@ async function fetchActivePartnershipMembers(
   }
 
   const usersByPartnershipId = groupBy(
-    (allMemberships ?? []) as PartnershipMembershipRow[],
+    ((allMemberships ?? []) as PartnershipMembershipRow[])
+      .filter((membership) => eligibleUserIds.has(membership.user_id)),
     (membership) => membership.partnership_id,
   );
   for (const memberships of usersByPartnershipId.values()) {
