@@ -112,7 +112,7 @@ Prefer `POST /api/admin/create-user` for an interactive admin workflow. A script
 Do not manually delete rows table by table.
 
 - Delete: the website tries `auth.admin.deleteUser()` and uses `try_delete_user_db(p_user_id)` as a database fallback.
-- Merge/transfer: use `transfer_user_data_admin(_source, _dest, _options)`.
+- Member transfer: use the admin `/api/admin/transfer-user-data` route. It resolves the destination Auth email to a verified GHL contact before calling the service-only `transfer_user_data_admin_v2(_source, _dest, _options)`. See [account-transfers.md](account-transfers.md) for migration prerequisites, retry IDs, supported history, and conflict handling.
 - Merge operations are recorded in `user_merge_log`.
 
 These are destructive operations. Require explicit IDs, a dry run where supported, and an audit artifact.
@@ -133,7 +133,7 @@ These are destructive operations. Require explicit IDs, a dry run where supporte
 | Manual attention status | `set_user_attention_manual_status` |
 | Course access check | `can_user_access_course`, `can_user_access_node_via_course` |
 | Current membership | `get_current_member_ids` |
-| User transfer | `transfer_user_data_admin` |
+| Member transfer | Admin transfer API → `transfer_user_data_admin_v2` |
 
 These functions encode invariants, authorization context, cascading behavior, or audit logic. Direct writes can leave derived state inconsistent.
 

@@ -97,7 +97,7 @@ API handlers still need their own guards. A middleware-public API prefix does no
 | `/api/admin/resources/placements` | POST | Resolve resource placements |
 | `/api/admin/system-scorecard-library` | GET, PATCH | Manage scorecard-system library mappings |
 | `/api/admin/status-overview` | GET | All-member status overview |
-| `/api/admin/transfer-user-data` | POST | Privileged user merge/transfer |
+| `/api/admin/transfer-user-data` | POST | Member-history copy with destination-email GHL lookup, dry run and retry ID; see [account transfers](account-transfers.md) |
 | `/api/admin/zoom-attendance-aliases` | GET, POST, DELETE | Approved Zoom-name mappings |
 
 ### Course-builder APIs
