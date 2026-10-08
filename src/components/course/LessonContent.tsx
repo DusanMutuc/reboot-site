@@ -20,9 +20,11 @@ import {
   type RenderableBlock,
   type RenderableResource,
   type SmartDocClientProgress,
+  type SmartDocSaveController,
 } from '@/components/course/BlockRenderer';
 import { supabase } from '@/lib/supabaseClient';
 import { useNodeProgress } from '@/hooks/useNodeProgress';
+import { flushPendingSmartDocSaves, hasPendingSmartDocSaves } from '@/lib/smartDocSaves';
 
 type LessonContentProps = {
   lesson: NodeSubtree | null;
@@ -61,6 +63,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   const [blocks, setBlocks] = useState<RenderableBlock[]>([]);
   const [blocksState, setBlocksState] = useState<LoadState>('idle');
   const [blocksError, setBlocksError] = useState<string | null>(null);
+  const [blocksNodeId, setBlocksNodeId] = useState<number | null>(null);
 
   // Media resources for asset blocks
   const [resources, setResources] = useState<Record<number, RenderableResource>>({});
@@ -76,30 +79,91 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }>
   >({});
   const [submitLoading, setSubmitLoading] = useState<Record<number, boolean>>({});
+  const [submitErrors, setSubmitErrors] = useState<Record<number, string>>({});
+  const [navigationError, setNavigationError] = useState<string | null>(null);
+  const smartDocControllers = useRef(new Map<number, SmartDocSaveController>());
+  const submitting = useRef(new Set<number>());
+  const submissionRevision = useRef(new Map<number, number>());
   const [clientSmartDocProgress, setClientSmartDocProgress] = useState<Record<number, SmartDocClientProgress>>({});
   const [videoProgressByBlock, setVideoProgressByBlock] = useState<Record<number, number>>({});
 
   const labels = getContentLabels(lesson);
   const nodeId = lesson?.node.id ?? null;
+  const currentNodeId = useRef(nodeId);
+  currentNodeId.current = nodeId;
   const { markStarted, markCompleted } = useNodeProgress(nodeId);
   const completedOnceRef = useRef(false);
+  const [progressSaveError, setProgressSaveError] = useState<'start' | 'complete' | null>(null);
 
   // ✨ EDIT MODE state
   const [editingSmartDoc, setEditingSmartDoc] = useState<Record<number, boolean>>({});
   const [pendingEditBlockId, setPendingEditBlockId] = useState<number | null>(null);
 
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasPendingSmartDocSaves()) return;
+      event.preventDefault();
+      event.returnValue = '';
+      void flushPendingSmartDocSaves().catch(() => {});
+    };
+    const onLinkClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
+        || !hasPendingSmartDocSaves()) return;
+      const link = (event.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+      if (!link || link.target === '_blank' || link.hasAttribute('download') || !/^https?:/.test(link.href)) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setNavigationError(null);
+      void flushPendingSmartDocSaves().then(() => window.location.assign(link.href)).catch((error: unknown) => {
+        setNavigationError(error instanceof Error ? error.message : 'Save your answers before leaving.');
+      });
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onLinkClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onLinkClick, true);
+    };
+  }, []);
+
+  const handleSmartDocReady = useCallback((blockId: number, controller: SmartDocSaveController | null) => {
+    if (controller) smartDocControllers.current.set(blockId, controller);
+    else smartDocControllers.current.delete(blockId);
+  }, []);
+
   const completeLesson = useCallback(async () => {
     if (!nodeId) return;
+    completedOnceRef.current = true;
+    setProgressSaveError(null);
     try {
       await markCompleted();
+      if (currentNodeId.current !== nodeId) return;
       onCompleted?.(nodeId);
     } catch (e) {
       console.error('completeLesson failed', e);
+      // Keep automatic completion suppressed while exposing an explicit retry;
+      // otherwise a failed network request can create an endless effect loop.
+      if (currentNodeId.current === nodeId) setProgressSaveError('complete');
     }
   }, [markCompleted, nodeId, onCompleted]);
 
+  const startLesson = useCallback(async () => {
+    if (!nodeId) return;
+    try {
+      await markStarted();
+      if (currentNodeId.current === nodeId) setProgressSaveError((error) => error === 'start' ? null : error);
+    } catch (e) {
+      console.error('startLesson failed', e);
+      if (currentNodeId.current === nodeId && !completedOnceRef.current) setProgressSaveError('start');
+    }
+  }, [markStarted, nodeId]);
+
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
   useEffect(() => {
+    setSubmitErrors({});
+    setNavigationError(null);
+    setProgressSaveError(null);
+    setBlocksNodeId(null);
     if (!nodeId) {
       setBlocks([]);
       setBlocksState('idle');
@@ -137,6 +201,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         if (!active) return;
 
         if (res.status === 304) {
+          setBlocksNodeId(nodeId);
           setBlocksState('ready');
           return;
         }
@@ -152,6 +217,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         const renderable = (blocks ?? []).map(toRenderableBlock).sort((a, b) => a.position - b.position);
 
         setBlocks(renderable);
+        setBlocksNodeId(nodeId);
         setBlocksState('ready');
       } catch (e) {
         if (!active) return;
@@ -168,10 +234,10 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
   // Mark STARTED as soon as the content is ready/visible
   useEffect(() => {
-    if (blocksState === 'ready' && nodeId) {
-      markStarted();
+    if (blocksState === 'ready' && nodeId && blocksNodeId === nodeId) {
+      void startLesson();
     }
-  }, [blocksState, nodeId, markStarted]);
+  }, [blocksState, blocksNodeId, nodeId, startLesson]);
 
   // Compute unique resource IDs from the *loaded blocks*
   const assetBlockIds = useMemo(() => {
@@ -347,6 +413,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
       return;
     }
     let active = true;
+    const revisions = new Map(submissionRevision.current);
 
     (async () => {
       try {
@@ -366,7 +433,15 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
         const map: Record<number, { status: 'draft' | 'submitted'; submitted_at: string | null }> = {};
         for (const [id, s] of entries) map[id] = s;
-        setSmartDocStatus(map);
+        // An initial read started before Submit must not replace its new status.
+        setSmartDocStatus((current) => {
+          const next = { ...current };
+          for (const [id, status] of Object.entries(map)) {
+            const blockId = Number(id);
+            if (submissionRevision.current.get(blockId) === revisions.get(blockId)) next[blockId] = status;
+          }
+          return next;
+        });
       } catch {
         // silent
       }
@@ -394,7 +469,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
   useEffect(() => {
     if (completedOnceRef.current) return;
-    if (blocksState !== 'ready' || !nodeId) return;
+    if (blocksState !== 'ready' || !nodeId || blocksNodeId !== nodeId) return;
     if (assetBlockIds.length > 0 && resourceState !== 'ready') return;
 
     const hasSmartDocs = smartDocBlockIds.length > 0;
@@ -436,6 +511,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     };
   }, [
     blocksState,
+    blocksNodeId,
     nodeId,
     smartDocBlockIds.length,
     allSmartDocsSubmitted, // ⬅️ dependency changed
@@ -448,12 +524,19 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
 
   // ===== 5) Submit/Update handler for a specific Smart Doc placement =====
   const submitSmartDoc = async (content_block_id: number, mode: 'submit' | 'update' = 'submit') => {
+    if (submitting.current.has(content_block_id)) return;
+    submitting.current.add(content_block_id);
+    submissionRevision.current.set(content_block_id, (submissionRevision.current.get(content_block_id) ?? 0) + 1);
     setSubmitLoading((m) => ({ ...m, [content_block_id]: true }));
+    setSubmitErrors((m) => ({ ...m, [content_block_id]: '' }));
     try {
+      const controller = smartDocControllers.current.get(content_block_id);
+      if (!controller) throw new Error('Your answers are still loading. Please try again.');
+      await controller.flush();
       const res = await fetch('/api/smartdoc/submit', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ content_block_id }),
+        body: JSON.stringify({ content_block_id, expected_user_id: controller.ownerId }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -468,6 +551,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
           submitted_at: string | null;
         };
       };
+      if (currentNodeId.current !== nodeId) return;
 
       // Update local status first (this is the gate for completion)
       setSmartDocStatus((m) => ({
@@ -502,8 +586,11 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
         void completeLesson();
       }
     } catch (e) {
-      console.error(e);
+      if (currentNodeId.current === nodeId) {
+        setSubmitErrors((m) => ({ ...m, [content_block_id]: e instanceof Error ? e.message : 'Submit failed. Please retry.' }));
+      }
     } finally {
+      submitting.current.delete(content_block_id);
       setSubmitLoading((m) => ({ ...m, [content_block_id]: false }));
     }
   };
@@ -566,6 +653,17 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   return (
     <Box sx={{ py: { xs: 4, md: 6 } }}>
       <Stack spacing={3} sx={{ maxWidth: 860, mx: 'auto', px: { xs: 2, md: 4 } }}>
+        {navigationError && <Alert severity="error">{navigationError} Your edits have been kept. Please retry saving before leaving.</Alert>}
+        {progressSaveError && (
+          <Alert severity="error" action={
+            <Button color="inherit" size="small" onClick={() => {
+              if (progressSaveError === 'complete') void completeLesson();
+              else void startLesson();
+            }}>Retry progress save</Button>
+          }>
+            Your {progressSaveError === 'complete' ? 'completion' : 'progress'} could not be saved. Please retry.
+          </Alert>
+        )}
         <Box>
           <Typography variant="overline" sx={{ color: 'primary.main', fontWeight: 600 }}>
             {labels.title}
@@ -608,7 +706,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                   const serverComplete = hasServerTotals
                     ? (p?.fields_completed ?? 0) >= (p?.fields_total ?? 0)
                     : undefined;
-                  const effectiveComplete = serverComplete ?? clientProgress?.isComplete ?? false;
+                  const effectiveComplete = clientProgress?.isComplete ?? serverComplete ?? false;
 
                   // Submit button enabled rules
                   const isSubmitted = s?.status === 'submitted';
@@ -629,7 +727,10 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
                         previewMode
                         onSmartDocProgress={handleClientSmartDocProgress}
                         onVideoProgress={handleVideoProgress}
+                        onSmartDocReady={handleSmartDocReady}
+                        smartDocReadOnly={submitLoading[block.id] ? true : s ? isSubmitted && !isEditing : undefined}
                       />
+                      {submitErrors[block.id] && <Alert severity="error" sx={{ mt: 1 }}>{submitErrors[block.id]}</Alert>}
 
                       {/* ✨ Read-only overlay for submitted SmartDocs (until user confirms edit) */}
                       {isSmart && isSubmitted && !isEditing && (

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
     const parentId = parseParentId(url.searchParams.get('parentId'));
     const userId = parseUserId(url.searchParams.get('userId'), guard.user.id);
 
-    const { data, error } = await adminClient.rpc('get_child_unlock_status', {
+    const { data, error } = await adminClient.rpc('get_child_unlock_status_admin_preview', {
       _parent_id: parentId,
       _user_id: userId,
     });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js';
 
+import { ACCOUNT_SETUP_REQUIRED_CODE, ACCOUNT_SETUP_REQUIRED_MESSAGE, requiresAccountSetup } from './accountSetup';
 import { getAdminClient } from './supabaseAdmin';
 import { fetchUserRoleCodes, isPastMemberRole } from './userRoles';
 import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from './accountLifecycle';
@@ -22,6 +23,7 @@ export type RequireUserResult = RequireUserSuccess | RequireUserFailure;
 
 type RequireUserOptions = {
   allowPastMember?: boolean;
+  allowPendingSetup?: boolean;
 };
 
 export async function requireUser(
@@ -72,6 +74,9 @@ export async function requireUser(
         return { ok: false, res: NextResponse.json(
           { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 },
         ) };
+      }
+      if (requiresAccountSetup(user) && !options?.allowPendingSetup) {
+        return { ok: false, res: NextResponse.json({ error: ACCOUNT_SETUP_REQUIRED_MESSAGE, code: ACCOUNT_SETUP_REQUIRED_CODE }, { status: 403 }) };
       }
       const roleCodes = await fetchUserRoleCodes(admin, user.id);
       if (isPastMemberRole(roleCodes) && !options?.allowPastMember) {
@@ -129,7 +134,10 @@ export async function requireUser(
         { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 },
       ) };
     }
-    const roleCodes = await fetchUserRoleCodes(admin, user.id);
+    if (requiresAccountSetup(user) && !options?.allowPendingSetup) {
+        return { ok: false, res: NextResponse.json({ error: ACCOUNT_SETUP_REQUIRED_MESSAGE, code: ACCOUNT_SETUP_REQUIRED_CODE }, { status: 403 }) };
+      }
+      const roleCodes = await fetchUserRoleCodes(admin, user.id);
     if (isPastMemberRole(roleCodes) && !options?.allowPastMember) {
       return {
         ok: false,

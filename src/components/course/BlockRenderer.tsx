@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState, useLayoutEffect } from 're
 import DOMPurify from 'dompurify';
 import {
   Box,
+  Alert,
   Button,
   Card,
   CardContent,
@@ -27,6 +28,7 @@ import ImageIcon from '@mui/icons-material/Image';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 
 import { supabase } from '@/lib/supabaseClient';
+import { getSmartDocSaveQueue, type SmartDocSaveQueue, type SmartDocSaveState } from '@/lib/smartDocSaves';
 
 export type RenderableBlock = {
   id: number;
@@ -126,7 +128,11 @@ export type BlockRendererProps = {
   previewMode?: boolean;
   onSmartDocProgress?: (contentBlockId: number, progress: SmartDocClientProgress) => void;
   onVideoProgress?: (contentBlockId: number, percent: number) => void;
+  onSmartDocReady?: (contentBlockId: number, controller: SmartDocSaveController | null) => void;
+  smartDocReadOnly?: boolean;
 };
+
+export type SmartDocSaveController = { ownerId: string; flush: () => Promise<void> };
 
 /** --------------------------------------------------------------------------- */
 
@@ -146,12 +152,12 @@ function SmartDocPromptField({
   const helper = prompt.help_text?.trim();
 
   return (
-    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled} required>
+    <FormControl fullWidth sx={{ mb: 4 }} disabled={disabled} required={prompt.required}>
       <FormLabel sx={LABEL_SX}>
         {label}
-        <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
+        {prompt.required && <Box component="span" sx={{ color: 'error.main', lineHeight: 1 }}>
           *
-        </Box>
+        </Box>}
       </FormLabel>
 
       {helper && (
@@ -170,27 +176,34 @@ function SmartDocPromptField({
         InputProps={{ disableUnderline: true, sx: FIELD_SX }}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        required
+        required={prompt.required}
+        disabled={disabled}
       />
     </FormControl>
   );
 }
 
-function SmartDocPreview({
+export function SmartDocPreview({
   docId,
   contentBlockId, // placement id (content_blocks.id)
   fallbackLabel,
   onProgressChange,
+  onReady,
+  readOnly,
 }: {
   docId: number;
   contentBlockId: number;
   fallbackLabel: string | null;
   onProgressChange?: (progress: SmartDocClientProgress) => void;
+  onReady?: (contentBlockId: number, controller: SmartDocSaveController | null) => void;
+  readOnly?: boolean;
 }) {
   const [state, setState] = useState<SmartDocState>({ status: 'idle' });
   const [values, setValues] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
-  const timers = useRef<Record<number, number | undefined>>({});
+  const queueRef = useRef<SmartDocSaveQueue | null>(null);
+  const [saveState, setSaveState] = useState<SmartDocSaveState>({ pending: false, error: null });
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Identity for this placement/doc
   const renderKey = `${contentBlockId}:${docId}`;
@@ -204,14 +217,29 @@ function SmartDocPreview({
     setState({ status: 'loading' });
     setValues({});
     setSubmitted(false);
+    queueRef.current = null;
+    setSaveState({ pending: false, error: null });
   }, [identityChanged, renderKey]);
 
   // Fetch doc + status + values together; only set "ready" once everything is in
   useEffect(() => {
     let active = true;
+    let unsubscribe: (() => void) | undefined;
+    let queue: SmartDocSaveQueue | null = null;
 
     async function loadAll() {
       try {
+        setState({ status: 'loading' });
+        const { data: identity, error: identityError } = await supabase.auth.getUser();
+        if (identityError || !identity.user) throw new Error('Please sign in again to load your answers.');
+        const ownerId = identity.user.id;
+        queue = getSmartDocSaveQueue(ownerId, contentBlockId);
+        // Complete a save from the previous mount before reading its response.
+        // Failed drafts remain in this owner's queue and are overlaid below.
+        await queue.flush().catch(() => {});
+        if (!active) return;
+        queueRef.current = queue;
+        unsubscribe = queue.subscribe(setSaveState);
         // 1) Doc + prompts
         const { data, error } = await supabase
           .from('smart_docs')
@@ -237,23 +265,19 @@ function SmartDocPreview({
             label: p.label ?? '',
             prompt_type: p.prompt_type,
             help_text: p.help_text,
-            required: true, // product decision: all required
+            required: p.required,
           }))
           .sort((a, b) => a.position - b.position);
 
         // 2) In parallel: status + values
         const statusPromise = (async () => {
-          try {
-            const res = await fetch('/api/smartdoc/status', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ content_block_id: contentBlockId }),
-            });
-            if (!res.ok) return { status: 'draft' as const, submitted_at: null as string | null };
-            return (await res.json()) as { status: 'draft' | 'submitted'; submitted_at: string | null };
-          } catch {
-            return { status: 'draft' as const, submitted_at: null as string | null };
-          }
+          const res = await fetch('/api/smartdoc/status', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ content_block_id: contentBlockId }),
+          });
+          if (!res.ok) throw new Error('Could not load your submission status. Please retry.');
+          return (await res.json()) as { status: 'draft' | 'submitted'; submitted_at: string | null };
         })();
 
         const valuesPromise = (async () => {
@@ -261,14 +285,17 @@ function SmartDocPreview({
             .from('smart_doc_responses')
             .select('id')
             .eq('content_block_id', contentBlockId)
+            .eq('user_id', ownerId)
             .maybeSingle();
 
-          if (respErr || !resp?.id) return {} as Record<number, string>;
+          if (respErr) throw new Error('Could not load your saved answers. Please retry.');
+          if (!resp?.id) return {} as Record<number, string>;
 
-          const { data: vals } = await supabase
+          const { data: vals, error: valuesError } = await supabase
             .from('smart_doc_response_values')
             .select('prompt_id, value_json')
             .eq('response_id', resp.id);
+          if (valuesError) throw new Error('Could not load your saved answers. Please retry.');
 
           const map: Record<number, string> = {};
           for (const row of vals ?? []) {
@@ -284,7 +311,8 @@ function SmartDocPreview({
         if (!active) return;
 
         setSubmitted(statusData.status === 'submitted');
-        setValues(valueMap);
+        setValues({ ...valueMap, ...queue.draftValues() });
+        onReady?.(contentBlockId, { ownerId, flush: queue.flush });
 
         setState({
           status: 'ready',
@@ -309,19 +337,19 @@ function SmartDocPreview({
 
     return () => {
       active = false;
-      // clear any pending timers
-      for (const k of Object.keys(timers.current)) {
-        window.clearTimeout(timers.current[Number(k)]);
-      }
-      timers.current = {};
+      unsubscribe?.();
+      onReady?.(contentBlockId, null);
+      // Never cancel a pending debounce on unmount. Keep the draft on failure.
+      void queue?.flush().catch(() => {});
     };
-  }, [renderKey, docId, contentBlockId]);
+  }, [renderKey, docId, contentBlockId, loadAttempt, onReady]);
 
   const progressSnapshot = useMemo<SmartDocClientProgress | null>(() => {
     if (state.status !== 'ready') return null;
-    const total = state.doc.prompts.length;
-    const completed = state.doc.prompts.filter((p) => (values[p.id]?.trim()?.length ?? 0) > 0).length;
-    return { total, completed, isComplete: total > 0 && completed === total };
+    const required = state.doc.prompts.filter((p) => p.required);
+    const total = required.length;
+    const completed = required.filter((p) => (values[p.id]?.trim()?.length ?? 0) > 0).length;
+    return { total, completed, isComplete: completed === total };
   }, [state, values]);
 
   useEffect(() => {
@@ -341,6 +369,7 @@ function SmartDocPreview({
           <Typography variant="body2" color="error.main">
             Failed to load: {state.message}
           </Typography>
+          <Button onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Retry loading answers</Button>
         </Stack>
       );
     }
@@ -361,22 +390,7 @@ function SmartDocPreview({
   const upsertValue = (promptId: number, value: string) => {
     setValues((v) => ({ ...v, [promptId]: value }));
 
-    window.clearTimeout(timers.current[promptId]);
-    timers.current[promptId] = window.setTimeout(async () => {
-      try {
-        await fetch('/api/smartdoc/upsert', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            content_block_id: contentBlockId,
-            prompt_id: promptId,
-            value,
-          }),
-        });
-      } catch (err) {
-        console.error('smartdoc upsert failed', err);
-      }
-    }, 400);
+    queueRef.current?.edit(promptId, value);
   };
 
   return (
@@ -407,11 +421,16 @@ function SmartDocPreview({
               prompt={p}
               value={values[p.id] ?? ''}
               onChange={(v) => upsertValue(p.id, v)}
-              disabled={submitted}
+              disabled={readOnly ?? submitted}
             />
           ))
         )}
       </Box>
+      {saveState.error ? (
+        <Alert severity="error" action={<Button color="inherit" onClick={() => { void queueRef.current?.flush().catch(() => {}); }}>Retry saving</Button>}>
+          {saveState.error} Your edits are still here.
+        </Alert>
+      ) : saveState.pending ? <Typography role="status" variant="caption">Saving answers…</Typography> : null}
     </Stack>
   );
 }
@@ -913,6 +932,8 @@ export function BlockRenderer({
   previewMode = false,
   onSmartDocProgress,
   onVideoProgress,
+  onSmartDocReady,
+  smartDocReadOnly,
 }: BlockRendererProps) {
   const smartDocProgressHandler = useMemo(() => {
     if (!onSmartDocProgress || block.block_type !== 'smart_doc') return undefined;
@@ -990,6 +1011,8 @@ export function BlockRenderer({
           contentBlockId={block.id}
           fallbackLabel={block.label}
           onProgressChange={smartDocProgressHandler}
+          onReady={onSmartDocReady}
+          readOnly={smartDocReadOnly}
         />
       );
     }

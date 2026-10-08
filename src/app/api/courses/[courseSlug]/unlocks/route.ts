@@ -9,8 +9,8 @@ export async function POST(req: NextRequest, context: unknown) {
   const guard = await requireUser(req);
   if (!guard.ok) return guard.res;
 
-  const { params } = context as { params: { courseSlug?: string } };
-  const courseSlug = params.courseSlug;
+  const { params } = context as { params: Promise<{ courseSlug?: string }> };
+  const { courseSlug } = await params;
 
   const body = (await req.json().catch(() => null)) as { parentIds?: number[] } | null;
   const parentIds = (body?.parentIds ?? []).filter((value) => Number.isFinite(value)) as number[];

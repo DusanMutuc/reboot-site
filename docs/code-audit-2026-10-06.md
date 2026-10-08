@@ -2,7 +2,7 @@
 
 Reviewed checkout: `main` at `30bb87b`, plus the local fixes described below. This is a source and local-behavior audit, not a claim that every workflow is defect-free. Production data, deployed functions, GHL calendars, and the work pending on the other PC were not inspected or changed.
 
-**8 October release follow-up:** The implementation-tab update is integrated at `02f839c`, and the account-transfer release is deployed at `f422e86`. The subsequent stabilization release includes the booking/member filtering, partnership authorization, and KPI A1/A2 fixes described here. These fixes require no database migration. A read-only live check confirmed A3's deployed entitlement mismatch (authenticated RLS policy wiring remains unverified); A3 and A4–A13 remain outstanding. See [the stabilization record](stabilization-2026-10-08.md) for compatibility notes, live-check limits, and release validation.
+**8 October release follow-up:** The implementation-tab update is integrated at `02f839c`, and the account-transfer release is deployed at `f422e86`. The subsequent stabilization release includes the booking/member filtering, partnership authorization, and KPI A1/A2 fixes described here. These fixes require no database migration. A read-only live check confirmed A3's deployed entitlement mismatch (authenticated RLS policy wiring remains unverified); The remaining findings are addressed by the follow-up audit repair release; A12 was already fixed with merged accounts. See [the repair record](audit-fixes-2026-10-08.md) for implementation and deployment status. See [the stabilization record](stabilization-2026-10-08.md) for compatibility notes, live-check limits, and release validation.
 
 ## Changes made in this review
 
@@ -26,25 +26,25 @@ Four regression tests cover every method under 401, 403, and 500 guard failures,
 
 These changes are included in the 8 October stabilization release. No database migration is needed for them. The original audit left the five pre-existing account-transfer files untouched; the later transfer release is documented separately.
 
-## Remaining findings
+## Findings and resolution history
 
-P1 means prioritize promptly because data or access boundaries are at risk. P2 means a reproducible functional or integrity defect. P3 means a latent defect with no current affected caller established. The original findings and reproduction notes are retained below; A1/A2 are fixed in the 8 October stabilization release.
+P1 means prioritize promptly because data or access boundaries are at risk. P2 means a reproducible functional or integrity defect. P3 means a latent defect with no current affected caller established. The original findings and reproduction notes are retained below; A1/A2 are fixed in the stabilization release, A12 in the merged-account release, and the remaining ten findings in the audit repair release. The repair record distinguishes validation from production rollout.
 
 | ID | Priority | Finding | Evidence |
 |---|---|---|---|
 | A1 | P1, fixed | Failed KPI history loads can lead to deletion of existing values | 8 October regression coverage |
 | A2 | P1, fixed | KPI autosave responses erase newer typing | 8 October regression coverage in both editors |
-| A3 | P1 | Database content rules omit revoked/programme membership restrictions | Deployed entitlement functions checked 8 October; RLS policy wiring unverified |
-| A4 | P2 | Unpublished library content is returned to members | Executed library-loader reproduction |
-| A5 | P2 | Smart Doc submission can succeed before required answers are saved | Executed API reproduction + client lifecycle trace |
-| A6 | P2 | Failed partnership edits partially commit | API write sequence + database constraints |
-| A7 | P2 | Partnership reactivation/sharing changes bypass overlap validation | API + checked-in triggers |
-| A8 | P2 | Legends-only resource downloads fail access checks | TypeScript paths + checked-in migration chain |
-| A9 | P2 | Required draft content can block published course progress | Course rendering + checked-in progress functions |
-| A10 | P2 | Smart Doc loading can display another person's answers to staff | Client query + checked-in response policies |
-| A11 | P2 | A 90-day programme can omit its final KPI month | Executed date-function reproduction |
-| A12 | P3 | Bearer authentication returns an anonymous database client | Installed SDK with mocked transport |
-| A13 | P1, previously documented | New accounts share a bootstrap password | Current provisioning/reset code |
+| A3 | P1, fixed | Database content rules omit revoked/programme membership restrictions | Deployed entitlement functions checked 8 October; RLS policy wiring unverified |
+| A4 | P2, fixed | Unpublished library content is returned to members | Executed library-loader reproduction |
+| A5 | P2, fixed | Smart Doc submission can succeed before required answers are saved | Executed API reproduction + client lifecycle trace |
+| A6 | P2, fixed | Failed partnership edits partially commit | API write sequence + database constraints |
+| A7 | P2, fixed | Partnership reactivation/sharing changes bypass overlap validation | API + checked-in triggers |
+| A8 | P2, fixed | Legends-only resource downloads fail access checks | TypeScript paths + checked-in migration chain |
+| A9 | P2, fixed | Required draft content can block published course progress | Course rendering + checked-in progress functions |
+| A10 | P2, fixed | Smart Doc loading can display another person's answers to staff | Client query + checked-in response policies |
+| A11 | P2, fixed | A 90-day programme can omit its final KPI month | Executed date-function reproduction |
+| A12 | P3, fixed | Bearer authentication returns an anonymous database client | Installed SDK with mocked transport |
+| A13 | P1, fixed | New accounts share a bootstrap password | Current provisioning/reset code |
 
 ### A1 — Failed KPI history loads can lead to deletion of existing values
 

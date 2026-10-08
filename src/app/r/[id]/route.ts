@@ -1,10 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { parseResourceId, resolveResourceRedirectTarget } from '@/lib/resourceRedirect';
 import { adminClient } from '@/lib/courseBuilder';
-import { canUserAccessNodeViaCourse } from '@/lib/courseAccess';
-import { getNinetyDayAccessibleNodeIds } from '@/lib/ninetyDayProgramme';
-import { getSupabaseServer } from '@/lib/supabaseServer';
-import { fetchUserRoleCodes, hasRoleCode, isNinetyDayUserRole } from '@/lib/userRoles';
+import { requireUser } from '@/lib/requireUser';
 
 type ResourceRow = {
   id: number;
@@ -15,53 +12,13 @@ type ResourceRow = {
   storage_path: string | null;
 };
 
-type RoleWithUsers = { code: string; user_roles: { user_id: string }[] };
-
-async function getUserId(): Promise<string | null> {
-  const supa = getSupabaseServer();
-  const { data } = await supa.auth.getUser();
-  return data?.user?.id ?? null;
-}
-
-async function isStaff(userId: string | null): Promise<boolean> {
-  if (!userId) return false;
-  const supa = getSupabaseServer();
-  const { data } = await supa
-    .from('roles')
-    .select('code, user_roles!inner(user_id)')
-    .eq('user_roles.user_id', userId);
-
-  const codes = (data ?? ([] as RoleWithUsers[])).map((r) => r.code);
-  return codes.some((c) => ['admin', 'superadmin', 'coach'].includes(c));
-}
-
-async function canAccessNinetyDayResource(userId: string, resourceId: number): Promise<boolean> {
-  const roleCodes = await fetchUserRoleCodes(adminClient, userId);
-  if (!isNinetyDayUserRole(roleCodes) || hasRoleCode(roleCodes, 'user')) return true;
-
-  const { data: blockRows, error } = await adminClient
-    .from('content_blocks')
-    .select('node_id')
-    .eq('resource_id', resourceId);
-  if (error || !blockRows?.length) return false;
-
-  const libraryIds = await getNinetyDayAccessibleNodeIds(userId);
-  const nodeIds = Array.from(new Set(blockRows.map((row) => Number(row.node_id))));
-  if (nodeIds.some((nodeId) => libraryIds.has(nodeId))) return true;
-
-  const courseAccess = await Promise.all(
-    nodeIds.map((nodeId) => canUserAccessNodeViaCourse(userId, nodeId)),
-  );
-  return courseAccess.some(Boolean);
-}
-
 function redirectResource(target: string) {
   const response = NextResponse.redirect(target, { status: 302 });
   response.headers.set('Cache-Control', 'private, no-store');
   return response;
 }
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   // Extract /r/[id] from the path without using the typed context arg
   const { pathname } = new URL(req.url);
   const match = pathname.match(/\/r\/([^/]+)\/?$/);
@@ -72,12 +29,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const supa = getSupabaseServer();
-  const userId = await getUserId();
-  if (!userId || !await canAccessNinetyDayResource(userId, numericId)) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  const guard = await requireUser(req);
+  if (!guard.ok) return guard.res;
+  const supa = guard.supabase;
+  const staff = guard.roleCodes.some((role) => ['admin', 'coach'].includes(role));
+  // Staff previews retain their existing RLS permissions. Member downloads and
+  // direct DB reads use the exact same publication and membership predicate.
+  if (!staff) {
+    const access = await adminClient.rpc('can_access_discovery_resource', {
+      _user_id: guard.user.id, _resource_id: numericId,
+    });
+    if (access.error) return NextResponse.json({ error: 'Access check unavailable' }, { status: 503 });
+    if (access.data !== true) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  const staff = await isStaff(userId);
 
   let query = supa
     .from('resources')

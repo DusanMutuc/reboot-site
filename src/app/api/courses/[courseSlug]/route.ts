@@ -9,17 +9,18 @@ import {
   type NodeSubtree as BuilderNodeSubtree,
 } from '@/lib/courseBuilder';
 import { resolveAccessibleCourseBySlug } from '@/lib/courseAccess';
+import { fetchAccessibleContentNodes } from '@/lib/contentEntitlements';
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 
-function sanitizeSubtree(subtree: BuilderNodeSubtree): NodeSubtree | null {
+function sanitizeSubtree(subtree: BuilderNodeSubtree, accessibleIds: Set<number>): NodeSubtree | null {
   const nodeState = (subtree.node.state ?? 'draft') as string;
-  if (nodeState !== 'published') {
+  if (nodeState !== 'published' || !accessibleIds.has(subtree.node.id)) {
     return null;
   }
 
   const children: NodeSubtree['children'] = [];
   for (const child of subtree.children) {
-    const sanitizedChild = sanitizeSubtree(child.subtree);
+    const sanitizedChild = sanitizeSubtree(child.subtree, accessibleIds);
     if (!sanitizedChild) continue;
     children.push({
       edge: { ...child.edge },
@@ -63,7 +64,9 @@ export async function GET(req: NextRequest, context: unknown) {
       includeBlocks: false, // we lazy-load per selected node
       allowUnpublished: false, // students see only published content
     });
-    const sanitized = sanitizeSubtree(rawTree);
+    const accessibleIds = new Set((await fetchAccessibleContentNodes(guard.user.id))
+      .filter((row) => Number(row.root_id) === courseRow.id).map((row) => Number(row.node_id)));
+    const sanitized = sanitizeSubtree(rawTree, accessibleIds);
 
     if (!sanitized) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });

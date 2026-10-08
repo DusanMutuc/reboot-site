@@ -28,11 +28,10 @@ export async function POST(
     return guard.res;
   }
 
-  // ✅ narrow here
-  const { params } = context as { params: { nodeId?: string } };
+  const { params } = context as { params: Promise<{ nodeId?: string }> };
 
   try {
-    const nodeId = parseNodeId(params?.nodeId);
+    const nodeId = parseNodeId((await params)?.nodeId);
     const body = (await request.json().catch(() => ({}))) as { on?: unknown };
 
     if (typeof body.on !== 'boolean') {

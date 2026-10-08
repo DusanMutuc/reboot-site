@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser } from '@/lib/requireUser';
+import { smartDocProgressRow, validSmartDocId } from '@/lib/smartDocProgress';
 
 export async function POST(req: NextRequest) {
   const guard = await requireUser(req);
@@ -7,7 +8,7 @@ export async function POST(req: NextRequest) {
   const { supabase, user } = guard;
 
   const body = await req.json().catch(() => null) as { content_block_id?: number } | null;
-  if (!body?.content_block_id) {
+  if (!validSmartDocId(body?.content_block_id)) {
     return NextResponse.json({ error: 'content_block_id is required' }, { status: 400 });
   }
 
@@ -20,6 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Progress fetch failed', details: error.message }, { status: 500 });
   }
 
-  // data is expected to be { fields_total, fields_completed }
-  return NextResponse.json({ progress: data ?? { fields_total: 0, fields_completed: 0 } });
+  const progress = smartDocProgressRow(data);
+  if (!progress) return NextResponse.json({ error: 'Invalid progress result' }, { status: 502 });
+  return NextResponse.json({ progress });
 }

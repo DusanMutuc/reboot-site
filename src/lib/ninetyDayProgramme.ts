@@ -14,6 +14,8 @@ import type {
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { loadNinetyDayCompassCourse } from '@/lib/trainingAssignments';
 import { formatNinetyDayMeetingTime } from '@/lib/ninetyDayMeetingTime';
+import { fetchAccessibleContentNodes } from '@/lib/contentEntitlements';
+import { programmeMonths } from '@/lib/ninetyDayProgrammeMonths';
 
 type CycleRow = {
   id: number;
@@ -81,7 +83,7 @@ async function loadActiveCycle(userId: string): Promise<CycleRow | null> {
   return (cycle as CycleRow | null) ?? null;
 }
 
-async function loadSystemRows(cycleId: number): Promise<Array<SystemLinkRow & { node: SystemNodeRow }>> {
+async function loadSystemRows(cycleId: number, userId: string): Promise<Array<SystemLinkRow & { node: SystemNodeRow }>> {
   const client = getAdminClient();
   const { data: links, error: linkError } = await client
     .from('ninety_day_cycle_systems')
@@ -92,18 +94,20 @@ async function loadSystemRows(cycleId: number): Promise<Array<SystemLinkRow & { 
   if (linkError) throw new Error(`Failed to load 90-day systems: ${linkError.message}`);
   const linkRows = (links ?? []) as SystemLinkRow[];
   if (linkRows.length === 0) return [];
+  const accessibleIds = new Set((await fetchAccessibleContentNodes(userId)).map((row) => Number(row.node_id)));
 
   const { data: nodes, error: nodeError } = await client
     .from('content_nodes')
     .select('id, title, slug, description, hero_image')
-    .in('id', linkRows.map((link) => link.node_id));
+    .in('id', linkRows.map((link) => link.node_id))
+    .eq('state', 'published');
 
   if (nodeError) throw new Error(`Failed to load 90-day system content: ${nodeError.message}`);
   const nodeMap = new Map(((nodes ?? []) as SystemNodeRow[]).map((node) => [Number(node.id), node]));
 
   return linkRows.flatMap((link) => {
     const node = nodeMap.get(Number(link.node_id));
-    return node ? [{ ...link, node }] : [];
+    return node && accessibleIds.has(Number(node.id)) ? [{ ...link, node }] : [];
   });
 }
 
@@ -116,14 +120,7 @@ function cycleWeek(cycle: CycleRow): ProgrammeWeek {
 }
 
 function cycleMonths(cycle: CycleRow): ProgrammeMonth[] {
-  const start = DateTime.fromISO(cycle.starts_on, { zone: cycle.timezone }).startOf('month');
-  return Array.from({ length: 3 }, (_, index) => {
-    const month = start.plus({ months: index });
-    return {
-      periodStart: month.toISODate() ?? cycle.starts_on,
-      label: month.toFormat('LLLL'),
-    };
-  });
+  return programmeMonths(cycle);
 }
 
 async function loadNextMeeting(cycle: CycleRow, focusTitle: string | null): Promise<MeetingSlot[]> {
@@ -173,7 +170,7 @@ export async function loadNinetyDayProgramme(
   const cycle = await loadActiveCycle(userId);
   if (!cycle) return null;
 
-  const rows = await loadSystemRows(cycle.id);
+  const rows = await loadSystemRows(cycle.id, userId);
   const nodeIds = rows.map((row) => row.node_id);
   const { data: progressRows, error: progressError } = nodeIds.length > 0
     ? await client
@@ -239,30 +236,6 @@ export async function loadNinetyDayProgramme(
 
 /** Node entitlement used by the normal library APIs for 90-day-only users. */
 export async function getNinetyDayAccessibleNodeIds(userId: string): Promise<Set<number>> {
-  const cycle = await loadActiveCycle(userId);
-  if (!cycle) return new Set();
-
-  const client = getAdminClient();
-  const rows = await loadSystemRows(cycle.id);
-  const allowed = new Set(rows.map((row) => Number(row.node_id)));
-  let frontier = Array.from(allowed);
-
-  while (frontier.length > 0) {
-    const { data, error } = await client
-      .from('node_children')
-      .select('child_id')
-      .in('parent_id', frontier);
-    if (error) throw new Error(`Failed to expand 90-day system access: ${error.message}`);
-
-    const next: number[] = [];
-    for (const row of data ?? []) {
-      const childId = Number(row.child_id);
-      if (allowed.has(childId)) continue;
-      allowed.add(childId);
-      next.push(childId);
-    }
-    frontier = next;
-  }
-
-  return allowed;
+  const inventory = await fetchAccessibleContentNodes(userId);
+  return new Set(inventory.filter((row) => row.open_path.startsWith('/library/')).map((row) => Number(row.node_id)));
 }

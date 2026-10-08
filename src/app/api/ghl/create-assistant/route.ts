@@ -1,3 +1,4 @@
+import { createSetupCredential, sendAccountSetupEmail } from '@/lib/accountSetupServer';
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
@@ -5,7 +6,6 @@ import { getAdminClient } from '@/lib/supabaseAdmin';
 import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 const ROLE_CODE = 'assistant';
-const DEFAULT_PASSWORD = 'reboot';
 const ASSISTANT_TAGS = new Set(['assistant agreement', 'assistant workroom']);
 const MAX_USER_PAGE_SIZE = 200;
 
@@ -89,10 +89,11 @@ export async function POST(request: NextRequest) {
 
   let userId: string | null = null;
   let created = false;
+  let needsSetupEmail = false;
 
   const { data: createdUser, error: createErr } = await supa.auth.admin.createUser({
     email,
-    password: DEFAULT_PASSWORD,
+    password: createSetupCredential(),
     phone: phone ?? undefined,
     email_confirm: true,
     user_metadata: {
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
     },
     app_metadata: {
       must_reset_password: true,
+      setup_required_at: new Date().toISOString(),
       created_by: 'ghl_webhook',
     },
   });
@@ -117,7 +119,7 @@ export async function POST(request: NextRequest) {
         const archivedResponse = await archivedAccountWriteResponse(supa, userId);
         if (archivedResponse) return archivedResponse;
         console.log('[ghl:create-assistant] Reusing existing auth user', userId);
-        await supa.auth.admin.updateUserById(userId, {
+        const { error: updateError } = await supa.auth.admin.updateUserById(userId, {
           phone: phone ?? undefined,
           user_metadata: {
             ...(existing.user_metadata || {}),
@@ -125,11 +127,9 @@ export async function POST(request: NextRequest) {
             last_name: lastName,
             source: 'ghl-webhook',
           },
-          app_metadata: {
-            ...(existing.app_metadata || {}),
-            must_reset_password: true,
-          },
         });
+        if (updateError) throw updateError;
+        needsSetupEmail = existing.app_metadata?.must_reset_password === true;
       } catch (lookupErr) {
         console.error('[ghl:create-assistant] Failed to resolve existing user after duplicate email', lookupErr);
         return NextResponse.json({ error: 'Duplicate email lookup failed' }, { status: 500 });
@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
   } else {
     userId = createdUser?.user?.id ?? null;
     created = true;
+    needsSetupEmail = true;
   }
 
   if (!userId) {
@@ -166,9 +167,12 @@ export async function POST(request: NextRequest) {
 
   console.log('[ghl:create-assistant] Assistant ready', { userId, created, matchedTag });
 
+  const setupEmailSent = needsSetupEmail ? await sendAccountSetupEmail(supa, email) : null;
   return NextResponse.json(
     {
       ok: true,
+      setup_email_sent: setupEmailSent,
+      warning: setupEmailSent === false ? 'Account is ready, but the setup email could not be sent. Resend a password reset from the profile.' : undefined,
       user_id: userId,
       created,
       tag: matchedTag,

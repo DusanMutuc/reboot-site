@@ -1,7 +1,7 @@
 // src/app/reset-password/ResetPasswordClient.tsx
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createBrowserClient } from '@supabase/ssr';
 import Paper from '@mui/material/Paper';
@@ -12,19 +12,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import { assertAccountSessionAllowed } from '@/lib/accountLifecycleClient';
 
-// rewrite hash → query on the client (safe-guarded)
-if (typeof window !== 'undefined' && window.location.hash.startsWith('#access_token=')) {
-  const hashParams = window.location.hash.substring(1);
-  const newUrl = window.location.pathname + '?' + hashParams;
-  window.location.replace(newUrl);
-}
-
-function parseHashParams(): URLSearchParams | null {
-  if (typeof window === 'undefined') return null;
-  if (!window.location.hash?.startsWith('#')) return null;
-  return new URLSearchParams(window.location.hash.substring(1));
-}
-
 export default function ResetPasswordClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -32,11 +19,15 @@ export default function ResetPasswordClient() {
   const supabase = useMemo(
     () => createBrowserClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { isSingleton: false, auth: { detectSessionInUrl: false } }
     ),
     []
   );
 
+  const authentication = useRef<Promise<void> | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [setupSent, setSetupSent] = useState(false);
   const [authenticating, setAuthenticating] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [pw1, setPw1] = useState('');
@@ -46,34 +37,36 @@ export default function ResetPasswordClient() {
 
   useEffect(() => {
     let cancelled = false;
-    const run = async () => {
-      try {
-        let at: string | null = searchParams.get('access_token');
-        let rt: string | null = searchParams.get('refresh_token');
-
-        if (!at || !rt) {
-          const hp = parseHashParams();
-          if (hp) {
-            at = at ?? hp.get('access_token');
-            rt = rt ?? hp.get('refresh_token');
-          }
-        }
-
-        if (at && rt) {
+    if (!authentication.current) {
+      authentication.current = (async () => {
+        const hash = new URLSearchParams(window.location.hash.slice(1));
+        const at = searchParams.get('access_token') ?? hash.get('access_token');
+        const rt = searchParams.get('refresh_token') ?? hash.get('refresh_token');
+        const code = searchParams.get('code');
+        const linkError = searchParams.get('error_description') ?? hash.get('error_description');
+        // Never move tokens into the query string, referrers, or server logs.
+        window.history.replaceState(null, '', window.location.pathname);
+        if (linkError) throw new Error('This link is invalid or expired. Request a new link from the login page.');
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw new Error('This link is invalid or expired. Request a new link from the login page.');
+        } else if (at && rt) {
           const { error } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
-          if (error) throw new Error('Auth failed: ' + error.message);
+          if (error) throw new Error('This link is invalid or expired. Request a new link from the login page.');
         }
-        await assertAccountSessionAllowed(supabase);
-        if (!cancelled) setAuthenticating(false);
-      } catch (e: unknown) {
-        if (!cancelled) {
-          const msg = e instanceof Error ? e.message : 'Authentication failed';
-          setAuthError(msg);
-          setAuthenticating(false);
-        }
+        await assertAccountSessionAllowed(supabase, { allowPendingSetup: true });
+        const { data: { user } } = await supabase.auth.getUser();
+        setSetupRequired(user?.app_metadata?.must_reset_password === true);
+      })();
+    }
+    authentication.current.then(() => {
+      if (!cancelled) setAuthenticating(false);
+    }).catch((e: unknown) => {
+      if (!cancelled) {
+        setAuthError(e instanceof Error ? e.message : 'Authentication failed');
+        setAuthenticating(false);
       }
-    };
-    run();
+    });
     return () => { cancelled = true; };
   }, [searchParams, supabase]);
 
@@ -87,26 +80,53 @@ export default function ResetPasswordClient() {
     setLoading(true);
 
     try {
-      await assertAccountSessionAllowed(supabase);
+      await assertAccountSessionAllowed(supabase, { allowPendingSetup: true });
+      // Re-read live state before choosing the setup-only privileged endpoint.
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) throw new Error('Please open a fresh password reset link.');
+      if (user.app_metadata?.must_reset_password === true) {
+        const { data } = await supabase.auth.getSession();
+        const token = data.session?.access_token;
+        if (!token) throw new Error('Please open a fresh setup link.');
+        const response = await fetch('/api/auth/clear-first-login-flag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ password: pw1 }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.error || 'Password could not be saved.');
+      } else {
+        // GoTrue enforces recovery, MFA, and secure password-change rules for
+        // established users. An admin password update would bypass those rules.
+        const { error } = await supabase.auth.updateUser({ password: pw1 });
+        if (error) throw new Error(error.message);
+      }
+      // The password is saved even if refreshing an old session fails.
+      await supabase.auth.signOut({ scope: 'local' });
+      router.replace('/login?passwordUpdated=1');
     } catch (error) {
+      setErr(error instanceof Error ? error.message : 'Password could not be saved.');
+    } finally {
       setLoading(false);
-      setErr(error instanceof Error ? error.message : 'Account access could not be verified.');
-      return;
     }
+  };
 
-    const { error: updateErr } = await supabase.auth.updateUser({ password: pw1 });
-    if (updateErr) {
+  const sendSetupLink = async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user?.email) throw new Error('Request a new link from the login page.');
+      const { error: sendError } = await supabase.auth.resetPasswordForEmail(user.email, {
+        redirectTo: 'https://hub.rebootmembers.com/reset-password',
+      });
+      if (sendError) throw sendError;
+      setSetupSent(true);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : 'The link could not be sent.');
+    } finally {
       setLoading(false);
-      return setErr(updateErr.message);
     }
-
-    try { await fetch('/api/auth/clear-first-login-flag', { method: 'POST' }); } catch {}
-    await supabase.auth.refreshSession();
-
-    setLoading(false);
-
-    const cameViaRecovery = !!searchParams.get('access_token') || !!searchParams.get('refresh_token');
-    router.replace(cameViaRecovery ? '/login' : '/');
   };
 
   return (
@@ -120,9 +140,13 @@ export default function ResetPasswordClient() {
             <Typography>Authenticating…</Typography>
           </Stack>
         ) : authError ? (
-          <Typography color="error" align="center">{authError}</Typography>
+          <Stack spacing={2}><Typography color="error" align="center">{authError}</Typography><Button href="/login">Request a new link</Button></Stack>
         ) : (
           <form onSubmit={handleSubmit}>
+            {setupRequired && <Stack spacing={1}>
+              <Typography variant="body2">Choose your password after opening the setup link in your email.</Typography>
+              <Button onClick={sendSetupLink} disabled={loading || setupSent}>{setupSent ? 'Setup link sent — check your email' : 'Send a fresh setup link'}</Button>
+            </Stack>}
             <TextField label="New password" type="password" value={pw1} onChange={(e)=>setPw1(e.target.value)} fullWidth margin="normal" disabled={loading} autoComplete="new-password" />
             <TextField label="Confirm new password" type="password" value={pw2} onChange={(e)=>setPw2(e.target.value)} fullWidth margin="normal" disabled={loading} autoComplete="new-password" />
             {err && <Typography color="error" align="center" sx={{ mt: 1 }}>{err}</Typography>}

@@ -3,7 +3,7 @@ import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, ACCOUNT_MERGED_PATH } from
 
 // Revalidate after an Auth exchange: middleware ran before the browser acquired
 // that new session. The server validates the bearer rather than trusting claims.
-export async function assertAccountSessionAllowed(client: Pick<SupabaseClient, 'auth'>): Promise<void> {
+export async function assertAccountSessionAllowed(client: Pick<SupabaseClient, 'auth'>, options?: { allowPendingSetup?: boolean }): Promise<void> {
   const { data, error } = await client.auth.getSession();
   const accessToken = data.session?.access_token;
   if (error || !accessToken) throw new Error('Please sign in to continue.');
@@ -20,6 +20,10 @@ export async function assertAccountSessionAllowed(client: Pick<SupabaseClient, '
       throw new Error(ACCOUNT_MERGED_MESSAGE);
     }
     throw new Error('Account access could not be verified. Please try again.');
+  }
+  if (result && typeof result === 'object' && 'setup_required' in result && result.setup_required === true && !options?.allowPendingSetup) {
+    window.location.replace('/reset-password');
+    throw new Error('Use an email setup link to choose your password.');
   }
   if (!result || typeof result !== 'object' || !('ok' in result) || result.ok !== true) {
     throw new Error('Account access could not be verified. Please try again.');

@@ -114,6 +114,14 @@ export async function middleware(req: NextRequest) {
   }
   if (isPublicRequest) return res;
 
+  if (user.app_metadata?.must_reset_password === true && pathname !== RESET_PATH) {
+    if (isApiRequest) return NextResponse.json({ error: 'Complete password setup using an email link.', code: 'ACCOUNT_SETUP_REQUIRED' }, { status: 403 });
+    const url = req.nextUrl.clone();
+    url.pathname = RESET_PATH;
+    return NextResponse.redirect(url);
+  }
+
+
   const roleCodes = await fetchUserRoleCodes(supabase, user.id);
   const isPastMember = isPastMemberRole(roleCodes);
 
@@ -141,11 +149,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user.app_metadata?.must_reset_password === true && pathname !== RESET_PATH) {
-    const url = req.nextUrl.clone();
-    url.pathname = RESET_PATH;
-    return NextResponse.redirect(url);
-  }
 
   const homeContext = hasDualMembership(roleCodes) ? await fetchMemberHomeContext(supabase) : undefined;
   const resolvedHomePath = resolveHomePathForRoleCodes(roleCodes, homeContext);

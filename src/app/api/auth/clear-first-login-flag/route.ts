@@ -1,73 +1,37 @@
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import { createServerClient, type CookieOptions } from '@supabase/ssr';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
-import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from '@/lib/accountLifecycle';
+import { hasVerifiedSetupSession, requiresAccountSetup } from '@/lib/accountSetup';
 
-export async function POST() {
+// Keep the existing URL for clients. Completion now sets the password and clears
+// the flag together after verifying the recovery session.
+export async function POST(request: NextRequest) {
+  const guard = await requireUser(request, { allowPastMember: true, allowPendingSetup: true });
+  if (!guard.ok) return guard.res;
+  if (!requiresAccountSetup(guard.user)) {
+    return NextResponse.json({ error: 'Password setup is already complete. Use the password reset form to change your password.' }, { status: 409 });
+  }
   try {
-    // 1) Prepare a response we can mutate cookies on
-    const res = new NextResponse();
-
-    // 2) Read current request cookies (async in Next 15)
-    const cookieStore = await cookies();
-
-    // 3) Create SSR supabase client bound to request+response cookies
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          // read from the incoming request cookies
-          get(name: string) {
-            return cookieStore.get(name)?.value;
-          },
-          // write to the outgoing response cookies
-          set(name: string, value: string, options: CookieOptions) {
-            res.cookies.set({ name, value, ...options });
-          },
-          remove(name: string, options: CookieOptions) {
-            res.cookies.set({ name, value: '', ...options, maxAge: 0 });
-          },
-        },
-      }
-    );
-
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser();
-
-    if (error || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401, headers: res.headers }
-      );
+    const body: unknown = await request.json();
+    const password = body && typeof body === 'object' && 'password' in body ? body.password : null;
+    if (typeof password !== 'string' || password.length < 8 || password.length > 1024) {
+      return NextResponse.json({ error: 'Choose a password between 8 and 1024 characters.' }, { status: 400 });
     }
-
-    // 4) Clear the app_metadata flag with the service-role admin client
-    const admin = getAdminClient();
-    if (isAccountMerged(await fetchAccountLifecycle(admin, user.id))) {
-      return NextResponse.json(
-        { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE },
-        { status: 403, headers: res.headers },
-      );
+    const token = request.headers.get('authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1];
+    const { data, error: claimsError } = await guard.supabase.auth.getClaims(token);
+    if (!claimsError && data?.claims && guard.user.factors?.some((factor) => factor.status === 'verified') && data.claims.aal !== 'aal2') {
+      return NextResponse.json({ error: 'Complete multi-factor authentication before choosing your password.', code: 'ACCOUNT_SETUP_MFA_REQUIRED' }, { status: 403 });
     }
-    const { error: adminErr } = await admin.auth.admin.updateUserById(user.id, {
-      app_metadata: { must_reset_password: false },
+    if (claimsError || !data?.claims || !hasVerifiedSetupSession(data.claims, guard.user)) {
+      return NextResponse.json({ error: 'Open a fresh password setup link from your email before choosing your password.' }, { status: 403 });
+    }
+    const { error } = await getAdminClient().auth.admin.updateUserById(guard.user.id, {
+      password,
+      app_metadata: { ...guard.user.app_metadata, must_reset_password: false, setup_completed_at: new Date().toISOString() },
     });
-
-    if (adminErr) {
-      return NextResponse.json(
-        { error: adminErr.message },
-        { status: 400, headers: res.headers }
-      );
-    }
-
-    // 5) Return JSON while preserving any Set-Cookie from `res`
-    return NextResponse.json({ ok: true }, { status: 200, headers: res.headers });
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ ok: true }, { headers: { 'Cache-Control': 'no-store' } });
+  } catch {
+    return NextResponse.json({ error: 'Password setup could not be completed. Please try again.' }, { status: 400 });
   }
 }

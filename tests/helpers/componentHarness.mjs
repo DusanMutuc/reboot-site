@@ -16,7 +16,7 @@ const changed = (previous, next) => !previous || !next
  * boundaries, and tests dispatch the event handlers the component renders.
  * Network promises are controlled by each test, not by this harness.
  */
-export function renderComponent(relativePath, initialProps, imports = {}, globals = {}) {
+export function renderComponent(relativePath, initialProps, imports = {}, globals = {}, exportName = 'default') {
   const hooks = [];
   let cursor = 0;
   let pendingEffects = [];
@@ -25,6 +25,7 @@ export function renderComponent(relativePath, initialProps, imports = {}, global
   let props = initialProps;
   let tree;
   const react = {
+    memo(component) { return component; },
     useDeferredValue(value) { return value; },
     useState(initial) {
       const index = cursor++;
@@ -107,7 +108,7 @@ export function renderComponent(relativePath, initialProps, imports = {}, global
     execute(loadedModule.exports, loadedModule, require);
     return loadedModule.exports;
   }
-  const Component = load(path.join(projectRoot, relativePath)).default;
+  const Component = load(path.join(projectRoot, relativePath))[exportName];
 
   async function flush() {
     // Bound even a broken component's rerender loop. Idle microtasks let async

@@ -255,7 +255,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
                   fontSize: '0.95rem',
                 }}
               >
-                Forgot Password?
+                Set up or reset password
               </Button>
             </Box>
 
@@ -347,7 +347,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
             setForgotMessage(null);
           }}
         >
-          <DialogTitle>Reset Password</DialogTitle>
+          <DialogTitle>Set up or reset your password</DialogTitle>
           <DialogContent>
             <TextField
               label="Enter your email"
@@ -506,7 +506,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
                 fontSize: '1.5rem',
               }}
             >
-              Forgot Password?
+              Set up or reset password
             </Button>
           </Box>
 
@@ -643,7 +643,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
           setForgotMessage(null);
         }}
       >
-        <DialogTitle>Reset Password</DialogTitle>
+        <DialogTitle>Set up or reset your password</DialogTitle>
         <DialogContent>
           <TextField
             label="Enter your email"

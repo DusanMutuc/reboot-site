@@ -196,6 +196,7 @@ export default function AddUserForm() {
     setBusy(true);
     try {
       const createdEmails: string[] = [];
+      const emailWarnings: string[] = [];
       const createdUserIds: string[] = [];
 
       for (const form of forms) {
@@ -214,6 +215,7 @@ export default function AddUserForm() {
         const userId = created?.user_id as string | undefined;
         if (!userId) throw new Error(`User created for ${form.email} but no user_id was returned.`);
         createdUserIds.push(userId);
+        if (created.setup_email_sent === false) emailWarnings.push(form.email);
 
         if (form.role === 'assistant') {
           if (assistantTo?.id) {
@@ -237,9 +239,9 @@ export default function AddUserForm() {
 
       setSnack({
         open: true,
-        message: createdEmails.length === 1
-          ? `Onboarded ${createdEmails[0]}`
-          : `Onboarded ${createdEmails.length} users`,
+        message: emailWarnings.length
+          ? `Accounts created. Setup email failed for ${emailWarnings.join(', ')}. Resend a password reset from their profiles.`
+          : createdEmails.length === 1 ? `Onboarded ${createdEmails[0]}. Setup email sent.` : `Onboarded ${createdEmails.length} users. Setup emails sent.`,
         severity: 'success',
       });
       setForms(isPartnership ? Array.from({ length: onboardeeCount }, defaultForm) : [defaultForm()]);

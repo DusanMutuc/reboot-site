@@ -229,3 +229,50 @@ test('post-exchange client gate allows a positively verified active account', as
   await env.load('src/lib/accountLifecycleClient.ts').assertAccountSessionAllowed(env.client);
   assert.equal(env.calls.redirects.length, 0);
 });
+
+for (const authentication of ['cookie','bearer']) {
+  test(`${authentication} pending setup blocks member APIs before role reads, with a scoped recovery exception`, async () => {
+    const env = fixture({authUser:{...user,app_metadata:{must_reset_password:true}}});
+    const request = new NextRequest('https://hub.example.invalid/api/progress', {
+      headers:authentication==='bearer'?{Authorization:'Bearer fixture-access-token'}:{},
+    });
+    const guard = env.load('src/lib/requireUser.ts').requireUser;
+    const result = await guard(request,{allowPastMember:true});
+    assert.equal(result.ok,false);
+    assert.equal(result.res.status,403);
+    assert.equal((await result.res.json()).code,'ACCOUNT_SETUP_REQUIRED');
+    assert.equal(env.calls.roles,0);
+    assert.equal((await guard(request,{allowPendingSetup:true})).ok,true);
+  });
+}
+
+test('pending admin must finish owner-verified setup before privileged role lookup', async () => {
+  const env = fixture({authUser:{...user,app_metadata:{must_reset_password:true}},roleCodes:['admin']});
+  const result=await env.load('src/lib/requireAdmin.ts').requireAdmin(new NextRequest('https://hub.example.invalid/api/admin/users'));
+  assert.equal(result.ok,false);
+  assert.equal(result.res.status,403);
+  assert.equal((await result.res.json()).code,'ACCOUNT_SETUP_REQUIRED');
+  assert.equal(env.calls.roles,0);
+});
+
+test('middleware routes pending accounts to setup before any user-scoped database request', async () => {
+  for (const pathname of ['/tracker','/api/progress']) {
+    const env = fixture({authUser:{...user,app_metadata:{must_reset_password:true}}});
+    const response=await env.load('src/middleware.ts').middleware(new NextRequest(`https://hub.example.invalid${pathname}`));
+    assert.equal(response.status,pathname.startsWith('/api')?403:307);
+    if (pathname.startsWith('/api')) assert.equal((await response.json()).code,'ACCOUNT_SETUP_REQUIRED');
+    else assert.equal(new URL(response.headers.get('location')).pathname,'/reset-password');
+    assert.equal(env.calls.roles,0);
+  }
+});
+
+test('post-exchange setup check redirects normal navigation but allows the reset page to complete authentication', async () => {
+  const env=fixture();
+  env.client.auth.getSession=async()=>({data:{session:{access_token:'fixture-access-token'}},error:null});
+  env.context.fetch=async()=>new Response('{"ok":true,"setup_required":true}',{status:200});
+  const check=env.load('src/lib/accountLifecycleClient.ts').assertAccountSessionAllowed;
+  await assert.rejects(()=>check(env.client),/setup link/);
+  assert.deepEqual(env.calls.redirects,['/reset-password']);
+  await check(env.client,{allowPendingSetup:true});
+  assert.equal(env.calls.redirects.length,1);
+});

@@ -1,3 +1,4 @@
+import { createSetupCredential, sendAccountSetupEmail } from '@/lib/accountSetupServer';
 import { NextRequest, NextResponse } from 'next/server';
 import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { requireAdmin } from '@/lib/requireAdmin';
@@ -76,10 +77,10 @@ export async function POST(request: NextRequest) {
     console.log('create-user: Creating auth user');
     const { data: created, error: authErr } = await supa.auth.admin.createUser({
       email,
-      password: 'reboot',
+      password: createSetupCredential(),
       email_confirm: true,
       user_metadata: { first_name, last_name },
-      app_metadata: { must_reset_password: true },
+      app_metadata: { must_reset_password: true, setup_required_at: new Date().toISOString() },
     });
 
     if (authErr) {
@@ -139,7 +140,9 @@ export async function POST(request: NextRequest) {
     invalidateAdminUserDirectory();
 
     console.log('create-user: User created successfully');
-    return NextResponse.json({ ok: true, user_id: userId }, { status: 200 });
+    const setupEmailSent = await sendAccountSetupEmail(supa, email);
+    return NextResponse.json({ ok: true, user_id: userId, setup_email_sent: setupEmailSent,
+      warning: setupEmailSent ? undefined : 'Account created, but the setup email could not be sent. Use Send password reset in the profile to retry.' }, { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unexpected server error';
     console.error('create-user: Unexpected error:', error);

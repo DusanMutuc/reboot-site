@@ -15,6 +15,7 @@ import {
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 import StudentCourseTree from './StudentCourseTree';
 import LessonContent from './LessonContent';
+import { flushPendingSmartDocSaves } from '@/lib/smartDocSaves';
 
 type CourseViewerProps = {
   courseSlug: string;
@@ -456,6 +457,15 @@ export default function CourseViewer({ courseSlug, slugParts = [] }: CourseViewe
 
   const nestedLockMap = lockMap;
 
+  const navigateAfterSaving = async (href: string) => {
+    try {
+      await flushPendingSmartDocSaves();
+      router.push(href);
+    } catch (error) {
+      setSnackbar(error instanceof Error ? error.message : 'Your answers could not be saved. Please retry before leaving.');
+    }
+  };
+
   const handleSelectContent = (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => {
     if (!isContentNodeType(node.node.node_type)) return;
 
@@ -481,7 +491,7 @@ export default function CourseViewer({ courseSlug, slugParts = [] }: CourseViewe
 
       const pathParents = collectParentPath(target.node.id, parentById);
       setExpanded((prev) => new Set([...prev, ...pathParents]));
-      router.push(href);
+      void navigateAfterSaving(href);
     };
 
     if (node.node.node_type === 'lesson' && node.children.length > 0) {
@@ -660,7 +670,7 @@ export default function CourseViewer({ courseSlug, slugParts = [] }: CourseViewe
           lockStatuses={nestedLockMap}
           onToggle={handleToggle}
           onSelectContent={handleSelectContent}
-          onBackToCourses={() => router.push('/courses')}
+          onBackToCourses={() => { void navigateAfterSaving('/courses'); }}
           fullHeight={false}
           noTransition
         />
@@ -694,7 +704,7 @@ export default function CourseViewer({ courseSlug, slugParts = [] }: CourseViewe
               lockStatuses={nestedLockMap}
               onToggle={handleToggle}
               onSelectContent={handleSelectContent}
-              onBackToCourses={() => router.push('/courses')}
+              onBackToCourses={() => { void navigateAfterSaving('/courses'); }}
               fullHeight
               noTransition
             />

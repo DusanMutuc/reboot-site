@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const guard = await requireUser(req);
   if (!guard.ok) return guard.res;
 
-  const { supabase } = guard;
+  const { supabase, user } = guard;
 
   const body = (await req.json().catch(() => null)) as PostPayload | null;
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const { error, data } = await supabase.rpc('upsert_smart_field_value', {
     _content_block_id: body.content_block_id,
     _prompt_id: body.prompt_id,
-    _user_id: null, // RPC uses auth.uid() via RLS; null is fine
+    _user_id: user.id,
     _value: body.value, // now strongly typed as Json
   });
 

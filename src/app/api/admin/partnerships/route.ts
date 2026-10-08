@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { requireAdmin } from '@/lib/requireAdmin';
+import { savePartnership } from '@/lib/partnershipMutation';
 
 type PartnershipRow = {
   id: string;
@@ -38,10 +39,6 @@ type PartnershipMember = {
 type Partnership = PartnershipRow & {
   members: PartnershipMember[];
 };
-
-function toStringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
-}
 
 function getErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Unexpected error';
@@ -160,80 +157,13 @@ export async function POST(req: NextRequest) {
   try {
     const guard = await requireAdmin(req);
     if (!guard.ok) return guard.res;
-    const supabaseAdmin = getAdminClient();
-
-    const raw = (await req.json().catch(() => ({} as unknown))) ?? {};
-    const body = raw as Record<string, unknown>;
-
-    const name =
-      typeof body.name === 'string' && body.name.trim().length > 0
-        ? body.name.trim()
-        : null;
-
-    const shared_kpis = Boolean(body['shared_kpis']);
-    const shared_attendance = Boolean(body['shared_attendance']);
-    const shared_notes = Boolean(body['shared_notes']);
-    const is_active =
-      typeof body['is_active'] === 'boolean' ? (body['is_active'] as boolean) : true;
-
-    const user_ids = toStringArray(body['user_ids']);
-
-    // Insert partnership
-    const { data: inserted, error: insertError } = await supabaseAdmin
-      .from('partnerships')
-      .insert({
-        name,
-        shared_kpis,
-        shared_attendance,
-        shared_notes,
-        is_active,
-      })
-      .select(
-        'id, name, shared_kpis, shared_attendance, shared_notes, is_active, created_at',
-      )
-      .single();
-
-    if (insertError || !inserted) {
-      console.error('partnerships POST insert error', insertError);
-      return NextResponse.json(
-        { error: 'Failed to create partnership' },
-        { status: 500 },
-      );
-    }
-
-    const base = inserted as PartnershipRow;
-
-    // Insert members (if any) — DB trigger will reject overlaps
-    if (user_ids.length > 0) {
-      const memberRows = user_ids.map((uid) => ({
-        partnership_id: base.id,
-        user_id: uid,
-      }));
-      const { error: membersError } = await supabaseAdmin
-        .from('partnership_users')
-        .insert(memberRows);
-
-      if (membersError) {
-        console.error('partnership_users insert error', membersError);
-        return NextResponse.json(
-          {
-            error:
-              membersError.message ||
-              'Failed to add members to partnership. Check for overlapping active partnerships.',
-          },
-          { status: 400 },
-        );
-      }
-    }
-
-    const [withMembers] = await buildPartnershipsWithMembers(supabaseAdmin, [base]);
+    const changes: unknown = await req.json().catch(() => null);
+    const result = await savePartnership(getAdminClient(), null, changes);
+    if (!result.ok) return result.response;
     invalidateAdminUserDirectory();
-    return NextResponse.json(withMembers, { status: 201 });
+    return NextResponse.json(result.data, { status: 201 });
   } catch (err: unknown) {
     console.error('partnerships POST unexpected error', err);
-    return NextResponse.json(
-      { error: getErrorMessage(err) },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: getErrorMessage(err) }, { status: 500 });
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { ACCOUNT_SETUP_REQUIRED_CODE, ACCOUNT_SETUP_REQUIRED_MESSAGE, requiresAccountSetup } from './accountSetup';
 import { getAdminClient } from './supabaseAdmin';
 import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from './accountLifecycle';
 
@@ -62,6 +63,9 @@ export async function requireAdmin(request?: NextRequest) {
       return { ok: false as const, res: NextResponse.json(
         { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 },
       ) };
+    }
+    if (requiresAccountSetup(user)) {
+      return { ok: false as const, res: NextResponse.json({ error: ACCOUNT_SETUP_REQUIRED_MESSAGE, code: ACCOUNT_SETUP_REQUIRED_CODE }, { status: 403 }) };
     }
     const { data: row, error } = await supaAdmin
       .from('user_roles')

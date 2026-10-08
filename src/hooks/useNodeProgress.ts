@@ -29,90 +29,38 @@ function formatProgressErrorDetail(body: unknown): string | undefined {
 }
 
 export function useNodeProgress(nodeId: number | null) {
-  const startedRef = useRef(false);
-  const completedRef = useRef(false);
+  // A LessonContent instance survives navigation. Keep each node's acknowledged
+  // and in-flight writes separate, and let concurrent callers await the same save.
+  const requests = useRef(new Map<string, Promise<void>>());
 
-  const markStarted = useCallback(async () => {
-    if (!nodeId || startedRef.current) return;
-    startedRef.current = true;
-    try {
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[progress] markStarted', { nodeId });
-      }
+  const save = useCallback((action: 'start' | 'complete'): Promise<void> => {
+    if (!nodeId) return Promise.resolve();
+    const key = `${nodeId}:${action}`;
+    const existing = requests.current.get(`${nodeId}:complete`) ?? requests.current.get(key);
+    if (existing) return existing;
+
+    const pending = (async () => {
       const response = await fetch('/api/progress', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'start', nodeId }),
+        body: JSON.stringify({ action, nodeId }),
       });
       if (!response.ok) {
-        const errorBody = await extractErrorBody(response);
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('[progress] markStarted failed', {
-            nodeId,
-            status: response.status,
-            statusText: response.statusText,
-            body: errorBody,
-          });
-        }
-        const detail = formatProgressErrorDetail(errorBody);
+        const detail = formatProgressErrorDetail(await extractErrorBody(response));
         throw new Error(
-          `Failed to mark node ${nodeId} as started (${response.status} ${response.statusText})${
-            detail ? `: ${detail}` : ''
-          }`,
+          `Failed to save progress for node ${nodeId} (${response.status} ${response.statusText})${detail ? `: ${detail}` : ''}`,
         );
       }
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[progress] markStarted succeeded', { nodeId });
-      }
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('[progress] markStarted encountered an error', { nodeId, error });
-      }
-      startedRef.current = false;
-      throw error;
-    }
+    })();
+    requests.current.set(key, pending);
+    // Failed attempts can be retried. A late failure only clears its own node.
+    void pending.catch(() => {
+      if (requests.current.get(key) === pending) requests.current.delete(key);
+    });
+    return pending;
   }, [nodeId]);
 
-  const markCompleted = useCallback(async () => {
-    if (!nodeId || completedRef.current) return;
-    completedRef.current = true;
-    try {
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[progress] markCompleted', { nodeId });
-      }
-      const response = await fetch('/api/progress', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'complete', nodeId }),
-      });
-      if (!response.ok) {
-        const errorBody = await extractErrorBody(response);
-        if (process.env.NODE_ENV !== 'production') {
-          console.error('[progress] markCompleted failed', {
-            nodeId,
-            status: response.status,
-            statusText: response.statusText,
-            body: errorBody,
-          });
-        }
-        const detail = formatProgressErrorDetail(errorBody);
-        throw new Error(
-          `Failed to mark node ${nodeId} as completed (${response.status} ${response.statusText})${
-            detail ? `: ${detail}` : ''
-          }`,
-        );
-      }
-      if (process.env.NODE_ENV !== 'production') {
-        console.debug('[progress] markCompleted succeeded', { nodeId });
-      }
-    } catch (error) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.error('[progress] markCompleted encountered an error', { nodeId, error });
-      }
-      completedRef.current = false;
-      throw error;
-    }
-  }, [nodeId]);
-
+  const markStarted = useCallback(() => save('start'), [save]);
+  const markCompleted = useCallback(() => save('complete'), [save]);
   return { markStarted, markCompleted };
 }

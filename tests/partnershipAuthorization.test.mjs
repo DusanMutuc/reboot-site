@@ -17,12 +17,16 @@ const partnership = {
   created_at: '2026-10-06T00:00:00Z',
 };
 
-function loadRoutes(deniedStatus) {
-  const calls = { clients: 0, queries: [], guards: [], invalidations: 0 };
+function loadRoutes(deniedStatus, rpcError = null) {
+  const calls = { clients: 0, queries: [], guards: [], invalidations: 0, rpcs: [] };
   const denied = deniedStatus
     ? NextResponse.json({ error: 'Access denied' }, { status: deniedStatus })
     : null;
   const client = {
+    async rpc(name, args) {
+      calls.rpcs.push({ name, args: JSON.parse(JSON.stringify(args)) });
+      return { data: { ...partnership, members: [] }, error: rpcError };
+    },
     from(table) {
       calls.queries.push(table);
       const query = {
@@ -55,7 +59,8 @@ function loadRoutes(deniedStatus) {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText;
     const exports = {};
-    vm.runInNewContext(source, { exports, console, require: (name) => imports[name] ?? require(name) });
+    vm.runInNewContext(source, { exports, console, require: (name) => name === '@/lib/partnershipMutation'
+      ? load('../src/lib/partnershipMutation.ts') : imports[name] ?? require(name) });
     return exports;
   }
   return {
@@ -87,6 +92,7 @@ for (const status of [401, 403, 500]) {
     }
     assert.equal(routes.calls.clients, 0);
     assert.deepEqual(routes.calls.queries, []);
+    assert.deepEqual(routes.calls.rpcs, []);
     assert.equal(routes.calls.invalidations, 0);
   });
 }
@@ -102,4 +108,50 @@ test('authorized admins retain access to all partnership operations', async () =
   assert.equal(routes.calls.clients, 4);
   assert.equal(routes.calls.invalidations, 3);
   assert.ok(routes.calls.queries.length > 0);
+});
+
+test('create and edit perform one atomic RPC and no separate database writes or hydration', async () => {
+  for (const method of ['POST', 'PATCH']) {
+    const routes = loadRoutes();
+    const changes = { name: 'Revised', shared_notes: true, is_active: true, user_ids: [partnership.id] };
+    const request = new NextRequest('https://reboot.example/api/admin/partnerships', {
+      method, body: JSON.stringify(changes), headers: { 'content-type': 'application/json' },
+    });
+    const result = await routes[method](request, { params: Promise.resolve({ partnershipId: partnership.id }) });
+    assert.equal(result.status, method === 'POST' ? 201 : 200);
+    assert.deepEqual(routes.calls.rpcs, [{ name: 'save_partnership_admin', args: {
+      _id: method === 'POST' ? null : partnership.id, _changes: changes,
+    } }]);
+    assert.deepEqual(routes.calls.queries, []);
+    assert.equal(routes.calls.invalidations, 1);
+    assert.deepEqual(await result.json(), { ...partnership, members: [] });
+  }
+});
+
+for (const [code, status] of [['23514',400], ['23503',400], ['42501',409], ['P0002',404], ['40001',409], ['XX000',500]]) {
+  test(`partnership mutation failure ${code} returns ${status} without extra writes or cache invalidation`, async () => {
+    for (const method of ['POST', 'PATCH']) {
+      const routes = loadRoutes(undefined, { code, message: 'rejected' });
+      const response = await routes[method](requestFor(method), { params: Promise.resolve({ partnershipId: partnership.id }) });
+      assert.equal(response.status, status);
+      assert.equal(routes.calls.rpcs.length, 1);
+      assert.deepEqual(routes.calls.queries, []);
+      assert.equal(routes.calls.invalidations, 0);
+    }
+  });
+}
+
+test('invalid partnership payloads are rejected before mutation and omitted members stay omitted', async () => {
+  for (const changes of [null, [], { user_ids: 'invalid' }, { user_ids: ['not-a-uuid'] }, { shared_kpis: 'false' }, { surprise: true }]) {
+    const routes = loadRoutes();
+    const request = new NextRequest('https://reboot.example/api/admin/partnerships', {
+      method: 'PATCH', body: JSON.stringify(changes), headers: { 'content-type': 'application/json' },
+    });
+    assert.equal((await routes.PATCH(request, { params: Promise.resolve({ partnershipId: partnership.id }) })).status, 400);
+    assert.deepEqual(routes.calls.rpcs, []);
+    assert.equal(routes.calls.invalidations, 0);
+  }
+  const routes = loadRoutes();
+  await routes.PATCH(requestFor('PATCH'), { params: Promise.resolve({ partnershipId: partnership.id }) });
+  assert.equal(Object.hasOwn(routes.calls.rpcs[0].args._changes, 'user_ids'), false);
 });

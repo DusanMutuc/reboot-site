@@ -170,7 +170,7 @@ All use `requireUser`.
 | Route | Methods | Authentication | Purpose |
 |---|---|---|---|
 | `/api/auth/is-admin` | GET | Session | Admin-role check |
-| `/api/auth/clear-first-login-flag` | POST | Session | Clear `must_reset_password` Auth metadata |
+| `/api/auth/clear-first-login-flag` | POST | Verified setup session | Atomically choose an initial password and complete account setup |
 | `/api/cron/sync-business-audit-meetings` | GET | Bearer `CRON_SECRET` | Reconcile future GHL Business Review and Implementation appointments with site meetings and reviews |
 | `/api/cron/sync-podcasts` | GET | Bearer `CRON_SECRET` | Sync Transistor episodes into `resources` |
 | `/api/ghl/create-assistant` | POST | `x-reboot-webhook-secret` | Create/update assistant account from GHL tags |
@@ -202,7 +202,7 @@ The forward-only cutoff (`2026-08-06T00:00:00-06:00`) and Calgary timezone (`Ame
 
 Coaches cannot manually create Business Reviews or Implementation meetings in the workspace. Both record types are created by the GHL reconciliation job; empty workspace slots are informational until a matching appointment synchronizes.
 
-The GHL and admin provisioning routes currently create accounts with a shared bootstrap password and set `must_reset_password`. This is security debt and should not be reproduced in external scripts.
+GHL and admin provisioning use a unique undisclosed random credential and send a password setup link by email. Pending accounts must complete setup from a verified recovery session. Existing completed accounts retain their password/reset state when an assistant webhook is retried. Email delivery failures are surfaced so an administrator can resend from the profile.
 
 ### Transistor
 
