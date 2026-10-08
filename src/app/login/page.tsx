@@ -13,8 +13,8 @@ function safeRedirectPath(value: string | string[] | undefined): string | null {
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ redirectTo?: string | string[] }>;
+  searchParams: Promise<{ redirectTo?: string | string[]; passwordUpdated?: string | string[] }>;
 }) {
   const params = await searchParams;
-  return <LoginClient redirectTo={safeRedirectPath(params.redirectTo)} />;
+  return <LoginClient redirectTo={safeRedirectPath(params.redirectTo)} passwordUpdated={params.passwordUpdated === '1'} />;
 }

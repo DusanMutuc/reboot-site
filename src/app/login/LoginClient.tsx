@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
+  Alert,
   Box,
   Button,
   Dialog,
@@ -20,9 +21,10 @@ import rebootLogo from '/public/Reboot Logo - Color.png'; // Add this import
 
 type LoginClientProps = {
   redirectTo?: string | null;
+  passwordUpdated?: boolean;
 };
 
-export default function LoginClient({ redirectTo = null }: LoginClientProps) {
+export default function LoginClient({ redirectTo = null, passwordUpdated = false }: LoginClientProps) {
   const router = useRouter();
   
   // Use useState and useEffect for hydration-safe responsive detection
@@ -66,7 +68,9 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
       await supabase.auth.signInWithPassword({ email, password });
   
     if (signInError) {
-      setError(signInError.message);
+      setError(signInError.code === 'invalid_credentials'
+        ? 'We couldn’t sign you in. Check your email and password, or choose “Set up or reset password” to get an email link and choose a password.'
+        : signInError.message);
       return;
     }
   
@@ -91,7 +95,99 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
     event.preventDefault();
     void handleLogin();
   };
-  
+
+  const openPasswordReset = () => {
+    setForgotEmail((emailRef.current?.value || email).trim());
+    setForgotError(null);
+    setForgotMessage(null);
+    setShowForgotModal(true);
+  };
+
+  const closePasswordReset = () => {
+    if (forgotLoading) return;
+    setShowForgotModal(false);
+    setForgotEmail('');
+    setForgotError(null);
+    setForgotMessage(null);
+  };
+
+  const sendPasswordResetEmail = async () => {
+    setForgotLoading(true);
+    setForgotError(null);
+    setForgotMessage(null);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        forgotEmail.trim(),
+        { redirectTo: 'https://hub.rebootmembers.com/reset-password' }
+      );
+      if (error) setForgotError(error.message);
+      else setForgotMessage('If an account exists for this email, we’ve sent a link. Check your inbox and spam folder. Open the link, choose your password, then return to sign in.');
+    } catch (error) {
+      setForgotError(error instanceof Error ? error.message : 'The email could not be sent. Please try again.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const passwordNotice = passwordUpdated ? (
+    <Alert severity="success" sx={{ mb: 2, fontSize: '14px' }}>
+      Your password has been saved. Sign in below with your email and new password.
+    </Alert>
+  ) : (
+    <Alert severity="info" sx={{ mb: 2 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5, fontSize: '14px' }}>
+        Still using the shared starter password?
+      </Typography>
+      <Typography variant="body2" sx={{ fontSize: '14px' }}>
+        We’ve retired the old shared starter password for security. If you used it, set your own password using an email link. If you already chose your own password, sign in as usual.
+      </Typography>
+      <Button type="button" onClick={openPasswordReset} size="small" sx={{ mt: 1, p: 0, fontSize: '14px', fontWeight: 600, color: 'inherit !important', textTransform: 'none', textDecoration: 'underline' }}>
+        Set my password by email
+      </Button>
+    </Alert>
+  );
+
+  const passwordResetDialog = (
+    <Dialog open={showForgotModal} fullScreen={!isMdUp} fullWidth maxWidth="sm" onClose={closePasswordReset} aria-labelledby="password-reset-title">
+      <DialogTitle id="password-reset-title" sx={{ fontSize: '20px' }}>Set up or reset your password</DialogTitle>
+      <DialogContent>
+        <Typography variant="body2" sx={{ fontSize: '14px' }}>
+          Enter the email you use for Reboot. We’ll email you a link to choose your own password. After saving it, return to the login page and sign in with your new password.
+        </Typography>
+        <TextField
+          label="Enter your email"
+          type="email"
+          value={forgotEmail}
+          onChange={(e) => setForgotEmail(e.target.value)}
+          fullWidth
+          margin="normal"
+          disabled={forgotLoading}
+          autoComplete="email"
+          inputMode="email"
+          autoCapitalize="none"
+          autoCorrect="off"
+          sx={{ '& .MuiInputBase-input': { fontSize: '16px' }, '& .MuiInputLabel-root': { fontSize: '14px' } }}
+        />
+        {forgotError && <Typography color="error" role="alert" sx={{ mt: 1, fontSize: '14px' }}>{forgotError}</Typography>}
+        {forgotMessage && (
+          <Box role="status" sx={{ mt: 1 }}>
+            <Typography color="success.main" sx={{ fontSize: '14px' }}>{forgotMessage}</Typography>
+            <Typography variant="body2" sx={{ mt: 1, fontSize: '14px' }}>
+              Still need help? <Link href="/support" prefetch={false}>Contact support</Link>.
+            </Typography>
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={sendPasswordResetEmail} disabled={forgotLoading || !forgotEmail.trim()} variant="contained" color="primary" sx={{ fontSize: '14px' }}>
+          {forgotLoading ? 'Sending…' : 'Send password link'}
+        </Button>
+        <Button onClick={closePasswordReset} disabled={forgotLoading} color="secondary" variant="outlined" sx={{ fontSize: '14px' }}>
+          {forgotMessage ? 'Back to sign in' : 'Cancel'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 
   // Prevent hydration mismatch by not rendering responsive content until mounted
   if (!mounted) {
@@ -186,6 +282,8 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
               Login information
             </Typography>
 
+            {passwordNotice}
+
             <TextField
               placeholder="Email"
               type="email"
@@ -246,7 +344,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
               <span /> {/* spacer to keep link at right */}
               <Button
                 variant="text"
-                onClick={() => setShowForgotModal(true)}
+                onClick={openPasswordReset}
                 sx={{
                   p: 0,
                   textTransform: 'none',
@@ -336,76 +434,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
           </Box>
         </Box>
 
-        {/* Forgot Password Modal (full-screen on phones) */}
-        <Dialog
-          open={showForgotModal}
-          fullScreen
-          onClose={() => {
-            setShowForgotModal(false);
-            setForgotEmail('');
-            setForgotError(null);
-            setForgotMessage(null);
-          }}
-        >
-          <DialogTitle>Set up or reset your password</DialogTitle>
-          <DialogContent>
-            <TextField
-              label="Enter your email"
-              value={forgotEmail}
-              onChange={(e) => setForgotEmail(e.target.value)}
-              fullWidth
-              margin="normal"
-              disabled={forgotLoading}
-              inputMode="email"
-              autoCapitalize="none"
-              autoCorrect="off"
-            />
-            {forgotError && (
-              <Typography color="error" sx={{ mt: 1 }}>
-                {forgotError}
-              </Typography>
-            )}
-            {forgotMessage && (
-              <Typography color="success.main" sx={{ mt: 1 }}>
-                {forgotMessage}
-              </Typography>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button
-              onClick={async () => {
-                setForgotLoading(true);
-                setForgotError(null);
-                setForgotMessage(null);
-                const { error } = await supabase.auth.resetPasswordForEmail(
-                  forgotEmail,
-                  { redirectTo: 'https://hub.rebootmembers.com/reset-password' }
-                );
-                if (error) setForgotError(error.message);
-                else setForgotMessage('If this email exists, a reset link has been sent.');
-                setForgotLoading(false);
-              }}
-              disabled={forgotLoading || !forgotEmail}
-              variant="contained"
-              color="primary"
-            >
-              {forgotLoading ? 'Sending...' : 'Send Email'}
-            </Button>
-            <Button
-              onClick={() => {
-                setShowForgotModal(false);
-                setForgotEmail('');
-                setForgotError(null);
-                setForgotMessage(null);
-              }}
-              disabled={forgotLoading}
-              color="secondary"
-              variant="outlined"
-            >
-              Cancel
-            </Button>
-          </DialogActions>
-        </Dialog>
+        {passwordResetDialog}
       </Box>
     );
   }
@@ -443,6 +472,8 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
           >
             Login information
           </Typography>
+
+          {passwordNotice}
 
           <TextField
             placeholder="Email"
@@ -498,7 +529,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
           <Box sx={{ textAlign: 'right', mb: '2rem' }}>
             <Button
               variant="text"
-              onClick={() => setShowForgotModal(true)}
+              onClick={openPasswordReset}
               sx={{
                 textTransform: 'none',
                 textDecoration: 'underline',
@@ -633,72 +664,7 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
         </div>
       </div>
 
-      {/* Forgot Password Modal (desktop) */}
-      <Dialog
-        open={showForgotModal}
-        onClose={() => {
-          setShowForgotModal(false);
-          setForgotEmail('');
-          setForgotError(null);
-          setForgotMessage(null);
-        }}
-      >
-        <DialogTitle>Set up or reset your password</DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Enter your email"
-            value={forgotEmail}
-            onChange={(e) => setForgotEmail(e.target.value)}
-            fullWidth
-            margin="normal"
-            disabled={forgotLoading}
-          />
-          {forgotError && (
-            <Typography color="error" sx={{ mt: 1 }}>
-              {forgotError}
-            </Typography>
-          )}
-          {forgotMessage && (
-            <Typography color="success.main" sx={{ mt: 1 }}>
-              {forgotMessage}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={async () => {
-              setForgotLoading(true);
-              setForgotError(null);
-              setForgotMessage(null);
-              const { error } = await supabase.auth.resetPasswordForEmail(
-                forgotEmail,
-                { redirectTo: 'https://hub.rebootmembers.com/reset-password' }
-              );
-              if (error) setForgotError(error.message);
-              else setForgotMessage('If this email exists, a reset link has been sent.');
-              setForgotLoading(false);
-            }}
-            disabled={forgotLoading || !forgotEmail}
-            variant="contained"
-            color="primary"
-          >
-            {forgotLoading ? 'Sending...' : 'Send Email'}
-          </Button>
-          <Button
-            onClick={() => {
-              setShowForgotModal(false);
-              setForgotEmail('');
-              setForgotError(null);
-              setForgotMessage(null);
-            }}
-            disabled={forgotLoading}
-            color="secondary"
-            variant="outlined"
-          >
-            Cancel
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {passwordResetDialog}
     </Box>
   );
 }

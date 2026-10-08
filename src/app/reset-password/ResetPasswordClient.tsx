@@ -132,7 +132,7 @@ export default function ResetPasswordClient() {
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f5f5f5', padding:16 }}>
       <Paper elevation={6} style={{ padding:32, width:'100%', maxWidth:420 }}>
-        <Typography variant="h5" align="center" gutterBottom>Reset Password</Typography>
+        <Typography variant="h5" align="center" gutterBottom>Choose your password</Typography>
 
         {authenticating ? (
           <Stack spacing={2} alignItems="center" sx={{ py: 3 }}>
@@ -143,15 +143,18 @@ export default function ResetPasswordClient() {
           <Stack spacing={2}><Typography color="error" align="center">{authError}</Typography><Button href="/login">Request a new link</Button></Stack>
         ) : (
           <form onSubmit={handleSubmit}>
+            <Typography variant="body2" sx={{ mb: 2, fontSize: '14px' }}>
+              Choose a password with at least 8 characters. After saving it, you’ll return to the login page to sign in with your new password.
+            </Typography>
             {setupRequired && <Stack spacing={1}>
-              <Typography variant="body2">Choose your password after opening the setup link in your email.</Typography>
-              <Button onClick={sendSetupLink} disabled={loading || setupSent}>{setupSent ? 'Setup link sent — check your email' : 'Send a fresh setup link'}</Button>
+              <Typography variant="body2" sx={{ fontSize: '14px' }}>To finish setting up your account, open the latest setup link in your email, then enter your new password below. If you already opened that link, you can continue here.</Typography>
+              <Button onClick={sendSetupLink} disabled={loading || setupSent}>{setupSent ? 'Setup link sent — check your inbox and spam folder' : 'Send a fresh setup link'}</Button>
             </Stack>}
-            <TextField label="New password" type="password" value={pw1} onChange={(e)=>setPw1(e.target.value)} fullWidth margin="normal" disabled={loading} autoComplete="new-password" />
+            <TextField label="New password" type="password" value={pw1} onChange={(e)=>setPw1(e.target.value)} fullWidth margin="normal" disabled={loading} autoComplete="new-password" helperText="At least 8 characters" />
             <TextField label="Confirm new password" type="password" value={pw2} onChange={(e)=>setPw2(e.target.value)} fullWidth margin="normal" disabled={loading} autoComplete="new-password" />
             {err && <Typography color="error" align="center" sx={{ mt: 1 }}>{err}</Typography>}
             <Button type="submit" variant="contained" color="primary" fullWidth disabled={loading} sx={{ mt: 2 }}>
-              {loading ? 'Updating…' : 'Save & continue'}
+              {loading ? 'Saving…' : 'Save password & return to sign in'}
             </Button>
           </form>
         )}

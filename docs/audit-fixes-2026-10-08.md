@@ -52,3 +52,11 @@ Final local run: **629 tests total, 626 passed, 3 optional integration tests ski
 - Final read-only database checks confirmed **zero non-archived accounts using the legacy credential**, **42 accounts requiring setup**, and **zero remaining Auth sessions for those 42 accounts**. Private schema backups, bounded snapshots and per-account remediation results are retained outside the repository.
 
 Members affected by the rotation must use the login page's setup/reset action to choose their own password. No one whose password already differed was included.
+
+## Login communication follow-up
+
+The login page now explains that the shared starter password was retired for security and offers an email setup action. People who already chose their own password are directed to sign in as usual. The same notice and recovery dialog are used on desktop and mobile, with readable text and the entered login email carried into the dialog. Invalid-credential errors explain the recovery option without revealing whether an account exists.
+
+The recovery dialog explains the steps, confirms email requests without account enumeration, and gives inbox/spam and support guidance. The password page states the eight-character minimum and explains that saving returns to login. A successful reset displays a password-saved confirmation on login. This follow-up changes presentation only; no additional credentials were rotated and no bulk emails were sent.
+
+Validation: all eight existing password-reset UI tests, TypeScript, focused ESLint and diff checks passed. Browser checks verified the notice, dialog, email prefill and success confirmation on desktop and mobile without sending recovery emails.
