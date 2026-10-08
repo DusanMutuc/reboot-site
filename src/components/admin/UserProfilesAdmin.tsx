@@ -1,6 +1,7 @@
 'use client';
 
 import MemberProgrammeSettings from './MemberProgrammeSettings';
+import type { AdminAccountMergeHistory } from '@/lib/adminAccountMerges';
 
 import {
   ChangeEvent,
@@ -81,6 +82,8 @@ type UserDirectoryRow = {
   is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
+  merged_into_user_id: string | null;
+  merged_at: string | null;
   pause_started_at: string | null;
   pause_reason: string | null;
   primary_coaches: DirectoryPerson[];
@@ -110,7 +113,7 @@ type SnackbarState = {
   severity: 'success' | 'error' | 'info';
 };
 
-type MembershipFilter = 'all' | 'current' | 'ninety-day' | 'past';
+type MembershipFilter = 'all' | 'current' | 'ninety-day' | 'past' | 'merged';
 type SetupFilter = 'all' | 'missing-phone' | 'missing-primary-coach' | 'missing-ghl';
 type SortOption = 'name' | 'introduced-desc' | 'last-sign-in-desc';
 type AttentionSeverity = 'blocking' | 'secondary';
@@ -188,7 +191,7 @@ function peopleLabel(people: DirectoryPerson[]) {
 }
 
 function MembershipSummary({ user }: { user: UserDirectoryRow }) {
-  const status = user.is_past_member
+  const status = user.merged_at ? 'Merged' : user.is_past_member
     ? 'Past member'
     : user.is_ninety_day_user
       ? user.is_current_member ? 'Full member + 90-Day programme' : '90-Day programme member'
@@ -205,7 +208,7 @@ function MembershipSummary({ user }: { user: UserDirectoryRow }) {
             width: 8,
             height: 8,
             borderRadius: '50%',
-            bgcolor: user.is_ninety_day_user
+            bgcolor: user.merged_at ? 'text.disabled' : user.is_ninety_day_user
               ? 'info.main'
               : user.is_current_member && !user.is_past_member
                 ? 'success.main'
@@ -214,8 +217,8 @@ function MembershipSummary({ user }: { user: UserDirectoryRow }) {
         />
         <Typography variant="body2" color="text.secondary">{status}</Typography>
       </Stack>
-      {user.pause_started_at ? <Chip label="Member is paused" color="info" size="small" /> : null}
-      {user.is_legend ? (
+      {!user.merged_at && user.pause_started_at ? <Chip label="Member is paused" color="info" size="small" /> : null}
+      {!user.merged_at && user.is_legend ? (
         <Stack direction="row" spacing={0.5} alignItems="center">
           <StarOutlineIcon sx={{ fontSize: 18, color: '#9a6b16' }} />
           <Typography variant="body2" sx={{ color: '#7d5714' }}>Legend</Typography>
@@ -255,7 +258,7 @@ function SupportSummary({ user }: { user: UserDirectoryRow }) {
 }
 
 function attentionIssues(user: UserDirectoryRow) {
-  if (user.is_past_member) return [] as AttentionIssue[];
+  if (user.merged_at || user.is_past_member) return [] as AttentionIssue[];
 
   const issues: AttentionIssue[] = [];
   if (!user.first_name.trim() || !user.last_name.trim()) {
@@ -278,12 +281,12 @@ function attentionLevel(user: UserDirectoryRow): 'blocking' | 'secondary' | 'rea
 
 function StatusAvatar({ user, size = 36 }: { user: UserDirectoryRow; size?: number }) {
   const level = attentionLevel(user);
-  const statusLabel = level === 'blocking'
+  const statusLabel = user.merged_at ? 'Merged account archive' : level === 'blocking'
     ? 'Has a blocking setup issue'
     : level === 'secondary'
       ? 'Has setup follow-ups'
       : 'Setup ready';
-  const statusColor = level === 'blocking'
+  const statusColor = user.merged_at ? 'text.disabled' : level === 'blocking'
     ? 'error.main'
     : level === 'secondary'
       ? 'warning.main'
@@ -335,7 +338,7 @@ function AttentionSummary({ user }: { user: UserDirectoryRow }) {
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minHeight: 38 }}>
         <CheckCircleOutlineIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
         <Typography variant="body2" color="text.secondary">
-          {user.is_past_member ? 'No action needed' : 'Ready'}
+          {user.merged_at ? 'Archived after merge' : user.is_past_member ? 'No action needed' : 'Ready'}
         </Typography>
       </Stack>
     );
@@ -403,6 +406,13 @@ export default function UserProfilesAdmin() {
   const [setup, setSetup] = useState<SetupFilter>('all');
   const [sort, setSort] = useState<SortOption>('name');
   const [selectedUser, setSelectedUser] = useState<UserDirectoryRow | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [mergeHistory, setMergeHistory] = useState<AdminAccountMergeHistory[]>([]);
+  const [currentAccount, setCurrentAccount] = useState<DirectoryPerson | null>(null);
+  const [pendingProfileId, setPendingProfileId] = useState<string | null>(null);
+  const profileRequestRef = useRef(0);
+  const requestedProfileIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState<UserDraft | null>(null);
   const [savedDraft, setSavedDraft] = useState<UserDraft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -425,6 +435,7 @@ export default function UserProfilesAdmin() {
     [draft, savedDraft],
   );
   const filtersActive = membership !== 'current' || legendOnly || setup !== 'all' || sort !== 'name';
+  const readOnlyProfile = Boolean(selectedUser?.merged_at) || profileLoading || Boolean(profileError);
 
   useEffect(() => {
     if (debounceRef.current) window.clearTimeout(debounceRef.current);
@@ -479,15 +490,52 @@ export default function UserProfilesAdmin() {
     return () => controller.abort();
   }, [legendOnly, membership, page, refreshKey, rowsPerPage, serverQuery, setup, sort]);
 
-  const openUser = useCallback((user: UserDirectoryRow) => {
-    const nextDraft = toDraft(user);
-    setSelectedUser(user);
-    setDraft(nextDraft);
-    setSavedDraft(nextDraft);
+  const loadProfile = useCallback(async (id: string, initialUser?: UserDirectoryRow) => {
+    const requestId = ++profileRequestRef.current;
+    requestedProfileIdRef.current = id;
+    setProfileLoading(true);
+    setProfileError(null);
+    setMergeHistory([]);
+    setCurrentAccount(null);
+    if (initialUser) {
+      const nextDraft = toDraft(initialUser);
+      setSelectedUser(initialUser);
+      setDraft(nextDraft);
+      setSavedDraft(nextDraft);
+    }
     setPauseReason('');
+    try {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}/merge-history`);
+      const data = await response.json() as {
+        profile: UserDirectoryRow; history: AdminAccountMergeHistory[]; current_account: DirectoryPerson | null; error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || 'Could not load account history.');
+      if (requestId !== profileRequestRef.current) return;
+      setSelectedUser(data.profile);
+      const nextDraft = toDraft(data.profile);
+      setDraft(nextDraft);
+      setSavedDraft(nextDraft);
+      setMergeHistory(data.history);
+      setCurrentAccount(data.current_account);
+    } catch (error) {
+      if (requestId === profileRequestRef.current) {
+        setProfileError(error instanceof Error ? error.message : 'Could not load account history.');
+      }
+    } finally {
+      if (requestId === profileRequestRef.current) setProfileLoading(false);
+    }
   }, []);
 
+  const openUser = useCallback((user: UserDirectoryRow) => { void loadProfile(user.id, user); }, [loadProfile]);
+
   const closeDrawer = useCallback(() => {
+    profileRequestRef.current += 1;
+    requestedProfileIdRef.current = null;
+    setProfileLoading(false);
+    setProfileError(null);
+    setMergeHistory([]);
+    setCurrentAccount(null);
+    setPendingProfileId(null);
     setSelectedUser(null);
     setDraft(null);
     setSavedDraft(null);
@@ -496,6 +544,7 @@ export default function UserProfilesAdmin() {
 
   const requestCloseDrawer = useCallback(() => {
     if (saving) return;
+    setPendingProfileId(null);
     if (isDirty) {
       setDiscardConfirmOpen(true);
       return;
@@ -504,11 +553,22 @@ export default function UserProfilesAdmin() {
   }, [closeDrawer, isDirty, saving]);
 
   function updateDraft<K extends keyof UserDraft>(key: K, value: UserDraft[K]) {
+    if (readOnlyProfile) return;
     setDraft((current) => (current ? { ...current, [key]: value } : current));
   }
 
+  function navigateToProfile(id: string) {
+    if (saving) return;
+    if (isDirty) {
+      setPendingProfileId(id);
+      setDiscardConfirmOpen(true);
+    } else {
+      void loadProfile(id);
+    }
+  }
+
   const handleSave = useCallback(async () => {
-    if (!selectedUser || !draft) return;
+    if (!selectedUser || !draft || readOnlyProfile) return;
     setSaving(true);
 
     try {
@@ -558,10 +618,10 @@ export default function UserProfilesAdmin() {
     } finally {
       setSaving(false);
     }
-  }, [draft, selectedUser]);
+  }, [draft, readOnlyProfile, selectedUser]);
 
   const handlePauseChange = useCallback(async () => {
-    if (!selectedUser) return;
+    if (!selectedUser || readOnlyProfile) return;
     const wasPaused = Boolean(selectedUser.pause_started_at);
     setPauseBusy(true);
     try {
@@ -596,10 +656,10 @@ export default function UserProfilesAdmin() {
     } finally {
       setPauseBusy(false);
     }
-  }, [pauseReason, selectedUser]);
+  }, [pauseReason, readOnlyProfile, selectedUser]);
 
   const handleSendPasswordReset = useCallback(async () => {
-    if (!resetConfirmUser) return;
+    if (!resetConfirmUser || resetConfirmUser.merged_at) return;
     setResetting(true);
 
     try {
@@ -624,7 +684,7 @@ export default function UserProfilesAdmin() {
   }, [resetConfirmUser]);
 
   const handleDelete = useCallback(async () => {
-    if (!deletingUser) return;
+    if (!deletingUser || deletingUser.merged_at) return;
     setDeleting(true);
 
     try {
@@ -684,7 +744,7 @@ export default function UserProfilesAdmin() {
         >
           <TextField
             size="small"
-            placeholder="Search name, email, phone, coach, or assistant"
+            placeholder="Search name, current or previous email, phone, or coach"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             sx={{ flex: '1 1 340px', maxWidth: 520, minWidth: { xs: '100%', sm: 320 } }}
@@ -715,6 +775,7 @@ export default function UserProfilesAdmin() {
             <ToggleButton value="current">Current</ToggleButton>
             <ToggleButton value="ninety-day">90-Day</ToggleButton>
             <ToggleButton value="past">Past</ToggleButton>
+            <ToggleButton value="merged">Merged</ToggleButton>
             <ToggleButton value="all">All</ToggleButton>
           </ToggleButtonGroup>
 
@@ -817,7 +878,7 @@ export default function UserProfilesAdmin() {
                                       width: 7,
                                       height: 7,
                                       borderRadius: '50%',
-                                      bgcolor: user.is_ninety_day_user
+                                      bgcolor: user.merged_at ? 'text.disabled' : user.is_ninety_day_user
                                         ? 'info.main'
                                         : user.is_current_member && !user.is_past_member
                                           ? 'success.main'
@@ -825,7 +886,7 @@ export default function UserProfilesAdmin() {
                                     }}
                                   />
                                   <Typography variant="caption" color="text.secondary">
-                                    {user.is_past_member
+                                    {user.merged_at ? 'Merged' : user.is_past_member
                                       ? 'Past member'
                                       : user.is_ninety_day_user
                                         ? user.is_current_member ? 'Current + 90-Day' : '90-Day'
@@ -835,7 +896,7 @@ export default function UserProfilesAdmin() {
                                   </Typography>
                                 </Stack>
                               ) : null}
-                              {user.is_legend ? (
+                              {!user.merged_at && user.is_legend ? (
                                 <Tooltip title="Legend member">
                                   <Stack direction="row" spacing={0.35} alignItems="center">
                                     <StarOutlineIcon sx={{ fontSize: 17, color: '#9a6b16' }} />
@@ -843,7 +904,7 @@ export default function UserProfilesAdmin() {
                                   </Stack>
                                 </Tooltip>
                               ) : null}
-                              {user.pause_started_at ? <Chip label="Paused" color="info" size="small" /> : null}
+                              {!user.merged_at && user.pause_started_at ? <Chip label="Paused" color="info" size="small" /> : null}
                             </Stack>
                             <Typography variant="caption" color="text.secondary" display="block" noWrap>{user.email}</Typography>
                           </Box>
@@ -910,6 +971,22 @@ export default function UserProfilesAdmin() {
 
             <Box sx={{ flex: 1, overflowY: 'auto', p: 3 }}>
               <Stack spacing={3} divider={<Divider flexItem />}>
+                {profileLoading ? <Stack direction="row" spacing={1} alignItems="center"><CircularProgress size={18} /><Typography variant="body2">Loading account history…</Typography></Stack> : null}
+                {profileError ? (
+                  <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => {
+                    if (requestedProfileIdRef.current) void loadProfile(requestedProfileIdRef.current);
+                  }}>Retry</Button>}>{profileError}</Alert>
+                ) : null}
+                {selectedUser.merged_at ? (
+                  <Alert severity="info" variant="outlined">
+                    <Stack spacing={1} alignItems="flex-start">
+                      <Typography variant="body2" fontWeight={700}>Merged into {currentAccount?.name || 'the current account'}</Typography>
+                      {currentAccount?.email ? <Typography variant="body2">{currentAccount.email}</Typography> : null}
+                      <Typography variant="body2">Merged {formatDate(selectedUser.merged_at, true)}. This archived profile is read-only. Continue managing the member on their current account.</Typography>
+                      {currentAccount ? <Button size="small" variant="outlined" onClick={() => navigateToProfile(currentAccount.id)}>Open current account</Button> : null}
+                    </Stack>
+                  </Alert>
+                ) : null}
                 <Stack spacing={2}>
                   <Box>
                     <Typography variant="adminSectionTitle">Profile</Typography>
@@ -919,17 +996,20 @@ export default function UserProfilesAdmin() {
                   <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
                     <TextField
                       label="First name"
+                      slotProps={{ input: { readOnly: readOnlyProfile } }}
                       value={draft.first_name}
                       onChange={(event) => updateDraft('first_name', event.target.value)}
                     />
                     <TextField
                       label="Last name"
+                      slotProps={{ input: { readOnly: readOnlyProfile } }}
                       value={draft.last_name}
                       onChange={(event) => updateDraft('last_name', event.target.value)}
                     />
                   </Box>
                   <TextField
                     label="Phone"
+                    slotProps={{ input: { readOnly: readOnlyProfile } }}
                     value={draft.phone}
                     onChange={(event) => updateDraft('phone', event.target.value)}
                     placeholder="Optional"
@@ -939,11 +1019,11 @@ export default function UserProfilesAdmin() {
                     type="date"
                     value={draft.introduced_at}
                     onChange={(event) => updateDraft('introduced_at', event.target.value)}
-                    slotProps={{ inputLabel: { shrink: true } }}
+                    slotProps={{ inputLabel: { shrink: true }, input: { readOnly: readOnlyProfile } }}
                   />
                 </Stack>
 
-                <Stack spacing={1.5}>
+                {!readOnlyProfile ? <Stack spacing={1.5}>
                   <Box>
                     <Typography variant="adminSectionTitle">Membership</Typography>
                     <Typography variant="body2" color="text.secondary">Access and lifecycle status.</Typography>
@@ -1010,14 +1090,34 @@ export default function UserProfilesAdmin() {
                       ) : null}
                     </>
                   )}
-                </Stack>
+                </Stack> : null}
 
-                <MemberProgrammeSettings key={selectedUser.id} userId={selectedUser.id} onChanged={(hasFullMembership) => {
+                {!readOnlyProfile ? <MemberProgrammeSettings key={selectedUser.id} userId={selectedUser.id} onChanged={(hasFullMembership) => {
                   const updated = { ...selectedUser, is_current_member: hasFullMembership && !selectedUser.is_past_member, is_ninety_day_user: true };
                   setSelectedUser(updated);
                   setUsers((current) => current.map((user) => user.id === updated.id ? updated : user));
                   setRefreshKey((current) => current + 1);
-                }} />
+                }} /> : null}
+
+                {mergeHistory.length > 0 ? (
+                  <Stack spacing={2}>
+                    <Typography variant="adminSectionTitle">Merge history</Typography>
+                    <Typography variant="body2" color="text.secondary">Previous identities retained for reference. Sign-in uses the current account email.</Typography>
+                    {mergeHistory.map((merge) => (
+                      <Box key={merge.source_user_id} sx={{ border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}>
+                        <Stack spacing={0.75} alignItems="flex-start">
+                          <Typography variant="body2" fontWeight={600}>{merge.source_name || merge.source_email || 'Previous account'}</Typography>
+                          <Typography variant="body2">Previous email: {merge.source_email || 'Not available'}</Typography>
+                          <Typography variant="body2">Previous GHL user ID: {merge.source_ghl_user_id || 'Not available'}</Typography>
+                          <Typography variant="body2">Previous GHL contact ID: {merge.source_ghl_contact_id || 'Not available'}</Typography>
+                          <Typography variant="body2" color="text.secondary">{formatDate(merge.merged_at, true)} · By {merge.execution_actor === 'system' ? 'System maintenance' : merge.actor?.name || 'Former administrator'}{merge.actor?.email && merge.actor.email !== merge.actor.name ? ` (${merge.actor.email})` : ''}</Typography>
+                          <Typography variant="caption" color="text.secondary">Merged into {merge.dest_email || merge.dest_user_id}</Typography>
+                          {merge.source_user_id !== selectedUser.id ? <Button size="small" onClick={() => navigateToProfile(merge.source_user_id)}>View old profile</Button> : null}
+                        </Stack>
+                      </Box>
+                    ))}
+                  </Stack>
+                ) : null}
 
                 <Stack spacing={2}>
                   <Box>
@@ -1042,6 +1142,7 @@ export default function UserProfilesAdmin() {
                   </Box>
                   <TextField
                     label="GHL user ID"
+                    slotProps={{ input: { readOnly: readOnlyProfile } }}
                     value={draft.ghl_user_id}
                     onChange={(event) => updateDraft('ghl_user_id', event.target.value)}
                     placeholder="Optional"
@@ -1063,7 +1164,7 @@ export default function UserProfilesAdmin() {
                       <Typography variant="body2">{formatDate(selectedUser.last_sign_in_at, true)}</Typography>
                     </Box>
                   </Box>
-                  <Button
+                  {!readOnlyProfile ? <><Button
                     variant="outlined"
                     startIcon={<MailOutlineIcon />}
                     onClick={() => setResetConfirmUser(selectedUser)}
@@ -1085,7 +1186,7 @@ export default function UserProfilesAdmin() {
                         Delete member
                       </Button>
                     </Stack>
-                  </Alert>
+                  </Alert></> : null}
                 </Stack>
               </Stack>
             </Box>
@@ -1093,13 +1194,13 @@ export default function UserProfilesAdmin() {
             <Box sx={{ p: 2.5, borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
               <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
                 <Typography variant="body2" color={isDirty ? 'warning.main' : 'text.secondary'}>
-                  {isDirty ? 'Unsaved changes' : 'No unsaved changes'}
+                  {selectedUser.merged_at ? 'Archived profile · Read-only' : isDirty ? 'Unsaved changes' : 'No unsaved changes'}
                 </Typography>
                 <Stack direction="row" spacing={1}>
                   <Button onClick={requestCloseDrawer} disabled={saving}>Close</Button>
-                  <LoadingButton variant="contained" onClick={handleSave} loading={saving} disabled={!isDirty}>
+                  {!readOnlyProfile ? <LoadingButton variant="contained" onClick={handleSave} loading={saving} disabled={!isDirty}>
                     Save changes
-                  </LoadingButton>
+                  </LoadingButton> : null}
                 </Stack>
               </Stack>
             </Box>
@@ -1107,16 +1208,20 @@ export default function UserProfilesAdmin() {
         ) : null}
       </Drawer>
 
-      <Dialog open={discardConfirmOpen} onClose={() => setDiscardConfirmOpen(false)}>
+      <Dialog open={discardConfirmOpen} onClose={() => { setDiscardConfirmOpen(false); setPendingProfileId(null); }}>
         <DialogTitle>Discard unsaved changes?</DialogTitle>
         <DialogContent>Your edits have not been saved.</DialogContent>
         <DialogActions>
-          <Button onClick={() => setDiscardConfirmOpen(false)}>Keep editing</Button>
+          <Button onClick={() => { setDiscardConfirmOpen(false); setPendingProfileId(null); }}>Keep editing</Button>
           <Button
             color="error"
             onClick={() => {
               setDiscardConfirmOpen(false);
-              closeDrawer();
+              if (pendingProfileId) {
+                const nextId = pendingProfileId;
+                setPendingProfileId(null);
+                void loadProfile(nextId);
+              } else closeDrawer();
             }}
           >
             Discard changes

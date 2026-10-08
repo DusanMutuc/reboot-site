@@ -1,5 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, ACCOUNT_MERGED_PATH, fetchAccountLifecycle, isAccountMerged } from '@/lib/accountLifecycle';
 
 import {
   ACCESS_REMOVED_PATH,
@@ -52,7 +54,12 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isApiRequest = pathname.startsWith('/api');
 
-  if (PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix))) {
+  if (pathname === ACCOUNT_MERGED_PATH) return NextResponse.next();
+  const isPublicRequest = PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+  const isAuthPage = ['/login', RESET_PATH, '/auth'].some((prefix) => isPathAtOrBelow(pathname, prefix));
+  // Public APIs enforce their own guards. Auth pages must also reject a merged
+  // session already present before a login, recovery or mobile handoff exchange.
+  if (isPublicRequest && !isAuthPage) {
     return NextResponse.next();
   }
 
@@ -83,17 +90,31 @@ export async function middleware(req: NextRequest) {
   );
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
+    if (isPublicRequest) return res;
     const url = req.nextUrl.clone();
     url.pathname = '/login';
     url.searchParams.set('redirectTo', `${pathname}${req.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 
-  const roleCodes = await fetchUserRoleCodes(supabase, session.user.id);
+  try {
+    if (isAccountMerged(await fetchAccountLifecycle(getAdminClient(), user.id))) {
+      const denied = isApiRequest
+        ? NextResponse.json({ error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 })
+        : NextResponse.redirect(new URL(ACCOUNT_MERGED_PATH, req.url));
+      for (const cookie of res.cookies.getAll()) denied.cookies.set(cookie);
+      return denied;
+    }
+  } catch {
+    return NextResponse.json({ error: 'Account access could not be verified. Please try again.' }, { status: 503 });
+  }
+  if (isPublicRequest) return res;
+
+  const roleCodes = await fetchUserRoleCodes(supabase, user.id);
   const isPastMember = isPastMemberRole(roleCodes);
 
   if (pathname === ACCESS_REMOVED_PATH) {
@@ -120,7 +141,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (session.user.app_metadata?.must_reset_password === true && pathname !== RESET_PATH) {
+  if (user.app_metadata?.must_reset_password === true && pathname !== RESET_PATH) {
     const url = req.nextUrl.clone();
     url.pathname = RESET_PATH;
     return NextResponse.redirect(url);

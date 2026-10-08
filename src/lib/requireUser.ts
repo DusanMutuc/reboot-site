@@ -4,6 +4,7 @@ import { createClient, type SupabaseClient, type User } from '@supabase/supabase
 
 import { getAdminClient } from './supabaseAdmin';
 import { fetchUserRoleCodes, isPastMemberRole } from './userRoles';
+import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from './accountLifecycle';
 
 export type RequireUserSuccess = {
   ok: true;
@@ -36,6 +37,7 @@ export async function requireUser(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
+          global: { headers: { Authorization: `Bearer ${accessToken}` } },
           auth: {
             autoRefreshToken: false,
             persistSession: false,
@@ -65,7 +67,13 @@ export async function requireUser(
         };
       }
 
-      const roleCodes = await fetchUserRoleCodes(getAdminClient(), user.id);
+      const admin = getAdminClient();
+      if (isAccountMerged(await fetchAccountLifecycle(admin, user.id))) {
+        return { ok: false, res: NextResponse.json(
+          { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 },
+        ) };
+      }
+      const roleCodes = await fetchUserRoleCodes(admin, user.id);
       if (isPastMemberRole(roleCodes) && !options?.allowPastMember) {
         return {
           ok: false,
@@ -115,7 +123,13 @@ export async function requireUser(
       };
     }
 
-    const roleCodes = await fetchUserRoleCodes(getAdminClient(), user.id);
+    const admin = getAdminClient();
+    if (isAccountMerged(await fetchAccountLifecycle(admin, user.id))) {
+      return { ok: false, res: NextResponse.json(
+        { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 },
+      ) };
+    }
+    const roleCodes = await fetchUserRoleCodes(admin, user.id);
     if (isPastMemberRole(roleCodes) && !options?.allowPastMember) {
       return {
         ok: false,

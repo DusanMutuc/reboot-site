@@ -9,6 +9,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { sanitizeMobileHandoffTarget } from '@/lib/mobileHandoff';
 import { supabase } from '@/lib/supabaseClient';
+import { assertAccountSessionAllowed } from '@/lib/accountLifecycleClient';
 
 function parseHashParams(): URLSearchParams | null {
   if (typeof window === 'undefined') return null;
@@ -57,6 +58,7 @@ export default function MobileHandoffClient() {
             throw new Error(error.message);
           }
 
+          await assertAccountSessionAllowed(supabase);
           redirectToTarget(target);
           return;
         }
@@ -77,6 +79,7 @@ export default function MobileHandoffClient() {
           throw new Error(error.message);
         }
 
+        await assertAccountSessionAllowed(supabase);
         redirectToTarget(target);
       } catch (error: unknown) {
         if (cancelled) return;

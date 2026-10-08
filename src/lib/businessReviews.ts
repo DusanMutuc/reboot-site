@@ -115,6 +115,7 @@ type BusinessReviewRow = {
   user_id: string;
   coach_id: string | null;
   meeting_id: number | null;
+  archived_meeting_id: number | null;
   coaching_note_id: number;
   focus_finder_template_key: string;
   system_scorecard_template_key: string | null;
@@ -297,7 +298,7 @@ export async function loadBusinessReviews(
     client
       .from('business_reviews')
       .select(
-        'id, user_id, coach_id, meeting_id, coaching_note_id, focus_finder_template_key, system_scorecard_template_key, review_date, status, completed_at, created_at, updated_at',
+        'id, user_id, coach_id, meeting_id, archived_meeting_id, coaching_note_id, focus_finder_template_key, system_scorecard_template_key, review_date, status, completed_at, created_at, updated_at',
       )
       .eq('user_id', studentId)
       .order('review_date', { ascending: false })
@@ -344,8 +345,8 @@ export async function loadBusinessReviews(
     additionalScorecardRows = (assignedScorecards ?? []) as AdditionalScorecardRow[];
 
     const meetingIds = rows
-      .map((row) => row.meeting_id)
-      .filter((meetingId): meetingId is number => meetingId !== null);
+      .map((row) => row.meeting_id ?? row.archived_meeting_id)
+      .filter((meetingId): meetingId is number => meetingId != null);
     const [focusResult, ratingResult, priorityResult, preparationResult, meetingResult] =
       await Promise.all([
       client
@@ -528,7 +529,8 @@ function mapBusinessReviewRow(
   preparationByReviewId: Map<number, BusinessReviewPreparationRow>,
 ): BusinessReview {
   const reviewId = Number(row.id);
-  const meetingId = row.meeting_id == null ? null : Number(row.meeting_id);
+  const storedMeetingId = row.meeting_id ?? row.archived_meeting_id;
+  const meetingId = storedMeetingId == null ? null : Number(storedMeetingId);
   const meetingStatus = meetingId == null ? null : (meetingStatusById.get(meetingId) ?? null);
   const preparation = preparationByReviewId.get(reviewId);
   const buildScorecard = (templateKey: string): BusinessReviewSystemScorecard | null => {

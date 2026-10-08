@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, type FormEvent } from 'react';
 import { supabase } from '../../lib/supabaseClient';
+import { assertAccountSessionAllowed } from '@/lib/accountLifecycleClient';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -75,6 +76,12 @@ export default function LoginClient({ redirectTo = null }: LoginClientProps) {
       return;
     }
   
+    try {
+      await assertAccountSessionAllowed(supabase);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Account access could not be verified.');
+      return;
+    }
     // The root route resolves membership and the admin-selected default home.
     router.replace(redirectTo || '/');
     router.refresh();

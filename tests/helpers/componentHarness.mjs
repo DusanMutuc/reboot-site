@@ -25,6 +25,7 @@ export function renderComponent(relativePath, initialProps, imports = {}, global
   let props = initialProps;
   let tree;
   const react = {
+    useDeferredValue(value) { return value; },
     useState(initial) {
       const index = cursor++;
       if (!(index in hooks)) {

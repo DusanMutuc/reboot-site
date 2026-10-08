@@ -5,6 +5,7 @@ import { fetchCoachingWorkspaceUserIdSet } from '@/lib/currentMembers';
 import { activePause, loadMemberPauses } from '@/lib/memberPauses';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 type Context = { params: Promise<{ userId: string }> };
 
@@ -70,6 +71,8 @@ export async function DELETE(request: NextRequest, context: Context) {
 
   try {
     const client = getAdminClient();
+    const archivedResponse = await archivedAccountWriteResponse(client, userId);
+    if (archivedResponse) return archivedResponse;
     const pauseMap = await loadMemberPauses(client, [userId], true);
     const pause = activePause(pauseMap.get(userId));
     if (!pause) return NextResponse.json({ error: 'This member is not paused.' }, { status: 409 });

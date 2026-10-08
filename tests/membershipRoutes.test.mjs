@@ -19,13 +19,16 @@ function loadModule(path, imports) {
 
 function loadMiddleware(codes, context, authenticated = true) {
   const client = {
-    auth: { getSession: async () => ({ data: { session: authenticated ? { user: { id: 'fixture', app_metadata: {} } } : null } }) },
+    auth: { getUser: async () => ({ data: { user: authenticated ? { id: 'fixture', app_metadata: {} } : null } }) },
     from: () => ({ select: () => ({ eq: async () => ({ data: codes.map((code) => ({ roles: { code } })), error: null }) }) }),
     rpc: async () => ({ data: context, error: null }),
   };
   return loadModule('../src/middleware.ts', {
     '@supabase/ssr': { createServerClient: () => client },
     '@/lib/userRoles': userRoles,
+    '@/lib/supabaseAdmin': { getAdminClient: () => client },
+    '@/lib/accountLifecycle': { ACCOUNT_MERGED_PATH: '/account-merged',
+      fetchAccountLifecycle: async () => ({ merged_at: null, merged_into_user_id: null }), isAccountMerged: () => false },
   }).middleware;
 }
 const context = { default_home: 'ninety-day', has_active_ninety_day_enrollment: true };

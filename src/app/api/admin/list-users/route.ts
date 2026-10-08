@@ -50,9 +50,13 @@ export async function GET(request: NextRequest) {
   const { data: profs, error: pErr } = await supa
     .from('profiles')
     .select('id, first_name, last_name, introduced_at')
-    .in('id', ids);
+    .in('id', ids)
+    .is('merged_into_user_id', null);
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 400 });
   const profMap = new Map((profs ?? []).map((p) => [p.id, p]));
+  // This endpoint feeds action selectors; archives are inspected through the
+  // profile directory, never selected for new work (including membership=all).
+  ids = ids.filter((id) => profMap.has(id));
 
   // Step 3: emails via Admin API
   const emailMap = new Map<string, string>();

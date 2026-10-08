@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from '@/lib/accountLifecycle';
 
 export async function POST() {
   try {
@@ -46,6 +47,12 @@ export async function POST() {
 
     // 4) Clear the app_metadata flag with the service-role admin client
     const admin = getAdminClient();
+    if (isAccountMerged(await fetchAccountLifecycle(admin, user.id))) {
+      return NextResponse.json(
+        { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE },
+        { status: 403, headers: res.headers },
+      );
+    }
     const { error: adminErr } = await admin.auth.admin.updateUserById(user.id, {
       app_metadata: { must_reset_password: false },
     });

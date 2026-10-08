@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import type { User } from '@supabase/supabase-js';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 const ROLE_CODE = 'assistant';
 const DEFAULT_PASSWORD = 'reboot';
@@ -113,6 +114,8 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'User already exists with this email' }, { status: 409 });
         }
         userId = existing.id;
+        const archivedResponse = await archivedAccountWriteResponse(supa, userId);
+        if (archivedResponse) return archivedResponse;
         console.log('[ghl:create-assistant] Reusing existing auth user', userId);
         await supa.auth.admin.updateUserById(userId, {
           phone: phone ?? undefined,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 export async function GET(request: NextRequest) {
   const guard = await requireAdmin(request);
@@ -114,6 +115,8 @@ export async function POST(request: NextRequest) {
     }
 
     const supa = getAdminClient();
+    const archived = await archivedAccountWriteResponse(supa, user_id);
+    if (archived) return archived;
 
     // 1) Upsert coach_profiles (coach-only fields; NO ghl_user_id here anymore)
     const profilePayload = {

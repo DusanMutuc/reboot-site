@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminUserDirectoryPage } from '@/lib/adminUserDirectory';
 import { requireAdmin } from '@/lib/requireAdmin';
 
-// GET /api/admin/users?query=&page=1&limit=200&membership=all|current|ninety-day|past
+// Omitted membership excludes merged archives; all/merged are explicit views.
 export async function GET(req: NextRequest) {
   const guard = await requireAdmin(req);
   if (!guard.ok) return guard.res;
@@ -14,9 +14,9 @@ export async function GET(req: NextRequest) {
   const membershipParam = searchParams.get('membership');
   const membership = membershipParam === 'current' ||
       membershipParam === 'ninety-day' ||
-      membershipParam === 'past'
+      membershipParam === 'past' || membershipParam === 'merged' || membershipParam === 'all'
     ? membershipParam
-    : 'all';
+    : 'unmerged';
   const setupParam = searchParams.get('setup');
   const setup = setupParam === 'missing-phone' ||
       setupParam === 'missing-primary-coach' ||

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 type AssignAssistantBody = {
   user_id: string;
@@ -34,6 +35,8 @@ export async function POST(request: NextRequest) {
   if (!roleId) return NextResponse.json({ error: 'Assistant role not found' }, { status: 400 });
 
   const supa = getAdminClient();
+  const archived = await archivedAccountWriteResponse(supa, body.user_id);
+  if (archived) return archived;
   const { error } = await supa
     .from('user_roles')
     .upsert({ user_id: body.user_id, role_id: roleId }, { onConflict: 'user_id,role_id', ignoreDuplicates: true });
@@ -58,6 +61,8 @@ export async function DELETE(request: NextRequest) {
   if (!roleId) return NextResponse.json({ error: 'Assistant role not found' }, { status: 400 });
 
   const supa = getAdminClient();
+  const archived = await archivedAccountWriteResponse(supa, userId);
+  if (archived) return archived;
   const { error } = await supa
     .from('user_roles')
     .delete()

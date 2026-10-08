@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 const COURSE_ID = 2;
 
@@ -135,6 +136,9 @@ export async function POST(request: NextRequest) {
 
     const supa = getAdminClient();
 
+    const archivedResponse = await archivedAccountWriteResponse(supa, user_id);
+    if (archivedResponse) return archivedResponse;
+
     if (replace) {
       console.log(
         '🔄 assign-coach: Deactivating existing assignments of same relationship_type'
@@ -192,6 +196,8 @@ export async function DELETE(request: NextRequest) {
   }
 
   const supa = getAdminClient();
+  const archivedResponse = await archivedAccountWriteResponse(supa, user_id);
+  if (archivedResponse) return archivedResponse;
   const { error } = await supa
     .from('user_coaches')
     .update({ is_active: false, ended_at: new Date().toISOString() })

@@ -9,30 +9,31 @@ const require = createRequire(import.meta.url);
 const { NextRequest, NextResponse } = require('next/server');
 const source = '00000000-0000-4000-8000-000000000901';
 const dest = '00000000-0000-4000-8000-000000000902';
+const actor = '00000000-0000-4000-8000-000000000904';
 const requestId = '00000000-0000-4000-8000-000000000903';
 const compiled = ts.transpileModule(fs.readFileSync(new URL('../src/app/api/admin/transfer-user-data/route.ts', import.meta.url), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
 
-function load({ deniedStatus, identityError, email = ' Destination@Example.test ', lookup = { ok: true, contactId: 'destination-contact' }, rpcError, rpcData, replayData = null, replayError } = {}) {
-  const calls = { clients: 0, identity: [], lookup: [], rpc: [], replay: [], invalidations: 0 };
+function load({ deniedStatus, identityError, email = ' Destination@Example.test ', lookup = { ok: true, contactId: 'destination-contact' }, rpcError, rpcData, replayData = null, replayError, banError } = {}) {
+  const calls = { clients: 0, identity: [], lookup: [], rpc: [], replay: [], invalidations: 0, bans: [] };
   const client = {
     auth: { admin: { async getUserById(id) {
       calls.identity.push(id);
       return { data: { user: { id, email } }, error: identityError ?? null };
-    } } },
+    }, async updateUserById(id, body) { calls.bans.push({ id, body: JSON.parse(JSON.stringify(body)) }); return { error: banError ?? null }; } } },
     async rpc(name, args) {
-      if (name === 'get_account_transfer_result_v2') {
+      if (name === 'get_account_transfer_result_v3') {
         calls.replay.push({ name, args: JSON.parse(JSON.stringify(args)) });
         return { data: replayData, error: replayError ?? null };
       }
       calls.rpc.push({ name, args: JSON.parse(JSON.stringify(args)) });
-      return { data: rpcData === undefined ? { dry_run: args._options.dry_run, counts: {} } : rpcData, error: rpcError ?? null };
+      return { data: rpcData === undefined ? { dry_run: args._options.dry_run, operation: args._options.operation, archived: !args._options.dry_run && args._options.operation !== 'copy', counts: {} } : rpcData, error: rpcError ?? null };
     },
   };
   const imports = {
     '@/lib/requireAdmin': { async requireAdmin() {
-      return deniedStatus ? { ok: false, res: NextResponse.json({ error: 'Denied' }, { status: deniedStatus }) } : { ok: true };
+      return deniedStatus ? { ok: false, res: NextResponse.json({ error: 'Denied' }, { status: deniedStatus }) } : { ok: true, user: { id: actor } };
     } },
     '@/lib/supabaseAdmin': { getAdminClient() { calls.clients++; return client; } },
     '@/lib/adminUserDirectory': { invalidateAdminUserDirectory() { calls.invalidations++; } },
@@ -80,9 +81,9 @@ test('dry run resolves Auth email and passes trusted contact to versioned RPC wi
   assert.equal(result.status, 200);
   assert.deepEqual(route.calls.identity, [dest]);
   assert.deepEqual(route.calls.lookup, ['destination@example.test']);
-  assert.deepEqual(route.calls.rpc, [{ name: 'transfer_user_data_admin_v2', args: {
+  assert.deepEqual(route.calls.rpc, [{ name: 'transfer_user_data_admin_v3', args: {
     _source: source, _dest: dest, _options: {
-      dry_run: true, kpi_merge: 'prefer_source', smart_doc_conflict: 'keep_latest_submitted', reassign_authorship: false,
+      operation: 'copy', actor_user_id: actor, dry_run: true, kpi_merge: 'prefer_source', smart_doc_conflict: 'keep_latest_submitted', reassign_authorship: false,
       destination_email: 'destination@example.test', destination_ghl_contact_id: 'destination-contact',
     },
   } }]);
@@ -150,7 +151,7 @@ for (const rpcData of [null, { ok: true }, { dry_run: true }]) {
 }
 
 test('completed attempts replay despite unavailable Auth/GHL without running another copy', async () => {
-  const replayData = { dry_run: false, request_id: requestId, counts: { general_coaching_notes: { copied: 2 } } };
+  const replayData = { operation: 'copy', archived: false, dry_run: false, request_id: requestId, counts: { general_coaching_notes: { copied: 2 } } };
   const route = load({ replayData, identityError: { status: 503 }, lookup: { ok: false, status: 504, error: 'GHL unavailable' } });
   const response = await route.post({ source, dest, options: { dry_run: false, request_id: requestId } });
   assert.equal(response.status, 200);
@@ -171,3 +172,42 @@ for (const replayError of [{ code: 'PGRST202', message: 'Function missing' }, { 
     assert.deepEqual(route.calls.rpc, []);
   });
 }
+
+for (const operation of ['merge', 'archive']) {
+  test(`${operation} archives Auth only after confirmed atomic database success`, async () => {
+    const route = load();
+    assert.equal((await route.post({ source, dest, options: { operation, dry_run: false, request_id: requestId } })).status, 200);
+    assert.equal(route.calls.rpc[0].args._options.operation, operation);
+    assert.equal(route.calls.rpc[0].args._options.actor_user_id, actor);
+    assert.deepEqual(route.calls.bans, [{ id: source, body: { ban_duration: '876000h' } }]);
+  });
+  test(`${operation} preview never bans the source account`, async () => {
+    const route = load();
+    assert.equal((await route.post({ source, dest, options: { operation, dry_run: true } })).status, 200);
+    assert.deepEqual(route.calls.bans, []);
+  });
+}
+test('Auth failure after recorded merge keeps the attempt retryable; replay finishes without another copy', async () => {
+  const body = { source, dest, options: { operation: 'merge', dry_run: false, request_id: requestId } };
+  const failed = load({ banError: { message: 'Unavailable' } });
+  const failure = await failed.post(body);
+  assert.equal(failure.status, 503);
+  assert.equal((await failure.json()).code, 'MERGE_AUTH_PENDING');
+  assert.equal(failed.calls.invalidations, 1);
+  const replay = load({ replayData: { operation: 'merge', archived: true, dry_run: false } });
+  assert.equal((await replay.post(body)).status, 200);
+  assert.equal(replay.calls.bans.length, 1);
+  assert.deepEqual(replay.calls.lookup, []);
+  assert.deepEqual(replay.calls.rpc, []);
+});
+test('legacy copy requests never archive source sign-in', async () => {
+  const route = load();
+  assert.equal((await route.post({ source, dest, options: { dry_run: false, request_id: requestId } })).status, 200);
+  assert.equal(route.calls.rpc[0].args._options.operation, 'copy');
+  assert.deepEqual(route.calls.bans, []);
+});
+test('replay with mismatched operation does not ban an account', async () => {
+  const route = load({ replayData: { operation: 'copy', archived: false, dry_run: false } });
+  assert.equal((await route.post({ source, dest, options: { operation: 'merge', dry_run: false, request_id: requestId } })).status, 502);
+  assert.deepEqual(route.calls.bans, []);
+});

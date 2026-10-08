@@ -2,7 +2,7 @@ import { DateTime } from 'luxon';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { GHL } from '@/lib/config';
-import { fetchCoachingWorkspaceUserIds } from '@/lib/currentMembers';
+import { fetchCoachingWorkspaceUserIds, filterUnmergedAccountIds } from '@/lib/currentMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { activeDaysSinceForGroup, activePause, loadMemberPauses, type MemberPause } from '@/lib/memberPauses';
 import type {
@@ -244,9 +244,11 @@ async function findAppointmentsForSync(
   matchBeyondRoster: boolean,
 ): Promise<GhlCoachingAppointmentScanResult> {
   const supabase = getAdminClient();
-  const assignments = (await fetchAssignments(supabase)).filter(
+  const candidates = (await fetchAssignments(supabase)).filter(
     (assignment) => normalizeRelationship(assignment.relationship_type) === relationshipType,
   );
+  const unmergedIds = new Set(await filterUnmergedAccountIds(supabase, candidates.map((row) => row.user_id)));
+  const assignments = candidates.filter((row) => unmergedIds.has(row.user_id));
 
   if (assignments.length === 0) {
     return {

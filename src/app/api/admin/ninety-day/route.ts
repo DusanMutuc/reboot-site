@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
   for (let offset = 0; offset < memberIds.length; offset += 200) {
     const ids = memberIds.slice(offset, offset + 200);
     const [profilesResult, preferencesResult] = await Promise.all([
-      supa.from('profiles').select('id, first_name, last_name').in('id', ids),
+      supa.from('profiles').select('id, first_name, last_name').in('id', ids).is('merged_into_user_id', null),
       supa.from('member_home_preferences').select('user_id, default_home').in('user_id', ids),
     ]);
     const error = profilesResult.error ?? preferencesResult.error;
@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     systems: (systemsResult.data ?? []).filter((row) => row.cycle_id === cycle.id),
     meetings: (meetingsResult.data ?? []).filter((row) => row.cycle_id === cycle.id),
     members: enrollmentRows
-      .filter((row) => row.cycle_id === cycle.id)
+      .filter((row) => row.cycle_id === cycle.id && people.some((person) => person.id === row.user_id))
       .map((row) => ({
         ...row,
         name: people.find((person) => person.id === row.user_id)?.name ?? 'Unnamed user',

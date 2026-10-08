@@ -7,6 +7,25 @@ type CurrentMemberRow = {
 type CurrentMemberQueryClient = Pick<SupabaseClient, 'rpc'>;
 type CoachingWorkspaceQueryClient = Pick<SupabaseClient, 'from' | 'rpc'>;
 
+/** Archived identities retain historical assignments but never rejoin a roster. */
+export async function filterUnmergedAccountIds(
+  client: Pick<SupabaseClient, 'from'>,
+  userIds: readonly string[],
+): Promise<string[]> {
+  const uniqueIds = [...new Set(userIds)];
+  const available = new Set<string>();
+  for (let index = 0; index < uniqueIds.length; index += 200) {
+    const { data, error } = await client.from('profiles')
+      .select('id, merged_into_user_id')
+      .in('id', uniqueIds.slice(index, index + 200));
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      if (row.merged_into_user_id == null) available.add(row.id);
+    }
+  }
+  return uniqueIds.filter((id) => available.has(id));
+}
+
 export async function fetchCurrentMemberUserIds(
   client: CurrentMemberQueryClient,
 ): Promise<string[]> {
@@ -67,10 +86,10 @@ export async function fetchCoachingWorkspaceUserIds(
     }
   }
 
-  return Array.from(new Set([
+  return filterUnmergedAccountIds(client, [
     ...currentMemberIds,
     ...ninetyDayUserIds.filter((userId) => !pastMemberIds.has(userId)),
-  ]));
+  ]);
 }
 
 export async function fetchCoachingWorkspaceUserIdSet(

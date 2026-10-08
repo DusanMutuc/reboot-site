@@ -6,6 +6,7 @@ import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { resolveGhlContactIdByEmail } from '@/lib/ghlContactLookup';
 
 type TransferOptions = {
+  operation?: 'merge' | 'copy' | 'archive';
   dry_run?: boolean;
   // Backend semantics:
   //  - 'skip'          => KPI tables untouched
@@ -50,8 +51,9 @@ export async function POST(request: NextRequest) {
   if (options !== undefined && (!options || typeof options !== 'object' || Array.isArray(options))) {
     return NextResponse.json({ error: 'Invalid transfer options' }, { status: 400 });
   }
-  const allowedOptions = new Set(['dry_run', 'kpi_merge', 'smart_doc_conflict', 'reassign_authorship', 'request_id']);
+  const allowedOptions = new Set(['operation', 'dry_run', 'kpi_merge', 'smart_doc_conflict', 'reassign_authorship', 'request_id']);
   if (Object.keys(options ?? {}).some((key) => !allowedOptions.has(key)) ||
+      (options?.operation !== undefined && !['merge', 'copy', 'archive'].includes(options.operation)) ||
       (options?.dry_run !== undefined && typeof options.dry_run !== 'boolean') ||
       (options?.reassign_authorship !== undefined && typeof options.reassign_authorship !== 'boolean') ||
       (options?.kpi_merge !== undefined && !['skip', 'prefer_source'].includes(options.kpi_merge)) ||
@@ -62,6 +64,10 @@ export async function POST(request: NextRequest) {
 
   // Only the server can supply the destination email/contact identity to SQL.
   const opts = {
+    // Old open tabs promise a copy with the source left active. The new UI
+    // explicitly sends merge; never silently archive from an old confirmation.
+    operation: options?.operation ?? 'copy',
+    actor_user_id: guard.user.id,
     dry_run: options?.dry_run ?? true,
     kpi_merge: options?.kpi_merge ?? 'prefer_source',
     smart_doc_conflict: options?.smart_doc_conflict ?? 'keep_latest_submitted',
@@ -73,11 +79,27 @@ export async function POST(request: NextRequest) {
   }
 
   const supa = getAdminClient();
+  async function finishAppliedTransfer(data: Record<string, unknown>) {
+    invalidateAdminUserDirectory();
+    if (opts.operation !== 'copy') {
+      // Database archival already blocks app/data access, including old tokens.
+      // Auth is a separate service: retry this idempotent step after a lost
+      // response or Auth outage without copying the member's history again.
+      const { error } = await supa.auth.admin.updateUserById(source, { ban_duration: '876000h' });
+      if (error) {
+        return NextResponse.json({
+          error: 'The merge is recorded, but disabling the old sign-in is still pending. Retry this same attempt to finish; the history will not be copied again.',
+          code: 'MERGE_AUTH_PENDING',
+        }, { status: 503 });
+      }
+    }
+    return NextResponse.json(data);
+  }
   if (!opts.dry_run) {
     // A committed attempt must remain recoverable even when Auth/GHL changed or
     // became unavailable after its response was lost. SQL validates the original
     // accounts and copy options before returning the protected audit result.
-    const { data: completed, error: replayError } = await supa.rpc('get_account_transfer_result_v2', {
+    const { data: completed, error: replayError } = await supa.rpc('get_account_transfer_result_v3', {
       _source: source, _dest: dest, _options: opts,
     });
     if (replayError) return databaseErrorResponse(replayError);
@@ -85,8 +107,11 @@ export async function POST(request: NextRequest) {
       if (!completed || typeof completed !== 'object' || Array.isArray(completed) || completed.dry_run !== false) {
         return NextResponse.json({ error: 'The saved transfer result could not be verified. Retry this same attempt.' }, { status: 502 });
       }
-      invalidateAdminUserDirectory();
-      return NextResponse.json(completed);
+      if (completed.operation !== opts.operation ||
+          completed.archived !== (opts.operation !== 'copy')) {
+        return NextResponse.json({ error: 'The saved account operation could not be verified.' }, { status: 502 });
+      }
+      return finishAppliedTransfer(completed);
     }
   }
   const { data: destination, error: identityError } = await supa.auth.admin.getUserById(dest);
@@ -103,7 +128,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Versioned RPC prevents an older database from ignoring GHL/retry requirements.
-  const { data, error } = await supa.rpc('transfer_user_data_admin_v2', {
+  const { data, error } = await supa.rpc('transfer_user_data_admin_v3', {
     _source: source,
     _dest: dest,
     _options: { ...opts, destination_email: destinationEmail, destination_ghl_contact_id: contact.contactId },
@@ -111,9 +136,10 @@ export async function POST(request: NextRequest) {
 
   if (error) return databaseErrorResponse(error);
 
-  if (!data || typeof data !== 'object' || Array.isArray(data) || data.dry_run !== opts.dry_run) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || data.dry_run !== opts.dry_run ||
+      data.operation !== opts.operation || data.archived !== (!opts.dry_run && opts.operation !== 'copy')) {
     return NextResponse.json({ error: 'The transfer returned no valid result. Retry this same attempt to check its outcome.' }, { status: 502 });
   }
-  if (!opts.dry_run) invalidateAdminUserDirectory();
+  if (!opts.dry_run) return finishAppliedTransfer(data);
   return NextResponse.json(data);
 }

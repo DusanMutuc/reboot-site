@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from '@/lib/accountLifecycle';
 
 export async function GET(request: NextRequest) {
   console.log('🔍 is-admin check started');
@@ -55,6 +56,12 @@ export async function GET(request: NextRequest) {
 
     // Use service role to check admin status
     const supaAdmin = getAdminClient();
+    if (isAccountMerged(await fetchAccountLifecycle(supaAdmin, user.id))) {
+      return NextResponse.json(
+        { isAdmin: false, error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE },
+        { status: 403 },
+      );
+    }
     console.log('🔧 Using admin client to check user_roles table');
 
     const { data, error } = await supaAdmin

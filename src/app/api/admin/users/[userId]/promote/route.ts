@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 type Params = { params: Promise<{ userId?: string | string[] | undefined }> };
 
@@ -20,7 +21,10 @@ export async function POST(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'Invalid user id' }, { status: 400 });
   }
 
-  const { data, error } = await getAdminClient().rpc('grant_full_membership', {
+  const supa = getAdminClient();
+  const archivedResponse = await archivedAccountWriteResponse(supa, userId);
+  if (archivedResponse) return archivedResponse;
+  const { data, error } = await supa.rpc('grant_full_membership', {
     p_user_id: userId,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

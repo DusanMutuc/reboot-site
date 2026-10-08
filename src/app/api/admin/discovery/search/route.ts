@@ -323,7 +323,7 @@ export async function GET(request: NextRequest) {
   try {
     const view = request.nextUrl.searchParams.get('view') ?? 'investigations';
     if (view === 'members') {
-      const page = await getAdminUserDirectoryPage(request.nextUrl.searchParams.get('q') ?? '', 1, 100, { membership: 'all' });
+      const page = await getAdminUserDirectoryPage(request.nextUrl.searchParams.get('q') ?? '', 1, 100);
       return reply({ members: page.items.map((item) => ({ id: item.id, name: `${item.first_name} ${item.last_name}`.trim() || item.email, email: item.email })) });
     }
     if (view === 'investigations') return reply({ groups: await fetchInvestigationRows(), windowDays: 90 });

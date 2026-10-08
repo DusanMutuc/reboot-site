@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 
 type Params = { params: Promise<{ userId?: string | string[] | undefined }> };
 const PASSWORD_RESET_REDIRECT_TO = 'https://hub.rebootmembers.com/reset-password';
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest, context: Params) {
   }
 
   const supa = getAdminClient();
+  const archivedResponse = await archivedAccountWriteResponse(supa, userId);
+  if (archivedResponse) return archivedResponse;
 
   const { data, error } = await supa.auth.admin.getUserById(userId);
   if (error) {

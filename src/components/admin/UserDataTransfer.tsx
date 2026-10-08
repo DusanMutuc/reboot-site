@@ -25,6 +25,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 type UserItem = { id: string; name: string; email: string };
 
 type TransferOptions = {
+  operation: 'merge' | 'copy' | 'archive';
   dry_run: boolean;
   // Backend semantics:
   //  - 'skip'          => KPI tables untouched
@@ -37,6 +38,7 @@ type TransferOptions = {
 type ApiResult = {
   ok: boolean;
   dryRun: boolean;
+  operation: TransferOptions['operation'];
   data?: unknown;
   error?: string;
 };
@@ -47,10 +49,58 @@ type ApiUserItem = {
   email?: string | null;
 };
 
+type TransferReceipt = {
+  requestId: string;
+  source: UserItem;
+  dest: UserItem;
+  options: TransferOptions & { dry_run: false };
+  createdAt: string;
+};
+
+const RECEIPTS_STORAGE_KEY = 'reboot:account-transfer:pending-receipts';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function transferIntent(sourceId: string | undefined, destId: string | undefined, options: TransferOptions) {
+  return JSON.stringify([options.operation, sourceId, destId, options.kpi_merge, options.smart_doc_conflict, options.reassign_authorship]);
+}
+
+function readTransferReceipts(): TransferReceipt[] {
+  try {
+    const raw: unknown = JSON.parse(window.sessionStorage.getItem(RECEIPTS_STORAGE_KEY) ?? '[]');
+    if (!Array.isArray(raw)) return [];
+    return raw.flatMap((entry: unknown) => {
+      if (!entry || typeof entry !== 'object') return [];
+      const receipt = entry as Partial<TransferReceipt>;
+      const validUser = (user: UserItem | undefined) => user && typeof user.id === 'string' && UUID_PATTERN.test(user.id)
+        && typeof user.name === 'string' && typeof user.email === 'string';
+      const options = receipt.options;
+      if (typeof receipt.requestId !== 'string' || !UUID_PATTERN.test(receipt.requestId)
+        || !validUser(receipt.source) || !validUser(receipt.dest) || receipt.source!.id.toLowerCase() === receipt.dest!.id.toLowerCase()
+        || !options || options.dry_run !== false || !['merge', 'copy', 'archive'].includes(options.operation)
+        || !['skip', 'prefer_source'].includes(options.kpi_merge)
+        || !['keep_latest_submitted', 'keep_dest', 'keep_source'].includes(options.smart_doc_conflict)
+        || typeof options.reassign_authorship !== 'boolean'
+        || typeof receipt.createdAt !== 'string' || !Number.isFinite(Date.parse(receipt.createdAt))) return [];
+      // Reconstruct the wire options: stored display metadata can never add
+      // trusted/server-only fields to a replay request.
+      return [{
+        requestId: receipt.requestId.toLowerCase(),
+        source: { id: receipt.source!.id, name: receipt.source!.name, email: receipt.source!.email },
+        dest: { id: receipt.dest!.id, name: receipt.dest!.name, email: receipt.dest!.email },
+        options: {
+          operation: options.operation, dry_run: false as const, kpi_merge: options.kpi_merge,
+          smart_doc_conflict: options.smart_doc_conflict, reassign_authorship: options.reassign_authorship,
+        },
+        createdAt: receipt.createdAt,
+      }];
+    });
+  } catch { return []; }
+}
+
 function savedRequestId(intentKey: string): string | undefined {
   try {
     const value = window.sessionStorage.getItem(`reboot:account-transfer:${intentKey}`);
-    return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+    return value && UUID_PATTERN.test(value)
       ? value.toLowerCase() : undefined;
   } catch {
     return undefined;
@@ -66,6 +116,7 @@ export default function UserDataTransfer() {
   const [dest, setDest] = useState<UserItem | null>(null);
 
   const [opts, setOpts] = useState<TransferOptions>({
+    operation: 'merge',
     dry_run: true,
     kpi_merge: 'prefer_source', // default: copy KPI from source, overwrite destination
     smart_doc_conflict: 'keep_latest_submitted',
@@ -78,10 +129,31 @@ export default function UserDataTransfer() {
   const [previewKey, setPreviewKey] = useState<string | null>(null);
   const [retryIntentKey, setRetryIntentKey] = useState<string | null>(null);
   const [completedIntents, setCompletedIntents] = useState(() => new Set<string>());
+  const [pendingReceipts, setPendingReceipts] = useState<TransferReceipt[]>([]);
+  const [receiptStorageFailed, setReceiptStorageFailed] = useState(false);
+  const receiptsRef = useRef<TransferReceipt[]>([]);
   const requestIds = useRef(new Map<string, string>());
-  const intentKey = JSON.stringify([source?.id, dest?.id, opts.kpi_merge, opts.smart_doc_conflict, opts.reassign_authorship]);
+  const intentKey = transferIntent(source?.id, dest?.id, opts);
   const completed = completedIntents.has(intentKey);
   const retrySavedAttempt = retryIntentKey === intentKey && !completed;
+
+  useEffect(() => {
+    const receipts = readTransferReceipts();
+    receiptsRef.current = receipts;
+    setPendingReceipts(receipts);
+    for (const receipt of receipts) {
+      requestIds.current.set(transferIntent(receipt.source.id, receipt.dest.id, receipt.options), receipt.requestId);
+    }
+  }, []);
+
+  function saveReceipts(receipts: TransferReceipt[]) {
+    receiptsRef.current = receipts;
+    setPendingReceipts(receipts);
+    try {
+      window.sessionStorage.setItem(RECEIPTS_STORAGE_KEY, JSON.stringify(receipts));
+      setReceiptStorageFailed(false);
+    } catch { setReceiptStorageFailed(true); }
+  }
 
   useEffect(() => {
     const requestId = requestIds.current.get(intentKey) ?? savedRequestId(intentKey);
@@ -129,20 +201,30 @@ export default function UserDataTransfer() {
     [source, dest, submitting, completed, opts.dry_run, previewKey, intentKey, retrySavedAttempt]
   );
 
-  async function handleRun() {
+  async function handleRun(savedAttempt?: TransferReceipt) {
+    const knownReceipt = savedAttempt && receiptsRef.current.find((receipt) => receipt === savedAttempt);
+    if (savedAttempt ? !knownReceipt || submitting : !source || !dest || !canSubmit) return;
+    const attemptSource = savedAttempt?.source ?? source!;
+    const attemptDest = savedAttempt?.dest ?? dest!;
+    const attemptOptions = savedAttempt?.options ?? opts;
+    const attemptKey = transferIntent(attemptSource.id, attemptDest.id, attemptOptions);
+    if (completedIntents.has(attemptKey)) return;
+    const retrying = Boolean(savedAttempt) || retrySavedAttempt;
     setResult(null);
-    if (!source || !dest || !canSubmit) return;
 
-    if (!opts.dry_run) {
+    if (!attemptOptions.dry_run) {
       const ok = window.confirm(
-        (retrySavedAttempt ? `Retry the previous transfer attempt:\n\n` : `This will copy/merge data from:\n\n`) +
-          `Source: ${source.name || source.email} (${source.id})\n` +
-          `→ Destination: ${dest.name || dest.email} (${dest.id})\n\n` +
-          (retrySavedAttempt
+        (retrying ? `Retry the previous account operation:\n\n` : `Operation: ${attemptOptions.operation === 'merge' ? 'Merge accounts' : attemptOptions.operation === 'archive' ? 'Archive a previously transferred account' : 'Copy history'}\n\n`) +
+          `Source: ${attemptSource.name || attemptSource.email} (${attemptSource.id})\n` +
+          `→ Destination: ${attemptDest.name || attemptDest.email} (${attemptDest.id})\n\n` +
+          (retrying
             ? `If the transfer already completed, its saved result will be returned without copying again.\n`
-            : `The destination user will gain data from the source.\n`) +
-          `Its GHL contact will be resolved from ${dest.email}.\n` +
-          `The source user will remain intact (except optional authorship changes).\n\n` +
+            : attemptOptions.operation === 'archive' ? `Existing destination history will be kept without copying again.\n`
+              : `The destination user will gain data from the source.\n`) +
+          `Its GHL contact will be resolved from ${attemptDest.email}.\n` +
+          (attemptOptions.operation === 'copy'
+            ? `Both accounts will remain usable.\n\n`
+            : `The source account will be archived as Merged, lose access, and leave active member workflows. Its original history will be preserved.\n\n`) +
           `Are you sure you want to proceed?`
       );
       if (!ok) return;
@@ -151,26 +233,32 @@ export default function UserDataTransfer() {
     setSubmitting(true);
     try {
       let requestId: string | undefined;
-      if (!opts.dry_run) {
+      if (!attemptOptions.dry_run) {
         // Keep the same operation ID after a lost response, including a page reload.
-        const storageKey = `reboot:account-transfer:${intentKey}`;
-        requestId = requestIds.current.get(intentKey);
+        const storageKey = `reboot:account-transfer:${attemptKey}`;
+        requestId = savedAttempt?.requestId ?? requestIds.current.get(attemptKey);
         if (!requestId) {
-          requestId = savedRequestId(intentKey);
+          requestId = savedRequestId(attemptKey);
           requestId ??= crypto.randomUUID();
-          requestIds.current.set(intentKey, requestId);
+          requestIds.current.set(attemptKey, requestId);
           try { window.sessionStorage.setItem(storageKey, requestId); } catch { /* In-memory retries still work. */ }
         }
-        setRetryIntentKey(intentKey);
+        if (!receiptsRef.current.some((receipt) => receipt.requestId === requestId)) {
+          saveReceipts([...receiptsRef.current, {
+            requestId, source: { ...attemptSource }, dest: { ...attemptDest },
+            options: { ...attemptOptions, dry_run: false }, createdAt: new Date().toISOString(),
+          }]);
+        }
+        if (attemptKey === intentKey) setRetryIntentKey(attemptKey);
       }
       const res = await fetch('/api/admin/transfer-user-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
         body: JSON.stringify({
-          source: source.id,
-          dest: dest.id,
-          options: { ...opts, ...(requestId ? { request_id: requestId } : {}) },
+          source: attemptSource.id,
+          dest: attemptDest.id,
+          options: { ...attemptOptions, ...(requestId ? { request_id: requestId } : {}) },
         }),
       });
 
@@ -183,17 +271,20 @@ export default function UserDataTransfer() {
           typeof (json as { error: unknown }).error === 'string'
             ? (json as { error: string }).error
             : 'Unknown error';
-        setResult({ ok: false, dryRun: opts.dry_run, error: errMsg });
-        if (opts.dry_run) setPreviewKey(null);
+        setResult({ ok: false, dryRun: attemptOptions.dry_run, operation: attemptOptions.operation, error: errMsg });
+        if (attemptOptions.dry_run) setPreviewKey(null);
       } else {
-        setResult({ ok: true, dryRun: opts.dry_run, data: json });
-        if (opts.dry_run) setPreviewKey(intentKey);
-        else setCompletedIntents((previous) => new Set(previous).add(intentKey));
+        setResult({ ok: true, dryRun: attemptOptions.dry_run, operation: attemptOptions.operation, data: json });
+        if (attemptOptions.dry_run) setPreviewKey(attemptKey);
+        else {
+          setCompletedIntents((previous) => new Set(previous).add(attemptKey));
+          saveReceipts(receiptsRef.current.filter((receipt) => receipt.requestId !== requestId));
+        }
       }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
-      setResult({ ok: false, dryRun: opts.dry_run, error: message });
-      if (opts.dry_run) setPreviewKey(null);
+      setResult({ ok: false, dryRun: attemptOptions.dry_run, operation: attemptOptions.operation, error: message });
+      if (attemptOptions.dry_run) setPreviewKey(null);
     } finally {
       setSubmitting(false);
     }
@@ -202,20 +293,62 @@ export default function UserDataTransfer() {
   return (
     <>
       <Stack spacing={2}>
+        {pendingReceipts.length > 0 && (
+          <Alert severity="warning" variant="outlined">
+            <Stack spacing={1.5}>
+              <Typography variant="subtitle2">Finish a previous operation</Typography>
+              <Typography variant="body2">These saved attempts may already have transferred the history. Retry the original operation to finish it or retrieve its result, even if the source account is now archived.</Typography>
+              {pendingReceipts.map((receipt) => (
+                <Box key={receipt.requestId} sx={{ borderTop: 1, borderColor: 'divider', pt: 1.5 }}>
+                  <Typography variant="body2" fontWeight={600}>{receipt.source.name || receipt.source.email} → {receipt.dest.name || receipt.dest.email}</Typography>
+                  <Typography variant="body2">{receipt.source.email} → {receipt.dest.email}</Typography>
+                  <Typography variant="caption" component="p" color="text.secondary">
+                    {receipt.options.operation === 'copy' ? 'Copy history' : receipt.options.operation === 'archive' ? 'Archive source' : 'Merge accounts'} · {new Date(receipt.createdAt).toLocaleString()}
+                  </Typography>
+                  <Typography variant="caption" component="p" color="text.secondary">
+                    {receipt.options.operation === 'archive' ? 'Keep the previously transferred history without copying again.' : <>
+                      KPI: {receipt.options.kpi_merge === 'skip' ? 'keep destination values' : 'use source values'} · Smart Docs: {receipt.options.smart_doc_conflict === 'keep_dest' ? 'keep destination' : receipt.options.smart_doc_conflict === 'keep_source' ? 'keep source' : 'latest submitted'} · Authorship: {receipt.options.reassign_authorship ? 'reassign' : 'unchanged'}
+                    </>}
+                  </Typography>
+                  <Button size="small" variant="outlined" disabled={submitting} onClick={() => void handleRun(receipt)} sx={{ mt: 1 }}>Retry this saved operation</Button>
+                </Box>
+              ))}
+            </Stack>
+          </Alert>
+        )}
+        {receiptStorageFailed && pendingReceipts.length > 0 && <Alert severity="warning">This browser could not save the recovery details. Keep this page open until the operation finishes.</Alert>}
         <Typography variant="body2">
-          Copy data from a source user into a destination user. The source user&apos;s data is left
-          intact (except optional authorship reassignment). Start with a dry run to see what would
-          happen.
+          Merge duplicate accounts into one current member profile. The old account becomes a
+          read-only archive, with its previous email and GHL identifiers kept in the merge history.
+          Start with a dry run to review the proposed changes.
         </Typography>
+        <FormControl fullWidth>
+          <InputLabel id="account-operation-label">Account operation</InputLabel>
+          <Select labelId="account-operation-label" label="Account operation" value={opts.operation}
+            disabled={submitting} onChange={(event) => setOpts((previous) => ({
+              ...previous, operation: event.target.value as TransferOptions['operation'], dry_run: true,
+            }))}>
+            <MenuItem value="merge">Merge accounts and archive the source</MenuItem>
+            <MenuItem value="archive">Archive a source whose history was already transferred</MenuItem>
+            <MenuItem value="copy">Copy history and keep both accounts usable</MenuItem>
+          </Select>
+        </FormControl>
+        {opts.operation === 'archive' && <Alert severity="info">
+          Requires a recorded successful transfer between these accounts. This preserves the
+          destination&apos;s existing work, refreshes its GHL contact, and archives the source without copying history again.
+        </Alert>}
+        {opts.operation === 'copy' && <Alert severity="warning">
+          Copy history leaves both accounts usable. Use Merge accounts when one account replaces the other.
+        </Alert>}
         <Typography variant="body2" color="text.secondary">
           Includes Business Reviews, preparation answers, Focus Finder scores, system scorecards,
           priorities, and scorecard history, plus implementation checklists, progress, meeting history,
           and standalone coaching notes, linked to the copied notes and action steps. Scheduled
-          meeting ownership stays with the original review; the copied note keeps its meeting reference.
+          meeting references are preserved in the copied history.
         </Typography>
         <Typography variant="body2" color="text.secondary">
           The destination&apos;s GHL contact is looked up using its account email. A missing or ambiguous
-          contact must be resolved before copying. Complete a dry run with the same settings before a live copy.
+          contact must be resolved before applying changes. Complete a dry run with the same settings first.
         </Typography>
 
         {loadErr && <Alert severity="error">Failed to load users: {loadErr}</Alert>}
@@ -293,11 +426,11 @@ export default function UserDataTransfer() {
           </Grid>
         </Grid>
 
-        <Button variant="outlined" onClick={() => setShowAdvanced((prev) => !prev)}>
+        <Button disabled={opts.operation === 'archive'} variant="outlined" onClick={() => setShowAdvanced((prev) => !prev)}>
           {showAdvanced ? 'Hide advanced options' : 'Advanced options'}
         </Button>
 
-        <Collapse in={showAdvanced}>
+        <Collapse in={showAdvanced && opts.operation !== 'archive'}>
           <Grid container spacing={2}>
             <Grid size={{ xs: 12, md: 4 }}>
               <FormControl fullWidth>
@@ -359,17 +492,17 @@ export default function UserDataTransfer() {
         </Collapse>
 
         {completed && (
-          <Alert severity="success">This transfer has completed. The saved operation will not copy data again.</Alert>
+          <Alert severity="success">This account operation has completed. Retrying will not copy data again.</Alert>
         )}
         {!opts.dry_run && retrySavedAttempt && (
           <Alert severity="info">A previous attempt is saved. Retry it to retrieve its result without copying twice.</Alert>
         )}
         {!opts.dry_run && !completed && !retrySavedAttempt && previewKey !== intentKey && (
-          <Alert severity="info">Run a dry test with these users and settings before starting the live copy.</Alert>
+          <Alert severity="info">Run a dry test with these users and settings before applying changes.</Alert>
         )}
         <Stack direction="row" spacing={2} alignItems="center">
-          <Button variant="contained" disabled={!canSubmit} onClick={handleRun}>
-            {completed ? 'Copy Completed' : opts.dry_run ? 'Run Dry Test' : retrySavedAttempt ? 'Retry Live Copy' : 'Run Live Copy'}
+          <Button variant="contained" disabled={!canSubmit} onClick={() => void handleRun()}>
+            {completed ? 'Completed' : opts.dry_run ? 'Run Dry Test' : retrySavedAttempt ? 'Retry Saved Operation' : opts.operation === 'copy' ? 'Copy History' : opts.operation === 'archive' ? 'Archive Source Account' : 'Merge Accounts'}
           </Button>
           {submitting && <CircularProgress size={20} />}
         </Stack>
@@ -380,7 +513,8 @@ export default function UserDataTransfer() {
               <Alert severity="success" sx={{ mb: 2 }}>
                 {result.dryRun
                   ? 'Dry run completed. Review the counts below.'
-                  : 'Live copy completed. See the audit and details below.'}
+                  : result.operation === 'copy' ? 'History copied. Both accounts remain usable.'
+                    : 'Merge completed. The source is archived and the destination is the current account.'}
               </Alert>
             ) : (
               <Alert severity="error" sx={{ mb: 2 }}>

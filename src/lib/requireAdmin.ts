@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { getAdminClient } from './supabaseAdmin';
+import { ACCOUNT_MERGED_CODE, ACCOUNT_MERGED_MESSAGE, fetchAccountLifecycle, isAccountMerged } from './accountLifecycle';
 
 export async function requireAdmin(request?: NextRequest) {
   try {
@@ -57,6 +58,11 @@ export async function requireAdmin(request?: NextRequest) {
     // Use admin client to check role (bypasses RLS issues)
     console.log('🔧 requireAdmin: Checking admin role with service client');
     const supaAdmin = getAdminClient();
+    if (isAccountMerged(await fetchAccountLifecycle(supaAdmin, user.id))) {
+      return { ok: false as const, res: NextResponse.json(
+        { error: ACCOUNT_MERGED_MESSAGE, code: ACCOUNT_MERGED_CODE }, { status: 403 },
+      ) };
+    }
     const { data: row, error } = await supaAdmin
       .from('user_roles')
       .select('user_id, roles!inner(code)')

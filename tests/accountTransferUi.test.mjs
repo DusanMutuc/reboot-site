@@ -18,6 +18,7 @@ function environment({ transfer, storageFails = false, confirm = true } = {}) {
   const storage = new Map();
   const confirmations = [];
   const instances = [];
+  let availableUsers = [source, dest, anotherDest];
   let nextId = 1;
   const globals = {
     crypto: { randomUUID: () => `44444444-4444-4444-8444-${String(nextId++).padStart(12, '0')}` },
@@ -29,24 +30,26 @@ function environment({ transfer, storageFails = false, confirm = true } = {}) {
       },
     },
     fetch: async (url, options) => {
-      if (url === '/api/admin/list-users?membership=all') return success({ items: [source, dest, anotherDest] });
+      if (url === '/api/admin/list-users?membership=all') return success({ items: availableUsers });
       assert.equal(url, '/api/admin/transfer-user-data');
       const body = JSON.parse(options.body);
       calls.push(body);
       return transfer ? transfer(body, calls.length) : success();
     },
   };
-  async function mount() {
+  async function mount({ selectUsers = true } = {}) {
     const ui = renderComponent('src/components/admin/UserDataTransfer.tsx', {}, {
       '@mui/material/Autocomplete': { __esModule: true, default: 'Autocomplete' },
     }, globals);
     instances.push(ui);
     await ui.flush();
-    await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[0].props.onChange(null, source));
-    await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[1].props.onChange(null, dest));
+    if (selectUsers) {
+      await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[0].props.onChange(null, source));
+      await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[1].props.onChange(null, dest));
+    }
     return ui;
   }
-  return { mount, calls, storage, confirmations, unmountAll: () => instances.forEach((ui) => ui.unmount()) };
+  return { mount, calls, storage, confirmations, setUsers: (users) => { availableUsers = users; }, unmountAll: () => instances.forEach((ui) => ui.unmount()) };
 }
 
 const runButton = (ui) => ui.all((node) => node.type === 'Button' && node.props.variant === 'contained')[0];
@@ -139,12 +142,12 @@ test('lost live responses reuse the operation ID on retry and after remount', as
   ui = await env.mount();
   await setDryRun(ui, false);
   assert.equal(runButton(ui).props.disabled, false, 'A saved attempt can be retried without another preview');
-  assert.equal(runButton(ui).props.children, 'Retry Live Copy');
+  assert.equal(runButton(ui).props.children, 'Retry Saved Operation');
   assert.match(ui.text(), /A previous attempt is saved/);
   await run(ui);
   assert.equal(env.calls.at(-1).options.request_id, operationId);
   assert.equal(liveRequests, 3);
-  assert.match(ui.text(), /Live copy completed/);
+  assert.match(ui.text(), /Merge completed/);
 });
 
 test('a failed preview after reload does not block retrieving a completed transfer with its original operation ID', async (t) => {
@@ -173,7 +176,7 @@ test('a failed preview after reload does not block retrieving a completed transf
   assert.equal(runButton(ui).props.disabled, false);
   await run(ui);
   assert.equal(env.calls.at(-1).options.request_id, originalId);
-  assert.match(ui.text(), /Live copy completed/);
+  assert.match(ui.text(), /Merge completed/);
   assert.equal(runButton(ui).props.disabled, true);
   const callsAfterCompletion = env.calls.length;
   await run(ui);
@@ -182,7 +185,7 @@ test('a failed preview after reload does not block retrieving a completed transf
 
 test('malformed saved operation IDs do not bypass the preview prerequisite', async (t) => {
   const env = environment(); t.after(env.unmountAll);
-  const intentKey = JSON.stringify([source.id, dest.id, 'prefer_source', 'keep_latest_submitted', false]);
+  const intentKey = JSON.stringify(['merge', source.id, dest.id, 'prefer_source', 'keep_latest_submitted', false]);
   env.storage.set(`reboot:account-transfer:${intentKey}`, 'corrupted-storage-value');
   const ui = await env.mount();
   await setDryRun(ui, false);
@@ -199,11 +202,11 @@ test('a completed operation stays disabled after switching settings away and bac
   await previewThenLive(ui);
   await run(ui);
   assert.equal(runButton(ui).props.disabled, true);
-  assert.equal(runButton(ui).props.children, 'Copy Completed');
+  assert.equal(runButton(ui).props.children, 'Completed');
   await selectOption(ui, 'KPI handling', 'skip');
   await selectOption(ui, 'KPI handling', 'prefer_source');
   assert.equal(runButton(ui).props.disabled, true);
-  assert.equal(runButton(ui).props.children, 'Copy Completed');
+  assert.equal(runButton(ui).props.children, 'Completed');
 });
 
 test('an unavailable session store still preserves the retry ID for this mounted page', async (t) => {
@@ -241,10 +244,10 @@ test('result labels describe the completed operation even after toggling the dry
   const ui = await env.mount();
   await previewThenLive(ui);
   assert.match(ui.text(), /Dry run completed/);
-  assert.doesNotMatch(ui.text(), /Live copy completed/);
+  assert.doesNotMatch(ui.text(), /Merge completed/);
   await run(ui);
   await setDryRun(ui, true);
-  assert.match(ui.text(), /Live copy completed/);
+  assert.match(ui.text(), /Merge completed/);
   assert.doesNotMatch(ui.text(), /Dry run completed/);
 });
 
@@ -257,4 +260,175 @@ test('cancelling confirmation performs no live request', async (t) => {
   assert.equal(env.confirmations.length, 1);
   assert.match(env.confirmations[0], /destination@example.invalid/);
   assert.equal(env.storage.size, 0);
+});
+
+test('merge is the default and switching operation requires a fresh preview and retry ID', async (t) => {
+  const env = environment(); t.after(env.unmountAll);
+  const ui = await env.mount();
+  await previewThenLive(ui);
+  assert.equal(env.calls[0].options.operation, 'merge');
+  await run(ui);
+  assert.match(env.confirmations.at(-1), /source account will be archived/);
+  const mergeId = env.calls.at(-1).options.request_id;
+  await selectOption(ui, 'Account operation', 'copy');
+  await setDryRun(ui, false);
+  assert.equal(runButton(ui).props.disabled, true);
+  await setDryRun(ui, true);
+  await previewThenLive(ui);
+  await run(ui);
+  assert.equal(env.calls.at(-1).options.operation, 'copy');
+  assert.notEqual(env.calls.at(-1).options.request_id, mergeId);
+  assert.match(env.confirmations.at(-1), /Both accounts will remain usable/);
+});
+test('archive mode sends archive intent and explains that history is not copied again', async (t) => {
+  const env = environment(); t.after(env.unmountAll);
+  const ui = await env.mount();
+  await selectOption(ui, 'Account operation', 'archive');
+  await previewThenLive(ui);
+  await run(ui);
+  assert.equal(env.calls.at(-1).options.operation, 'archive');
+  assert.match(env.confirmations.at(-1), /without copying again/);
+});
+
+const receiptKey = 'reboot:account-transfer:pending-receipts';
+const recoveryButtons = (ui) => ui.all((node) => node.type === 'Button' && node.props.children === 'Retry this saved operation');
+
+test('an Auth-pending merge can recover after reload when the archived source is absent from all selectors', async (t) => {
+  let archived = false;
+  const env = environment({ transfer: (body) => {
+    if (body.options.dry_run) {
+      assert.equal(archived, false, 'recovering an archived source must not require a new preview');
+      return success();
+    }
+    if (!archived) {
+      archived = true;
+      return { ok: false, json: async () => ({ code: 'MERGE_AUTH_PENDING', error: 'The merge is recorded, but disabling the old sign-in is still pending.' }) };
+    }
+    return success({ operation: 'merge', archived: true, replayed: true });
+  } });
+  t.after(env.unmountAll);
+  let ui = await env.mount();
+  await previewThenLive(ui);
+  await run(ui);
+  const originalRequest = env.calls.at(-1);
+  assert.equal(JSON.parse(env.storage.get(receiptKey)).length, 1);
+  ui.unmount();
+  env.setUsers([dest, anotherDest]);
+  ui = await env.mount({ selectUsers: false });
+  for (const select of ui.all((node) => node.type === 'Autocomplete')) {
+    assert.equal(select.props.options.some((user) => user.id === source.id), false);
+    assert.equal(select.props.value, null);
+  }
+  assert.equal(runButton(ui).props.disabled, true);
+  assert.equal(recoveryButtons(ui).length, 1);
+  assert.match(ui.text(), /source@example.invalid/);
+  await ui.act(() => recoveryButtons(ui)[0].props.onClick());
+  assert.deepEqual(env.calls.at(-1), originalRequest, 'recovery must preserve the exact operation, accounts, options and ID');
+  assert.equal(env.calls.length, 3);
+  assert.match(ui.text(), /Merge completed/);
+  assert.equal(recoveryButtons(ui).length, 0);
+  assert.deepEqual(JSON.parse(env.storage.get(receiptKey)), []);
+  ui.unmount();
+  ui = await env.mount({ selectUsers: false });
+  assert.equal(recoveryButtons(ui).length, 0, 'completed recovery should not remain an unfinished receipt');
+});
+
+test('recovery ignores changed form selections and does not authorize a different unpreviewed operation', async (t) => {
+  let pending = true;
+  const env = environment({ transfer: (body) => {
+    if (!body.options.dry_run && pending) { pending = false; throw new Error('Lost reply'); }
+    return success();
+  } });
+  t.after(env.unmountAll);
+  let ui = await env.mount();
+  await previewThenLive(ui);
+  await run(ui);
+  const original = env.calls.at(-1);
+  ui.unmount();
+  env.setUsers([dest, anotherDest]);
+  ui = await env.mount({ selectUsers: false });
+  await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[0].props.onChange(null, dest));
+  await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[1].props.onChange(null, anotherDest));
+  await selectOption(ui, 'Account operation', 'copy');
+  await selectOption(ui, 'KPI handling', 'skip');
+  await selectOption(ui, 'Smart Doc conflicts', 'keep_dest');
+  await setDryRun(ui, false);
+  assert.equal(runButton(ui).props.disabled, true);
+  await run(ui);
+  assert.equal(env.calls.length, 2);
+  await ui.act(() => recoveryButtons(ui)[0].props.onClick());
+  assert.deepEqual(env.calls.at(-1), original);
+  assert.equal(runButton(ui).props.disabled, true, 'recovery is not a preview for the visible new operation');
+  assert.match(ui.text(), /Merge completed/);
+  assert.doesNotMatch(ui.text(), /History copied\. Both accounts remain usable/);
+});
+
+test('malformed receipts cannot appear as recoverable live operations', async (t) => {
+  const env = environment(); t.after(env.unmountAll);
+  const base = { requestId: '44444444-4444-4444-8444-000000000001', source, dest,
+    options: { operation: 'merge', dry_run: false, kpi_merge: 'prefer_source', smart_doc_conflict: 'keep_dest', reassign_authorship: false },
+    createdAt: '2026-10-10T10:00:00Z' };
+  for (const bad of [null, {}, { ...base, requestId: 'invalid' }, { ...base, dest: source },
+    { ...base, options: { ...base.options, dry_run: true } }, { ...base, options: { ...base.options, operation: 'delete' } },
+    { ...base, options: { ...base.options, reassign_authorship: 'false' } }]) {
+    env.storage.set(receiptKey, JSON.stringify([bad]));
+    const ui = await env.mount();
+    assert.equal(recoveryButtons(ui).length, 0);
+    await setDryRun(ui, false);
+    assert.equal(runButton(ui).props.disabled, true);
+    ui.unmount();
+  }
+  assert.equal(env.calls.length, 0);
+});
+
+test('saved receipt replay strips unexpected option metadata and preserves the original operation', async (t) => {
+  const env = environment(); t.after(env.unmountAll);
+  const receipt = { requestId: '44444444-4444-4444-8444-000000000001', source, dest,
+    options: { operation: 'archive', dry_run: false, kpi_merge: 'skip', smart_doc_conflict: 'keep_dest', reassign_authorship: false, destination_email: 'forged@example.invalid' },
+    createdAt: '2026-10-10T10:00:00Z' };
+  env.storage.set(receiptKey, JSON.stringify([receipt]));
+  env.setUsers([]);
+  const ui = await env.mount({ selectUsers: false });
+  await ui.act(() => recoveryButtons(ui)[0].props.onClick());
+  assert.equal(env.calls[0].options.operation, 'archive');
+  assert.equal(env.calls[0].options.request_id, receipt.requestId);
+  assert.equal('destination_email' in env.calls[0].options, false);
+});
+
+test('cancelling a saved-operation retry leaves its recovery receipt and sends no request', async (t) => {
+  const env = environment({ confirm: false }); t.after(env.unmountAll);
+  env.storage.set(receiptKey, JSON.stringify([{ requestId: '44444444-4444-4444-8444-000000000001', source, dest,
+    options: { operation: 'merge', dry_run: false, kpi_merge: 'skip', smart_doc_conflict: 'keep_dest', reassign_authorship: false },
+    createdAt: '2026-10-10T10:00:00Z' }]));
+  const ui = await env.mount({ selectUsers: false });
+  await ui.act(() => recoveryButtons(ui)[0].props.onClick());
+  assert.equal(env.calls.length, 0);
+  assert.equal(recoveryButtons(ui).length, 1);
+  assert.equal(JSON.parse(env.storage.get(receiptKey)).length, 1);
+});
+
+test('finishing one saved operation preserves unrelated unfinished receipts', async (t) => {
+  let failWrites = true;
+  const env = environment({ transfer: (body) => {
+    if (!body.options.dry_run && failWrites) throw new Error('Uncertain response');
+    return success();
+  } });
+  t.after(env.unmountAll);
+  let ui = await env.mount();
+  await previewThenLive(ui); await run(ui);
+  const first = env.calls.at(-1);
+  await ui.act(() => ui.all((node) => node.type === 'Autocomplete')[1].props.onChange(null, anotherDest));
+  await setDryRun(ui, true); await previewThenLive(ui); await run(ui);
+  const second = env.calls.at(-1);
+  assert.equal(recoveryButtons(ui).length, 2);
+  failWrites = false;
+  ui.unmount(); env.setUsers([]);
+  ui = await env.mount({ selectUsers: false });
+  await ui.act(() => recoveryButtons(ui)[0].props.onClick());
+  assert.deepEqual(env.calls.at(-1), first);
+  assert.equal(recoveryButtons(ui).length, 1);
+  assert.equal(JSON.parse(env.storage.get(receiptKey))[0].requestId, second.options.request_id);
+  await ui.act(() => recoveryButtons(ui)[0].props.onClick());
+  assert.deepEqual(env.calls.at(-1), second);
+  assert.equal(recoveryButtons(ui).length, 0);
 });

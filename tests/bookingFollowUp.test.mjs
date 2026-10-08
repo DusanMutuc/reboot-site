@@ -19,7 +19,7 @@ const enrollment = (user_id, status = 'active', ended_at = null) => ({
 function fixture({
   current = ['member'], past = ['past'],
   assignments = [assignment('member'), assignment('past')],
-  partnerships = [], enrollments = [], pauses = [], failTable, membershipError,
+  partnerships = [], enrollments = [], pauses = [], archived = [], events = [], failTable, membershipError,
 } = {}) {
   const calls = [];
   const scans = [];
@@ -34,7 +34,8 @@ function fixture({
     ninety_day_cycle_users: enrollments,
     user_roles: past.map((user_id) => ({ user_id, roles: { code: 'past_member' } })),
     member_pauses: pauses,
-    profiles: allIds.map((id) => ({ id, first_name: id, last_name: 'Person', ghl_user_id: id })),
+    profiles: allIds.map((id) => ({ id, first_name: id, last_name: 'Person', ghl_user_id: id,
+      merged_into_user_id: archived.includes(id) ? 'current-account' : null })),
   };
   const valueAt = (row, key) => key.split('.').reduce((value, part) => value?.[part], row);
   const client = {
@@ -76,10 +77,11 @@ function fixture({
     require: (name) => imports[name] ?? require(name),
     fetch: async (url) => {
       scans.push(new URL(url).searchParams.get('userId'));
-      return { ok: true, json: async () => ({ events: [] }) };
+      return { ok: true, json: async () => ({ events }) };
     },
   });
-  return { build: exports.buildBookingFollowUp, client, calls, scans };
+  return { build: exports.buildBookingFollowUp, syncAudit: exports.findBusinessAuditAppointmentsForSync,
+    syncImplementation: exports.findImplementationAppointmentsForSync, client, calls, scans };
 }
 
 const memberIds = (report) => [...new Set(report.groups.flatMap((group) => group.members.flatMap((member) => member.memberIds)))].sort();
@@ -101,7 +103,7 @@ test('an active partnership cannot reintroduce a past member or their coach', as
   const { build, scans, calls } = fixture({ assignments: [assignment('member'), assignment('past', 'past-coach')], partnerships: [partner('member'), partner('past')] });
   assert.deepEqual(memberIds(await build({ coachId: 'coach' })), ['member']);
   assert.equal(scans.includes('past-coach'), false);
-  const profileIds = calls.find((call) => call.table === 'profiles').filters.find(([key]) => key === 'id')[1];
+  const profileIds = calls.filter((call) => call.table === 'profiles').at(-1).filters.find(([key]) => key === 'id')[1];
   assert.equal(profileIds.includes('past'), false);
 });
 
@@ -152,4 +154,35 @@ test('programme eligibility checks every batch of revoked memberships', async ()
   const actual = await currentMembers.fetchCoachingWorkspaceUserIds(client);
   assert.equal(actual.length, 204);
   assert.equal(actual.includes(ids[204]), false);
+});
+
+test('merged identities cannot reenter coaching follow-up through stale membership, enrollment or partnership data', async () => {
+  const { build, client } = fixture({ current: ['member', 'archived'], past: [], archived: ['archived'],
+    assignments: [assignment('member'), assignment('archived', 'old-coach')],
+    enrollments: [enrollment('archived')], partnerships: [partner('member'), partner('archived')] });
+  assert.deepEqual(await currentMembers.fetchCoachingWorkspaceUserIds(client), ['member']);
+  assert.deepEqual(memberIds(await build()), ['member']);
+});
+
+for (const kind of ['Audit', 'Implementation']) {
+  test(`${kind} sync excludes archived assignments and matching calendar events without losing the active member`, async () => {
+    const relationship_type = kind === 'Audit' ? 'primary' : 'implementation';
+    const rows = [assignment('member'), assignment('archived'), assignment('archived-only', 'old-coach')]
+      .map((row) => ({ ...row, relationship_type }));
+    const events = ['member', 'archived', 'archived-only'].map((id) => ({ id: `event-${id}`, contactId: id,
+      title: `${id} Person ${kind === 'Audit' ? 'Business Audit' : 'Implementation Meeting'} with coach Person`,
+      startTime: '2026-10-08T12:00:00Z' }));
+    const env = fixture({ current: ['member', 'archived'], past: [], assignments: rows,
+      archived: ['archived', 'archived-only'], enrollments: [enrollment('archived')], events });
+    const result = await env[`sync${kind}`]({ startMs: Date.parse('2026-10-08'), endMs: Date.parse('2026-10-09') });
+    assert.deepEqual(Array.from(result.appointments, (row) => row.studentId), ['member']);
+    assert.deepEqual(env.scans, ['coach'], 'archived-only coach roster must not trigger a calendar scan');
+    assert.equal(result.unmatchedAppointmentIds.includes('event-archived'), true);
+  });
+}
+
+test('archive lookup failures stop appointment sync before calendars are scanned', async () => {
+  const { syncAudit, scans } = fixture({ failTable: 'profiles' });
+  await assert.rejects(() => syncAudit({ startMs: 0, endMs: 1 }), /Cannot read profiles/);
+  assert.equal(scans.length, 0);
 });

@@ -10,6 +10,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
+import { assertAccountSessionAllowed } from '@/lib/accountLifecycleClient';
 
 // rewrite hash → query on the client (safe-guarded)
 if (typeof window !== 'undefined' && window.location.hash.startsWith('#access_token=')) {
@@ -62,6 +63,7 @@ export default function ResetPasswordClient() {
           const { error } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
           if (error) throw new Error('Auth failed: ' + error.message);
         }
+        await assertAccountSessionAllowed(supabase);
         if (!cancelled) setAuthenticating(false);
       } catch (e: unknown) {
         if (!cancelled) {
@@ -83,6 +85,14 @@ export default function ResetPasswordClient() {
     if (pw1 !== pw2)   return setErr('Passwords do not match.');
 
     setLoading(true);
+
+    try {
+      await assertAccountSessionAllowed(supabase);
+    } catch (error) {
+      setLoading(false);
+      setErr(error instanceof Error ? error.message : 'Account access could not be verified.');
+      return;
+    }
 
     const { error: updateErr } = await supabase.auth.updateUser({ password: pw1 });
     if (updateErr) {

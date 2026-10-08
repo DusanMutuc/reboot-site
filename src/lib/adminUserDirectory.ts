@@ -1,6 +1,7 @@
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { fetchCurrentMemberUserIdSet } from '@/lib/currentMembers';
 import { activePause, loadMemberPauses } from '@/lib/memberPauses';
+import { currentAccountId, fetchAdminAccountMerges } from '@/lib/adminAccountMerges';
 
 export type AdminDirectoryPerson = {
   id: string;
@@ -27,6 +28,8 @@ export type AdminUserDirectoryRow = {
   is_ninety_day_user: boolean;
   is_legend: boolean;
   is_past_member: boolean;
+  merged_into_user_id: string | null;
+  merged_at: string | null;
   pause_started_at: string | null;
   pause_reason: string | null;
   primary_coaches: AdminDirectoryPerson[];
@@ -36,7 +39,7 @@ export type AdminUserDirectoryRow = {
 };
 
 export type AdminUserDirectoryFilters = {
-  membership?: 'all' | 'current' | 'ninety-day' | 'past';
+  membership?: 'all' | 'unmerged' | 'current' | 'ninety-day' | 'past' | 'merged';
   legendOnly?: boolean;
   setup?: 'all' | 'missing-phone' | 'missing-primary-coach' | 'missing-ghl';
   sort?: 'name' | 'introduced-desc' | 'last-sign-in-desc';
@@ -65,6 +68,8 @@ type ProfileDirectoryRow = {
   ghl_user_id: string | null;
   introduced_at: string | null;
   created_at: string | null;
+  merged_into_user_id: string | null;
+  merged_at: string | null;
 };
 
 const DIRECTORY_TTL_MS = 2 * 60 * 1000;
@@ -86,6 +91,7 @@ function buildSearchText(row: AdminUserDirectoryRow) {
     row.is_current_member ? 'current member' : 'inactive member',
     row.is_ninety_day_user ? '90 day ninety day programme member' : '',
     row.is_past_member ? 'past member' : '',
+    row.merged_at ? 'merged archived account' : '',
     row.pause_started_at ? 'paused member' : '',
     row.is_legend ? 'legend' : '',
     row.phone ? '' : 'missing phone',
@@ -150,6 +156,8 @@ function toPublicDirectoryRow(row: AdminUserDirectoryEntry): AdminUserDirectoryR
     is_ninety_day_user: row.is_ninety_day_user,
     is_legend: row.is_legend,
     is_past_member: row.is_past_member,
+    merged_into_user_id: row.merged_into_user_id,
+    merged_at: row.merged_at,
     pause_started_at: row.pause_started_at,
     pause_reason: row.pause_reason,
     primary_coaches: row.primary_coaches,
@@ -217,7 +225,7 @@ async function fetchProfilesByIds(ids: string[]): Promise<ProfileDirectoryRow[]>
     chunks.map((chunk) =>
       supa
         .from('profiles')
-        .select('id, first_name, last_name, ghl_user_id, introduced_at, created_at')
+        .select('id, first_name, last_name, ghl_user_id, introduced_at, created_at, merged_into_user_id, merged_at')
         .in('id', chunk),
     ),
   );
@@ -346,7 +354,7 @@ async function buildAdminUserDirectory() {
     fetchRoleIdByCode('past_member'),
   ]);
 
-  const [userIds, ninetyDayUserIds, legendUserIds, pastMemberUserIds, currentMemberUserIdSet, authUsersMap] =
+  const [userIds, ninetyDayUserIds, legendUserIds, pastMemberUserIds, currentMemberUserIdSet, authUsersMap, merges] =
     await Promise.all([
       fetchUserIdsByRoleId(userRoleId),
       fetchUserIdsByRoleId(ninetyDayRoleId),
@@ -354,8 +362,11 @@ async function buildAdminUserDirectory() {
       fetchUserIdsByRoleId(pastMemberRoleId),
       fetchCurrentMemberUserIdSet(supa),
       fetchAuthUsersMap(),
+      fetchAdminAccountMerges(supa),
     ]);
-  const directoryUserIds = Array.from(new Set([...userIds, ...ninetyDayUserIds]));
+  const directoryUserIds = Array.from(new Set([
+    ...userIds, ...ninetyDayUserIds, ...merges.flatMap((merge) => [merge.source_user_id, merge.dest_user_id]),
+  ]));
   if (directoryUserIds.length === 0) return [];
 
   const [profiles, support, pauseMap] = await Promise.all([
@@ -366,26 +377,38 @@ async function buildAdminUserDirectory() {
   const ninetyDayUserIdSet = new Set(ninetyDayUserIds);
   const legendUserIdSet = new Set(legendUserIds);
   const pastMemberUserIdSet = new Set(pastMemberUserIds);
+  const mergeBySource = new Map(merges.map((merge) => [merge.source_user_id, merge]));
+  const aliases = new Map<string, string[]>();
+  for (const merge of merges) {
+    const target = currentAccountId(merge.dest_user_id, merges);
+    const existing = aliases.get(target) ?? [];
+    existing.push(merge.source_email ?? '', merge.source_snapshot?.profile?.ghl_user_id ?? '', merge.source_snapshot?.profile?.ghl_contact_id ?? '');
+    aliases.set(target, existing);
+  }
 
   return profiles
     .map((profile) => {
       const auth = authUsersMap.get(profile.id);
       const pause = activePause(pauseMap.get(profile.id));
-      return toDirectoryEntry({
+      const merge = mergeBySource.get(profile.id);
+      const mergedAt = profile.merged_at ?? merge?.merged_at ?? null;
+      const entry = toDirectoryEntry({
         id: profile.id,
-        email: auth?.email ?? '',
-        phone: auth?.phone ?? null,
+        email: mergedAt ? merge?.source_email ?? auth?.email ?? '' : auth?.email ?? '',
+        phone: auth?.phone ?? (mergedAt ? merge?.source_snapshot?.auth?.phone : null) ?? null,
         first_name: profile.first_name ?? '',
         last_name: profile.last_name ?? '',
-        ghl_user_id: profile.ghl_user_id?.trim() ?? null,
+        ghl_user_id: profile.ghl_user_id?.trim() || (mergedAt ? merge?.source_snapshot?.profile?.ghl_user_id : null) || null,
         introduced_at: profile.introduced_at ?? null,
         created_at: auth?.created_at ?? profile.created_at ?? null,
         last_sign_in_at: auth?.last_sign_in_at ?? null,
-        is_current_member: currentMemberUserIdSet.has(profile.id),
+        is_current_member: !mergedAt && currentMemberUserIdSet.has(profile.id),
         is_ninety_day_user:
-          ninetyDayUserIdSet.has(profile.id),
-        is_legend: legendUserIdSet.has(profile.id),
-        is_past_member: pastMemberUserIdSet.has(profile.id),
+          !mergedAt && ninetyDayUserIdSet.has(profile.id),
+        is_legend: !mergedAt && legendUserIdSet.has(profile.id),
+        is_past_member: !mergedAt && pastMemberUserIdSet.has(profile.id),
+        merged_into_user_id: profile.merged_into_user_id ?? merge?.dest_user_id ?? null,
+        merged_at: mergedAt,
         pause_started_at: pause?.started_at ?? null,
         pause_reason: pause?.reason ?? null,
         primary_coaches: support.primaryCoaches.get(profile.id) || [],
@@ -393,6 +416,8 @@ async function buildAdminUserDirectory() {
         assistants: support.assistants.get(profile.id) || [],
         partnerships: support.partnerships.get(profile.id) || [],
       });
+      entry.searchText += ` ${(aliases.get(profile.id) ?? []).join(' ').toLowerCase()}`;
+      return entry;
     })
     .sort(compareDirectoryRows);
 }
@@ -423,10 +448,12 @@ export async function getAdminUserDirectoryPage(
 ): Promise<AdminUserDirectoryPage> {
   const normalizedQuery = query.trim().toLowerCase();
   const directory = await getCachedDirectory();
-  const membership = filters.membership ?? 'all';
+  const membership = filters.membership ?? 'unmerged';
   const setup = filters.setup ?? 'all';
 
   const filtered = directory.filter((row) => {
+    if (membership === 'merged' && !row.merged_at) return false;
+    if (membership !== 'all' && membership !== 'merged' && row.merged_at) return false;
     if (membership === 'current' && !row.is_current_member) return false;
     if (membership === 'ninety-day' && !row.is_ninety_day_user) return false;
     if (membership === 'past' && !row.is_past_member) return false;
@@ -452,6 +479,14 @@ export async function getAdminUserDirectoryPage(
     items: sorted.slice(from, from + limit).map(toPublicDirectoryRow),
     total: sorted.length,
   };
+}
+
+export async function getAdminUserDirectoryUser(userId: string): Promise<AdminUserDirectoryRow | null> {
+  let row = (await getCachedDirectory()).find((entry) => entry.id === userId);
+  // A recently archived source may have lost its member role before this
+  // instance's directory cache was invalidated.
+  if (!row) row = (await buildAdminUserDirectory()).find((entry) => entry.id === userId);
+  return row ? toPublicDirectoryRow(row) : null;
 }
 
 export function invalidateAdminUserDirectory() {

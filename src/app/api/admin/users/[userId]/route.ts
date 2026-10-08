@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { invalidateAdminUserDirectory } from '@/lib/adminUserDirectory';
+import { archivedAccountWriteResponse } from '@/lib/adminAccountGuard';
 import { requireAdmin } from '@/lib/requireAdmin';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { fetchUserRoleCodes, hasRoleCode } from '@/lib/userRoles';
@@ -148,6 +149,9 @@ export async function PATCH(request: NextRequest, context: Params) {
     return NextResponse.json({ error: 'Invalid user id' }, { status: 400 });
   }
 
+  const archivedResponse = await archivedAccountWriteResponse(getAdminClient(), userId);
+  if (archivedResponse) return archivedResponse;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -274,6 +278,12 @@ export async function DELETE(request: NextRequest, context: Params) {
   }
 
   const supa = getAdminClient();
+  const archivedResponse = await archivedAccountWriteResponse(supa, userId);
+  if (archivedResponse) return archivedResponse;
+  const { count, error: mergeError } = await supa.from('account_merges')
+    .select('source_user_id', { count: 'exact', head: true }).eq('dest_user_id', userId);
+  if (mergeError) return NextResponse.json({ error: 'Could not verify merge history.' }, { status: 503 });
+  if (count) return NextResponse.json({ error: 'This account is linked to archived merge history and cannot be deleted.' }, { status: 409 });
   const res = await supa.auth.admin.deleteUser(userId);
 
   if (res.error) {
