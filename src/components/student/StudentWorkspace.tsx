@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
   Chip,
@@ -15,7 +14,6 @@ import {
   Stack,
   Tab,
   Tabs,
-  TextField,
   Typography,
 } from '@mui/material';
 import ArrowBackIosNewIcon from '@mui/icons-material/ArrowBackIosNew';
@@ -29,6 +27,8 @@ import ImplementationTab from '@/components/student/workspace/ImplementationTab'
 import KpiTab from '@/components/student/workspace/KpiTab';
 import OverviewTab from '@/components/student/workspace/OverviewTab';
 import ProgressTab from '@/components/student/workspace/ProgressTab';
+import WorkspaceMemberSelector from '@/components/student/workspace/WorkspaceMemberSelector';
+import { parsePositiveInteger } from '@/lib/businessReviews';
 import type {
   StudentWorkspaceMode,
   StudentWorkspaceTab,
@@ -77,6 +77,8 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
   const workspaceRootRef = useRef<HTMLDivElement | null>(null);
   const workspaceNavigationGuard = useRef<((run: () => void) => void) | null>(null);
   const registerWorkspaceNavigationGuard = useCallback((guard: ((run: () => void) => void) | null) => {
@@ -88,14 +90,17 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
   const selectedStudentId = searchParams.get('userId');
   const courseIdFromQuery = searchParams.get('courseId');
   const selectedCourseId = courseIdFromQuery ? Number(courseIdFromQuery) : null;
+  const requestedNoteId = parsePositiveInteger(searchParams.get('noteId') ?? '');
+  const requestedMeetingId = parsePositiveInteger(searchParams.get('meetingId') ?? '');
+  const requestedReviewId = parsePositiveInteger(searchParams.get('reviewId') ?? '');
 
   const [privateNotesOpen, setPrivateNotesOpen] = useState(false);
   const [privateNotesOffset, setPrivateNotesOffset] = useState(0);
   const [kpiRefreshSignal, setKpiRefreshSignal] = useState(0);
 
   const setQuery = useCallback(
-    (patch: WorkspaceQueryPatch) => {
-      const params = new URLSearchParams(searchParams.toString());
+    (patch: WorkspaceQueryPatch, applied?: () => void) => {
+      const params = new URLSearchParams(searchParamsRef.current.toString());
 
       Object.entries(patch).forEach(([key, value]) => {
         if (value == null || value === '') {
@@ -107,11 +112,14 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
       });
 
       const next = params.toString();
-      const navigate = () => router.replace(next ? `${pathname}?${next}` : pathname);
+      const navigate = () => {
+        applied?.();
+        router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+      };
       if (workspaceNavigationGuard.current) workspaceNavigationGuard.current(navigate);
       else navigate();
     },
-    [pathname, router, searchParams],
+    [pathname, router],
   );
 
   const {
@@ -252,6 +260,8 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
             selectedStudentId={activeStudentId}
             studentName={selectedStudent.full_name}
             studentEmail={selectedStudent.email}
+            requestedNoteId={requestedNoteId}
+            requestedMeetingId={requestedMeetingId}
             onNavigationGuardChange={registerWorkspaceNavigationGuard}
           />
         );
@@ -267,8 +277,10 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
       case 'audit':
         return (
           <BusinessAuditTab
+            key={activeStudentId}
             selectedStudentId={activeStudentId}
             studentName={selectedStudent.full_name}
+            requestedReviewId={requestedReviewId}
           />
         );
       case 'progress':
@@ -384,54 +396,13 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
                 alignItems={{ xs: 'stretch', md: 'center' }}
               >
                 <Box sx={{ minWidth: 300, flex: 1 }}>
-                  <Autocomplete
-                    options={students}
+                  <WorkspaceMemberSelector
+                    students={students}
+                    selectedStudent={selectedStudent}
                     loading={studentsLoading}
-                    value={selectedStudent}
-                    onChange={(_event, nextValue) => {
-                      setQuery({ userId: nextValue?.id ?? null });
-                    }}
-                    getOptionLabel={(option) => option.full_name}
-                    isOptionEqualToValue={(option, value) => option.id === value.id}
-                    renderOption={(props, option) => {
-                      const { key, ...optionProps } = props;
-
-                      return (
-                      <Box
-                        component="li"
-                        key={key}
-                        {...optionProps}
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          minWidth: 0,
-                        }}
-                      >
-                        <Box sx={{ minWidth: 0, flex: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {option.full_name}
-                          </Typography>
-                          {option.email ? (
-                            <Typography variant="caption" color="text.secondary">
-                              {option.email}
-                            </Typography>
-                          ) : null}
-                        </Box>
-                        {option.is_legend ? <LegendMemberIcon /> : null}
-                        {option.pause_started_at ? <Chip label="Paused" size="small" color="info" /> : null}
-                      </Box>
-                      );
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Student"
-                        placeholder="Search for a student"
-                        error={Boolean(studentsError)}
-                        helperText={studentsError ?? scopeCopy}
-                      />
-                    )}
+                    error={studentsError}
+                    scopeCopy={scopeCopy}
+                    onSelect={(member, applied) => setQuery({ userId: member.id, noteId: null, meetingId: null, reviewId: null }, applied)}
                   />
                 </Box>
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   Accordion,
   AccordionDetails,
@@ -277,7 +278,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
             </Stack>
           ) : (
             visibleGroups.map((group) => (
-              <CoachGroupContent key={group.coachId} group={group} filter={filter} />
+              <CoachGroupContent key={group.coachId} group={group} filter={filter} showCoachingLinks />
             ))
           )}
 
@@ -366,7 +367,7 @@ function AdminCoachGroup({ group, filter }: { group: VisibleBookingFollowUpGroup
   );
 }
 
-function CoachGroupContent({ group, filter }: { group: BookingFollowUpGroup; filter: Filter }) {
+function CoachGroupContent({ group, filter, showCoachingLinks = false }: { group: BookingFollowUpGroup; filter: Filter; showCoachingLinks?: boolean }) {
   return (
     <Box>
       {group.dataWarning && (
@@ -381,13 +382,13 @@ function CoachGroupContent({ group, filter }: { group: BookingFollowUpGroup; fil
             : 'No roster members found.'}
         </Alert>
       ) : (
-        <MemberTable members={group.members} />
+        <MemberTable members={group.members} showCoachingLinks={showCoachingLinks} />
       )}
     </Box>
   );
 }
 
-function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
+function MemberTable({ members, showCoachingLinks }: { members: BookingFollowUpMember[]; showCoachingLinks: boolean }) {
   return (
     <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
       <Table size="small" aria-label="Booking follow-up roster">
@@ -415,6 +416,16 @@ function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
                   {member.people.map((person) => (
                     <Box key={person.userId}>
                       <Typography variant="body2" fontWeight={700}>{person.name}</Typography>
+                      {showCoachingLinks ? (
+                        <Button
+                          component={Link}
+                          href={`/coach/students-overview?userId=${encodeURIComponent(person.userId)}&courseId=2&tab=${member.needsImplementation ? 'notes' : member.needsM2 ? 'audit' : 'overview'}`}
+                          size="small"
+                          sx={{ p: 0, minHeight: 28, minWidth: 0, fontSize: 12, color: '#2f7767', display: 'flex', width: 'fit-content' }}
+                        >
+                          Open space →
+                        </Button>
+                      ) : null}
                       {person.email && (
                         <Typography variant="caption" color="text.secondary">
                           {person.email}
