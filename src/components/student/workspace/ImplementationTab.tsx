@@ -18,6 +18,7 @@ import ImplementationMeetings, { implementationMeetingStatus } from './Implement
 import ImplementationBookingPanel from './ImplementationBookingPanel';
 import { implementationLocalDate } from '@/lib/implementationMeetingSelection';
 import { getImplementationNextMeeting } from '@/lib/implementationNextMeeting';
+import { selectLinkedWorkspaceItem } from '@/lib/workspaceLinkedSelection';
 import { saveImplementationBookingConfirmation, type BookingConfirmationTarget } from '@/lib/implementationBookingConfirmation';
 import type {
   ImplementationAction, ImplementationMeeting, ImplementationOperation, ImplementationWorkspaceResponse,
@@ -28,6 +29,8 @@ type Props = {
   selectedStudentId: string;
   studentName?: string | null;
   studentEmail?: string | null;
+  requestedNoteId?: number | null;
+  requestedMeetingId?: number | null;
   onNavigationGuardChange?: (guard: NavigationGuard | null) => void;
 };
 type NotesDraft = { notes: string; commitments: string };
@@ -68,7 +71,7 @@ function orderedActions(actions: ImplementationAction[]) {
   return [...actions].sort((left, right) => (left.priorityPosition ?? 999) - (right.priorityPosition ?? 999) || left.actionStepId - right.actionStepId);
 }
 
-export default function ImplementationTab({ selectedStudentId, studentName, studentEmail, onNavigationGuardChange }: Props) {
+export default function ImplementationTab({ selectedStudentId, studentName, studentEmail, requestedNoteId, requestedMeetingId, onNavigationGuardChange }: Props) {
   const router = useRouter();
   const [workspace, setWorkspace] = useState<ImplementationWorkspaceResponse | null>(null);
   const [meetingId, setMeetingId] = useState<number | null>(null);
@@ -142,7 +145,7 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
     }
   }, []);
 
-  const load = useCallback(async (noteId?: number | null, chooseSuggested = false, showLoading = false) => {
+  const load = useCallback(async (noteId?: number | null, chooseSuggested = false, showLoading = false, linkedMeetingId?: number | null) => {
     if (busyRef.current) return;
     requestController.current?.abort();
     const controller = new AbortController(); requestController.current = controller;
@@ -156,8 +159,10 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
       const response = await fetch(`/api/implementation-workspace?${query}`, { cache: 'no-store', signal: controller.signal });
       const next = await readResponse(response);
       if (controller.signal.aborted || sequence !== requestSequence.current || userId !== userRef.current) return;
-      const selectedId = chooseSuggested || meetingIdRef.current === null ? next.suggestedMeetingId ?? next.meetings.find((item) => !item.cancelled)?.id ?? null : meetingIdRef.current;
+      const defaultId = chooseSuggested || meetingIdRef.current === null ? next.suggestedMeetingId ?? next.meetings.find((item) => !item.cancelled)?.id ?? null : meetingIdRef.current;
+      const selectedId = selectLinkedWorkspaceItem(next.meetings, linkedMeetingId, defaultId);
       hydrate(next, selectedId, chooseSuggested); setConflict(false);
+      if (linkedMeetingId != null && selectedId === null) setError('The linked meeting is unavailable in this coaching cycle. Choose a meeting below.');
     } catch (caught) {
       if (!controller.signal.aborted && sequence === requestSequence.current) setError(caught instanceof Error ? caught.message : 'Unable to load implementation meetings.');
     } finally { if (sequence === requestSequence.current && !controller.signal.aborted) setLoading(false); }
@@ -169,9 +174,9 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
     setBaseline(EMPTY_NOTES); baselineRef.current = EMPTY_NOTES;
     setMessage(null); setConflict(false); setLatestNotes(null);
     setCreateOpen(false); setCreateError(null); createRequest.current = null;
-    void load(undefined, true, true);
+    void load(requestedNoteId, true, true, requestedMeetingId);
     return () => { requestController.current?.abort(); requestSequence.current += 1; };
-  }, [selectedStudentId, load]);
+  }, [selectedStudentId, requestedNoteId, requestedMeetingId, load]);
 
   const leave = useCallback<NavigationGuard>((run) => {
     if (busyRef.current) { setError('Please wait for the current update to finish.'); return; }
@@ -331,7 +336,7 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
   };
 
   if (loading && !workspace) return <Stack spacing={2} sx={{ maxWidth: 1180, mx: 'auto' }}><Skeleton variant="rounded" height={160} /><Skeleton variant="rounded" height={540} /></Stack>;
-  if (!workspace) return <Alert severity="error" action={<Button color="inherit" onClick={() => void load(undefined, true, true)}>Retry</Button>}>{error ?? 'Unable to load implementation meetings.'}</Alert>;
+  if (!workspace) return <Alert severity="error" action={<Button color="inherit" onClick={() => void load(requestedNoteId, true, true, requestedMeetingId)}>Retry</Button>}>{error ?? 'Unable to load implementation meetings.'}</Alert>;
 
   return (
     <Stack spacing={2.5} sx={{ maxWidth: 1180, mx: 'auto' }}>
@@ -357,7 +362,7 @@ export default function ImplementationTab({ selectedStudentId, studentName, stud
       {message && <Alert severity="success" onClose={() => setMessage(null)}>{message}</Alert>}
       {conflict && <Alert severity="warning" action={<Button color="inherit" onClick={() => void load(workspace.selectedNoteId, false, true)}>Refresh meeting</Button>}>This meeting changed while you were working. Refresh its progress before continuing. Your unsaved notes will be kept.</Alert>}
       {!cycle && <Alert severity="info">{workspace.nextAuditDate ? `The next implementation cycle begins with the Business Review on ${shortDate(workspace.nextAuditDate)}.` : 'No active M2 or Business Review coaching cycle was found.'}</Alert>}
-      {cycle && !meeting && <Alert severity="info" action={workspace.canManageAttendance ? <Button color="inherit" disabled={!!busy || loading || cycle.cancelled} onClick={openCreateMeeting}>Add meeting</Button> : undefined}>No implementation meeting is scheduled in this cycle yet.{workspace.canManageAttendance ? ' Add a meeting if your appointment has not appeared.' : ''}</Alert>}
+      {cycle && !meeting && <Alert severity="info" action={workspace.canManageAttendance ? <Button color="inherit" disabled={!!busy || loading || cycle.cancelled} onClick={openCreateMeeting}>Add meeting</Button> : undefined}>{workspace.meetings.length ? 'Choose an implementation meeting above to open its workspace.' : 'No implementation meeting is scheduled in this cycle yet.'}{workspace.canManageAttendance ? ' Add a meeting if your appointment has not appeared.' : ''}</Alert>}
 
       {cycle && meeting && <>
         {!session ? <Alert severity="info" action={<Button color="inherit" variant="outlined" startIcon={<PlayArrowRounded />} disabled={disabled || meeting.cancelled} onClick={() => { if (!meeting.isToday) setStartOpen(true); else void mutate('start'); }}>Start meeting</Button>}>{meeting.cancelled ? 'This meeting was cancelled. Select another meeting to record implementation work.' : `You are previewing ${meeting.isToday ? "today's meeting" : `the meeting on ${shortDate(meeting.date)}`}. Start it when you are ready to record work and notes.`}</Alert>

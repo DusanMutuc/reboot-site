@@ -5,7 +5,7 @@ import AdminThemeRegistry from '@/components/AdminThemeRegistry';
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isBaseCoachPage = pathname === '/coach' || pathname === '/coach/';
+  const isBaseCoachPage = ['/coach', '/coach/', '/coach/members', '/coach/resources', '/coach/schedule'].includes(pathname);
 
   if (isBaseCoachPage) {
     return <>{children}</>;
