@@ -30,16 +30,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing user_id' }, { status: 400 });
   }
 
-  const { id: roleId, error: roleError } = await getAssistantRoleId();
-  if (roleError) return NextResponse.json({ error: roleError }, { status: 400 });
-  if (!roleId) return NextResponse.json({ error: 'Assistant role not found' }, { status: 400 });
-
   const supa = getAdminClient();
   const archived = await archivedAccountWriteResponse(supa, body.user_id);
   if (archived) return archived;
-  const { error } = await supa
-    .from('user_roles')
-    .upsert({ user_id: body.user_id, role_id: roleId }, { onConflict: 'user_id,role_id', ignoreDuplicates: true });
+  // Explicit restoration clears automatic revocation and grants the role in one transaction.
+  const { error } = await supa.rpc('restore_assistant_access', { p_assistant_id: body.user_id });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

@@ -60,24 +60,13 @@ export async function POST(request: NextRequest) {
   }
 
   const supa = getAdminClient();
-  const replace = body.replace !== false;
-
-  if (replace) {
-    const { error: clearErr } = await supa
-      .from('user_assistants')
-      .update({ is_active: false, ended_at: new Date().toISOString() })
-      .eq('user_id', body.user_id);
-    if (clearErr) return NextResponse.json({ error: clearErr.message }, { status: 400 });
-  }
-
-  const { error } = await supa
-    .from('user_assistants')
-    .insert({
-      user_id: body.user_id,
-      assistant_id: body.assistant_id,
-      assigned_by: guard.user.id,
-      is_active: true,
-    });
+  const { error } = await supa.rpc('set_member_assistant_assignment', {
+    p_member_id: body.user_id,
+    p_assistant_id: body.assistant_id,
+    p_active: true,
+    p_replace: body.replace !== false,
+    p_assigned_by: guard.user.id,
+  });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
@@ -97,11 +86,12 @@ export async function DELETE(request: NextRequest) {
   }
 
   const supa = getAdminClient();
-  const { error } = await supa
-    .from('user_assistants')
-    .update({ is_active: false, ended_at: new Date().toISOString() })
-    .eq('user_id', userId)
-    .eq('assistant_id', assistantId);
+  const { error } = await supa.rpc('set_member_assistant_assignment', {
+    p_member_id: userId,
+    p_assistant_id: assistantId,
+    p_active: false,
+    p_replace: false,
+  });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 

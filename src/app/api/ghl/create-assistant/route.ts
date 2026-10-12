@@ -9,6 +9,10 @@ const ROLE_CODE = 'assistant';
 const ASSISTANT_TAGS = new Set(['assistant agreement', 'assistant workroom']);
 const MAX_USER_PAGE_SIZE = 200;
 
+function assistantAccessRemovedResponse() {
+  return NextResponse.json({ skipped: true, reason: 'Assistant access removed' }, { status: 202 });
+}
+
 type GhlWebhookPayload = {
   email?: unknown;
   phone?: unknown;
@@ -118,6 +122,16 @@ export async function POST(request: NextRequest) {
         userId = existing.id;
         const archivedResponse = await archivedAccountWriteResponse(supa, userId);
         if (archivedResponse) return archivedResponse;
+        const { data: revocation, error: revocationError } = await supa
+          .from('assistant_access_revocations')
+          .select('assistant_id')
+          .eq('assistant_id', userId)
+          .maybeSingle();
+        if (revocationError) {
+          console.error('[ghl:create-assistant] Access status lookup failed', revocationError);
+          return NextResponse.json({ error: 'Assistant access could not be verified' }, { status: 503 });
+        }
+        if (revocation) return assistantAccessRemovedResponse();
         console.log('[ghl:create-assistant] Reusing existing auth user', userId);
         const { error: updateError } = await supa.auth.admin.updateUserById(userId, {
           phone: phone ?? undefined,
@@ -157,12 +171,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: profileErr.message }, { status: 400 });
   }
 
-  const { error: linkErr } = await supa
-    .from('user_roles')
-    .upsert({ user_id: userId, role_id: roleRow.id }, { onConflict: 'user_id,role_id', ignoreDuplicates: true });
+  // Serialize the final entitlement decision with member offboarding. A retry
+  // can grant a new assistant role but cannot clear an automatic revocation.
+  const { data: accessGranted, error: linkErr } = await supa
+    .rpc('grant_assistant_access_if_allowed', { p_assistant_id: userId });
   if (linkErr) {
     console.error('[ghl:create-assistant] Role assignment error', linkErr);
     return NextResponse.json({ error: linkErr.message }, { status: 400 });
+  }
+  if (accessGranted === false) return assistantAccessRemovedResponse();
+  if (accessGranted !== true) {
+    return NextResponse.json({ error: 'Assistant access could not be verified' }, { status: 503 });
   }
 
   console.log('[ghl:create-assistant] Assistant ready', { userId, created, matchedTag });

@@ -171,8 +171,9 @@ test('pending MFA users require verified AAL2 before an atomic setup password up
   assert.equal(elevated.calls.updates.length,1);
 });
 
-function provisioningFixture({denied=false,duplicate=false,existingUser=user,emailError=null,roleError=null,profileError=null}={}) {
-  const calls={creates:[],updates:[],emails:[],writes:[],clients:0};
+function provisioningFixture({denied=false,duplicate=false,existingUser=user,emailError=null,roleError=null,profileError=null,
+  revoked=false,revocationError=null,grantError=null,grantAllowed=true}={}) {
+  const calls={creates:[],updates:[],emails:[],writes:[],rpcs:[],clients:0};
   const client={
     auth:{
       async resetPasswordForEmail(email,options){calls.emails.push({email,options});return {error:emailError};},
@@ -185,10 +186,13 @@ function provisioningFixture({denied=false,duplicate=false,existingUser=user,ema
     from(table){
       const query={
         select(){return query;},eq(){return query;},
-        async maybeSingle(){return {data:{id:7,code:'user'},error:roleError};},
+        async maybeSingle(){return table==='assistant_access_revocations'
+          ? {data:revoked?{assistant_id:user.id}:null,error:revocationError}
+          : {data:{id:7,code:'user'},error:roleError};},
         async upsert(payload){calls.writes.push({table,payload});return {error:table==='profiles'?profileError:null};},
       };return query;
     },
+    async rpc(name,args){calls.rpcs.push({name,args:JSON.parse(JSON.stringify(args))});return {data:grantAllowed,error:grantError};},
   };
   const load=loader({
     '@/lib/supabaseAdmin':{getAdminClient(){calls.clients+=1;return client;}},
@@ -240,6 +244,8 @@ test('new assistant webhook accounts get distinct random credentials and setup e
   assert.equal(env.calls.creates[0].app_metadata.must_reset_password,true);
   assert.ok(env.calls.creates[0].password.length>=64);
   assert.equal(env.calls.emails.length,1);
+  assert.deepEqual(env.calls.writes.map((write)=>write.table),['profiles']);
+  assert.deepEqual(env.calls.rpcs,[{name:'grant_assistant_access_if_allowed',args:{p_assistant_id:user.id}}]);
 });
 
 test('webhook retry preserves an established password and setup state; pending retries can resend email only', async () => {
@@ -261,4 +267,56 @@ test('unauthorized and unmatched GHL webhooks perform no provisioning or email',
   const ignored=provisioningFixture();
   assert.equal((await ignored.webhook({email:user.email,tags:['not assistant']})).status,202);
   assert.equal(ignored.calls.creates.length,0);
+});
+
+test('GHL retries cannot change metadata, grant access, or send setup email for a revoked assistant', async () => {
+  for (const pending of [true,false]) {
+    const env=provisioningFixture({duplicate:true,revoked:true,
+      existingUser:{...user,app_metadata:{...user.app_metadata,must_reset_password:pending}}});
+    const response=await env.webhook();
+    assert.equal(response.status,202);
+    assert.deepEqual(await response.json(),{skipped:true,reason:'Assistant access removed'});
+    assert.equal(env.calls.updates.length,0);
+    assert.equal(env.calls.writes.length,0);
+    assert.equal(env.calls.rpcs.length,0);
+    assert.equal(env.calls.emails.length,0);
+  }
+});
+
+test('assistant access lookup fails closed before existing-account writes or setup email', async () => {
+  const env=provisioningFixture({duplicate:true,revocationError:{message:'database unavailable'}});
+  const response=await env.webhook();
+  assert.equal(response.status,503);
+  assert.equal(env.calls.updates.length,0);
+  assert.equal(env.calls.writes.length,0);
+  assert.equal(env.calls.rpcs.length,0);
+  assert.equal(env.calls.emails.length,0);
+});
+
+test('a concurrent assistant revocation is acknowledged without restoration or setup email', async () => {
+  const env=provisioningFixture({duplicate:true,grantAllowed:false});
+  const response=await env.webhook();
+  assert.equal(response.status,202);
+  assert.deepEqual(await response.json(),{skipped:true,reason:'Assistant access removed'});
+  assert.deepEqual(env.calls.writes.map((write)=>write.table),['profiles']);
+  assert.deepEqual(env.calls.rpcs,[{name:'grant_assistant_access_if_allowed',args:{p_assistant_id:user.id}}]);
+  assert.equal(env.calls.emails.length,0);
+});
+
+test('assistant grant RPC errors are reported without direct role writes or setup email', async () => {
+  for (const grantError of [{code:'42501',message:'Permission denied'},
+    {code:'23514',message:'Assistant role not found'}]) {
+    const env=provisioningFixture({duplicate:true,grantError});
+    const response=await env.webhook();
+    assert.equal(response.status,400);
+    assert.equal((await response.json()).error,grantError.message);
+    assert.deepEqual(env.calls.writes.map((write)=>write.table),['profiles']);
+    assert.equal(env.calls.emails.length,0);
+  }
+});
+
+test('an indeterminate assistant grant RPC result fails closed without setup email', async () => {
+  const env=provisioningFixture({duplicate:true,grantAllowed:null});
+  assert.equal((await env.webhook()).status,503);
+  assert.equal(env.calls.emails.length,0);
 });
