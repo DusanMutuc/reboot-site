@@ -24,12 +24,11 @@ import {
 } from '@mui/material';
 import { UserStatusDialog } from '@/components/UserStatusDialog';
 import { UserStatusChip } from '@/components/UserStatusChip';
-import type { StatusOverviewResponse, StatusOverviewRow } from '@/lib/statusOverviewTypes';
+import CoachMemberRoster from '@/components/coach/CoachMemberRoster';
+import type { StatusOverviewResponse, StatusOverviewRow, StatusOverviewSortBy as SortBy, StatusOverviewSortDirection as SortDirection } from '@/lib/statusOverviewTypes';
 import type { UserStatus } from '@/types/coaching';
 
 type WorkspaceMode = 'coach' | 'admin';
-type SortBy = 'name' | 'status' | 'kpi' | 'one_on_one' | 'group' | 'courses';
-type SortDirection = 'asc' | 'desc';
 
 type StudentStatusOverviewProps = {
   courseId?: number | null;
@@ -282,6 +281,19 @@ export default function StudentStatusOverview({
     setReloadToken((current) => current + 1);
   };
 
+  const statusDialog = <UserStatusDialog
+    open={Boolean(selectedRow)} onClose={() => setSelectedRow(null)} userId={selectedRow?.user_id ?? ''}
+    currentStatus={selectedRow?.user_status ?? null} manualStatus={selectedRow?.user_status_manual ?? null}
+    manualReason={selectedRow?.user_status_manual_reason ?? null} userLabel={selectedRow?.full_name || 'Unknown user'} onSaved={handleSaved}
+  />;
+
+  if (workspaceMode === 'coach') return <>
+    <CoachMemberRoster rows={visibleRows} allRows={rows} loading={loading} error={error} query={query} sortBy={sortBy} sortDirection={sortDirection}
+      onQuery={setQuery} onSort={handleSort} onSortDirection={() => setSortDirection((current) => current === 'asc' ? 'desc' : 'asc')}
+      onStatus={setSelectedRow} onRetry={handleSaved} workspaceHref={(userId) => getWorkspaceHref(workspaceMode, userId, courseId)} formatDate={formatDateValue} />
+    {statusDialog}
+  </>;
+
   return (
     <>
       <Paper
@@ -449,16 +461,7 @@ export default function StudentStatusOverview({
         )}
       </Paper>
 
-      <UserStatusDialog
-        open={Boolean(selectedRow)}
-        onClose={() => setSelectedRow(null)}
-        userId={selectedRow?.user_id ?? ''}
-        currentStatus={selectedRow?.user_status ?? null}
-        manualStatus={selectedRow?.user_status_manual ?? null}
-        manualReason={selectedRow?.user_status_manual_reason ?? null}
-        userLabel={selectedRow?.full_name || 'Unknown user'}
-        onSaved={handleSaved}
-      />
+      {statusDialog}
     </>
   );
 }

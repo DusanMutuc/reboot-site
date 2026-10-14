@@ -14,12 +14,11 @@ function MemberViews() {
   const view = searchParams.get('view') === 'follow-up' ? 'follow-up' : 'roster';
   return (
     <>
-      <Tabs value={view} aria-label="Member views" sx={{ mb: 3, borderBottom: `1px solid ${brand.border}`, '& .MuiTab-root': { fontSize: 14, textTransform: 'none', px: 2, minHeight: 48 }, '& .Mui-selected': { color: `${brand.turquoiseDeep} !important` } }}>
+      <Tabs value={view} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile aria-label="Member views" sx={{ mb: 3, borderBottom: `1px solid ${brand.border}`, '& .MuiTab-root': { fontSize: 14, textTransform: 'none', px: 2, minHeight: 48 }, '& .Mui-selected': { color: `${brand.turquoiseDeep} !important` } }}>
         <Tab component={Link} href="/coach/members" value="roster" label="Member roster" id="members-roster-tab" aria-controls="members-roster-panel" />
         <Tab component={Link} href="/coach/members?view=follow-up" value="follow-up" label="Booking follow-up" id="members-follow-up-tab" aria-controls="members-follow-up-panel" />
       </Tabs>
-      <Box role="tabpanel" id={`members-${view}-panel`} aria-labelledby={`members-${view}-tab`}
-        sx={{ '& .MuiTableCell-root': { fontSize: 13 }, '& .MuiTableCell-root .MuiButton-root': { fontSize: 12, px: 1.5, minHeight: 38 }, ...(view === 'follow-up' ? { '& > .MuiBox-root': { bgcolor: 'transparent', p: 0 }, '& h2': { fontFamily: 'Poppins, Arial, sans-serif', fontSize: 20, fontWeight: 600 } } : {}) }}>
+      <Box role="tabpanel" id={`members-${view}-panel`} aria-labelledby={`members-${view}-tab`}>
         {view === 'follow-up' ? <BookingFollowUpPanel mode="coach" /> : <StudentStatusOverview courseId={2} workspaceMode="coach" />}
       </Box>
     </>
