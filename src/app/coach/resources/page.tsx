@@ -1,46 +1,43 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Alert, Box, Button, Skeleton, Tab, Tabs, Typography } from '@mui/material';
+import { Accordion, AccordionDetails, AccordionSummary, Alert, Box, Button, Skeleton, Snackbar, Tab, Tabs, Typography } from '@mui/material';
 import ArrowOutwardRoundedIcon from '@mui/icons-material/ArrowOutwardRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import PeopleOutlineRoundedIcon from '@mui/icons-material/PeopleOutlineRounded';
+import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import CoachShell, { COACH_MAX_WIDTH } from '@/components/coach/CoachShell';
 import PodcastSection from '@/components/podcastSection';
 import Search from '@/components/search';
 import { brand } from '@/lib/homeTheme';
 import { supabase } from '@/lib/supabaseClient';
+import { coachResourceGroups, getCoachProfileLinks, sharedCoachResourceLinks, type CoachingLink } from '@/lib/coachResourceLinks';
 
-type CoachingLink = { label: string; href: string | null; detail: string };
-const sharedLinks: CoachingLink[] = [
-  { label: 'Training, tools & courses', href: '/resources', detail: 'Browse Reboot training and course materials' },
-  { label: 'Reboot calendar', href: 'https://www.addevent.com/calendar/ez616853', detail: 'The full group session calendar' },
-  { label: 'Reboot coaching room', href: 'https://zoom.us/j/93233351653', detail: 'Join the group coaching Zoom room' },
-  { label: 'Assistant workroom', href: 'https://zoom.us/j/99652221215', detail: 'Join the assistant Zoom room' },
-  { label: 'Assistant onboarding', href: 'https://api.leadconnectorhq.com/widget/bookings/assistant_on', detail: 'Book an assistant onboarding session' },
-  { label: 'Systems explainers', href: 'https://vimeo.com/showcase/11715034', detail: 'Watch the Reboot system guides' },
-  { label: 'Reboot Facebook group', href: 'https://www.facebook.com/groups/realestatereboot', detail: 'Connect with the member community' },
-  { label: 'Agent referral directory', href: 'https://rebootmembers.com/legends', detail: 'Find a Reboot agent for client referrals' },
-];
+const accordionSx = {
+  bgcolor: 'transparent', boxShadow: 'none', borderBottom: `1px solid ${brand.border}`,
+  '&::before': { display: 'none' },
+  '& .MuiAccordionSummary-root': { px: 0, minHeight: 86, gap: 2 },
+  '& .MuiAccordionSummary-content': { my: 2, alignItems: 'center', gap: 2, minWidth: 0 },
+  '& .MuiAccordionDetails-root': { p: 0, pb: 2, pl: { xs: 0, sm: 4.25 } },
+};
 
-function safeUrl(raw: unknown) {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  const value = raw.trim();
-  const candidate = /^[\w.-]+\.[a-z]{2,}([/:].*)?$/i.test(value) ? `https://${value}` : value;
-  try {
-    const url = new URL(candidate);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
-  } catch {
-    return null;
-  }
-}
+const compactButtonSx = { fontSize: 12, minHeight: 38, px: 1.5, py: 0.75, color: brand.turquoiseDeep };
 
 function CoachingLinks() {
   const [profileLinks, setProfileLinks] = useState<CoachingLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [reload, setReload] = useState(0);
+  const [coachingExpanded, setCoachingExpanded] = useState(false);
+  const coachingSummaryRef = useRef<HTMLDivElement>(null);
+  const [copyMessage, setCopyMessage] = useState<{ text: string; severity: 'success' | 'warning' } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -54,11 +51,7 @@ function CoachingLinks() {
           .select('m2_booking_url, call15_url, coaching_notes_url, impl_booking_url')
           .eq('user_id', user.id).maybeSingle();
         if (profileError) throw profileError;
-        if (active) setProfileLinks([
-          { label: 'Business Review booking link', href: safeUrl(data?.m2_booking_url), detail: 'Your Momentum coaching booking page' },
-          { label: 'Implementation booking link', href: safeUrl(data?.impl_booking_url ?? data?.call15_url), detail: 'Your implementation coaching booking page' },
-          { label: 'Implementation notes', href: safeUrl(data?.coaching_notes_url), detail: 'Your saved coaching notes link' },
-        ]);
+        if (active) setProfileLinks(getCoachProfileLinks(data));
       } catch {
         if (active) setError(true);
       } finally {
@@ -69,28 +62,72 @@ function CoachingLinks() {
     return () => { active = false; };
   }, [reload]);
 
-  const renderLink = ({ label, href, detail }: CoachingLink) => (
-    <Box key={label} sx={{ borderBottom: `1px solid ${brand.border}`, py: 2, minWidth: 0 }}>
+  const copyLink = async ({ label, href }: CoachingLink) => {
+    if (!href) return;
+    try {
+      await navigator.clipboard.writeText(href);
+      setCopyMessage({ text: `${label} copied.`, severity: 'success' });
+    } catch {
+      setCopyMessage({ text: 'The link could not be copied. Open the booking page to copy its address.', severity: 'warning' });
+    }
+  };
+
+  const renderLink = (link: CoachingLink) => {
+    const { label, href, detail, copyable } = link;
+    return (
+    <Box key={label} sx={{ display: 'flex', alignItems: 'center', flexWrap: { xs: 'wrap', sm: 'nowrap' }, gap: 1.5, borderBottom: `1px solid ${brand.border}`, py: 2, minWidth: 0, '&:last-child': { borderBottom: 0 } }}>
       {href ? (
-        <Box component={Link} href={href} target={href.startsWith('http') ? '_blank' : undefined} rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
-          sx={{ display: 'flex', gap: 1.5, justifyContent: 'space-between', alignItems: 'center', color: brand.ink, fontSize: 14, fontWeight: 600, minHeight: 28, '&:hover': { color: brand.turquoiseDeep }, '&:focus-visible': { outline: `2px solid ${brand.turquoiseDeep}`, outlineOffset: 4, borderRadius: '2px' } }}>
-          {label}{href.startsWith('http') ? <ArrowOutwardRoundedIcon sx={{ fontSize: 17, flexShrink: 0, color: brand.turquoiseDeep }} /> : <ArrowForwardRoundedIcon sx={{ fontSize: 17, flexShrink: 0, color: brand.turquoiseDeep }} />}
+        <Box component={Link} href={href} aria-label={label} target={href.startsWith('http') ? '_blank' : undefined} rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
+          sx={{ display: 'flex', flex: 1, gap: 1.5, justifyContent: 'space-between', alignItems: 'center', color: brand.ink, minWidth: { xs: '100%', sm: 0 }, '&:hover': { color: brand.turquoiseDeep }, '&:focus-visible': { outline: `2px solid ${brand.turquoiseDeep}`, outlineOffset: 4, borderRadius: '2px' } }}>
+          <Box sx={{ minWidth: 0 }}><Typography sx={{ fontSize: 14, fontWeight: 600 }}>{label}</Typography><Typography sx={{ color: brand.inkSoft, fontSize: 12, mt: 0.5 }}>{detail}</Typography></Box>
+          <Box component="span" sx={{ display: 'inline-flex', gap: 0.5, alignItems: 'center', color: brand.turquoiseDeep, fontSize: 12 }}>Open{href.startsWith('http') ? <ArrowOutwardRoundedIcon sx={{ fontSize: 17, flexShrink: 0 }} /> : <ArrowForwardRoundedIcon sx={{ fontSize: 17, flexShrink: 0 }} />}</Box>
         </Box>
-      ) : <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{label}</Typography>}
-      <Typography sx={{ color: brand.inkSoft, fontSize: 12, mt: 0.5 }}>{href ? detail : 'No link has been set up for your account.'}</Typography>
+      ) : <Box><Typography sx={{ fontSize: 14, fontWeight: 600 }}>{label}</Typography><Typography sx={{ color: brand.inkSoft, fontSize: 12, mt: 0.5 }}>No link has been set up for your account.</Typography></Box>}
+      {href && copyable ? <Button variant="outlined" aria-label={`Copy ${label}`} startIcon={<ContentCopyRoundedIcon sx={{ fontSize: 15 }} />} onClick={() => void copyLink(link)} sx={{ ...compactButtonSx, flexShrink: 0, borderColor: brand.border }}>Copy link</Button> : null}
     </Box>
-  );
+    );
+  };
+
+  const coachingRoom = sharedCoachResourceLinks.find((link) => link.label === 'Reboot coaching room')!;
+  const calendar = sharedCoachResourceLinks.find((link) => link.label === 'Reboot calendar')!;
+  const groupIcons = { rooms: <VideocamOutlinedIcon />, learning: <MenuBookOutlinedIcon />, community: <PeopleOutlineRoundedIcon /> };
+  const shortcutSx = { display: 'flex', textAlign: 'left', alignItems: 'center', justifyContent: 'flex-start', gap: 1.5, minWidth: 0, p: 2, bgcolor: brand.card, border: `1px solid ${brand.border}`, borderRadius: '12px', color: brand.ink, '&:hover': { bgcolor: brand.turquoiseTint, borderColor: brand.borderStrong }, '& > .MuiSvgIcon-root': { color: brand.turquoiseDeep, fontSize: 22, flexShrink: 0 } };
 
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1.5fr' }, gap: { xs: 4, md: 7 } }}>
-      <Box component="section" aria-labelledby="personal-coaching-links">
-        <Typography component="h2" id="personal-coaching-links" sx={{ fontSize: 18, fontWeight: 600, mb: 1 }}>Your coaching links</Typography>
-        {loading ? <Skeleton variant="rounded" height={200} /> : error ? <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => setReload((value) => value + 1)}>Retry</Button>}>Your coaching links could not be loaded.</Alert> : profileLinks.map(renderLink)}
+    <Box>
+      <Typography component="h2" sx={{ fontFamily: 'Poppins, Arial, sans-serif', fontSize: 18, fontWeight: 600, mb: 2 }}>Everyday shortcuts</Typography>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' }, gap: 1.5, mb: 4 }}>
+        <Button aria-controls="personal-coaching-links-panel" aria-expanded={coachingExpanded} onClick={() => { setCoachingExpanded(true); coachingSummaryRef.current?.focus(); }} sx={shortcutSx}>
+          <LinkRoundedIcon /><Box sx={{ flex: 1, minWidth: 0 }}><Typography sx={{ fontSize: 14, fontWeight: 600 }}>Your booking links</Typography><Typography sx={{ fontSize: 12, color: brand.inkSoft, mt: 0.5 }}>Open or copy a link for a member</Typography></Box><ArrowForwardRoundedIcon sx={{ fontSize: '17px !important' }} />
+        </Button>
+        <Button component={Link} href={coachingRoom.href!} target="_blank" rel="noopener noreferrer" sx={shortcutSx}>
+          <VideocamOutlinedIcon /><Box sx={{ flex: 1, minWidth: 0 }}><Typography sx={{ fontSize: 14, fontWeight: 600 }}>{coachingRoom.label}</Typography><Typography sx={{ fontSize: 12, color: brand.inkSoft, mt: 0.5 }}>{coachingRoom.detail}</Typography></Box><ArrowOutwardRoundedIcon sx={{ fontSize: '17px !important' }} />
+        </Button>
+        <Button component={Link} href={calendar.href!} target="_blank" rel="noopener noreferrer" sx={shortcutSx}>
+          <CalendarMonthOutlinedIcon /><Box sx={{ flex: 1, minWidth: 0 }}><Typography sx={{ fontSize: 14, fontWeight: 600 }}>{calendar.label}</Typography><Typography sx={{ fontSize: 12, color: brand.inkSoft, mt: 0.5 }}>View or subscribe to Reboot events</Typography></Box><ArrowOutwardRoundedIcon sx={{ fontSize: '17px !important' }} />
+        </Button>
       </Box>
-      <Box component="section" aria-labelledby="shared-coaching-links">
-        <Typography component="h2" id="shared-coaching-links" sx={{ fontSize: 18, fontWeight: 600, mb: 1 }}>Rooms & member resources</Typography>
-        {sharedLinks.map(renderLink)}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: { xs: 'flex-start', sm: 'center' }, flexDirection: { xs: 'column', sm: 'row' }, mb: 1.5 }}>
+        <Typography component="h2" sx={{ fontFamily: 'Poppins, Arial, sans-serif', fontSize: 18, fontWeight: 600 }}>Browse by task</Typography>
+        <Button component={Link} href="/coach/resources?view=library" endIcon={<ArrowForwardRoundedIcon />} sx={compactButtonSx}>Search the resource library</Button>
       </Box>
+      <Box sx={{ borderTop: `1px solid ${brand.border}` }}>
+        <Accordion expanded={coachingExpanded} onChange={(_, expanded) => setCoachingExpanded(expanded)} disableGutters elevation={0} sx={accordionSx}>
+          <AccordionSummary ref={coachingSummaryRef} expandIcon={<ExpandMoreRoundedIcon />} id="personal-coaching-links" aria-controls="personal-coaching-links-panel">
+            <LinkRoundedIcon sx={{ color: brand.turquoiseDeep, fontSize: 21 }} /><Box sx={{ flex: 1, minWidth: 0 }}><Typography component="span" sx={{ fontSize: 14, fontWeight: 600 }}>Your coaching tools</Typography><Typography sx={{ fontSize: 12, color: brand.inkSoft, mt: 0.5 }}>Your booking links and implementation notes</Typography></Box><Typography sx={{ fontSize: 12, color: brand.inkSoft }}>3</Typography>
+          </AccordionSummary>
+          <AccordionDetails><Box sx={{ bgcolor: brand.card, px: 2, borderRadius: '10px' }}>{loading ? <Skeleton variant="rounded" height={180} sx={{ my: 2 }} /> : error ? <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => setReload((value) => value + 1)}>Retry</Button>}>Your coaching links could not be loaded.</Alert> : profileLinks.map(renderLink)}</Box></AccordionDetails>
+        </Accordion>
+        {coachResourceGroups.map((group) => (
+          <Accordion key={group.id} disableGutters elevation={0} sx={accordionSx}>
+            <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />} id={`resource-group-${group.id}`} aria-controls={`resource-group-${group.id}-panel`}>
+              <Box sx={{ display: 'flex', color: brand.turquoiseDeep, '& .MuiSvgIcon-root': { fontSize: 21 } }}>{groupIcons[group.id as keyof typeof groupIcons]}</Box><Box sx={{ flex: 1, minWidth: 0 }}><Typography component="span" sx={{ fontSize: 14, fontWeight: 600 }}>{group.label}</Typography><Typography sx={{ fontSize: 12, color: brand.inkSoft, mt: 0.5 }}>{group.detail}</Typography></Box><Typography sx={{ fontSize: 12, color: brand.inkSoft }}>{group.links.length}</Typography>
+            </AccordionSummary>
+            <AccordionDetails><Box sx={{ bgcolor: brand.card, px: 2, borderRadius: '10px' }}>{group.links.map((label) => sharedCoachResourceLinks.find((link) => link.label === label)!).map(renderLink)}</Box></AccordionDetails>
+          </Accordion>
+        ))}
+      </Box>
+      <Snackbar open={Boolean(copyMessage)} autoHideDuration={4000} onClose={() => setCopyMessage(null)}><Alert severity={copyMessage?.severity ?? 'success'} onClose={() => setCopyMessage(null)}>{copyMessage?.text}</Alert></Snackbar>
     </Box>
   );
 }
@@ -113,7 +150,7 @@ function HelpContacts() {
 }
 
 const resourceViews = [
-  { value: 'links', label: 'Coaching links' },
+  { value: 'links', label: 'Overview' },
   { value: 'library', label: 'Resource library' },
   { value: 'podcast', label: 'Private podcast' },
   { value: 'help', label: 'Help' },

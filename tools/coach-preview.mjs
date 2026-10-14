@@ -74,9 +74,10 @@ async function seed() {
     { id: base + index * 2, user_id: member.id, coach_id: implementation.id, relationship_type: 'implementation', course_id: 2, is_active: true, assigned_at: DateTime.utc().minus({ days: 90 }).toISO() },
     { id: base + index * 2 + 1, user_id: member.id, coach_id: momentum.id, relationship_type: 'primary', course_id: 2, is_active: true, assigned_at: DateTime.utc().minus({ days: 90 }).toISO() },
   ]));
-  await upsert('meeting_types', [{ id: base, code: 'IMPLEMENTATION_MEETING', name: 'Implementation meeting', counts_toward_engagement: true }, { id: base + 1, code: 'M2_MEETING', name: 'Business Review', counts_toward_engagement: true }], 'code');
+  const meetingTypes = await upsert('meeting_types', [{ code: 'IMPLEMENTATION_MEETING', name: 'Implementation meeting', counts_toward_engagement: true }, { code: 'M2_MEETING', name: 'Business Review', counts_toward_engagement: true }], 'code');
+  const meetingTypeId = (code) => meetingTypes.find((type) => type.code === code).id;
   await upsert('focus_finder_templates', { key: 'focus_finder_v1', name: 'Preview Focus Finder', version: 1, is_active: true }, 'key');
-  await upsert('system_scorecard_templates', { key: 'preview_foundation_v1', audience: 'foundation', name: 'Preview foundation systems', version: 1, is_active: true }, 'key');
+  await upsert('system_scorecard_templates', { key: 'preview_foundation_v1', audience: 'foundation', name: 'Preview foundation systems', version: base, is_active: false }, 'key');
   await upsert('system_scorecard_categories', { id: base, template_key: 'preview_foundation_v1', key: 'preview_growth', label: 'Business growth', position: 1 });
   const systems = ['Follow-up', 'Referrals', 'Listing presentation', 'Lead generation'];
   await upsert('system_scorecard_systems', systems.map((label, index) => ({ id: base + index, template_key: 'preview_foundation_v1', category_id: base, key: `preview_system_${index}`, label, position: index + 1 })));
@@ -107,7 +108,7 @@ async function seed() {
         const start = week.plus({ weeks: weekOffset, days: index, hours: index === 4 ? 18 : 10 + index });
         const event = addEvent(member, index, 'implementation', start, `-week${weekOffset}`);
         const meetingId = base + 100 + index + weekOffset * 20;
-        await upsert('meetings', { id: meetingId, meeting_type_id: base, date: start.toISODate(), title: event.title, starts_at: event.startTime, ends_at: event.endTime, ghl_appointment_id: event.id, ghl_calendar_id: event.calendarId, ghl_status: event.appointmentStatus, meeting_timezone: 'Europe/Belgrade' });
+        await upsert('meetings', { id: meetingId, meeting_type_id: meetingTypeId('IMPLEMENTATION_MEETING'), date: start.toISODate(), title: event.title, starts_at: event.startTime, ends_at: event.endTime, ghl_appointment_id: event.id, ghl_calendar_id: event.calendarId, ghl_status: event.appointmentStatus, meeting_timezone: 'Europe/Belgrade' });
         await upsert('meeting_attendance_base', { user_id: member.id, meeting_id: meetingId, attended: start < now }, 'user_id,meeting_id');
       }
     }
@@ -116,7 +117,7 @@ async function seed() {
       const event = addEvent(member, index, 'business_review', start);
       const meetingId = base + 200 + index;
       const futureNoteId = base + 100 + index;
-      await upsert('meetings', { id: meetingId, meeting_type_id: base + 1, date: start.toISODate(), title: event.title, starts_at: event.startTime, ends_at: event.endTime, ghl_appointment_id: event.id, ghl_calendar_id: event.calendarId, ghl_status: event.appointmentStatus, meeting_timezone: 'Europe/Belgrade' });
+      await upsert('meetings', { id: meetingId, meeting_type_id: meetingTypeId('M2_MEETING'), date: start.toISODate(), title: event.title, starts_at: event.startTime, ends_at: event.endTime, ghl_appointment_id: event.id, ghl_calendar_id: event.calendarId, ghl_status: event.appointmentStatus, meeting_timezone: 'Europe/Belgrade' });
       await upsert('meeting_attendance_base', { user_id: member.id, meeting_id: meetingId, attended: start < now }, 'user_id,meeting_id');
       await upsert('coaching_notes_base', { id: futureNoteId, user_id: member.id, coach_id: momentum.id, m2_meeting_id: meetingId });
       await upsert('business_reviews', { id: base + 100 + index, user_id: member.id, coach_id: momentum.id, coaching_note_id: futureNoteId, meeting_id: meetingId, review_date: start.toISODate(), system_scorecard_template_key: 'preview_foundation_v1' });
