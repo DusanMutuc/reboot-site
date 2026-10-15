@@ -20,13 +20,16 @@ function fixture({
   current = ['member'], past = ['past'],
   assignments = [assignment('member'), assignment('past')],
   partnerships = [], enrollments = [], pauses = [], archived = [], events = [], failTable, membershipError,
+  profileOverrides = [], contacts = {}, contactStatus = 200,
 } = {}) {
   const calls = [];
   const scans = [];
+  const contactRequests = [];
   const allIds = [...new Set([
     ...assignments.flatMap((row) => [row.user_id, row.coach_id]),
     ...partnerships.map((row) => row.user_id),
     ...enrollments.map((row) => row.user_id),
+    ...profileOverrides.map((row) => row.id),
   ])];
   const tables = {
     user_coaches: assignments,
@@ -34,8 +37,9 @@ function fixture({
     ninety_day_cycle_users: enrollments,
     user_roles: past.map((user_id) => ({ user_id, roles: { code: 'past_member' } })),
     member_pauses: pauses,
-    profiles: allIds.map((id) => ({ id, first_name: id, last_name: 'Person', ghl_user_id: id,
-      merged_into_user_id: archived.includes(id) ? 'current-account' : null })),
+    profiles: allIds.map((id) => ({ id, first_name: id, last_name: 'Person', ghl_user_id: id, ghl_contact_id: null,
+      merged_into_user_id: archived.includes(id) ? 'current-account' : null,
+      ...profileOverrides.find((row) => row.id === id) })),
   };
   const valueAt = (row, key) => key.split('.').reduce((value, part) => value?.[part], row);
   const client = {
@@ -73,15 +77,21 @@ function fixture({
     '@/lib/config': { GHL: { BASE: 'https://calendar.example.invalid', TOKEN: 'fixture', VERSION: 'fixture', LOCATION_ID: 'fixture' } },
   };
   vm.runInNewContext(source, {
-    exports, console, URL,
+    exports, console, URL, AbortSignal, process: { env: { NODE_ENV: 'test' } },
     require: (name) => imports[name] ?? require(name),
-    fetch: async (url) => {
-      scans.push(new URL(url).searchParams.get('userId'));
+    fetch: async (url, options) => {
+      const parsed = new URL(url);
+      if (parsed.pathname.startsWith('/contacts/')) {
+        const id = decodeURIComponent(parsed.pathname.split('/').at(-1));
+        contactRequests.push({ id, options });
+        return { ok: contactStatus === 200, json: async () => ({ contact: contacts[id] ?? null }) };
+      }
+      scans.push(parsed.searchParams.get('userId'));
       return { ok: true, json: async () => ({ events }) };
     },
   });
   return { build: exports.buildBookingFollowUp, syncAudit: exports.findBusinessAuditAppointmentsForSync,
-    syncImplementation: exports.findImplementationAppointmentsForSync, client, calls, scans };
+    syncImplementation: exports.findImplementationAppointmentsForSync, client, calls, scans, contactRequests };
 }
 
 const memberIds = (report) => [...new Set(report.groups.flatMap((group) => group.members.flatMap((member) => member.memberIds)))].sort();
@@ -185,4 +195,100 @@ test('archive lookup failures stop appointment sync before calendars are scanned
   const { syncAudit, scans } = fixture({ failTable: 'profiles' });
   await assert.rejects(() => syncAudit({ startMs: 0, endMs: 1 }), /Cannot read profiles/);
   assert.equal(scans.length, 0);
+});
+
+const sharedProfiles = [
+  { id: 'member', first_name: 'Keith', last_name: 'Faria', ghl_user_id: 'old-member-contact' },
+  { id: 'partner', first_name: 'David', last_name: 'Schmitz', ghl_user_id: 'partner-contact' },
+];
+const sharedContact = { id: 'shared-contact', locationId: 'fixture', firstName: 'Keith', lastName: 'Faria', email: 'shared@example.invalid' };
+const futureStart = () => new Date(Date.now() + 7 * 86400000).toISOString();
+const sharedEvent = (kind = 'Business Review') => ({ id: 'shared-appointment', contactId: 'shared-contact',
+  title: `Keith Faria & Dave Schmitz ${kind} with coach Person`, startTime: futureStart() });
+
+for (const kind of ['Audit', 'Implementation']) {
+  test(`${kind} sync resolves a shared contact with a combined title to one scoped member`, async () => {
+    const relationship_type = kind === 'Audit' ? 'primary' : 'implementation';
+    const env = fixture({ current: ['member', 'partner'], past: [],
+      assignments: [assignment('member'), assignment('partner')].map(row => ({ ...row, relationship_type })),
+      profileOverrides: sharedProfiles, events: [sharedEvent(kind === 'Audit' ? 'Business Review' : 'Implementation Meeting')],
+      contacts: { 'shared-contact': sharedContact } });
+    const result = await env[`sync${kind}`]({ startMs: Date.now(), endMs: Date.now() + 30 * 86400000 });
+    assert.deepEqual(Array.from(result.appointments, row => row.studentId), ['member']);
+    assert.equal(result.coachScanWarnings.length, 0);
+    assert.equal(result.unmatchedAppointmentIds.length, 0);
+    assert.equal(env.contactRequests.length, 1);
+    assert.equal(env.contactRequests[0].options.redirect, 'error');
+  });
+}
+
+test('live follow-ups resolve a shared booking once and stop reminding both partners to book it', async () => {
+  const env = fixture({ current: ['member', 'partner'], past: [],
+    assignments: [assignment('member'), assignment('partner')], partnerships: [partner('member'), partner('partner')],
+    profileOverrides: sharedProfiles, events: [sharedEvent(), { ...sharedEvent(), id: 'second-shared-appointment' }],
+    contacts: { 'shared-contact': sharedContact } });
+  const report = await env.build();
+  const row = report.groups[0].members[0];
+  assert.equal(report.groups[0].members.length, 1);
+  assert.deepEqual(Array.from(row.memberIds).sort(), ['member', 'partner']);
+  assert.equal(row.upcomingM2.id, 'shared-appointment');
+  assert.equal(row.needsM2, false);
+  assert.equal(row.dataComplete, true);
+  assert.equal(env.contactRequests.length, 1);
+});
+
+test('both stored contact-id fields are honored before names or fallback requests', async () => {
+  const env = fixture({ current: ['member'], past: [], assignments: [assignment('member')],
+    profileOverrides: [{ ...sharedProfiles[0], ghl_contact_id: 'shared-contact' }], events: [sharedEvent()] });
+  const report = await env.build();
+  assert.equal(report.groups[0].members[0].upcomingM2.id, 'shared-appointment');
+  assert.equal(env.contactRequests.length, 0);
+});
+
+test('contact lookup failures suppress missing-booking reminders and surface sync warnings', async () => {
+  const options = { current: ['member'], past: [], assignments: [assignment('member')],
+    profileOverrides: sharedProfiles.slice(0, 1), events: [sharedEvent()], contactStatus: 503 };
+  const row = (await fixture(options).build()).groups[0].members[0];
+  assert.equal(row.dataComplete, false);
+  assert.equal(row.needsM2, false);
+  assert.match(row.dataWarning, /contacts could not be verified/);
+  const result = await fixture(options).syncAudit({ startMs: Date.now(), endMs: Date.now() + 30 * 86400000 });
+  assert.equal(result.coachScanWarnings.length, 1);
+  assert.deepEqual(Array.from(result.unmatchedAppointmentIds), ['shared-appointment']);
+});
+
+test('mismatched contact IDs and locations cannot supply an identity', async () => {
+  for (const contact of [{ ...sharedContact, id: 'another-contact' }, { ...sharedContact, locationId: 'another-location' }]) {
+    const env = fixture({ current: ['member'], past: [], assignments: [assignment('member')],
+      profileOverrides: sharedProfiles.slice(0, 1), events: [sharedEvent()], contacts: { 'shared-contact': contact } });
+    const row = (await env.build()).groups[0].members[0];
+    assert.equal(row.upcomingM2, null);
+    assert.equal(row.dataComplete, false);
+  }
+});
+
+test('a shared contact name that identifies multiple roster accounts stays unmatched', async () => {
+  const env = fixture({ current: ['member', 'partner'], past: [], assignments: [assignment('member'), assignment('partner')],
+    profileOverrides: [sharedProfiles[0], { ...sharedProfiles[0], id: 'partner' }], events: [sharedEvent()],
+    contacts: { 'shared-contact': sharedContact } });
+  const result = await env.syncAudit({ startMs: Date.now(), endMs: Date.now() + 30 * 86400000 });
+  assert.equal(result.appointments.length, 0);
+  assert.deepEqual(Array.from(result.unmatchedAppointmentIds), ['shared-appointment']);
+});
+
+test('a contact ID stored on multiple accounts cannot be disambiguated by a weaker name fallback', async () => {
+  const env = fixture({ current: ['member', 'partner'], past: [], assignments: [assignment('member'), assignment('partner')],
+    profileOverrides: sharedProfiles.map(p => ({ ...p, ghl_contact_id: 'shared-contact' })), events: [sharedEvent()],
+    contacts: { 'shared-contact': sharedContact } });
+  const result = await env.syncAudit({ startMs: Date.now(), endMs: Date.now() + 30 * 86400000 });
+  assert.equal(result.appointments.length, 0);
+});
+
+test('Implementation contact fallback retains its coach roster scope', async () => {
+  const env = fixture({ current: ['member', 'outsider'], past: [],
+    assignments: [{ ...assignment('member'), relationship_type: 'implementation' }],
+    profileOverrides: [sharedProfiles[0], { id: 'outsider', first_name: 'Outside', last_name: 'Member' }],
+    events: [sharedEvent('Implementation Meeting')], contacts: { 'shared-contact': { ...sharedContact, firstName: 'Outside', lastName: 'Member' } } });
+  const result = await env.syncImplementation({ startMs: Date.now(), endMs: Date.now() + 30 * 86400000 });
+  assert.equal(result.appointments.length, 0);
 });

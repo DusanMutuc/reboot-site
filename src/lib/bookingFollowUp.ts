@@ -35,6 +35,7 @@ type ProfileRow = {
   first_name: string | null;
   last_name: string | null;
   ghl_user_id: string | null;
+  ghl_contact_id: string | null;
 };
 
 type PartnershipMembershipRow = {
@@ -167,7 +168,7 @@ export async function buildBookingFollowUp(
   const [{ data: profileRows, error: profileError }, emailById] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, first_name, last_name, ghl_user_id')
+      .select('id, first_name, last_name, ghl_user_id, ghl_contact_id')
       .in('id', allIds),
     fetchEmails(supabase, new Set(allIds)),
   ]);
@@ -180,7 +181,7 @@ export async function buildBookingFollowUp(
     ((profileRows ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
   );
   const scanRange = getScanRange(analysisAssignments);
-  const coachScans = await mapWithConcurrency(
+  const rawCoachScans = await mapWithConcurrency(
     coachIds,
     GHL_FETCH_CONCURRENCY,
     async (coachId) => scanCoachCalendar(
@@ -190,12 +191,15 @@ export async function buildBookingFollowUp(
       scanRange.endMs,
     ),
   );
-  const scanByCoachId = new Map(coachScans.map((scan) => [scan.coachId, scan]));
   const meetingCandidateAssignments = expandAssignmentsForPartnerships(
     analysisAssignments,
     partnershipMembersByUserId,
   );
   const assignmentsByCoachId = groupBy(meetingCandidateAssignments, (row) => row.coach_id);
+  const coachScans = await resolveUnmatchedContactDetails({
+    coachScans: rawCoachScans, assignmentsByCoachId, profileById, emailById,
+  });
+  const scanByCoachId = new Map(coachScans.map((scan) => [scan.coachId, scan]));
   const meetingsByStudentId = matchMeetingsToStudents({
     coachScans,
     assignmentsByCoachId,
@@ -271,7 +275,7 @@ async function findAppointmentsForSync(
   const [{ data: profileRows, error: profileError }, emailById] = await Promise.all([
     supabase
       .from('profiles')
-      .select('id, first_name, last_name, ghl_user_id')
+      .select('id, first_name, last_name, ghl_user_id, ghl_contact_id')
       .in('id', allIds),
     fetchEmails(supabase, new Set(allIds)),
   ]);
@@ -283,7 +287,7 @@ async function findAppointmentsForSync(
   const profileById = new Map(
     ((profileRows ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
   );
-  const coachScans = await mapWithConcurrency(
+  const rawCoachScans = await mapWithConcurrency(
     coachIds,
     GHL_FETCH_CONCURRENCY,
     async (coachId) => scanCoachCalendar(
@@ -293,9 +297,14 @@ async function findAppointmentsForSync(
       input.endMs,
     ),
   );
+  const assignmentsByCoachId = groupBy(assignments, (assignment) => assignment.coach_id);
+  const coachScans = await resolveUnmatchedContactDetails({
+    coachScans: rawCoachScans, assignmentsByCoachId, profileById, emailById,
+    coachableIds, includeExcluded: true, meetingType,
+  });
   const meetingsByStudentId = matchMeetingsToStudents({
     coachScans,
-    assignmentsByCoachId: groupBy(assignments, (assignment) => assignment.coach_id),
+    assignmentsByCoachId,
     profileById,
     emailById,
     includeExcluded: true,
@@ -604,6 +613,66 @@ function normalizeGhlEvent(event: RawGhlEvent): NormalizedGhlEvent | null {
   };
 }
 
+/** Calendar list responses can omit the contact name/email. Resolve an unknown
+ * shared contact once per scan, then let the same scoped matcher handle both
+ * daily synchronization and live follow-ups. Do not persist guessed aliases. */
+async function resolveUnmatchedContactDetails({
+  coachScans, assignmentsByCoachId, profileById, emailById,
+  coachableIds = [], includeExcluded = false, meetingType,
+}: {
+  coachScans: CoachScan[];
+  assignmentsByCoachId: Map<string, AssignmentRow[]>;
+  profileById: Map<string, ProfileRow>;
+  emailById: Map<string, string>;
+  coachableIds?: string[];
+  includeExcluded?: boolean;
+  meetingType?: ParsedMeetingTitle['type'];
+}): Promise<CoachScan[]> {
+  const wantedByCoach = new Map<string, Set<string>>();
+  for (const scan of coachScans) {
+    for (const event of scan.events) {
+      if (!event.contactId || (!includeExcluded && (event.deleted || isExcludedStatus(event.status)))) continue;
+      const parsed = parseMeetingTitle(event.title);
+      if (!parsed || (meetingType && parsed.type !== meetingType)) continue;
+      if (matchStudent(event, parsed, assignmentsByCoachId.get(scan.coachId) ?? [], profileById, emailById, coachableIds)) continue;
+      const contacts = wantedByCoach.get(scan.coachId) ?? new Set<string>();
+      contacts.add(event.contactId);
+      wantedByCoach.set(scan.coachId, contacts);
+    }
+  }
+  const ids = unique([...wantedByCoach.values()].flatMap((ids) => [...ids]));
+  const resolved = new Map(await mapWithConcurrency(ids, GHL_FETCH_CONCURRENCY, async (contactId) => {
+    try {
+      if (!GHL.BASE || !GHL.TOKEN || !GHL.VERSION || !GHL.LOCATION_ID) throw new Error('Missing calendar configuration.');
+      const base = new URL(GHL.BASE);
+      const local = process.env.NODE_ENV !== 'production' && base.protocol === 'http:'
+        && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
+      if ((base.protocol !== 'https:' && !local) || base.username || base.password) throw new Error('Invalid calendar configuration.');
+      const response = await fetch(`${base.href.replace(/\/+$/, '')}/contacts/${encodeURIComponent(contactId)}`, {
+        headers: { Authorization: `Bearer ${GHL.TOKEN}`, Version: GHL.VERSION, Accept: 'application/json' },
+        cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) throw new Error('The contact could not be loaded.');
+      const payload = await response.json();
+      const contact = payload?.contact;
+      if (contact?.id !== contactId || contact.locationId !== GHL.LOCATION_ID) throw new Error('Invalid calendar contact.');
+      const name = [readString(contact.firstName), readString(contact.lastName)].filter(isPresent).join(' ');
+      return [contactId, { name: name || readString(contact.name), email: readString(contact.email)?.toLowerCase() ?? null }] as const;
+    } catch {
+      return [contactId, null] as const;
+    }
+  }));
+  return coachScans.map((scan) => ({
+    ...scan,
+    error: scan.error ?? ([...(wantedByCoach.get(scan.coachId) ?? [])].some((id) => !resolved.get(id))
+      ? 'Some booking contacts could not be verified. Please retry.' : null),
+    events: scan.events.map((event) => {
+      const contact = event.contactId ? resolved.get(event.contactId) : null;
+      return contact ? { ...event, contactName: contact.name, contactEmail: contact.email } : event;
+    }),
+  }));
+}
+
 function matchMeetingsToStudents({
   coachScans,
   assignmentsByCoachId,
@@ -627,7 +696,7 @@ function matchMeetingsToStudents({
     const coachName = fullName(profileById.get(scan.coachId), emailById.get(scan.coachId));
 
     for (const event of scan.events) {
-      if (!includeExcluded && isExcludedStatus(event.status)) continue;
+      if (!includeExcluded && (event.deleted || isExcludedStatus(event.status))) continue;
       const parsed = parseMeetingTitle(event.title);
       if (!parsed) continue;
 
@@ -689,11 +758,11 @@ function matchStudent(
   };
 
   if (event.contactId) {
-    const byContactId = onlyMatch(
-      searchIds,
-      (id) => profileById.get(id)?.ghl_user_id?.trim() === event.contactId,
-    );
-    if (byContactId) return byContactId;
+    const matches = searchIds.filter((id) => {
+      const profile = profileById.get(id);
+      return [profile?.ghl_user_id?.trim(), profile?.ghl_contact_id?.trim()].includes(event.contactId!);
+    });
+    if (matches.length) return matches.length === 1 ? matches[0] : null;
   }
 
   if (event.contactEmail) {
