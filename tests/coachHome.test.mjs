@@ -94,110 +94,173 @@ test('published group sessions resolve an upcoming January date across the year 
 function fakeClient(tables, failedTable = null) {
   return { from(table) {
     assert.ok(table in tables, `Unexpected table ${table}`);
-    let values = tables[table];
-    let maximum = Infinity;
+    let values = [...tables[table]], maximum = Infinity, offset = 0;
+    const ordering = [];
     const query = {
       select() { return query; },
       eq(key, value) { values = values.filter((row) => row[key] === value); return query; },
       in(key, allowed) { values = values.filter((row) => allowed.some((value) => String(row[key]) === String(value))); return query; },
       is(key, value) { values = values.filter((row) => (row[key] ?? null) === value); return query; },
-      or() { return query; },
+      or(filter) {
+        if (filter.startsWith('ended_at.')) values = values.filter((row) => !row.ended_at || Date.parse(row.ended_at) > Date.now());
+        return query;
+      },
       gte(key, value) { values = values.filter((row) => row[key] >= value); return query; },
       lt(key, value) { values = values.filter((row) => row[key] < value); return query; },
-      order() { return query; },
+      order(key) { ordering.push(key); return query; },
       limit(value) { maximum = value; return query; },
-      then(resolve, reject) { return Promise.resolve({ data: values.slice(0, maximum), error: failedTable === table ? { message: 'Unavailable' } : null }).then(resolve, reject); },
+      range(first, last) { offset = first; maximum = last - first + 1; return query; },
+      then(resolve, reject) {
+        const sorted = [...values].sort((a, b) => {
+          for (const key of ordering) { if (a[key] < b[key]) return -1; if (a[key] > b[key]) return 1; }
+          return 0;
+        });
+        return Promise.resolve({ data: sorted.slice(offset, offset + maximum), error: failedTable === table ? { message: 'Unavailable' } : null }).then(resolve, reject);
+      },
     };
     return query;
   } };
 }
 
-function serviceFixture({ failedTable = null, calendarFailure = false } = {}) {
+const savedMeeting = (id, meeting_type_id = 1, options = {}) => ({
+  id, meeting_type_id, date: '2026-10-07', starts_at: '2026-10-07T18:00:00Z', ends_at: '2026-10-07T19:00:00Z',
+  created_by: 'coach', ghl_appointment_id: null, ghl_status: null, title: 'A title without any GHL naming pattern', ...options,
+});
+const assignment = (user_id, relationship_type = 'implementation', options = {}) => ({ user_id, coach_id: 'coach', relationship_type, course_id: 2, is_active: true, ended_at: null, ...options });
+
+function serviceFixture({ failedTable = null, eligible = ['member', 'partner', 'reviewer'], change = () => {} } = {}) {
   const tables = {
+    // GHL profile IDs are intentionally absent: the agenda must not depend on them.
     profiles: [
-      { id: 'coach', first_name: 'Coach', last_name: 'Example', ghl_user_id: 'ghl-coach' },
-      { id: 'member', first_name: 'Visible', last_name: 'Member', ghl_contact_id: 'contact-member' },
-      { id: 'partner', first_name: 'Shared', last_name: 'Partner', ghl_contact_id: 'contact-partner' },
-      { id: 'outsider', first_name: 'Private', last_name: 'Person', ghl_contact_id: 'contact-outsider' },
+      { id: 'coach', first_name: 'Coach', last_name: 'Example' },
+      { id: 'member', first_name: 'Visible', last_name: 'Member' },
+      { id: 'partner', first_name: 'Shared', last_name: 'Partner' },
+      { id: 'reviewer', first_name: 'Review', last_name: 'Member' },
+      { id: 'outsider', first_name: 'Private', last_name: 'Person' },
     ],
-    user_coaches: [{ user_id: 'member', coach_id: 'coach', relationship_type: 'implementation', is_active: true }],
+    user_coaches: [assignment('member'), assignment('partner'), assignment('reviewer', 'primary'), assignment('outsider')],
+    meeting_types: [{ id: 1, code: 'IMPLEMENTATION_MEETING' }, { id: 2, code: 'M2_MEETING' }],
     ninety_day_cycle_meetings: [],
-    meetings: [
-      { id: 101, ghl_appointment_id: 'implementation', date: '2026-10-07' },
-      { id: 102, ghl_appointment_id: 'review', date: '2026-10-08' },
-    ],
+    meetings: [savedMeeting(101), savedMeeting(102, 2), savedMeeting(103), savedMeeting(104), savedMeeting(105, 2)],
     business_reviews: [{ id: 10, coaching_note_id: 1, meeting_id: null }, { id: 20, coaching_note_id: 2, meeting_id: 102 }],
     business_review_system_priorities: [{ business_review_id: 10, system_id: 11, position: 1 }, { business_review_id: 20, system_id: 22, position: 1 }],
     system_scorecard_systems: [{ id: 11, label: 'Current priority', library_item_id: 51 }, { id: 22, label: 'Future priority', library_item_id: null }],
     content_nodes: [{ id: 51, slug: 'current-priority', node_type: 'library' }],
-    meeting_attendance: [{ user_id: 'member', meeting_id: 101 }],
+    meeting_attendance: [
+      { user_id: 'member', meeting_id: 101, attended: false }, { user_id: 'reviewer', meeting_id: 102, attended: false },
+      { user_id: 'member', meeting_id: 103, attended: false }, { user_id: 'partner', meeting_id: 103, attended: false },
+      { user_id: 'outsider', meeting_id: 104, attended: false }, { user_id: 'member', meeting_id: 105, attended: false },
+    ],
     implementation_meeting_sessions: [],
     business_review_preparation_responses: [{ business_review_id: 20, submitted_at: '2026-10-05T18:00:00Z' }],
   };
+  change(tables);
   const client = fakeClient(tables, failedTable);
-  const calendarEvents = [
-    { id: 'implementation', contactId: 'contact-member', title: 'Member Implementation Meeting with Coach' },
-    { id: 'review', contactId: 'contact-member', title: 'Member Business Review with Coach' },
-    { id: 'shared', contactId: 'contact-partner', title: 'Partner Implementation Meeting with Coach' },
-    { id: 'unknown', contactId: 'contact-outsider', title: 'Private Person Implementation Meeting with Coach' },
-  ].map((event) => ({ ...event, startTime: '2026-10-07T18:00:00Z', endTime: '2026-10-07T19:00:00Z' }));
   const cycles = [
     { id: 'business_audit:10', noteId: 1, businessReviewId: 10, kind: 'business_audit', cycleDate: '2026-09-01', cancelled: false },
     { id: 'business_audit:20', noteId: 2, businessReviewId: 20, kind: 'business_audit', cycleDate: '2026-10-08', cancelled: false },
   ];
-  const service = loadModule('../src/lib/coachHome.ts', {
+  const schedule = loadModule('../src/lib/coachSchedule.ts', {
     'server-only': {}, luxon,
-    '@/lib/config': { GHL: { BASE: 'https://example.com', TOKEN: 'test-token', VERSION: 'test', LOCATION_ID: 'test' } },
-    '@/lib/currentMembers': { fetchCoachingWorkspaceUserIdSet: async () => new Set(['member', 'partner', 'outsider']) },
+    '@/lib/currentMembers': { fetchCoachingWorkspaceUserIdSet: async () => new Set(eligible) },
+  });
+  const service = loadModule('../src/lib/coachHome.ts', {
+    'server-only': {}, luxon, '@/lib/coachSchedule': schedule,
     '@/lib/coachingCycles': {
       loadCoachingCycles: async () => ({ cycles, activeCycleId: 'business_audit:10' }),
       selectActiveCoachingCycle: (values, date) => values.filter((cycle) => cycle.cycleDate <= date).at(-1),
     },
-    '@/lib/partnershipScope': { getNotesScopeUserIds: async (_client, id) => id === 'partner' ? ['partner', 'member'] : [id] },
     '@/lib/contentNodeLinks': { getContentNodeHref: (node) => `/library/${node.slug}` },
     '@/lib/supabaseAdmin': { getAdminClient: () => client },
     '@/lib/coachHomeShared': shared,
     '@/lib/coachHomeGroups': { COACH_GROUP_CALENDAR_URL: groups.COACH_GROUP_CALENDAR_URL, loadPublishedCoachGroups: async () => [] },
-  }, { fetch: async () => {
-    if (calendarFailure) throw new Error('Offline');
-    return { ok: true, json: async () => ({ events: calendarEvents }) };
-  } });
-  return service;
+  }, { fetch: async () => { throw new Error('The saved agenda must never request GHL.'); } });
+  return { ...service, schedule, client, tables };
 }
 
-test('coach home uses assignment responsibilities, current priorities, exact workspace links and authorized shared member context', async () => {
+test('saved agenda uses each member relationship and stored attendees without GHL IDs or title matching', async () => {
   const home = await serviceFixture().buildCoachHome('coach', ['coach'], range);
-  assert.deepEqual(Array.from(home.coach.responsibilities), ['implementation']);
-  const implementation = home.meetings.find((event) => event.id === 'implementation');
+  assert.deepEqual(Array.from(home.coach.responsibilities), ['implementation', 'primary']);
+  assert.deepEqual(Array.from(home.meetings, (meeting) => meeting.id), ['101', '102', '103']);
+  const implementation = home.meetings[0];
   assert.equal(implementation.member.id, 'member');
   assert.equal(implementation.priorities[0].label, 'Current priority');
   assert.match(implementation.workspaceHref, /noteId=1&meetingId=101$/);
-  const review = home.meetings.find((event) => event.id === 'review');
+  const review = home.meetings[1];
+  assert.equal(review.kind, 'business_review');
   assert.equal(review.priorities[0].label, 'Current priority');
   assert.match(review.workspaceHref, /reviewId=20$/);
   assert.equal(review.prepSubmitted, true);
-  assert.equal(home.meetings.find((event) => event.id === 'shared').member.id, 'member');
-  const unknown = home.meetings.find((event) => event.id === 'unknown');
-  assert.equal(unknown.member, null);
-  assert.equal(unknown.prioritiesState, 'unavailable');
-  assert.equal(unknown.workspaceHref, '/coach/students-overview');
   assert.ok(!JSON.stringify(home).includes('Private Person'));
   assert.ok(!JSON.stringify(home).includes('Future priority'));
 });
 
-test('a failed priorities source remains explicitly unavailable while appointments continue to render', async () => {
+test('shared attendee identities produce one appointment with real member links', async () => {
+  const home = await serviceFixture().buildCoachHome('coach', ['coach'], range);
+  const sharedMeeting = home.meetings.find((meeting) => meeting.id === '103');
+  assert.equal(home.meetings.filter((meeting) => meeting.id === '103').length, 1);
+  assert.equal(sharedMeeting.member.name, 'Visible Member & Shared Partner');
+  assert.deepEqual(Array.from(sharedMeeting.people, (person) => person.id), ['member', 'partner']);
+  assert.match(sharedMeeting.people[1].workspaceHref, /userId=partner.*meetingId=103$/);
+});
+
+test('inactive, ended, ineligible and other-course assignments do not supply calendar meetings', async () => {
+  for (const options of [{ is_active: false }, { ended_at: '2000-01-01T00:00:00Z' }, { course_id: 99 }]) {
+    const home = await serviceFixture({ change: (tables) => { tables.user_coaches = [assignment('member', 'implementation', options)]; } }).buildCoachHome('coach', ['coach'], range);
+    assert.equal(home.meetings.length, 0);
+  }
+  assert.equal((await serviceFixture({ eligible: [] }).buildCoachHome('coach', ['coach'], range)).meetings.length, 0);
+});
+
+test('cancellations and a stand-in coach booking are excluded while manually entered meetings remain valid', async () => {
+  const env = serviceFixture({ change(tables) {
+    tables.meetings = [
+      savedMeeting(101, 1, { ghl_status: 'No_Show' }), savedMeeting(103, 1, { ghl_status: 'cancelled' }),
+      savedMeeting(201, 1, { ghl_appointment_id: 'with-stand-in', created_by: 'other-coach' }),
+      savedMeeting(202, 1, { created_by: 'admin' }),
+    ];
+    tables.meeting_attendance.push({ meeting_id: 201, user_id: 'member' }, { meeting_id: 202, user_id: 'member' });
+  } });
+  const home = await env.buildCoachHome('coach', ['coach'], range);
+  assert.deepEqual(Array.from(home.meetings, (meeting) => meeting.id), ['202']);
+});
+
+test('date-only records retain their date, no-show normalization and selected-week boundaries', async () => {
+  const home = await serviceFixture({ change(tables) {
+    tables.meetings = [savedMeeting(101, 1, { starts_at: null, ends_at: null }), savedMeeting(103, 1, { starts_at: '2026-10-12T18:00:00Z' })];
+  } }).buildCoachHome('coach', ['coach'], range);
+  assert.equal(home.meetings.length, 1);
+  assert.equal(home.meetings[0].dateOnly, true);
+  assert.equal(home.meetings[0].start, '2026-10-07T06:00:00.000Z');
+  assert.equal(home.meetings[0].end, '2026-10-08T05:59:59.999Z');
+});
+
+test('pagination retains every saved meeting and its attendee beyond one response page', async () => {
+  const env = serviceFixture({ change(tables) {
+    tables.user_coaches = [assignment('member')];
+    tables.meetings = Array.from({ length: 450 }, (_, index) => savedMeeting(1000 + index));
+    tables.meeting_attendance = tables.meetings.map((meeting) => ({ user_id: 'member', meeting_id: meeting.id, attended: false }));
+  } });
+  const assignments = await env.schedule.loadCoachAssignments(env.client, 'coach');
+  const meetings = await env.schedule.loadCoachSchedule(env.client, 'coach', assignments, range);
+  assert.equal(meetings.length, 450);
+  assert.equal(meetings[449].meeting.id, 1449);
+});
+
+test('a failed priorities source preserves the saved schedule and exact member identity', async () => {
   const home = await serviceFixture({ failedTable: 'business_review_system_priorities' }).buildCoachHome('coach', ['coach'], range);
   assert.equal(home.sources.schedule.status, 'ready');
   assert.equal(home.sources.priorities.status, 'partial');
-  assert.equal(home.meetings.length, 4);
+  assert.equal(home.meetings.length, 3);
   assert.equal(home.meetings[0].prioritiesState, 'unavailable');
-  assert.equal(home.meetings[0].prepSubmitted, null);
 });
 
-test('a failed calendar never returns a successful empty schedule', async () => {
-  const home = await serviceFixture({ calendarFailure: true }).buildCoachHome('coach', ['coach'], range);
-  assert.equal(home.sources.schedule.status, 'unavailable');
-  assert.equal(home.meetings.length, 0);
+test('failed saved-meeting or attendee queries are unavailable rather than a successful empty schedule', async () => {
+  for (const failedTable of ['meetings', 'meeting_attendance', 'meeting_types']) {
+    const home = await serviceFixture({ failedTable }).buildCoachHome('coach', ['coach'], range);
+    assert.equal(home.sources.schedule.status, 'unavailable');
+    assert.equal(home.meetings.length, 0);
+  }
 });
 
 test('home endpoint enforces authenticated coach authorization before using privileged data', async () => {
