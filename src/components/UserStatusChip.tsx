@@ -11,6 +11,7 @@ export interface UserStatusChipProps {
   size?: 'small' | 'medium';
   clickable?: boolean;
   onClick?: () => void;
+  compact?: boolean;
 }
 
 function getChipColor(status: UserStatus) {
@@ -25,15 +26,15 @@ function getChipColor(status: UserStatus) {
   }
 }
 
-function getChipLabel(status: UserStatus) {
+function getChipLabel(status: UserStatus, compact = false) {
   switch (status) {
     case 'red':
-      return 'Red – Emergency';
+      return compact ? 'Emergency' : 'Red – Emergency';
     case 'yellow':
-      return 'Yellow – Needs attention';
+      return compact ? 'Needs attention' : 'Yellow – Needs attention';
     case 'green':
     default:
-      return 'Green – On track';
+      return compact ? 'On track' : 'Green – On track';
   }
 }
 
@@ -66,13 +67,14 @@ function UserStatusChipBase({
   size = 'small',
   clickable = false,
   onClick,
+  compact = false,
 }: UserStatusChipProps) {
   const chip = (
     <Chip
       size={size}
       color={getChipColor(status)}
-      label={getChipLabel(status)}
-      variant={clickable ? 'filled' : 'outlined'}
+      label={getChipLabel(status, compact)}
+      variant={compact ? 'outlined' : clickable ? 'filled' : 'outlined'}
       onClick={clickable ? onClick : undefined}
       sx={{ fontWeight: 500, fontSize:12 }}
     />

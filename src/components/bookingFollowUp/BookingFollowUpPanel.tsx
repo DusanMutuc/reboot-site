@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   Accordion,
   AccordionDetails,
@@ -30,6 +31,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import NewReleasesOutlinedIcon from '@mui/icons-material/NewReleasesOutlined';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import CoachBookingFollowUp from './CoachBookingFollowUp';
 
 import type {
   BookingFollowUpGroup,
@@ -194,6 +196,10 @@ export default function BookingFollowUpPanel({ mode }: Props) {
     });
   }, [filter, report]);
 
+  if (mode === 'coach') {
+    return <CoachBookingFollowUp report={report} loading={loading} refreshing={refreshing} error={error} onRefresh={() => void load(undefined, true)} onRetry={() => void load()} />;
+  }
+
   const content = (
     <>
       <Box
@@ -207,7 +213,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
         }}
       >
         <Box>
-          <Typography variant={mode === 'coach' ? 'h2' : 'adminSectionTitle'} fontWeight={700}>
+          <Typography variant="adminSectionTitle" fontWeight={700}>
             Booking follow-up
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -269,16 +275,12 @@ export default function BookingFollowUpPanel({ mode }: Props) {
 
           {filter === 'attention' && summary.attention === 0 ? (
             <Alert severity="success">No members currently need booking follow-up. Paused members are excluded from these prompts.</Alert>
-          ) : mode === 'admin' ? (
+          ) : (
             <Stack spacing={1.5}>
               {visibleGroups.map((group) => (
                 <AdminCoachGroup key={group.coachId} group={group} filter={filter} />
               ))}
             </Stack>
-          ) : (
-            visibleGroups.map((group) => (
-              <CoachGroupContent key={group.coachId} group={group} filter={filter} />
-            ))
           )}
 
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
@@ -289,13 +291,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
     </>
   );
 
-  if (mode === 'admin') return content;
-
-  return (
-    <Box sx={{ width: '100%', bgcolor: '#f4f7f6', py: { xs: 5, md: 8 }, px: 2 }}>
-      <Box sx={{ width: '100%', maxWidth: 1200, mx: 'auto' }}>{content}</Box>
-    </Box>
-  );
+  return content;
 }
 
 function SummaryCard({
@@ -366,7 +362,7 @@ function AdminCoachGroup({ group, filter }: { group: VisibleBookingFollowUpGroup
   );
 }
 
-function CoachGroupContent({ group, filter }: { group: BookingFollowUpGroup; filter: Filter }) {
+function CoachGroupContent({ group, filter, showCoachingLinks = false }: { group: BookingFollowUpGroup; filter: Filter; showCoachingLinks?: boolean }) {
   return (
     <Box>
       {group.dataWarning && (
@@ -381,13 +377,13 @@ function CoachGroupContent({ group, filter }: { group: BookingFollowUpGroup; fil
             : 'No roster members found.'}
         </Alert>
       ) : (
-        <MemberTable members={group.members} />
+        <MemberTable members={group.members} showCoachingLinks={showCoachingLinks} />
       )}
     </Box>
   );
 }
 
-function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
+function MemberTable({ members, showCoachingLinks }: { members: BookingFollowUpMember[]; showCoachingLinks: boolean }) {
   return (
     <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
       <Table size="small" aria-label="Booking follow-up roster">
@@ -415,6 +411,16 @@ function MemberTable({ members }: { members: BookingFollowUpMember[] }) {
                   {member.people.map((person) => (
                     <Box key={person.userId}>
                       <Typography variant="body2" fontWeight={700}>{person.name}</Typography>
+                      {showCoachingLinks ? (
+                        <Button
+                          component={Link}
+                          href={`/coach/students-overview?userId=${encodeURIComponent(person.userId)}&courseId=2&tab=${member.needsImplementation ? 'notes' : member.needsM2 ? 'audit' : 'overview'}`}
+                          size="small"
+                          sx={{ p: 0, minHeight: 28, minWidth: 0, fontSize: 12, color: '#2f7767', display: 'flex', width: 'fit-content' }}
+                        >
+                          Open space →
+                        </Button>
+                      ) : null}
                       {person.email && (
                         <Typography variant="caption" color="text.secondary">
                           {person.email}

@@ -39,10 +39,12 @@ import type {
   SystemScorecardStatus,
 } from '@/lib/businessReviews';
 import { getBusinessReviewScorecards } from '@/lib/businessReviews';
+import { selectLinkedWorkspaceItem } from '@/lib/workspaceLinkedSelection';
 
 type BusinessAuditTabProps = {
   selectedStudentId: string;
   studentName?: string | null;
+  requestedReviewId?: number | null;
 };
 
 type ApiErrorBody = {
@@ -276,6 +278,7 @@ function EmptyAuditState({
 export default function BusinessAuditTab({
   selectedStudentId,
   studentName,
+  requestedReviewId,
 }: BusinessAuditTabProps) {
   const [dimensions, setDimensions] = useState<FocusFinderDimension[]>([]);
   const [reviews, setReviews] = useState<BusinessReview[]>([]);
@@ -334,11 +337,14 @@ export default function BusinessAuditTab({
           throw new Error(body.error || 'Failed to load business reviews.');
         }
 
-        if (activeStudentIdRef.current !== selectedStudentId) return;
+        if (controller.signal.aborted || activeStudentIdRef.current !== selectedStudentId) return;
 
         setDimensions(body.dimensions ?? []);
         setReviews(body.reviews ?? []);
-        setSelectedReviewId(selectDefaultReviewId(body.reviews ?? []));
+        const loadedReviews = body.reviews ?? [];
+        const selectedId = selectLinkedWorkspaceItem(loadedReviews, requestedReviewId, selectDefaultReviewId(loadedReviews));
+        setSelectedReviewId(selectedId);
+        if (requestedReviewId != null && selectedId === null) setLoadError('The linked Business Review is unavailable for this member. Choose a review below.');
       } catch (error) {
         if (controller.signal.aborted) return;
 
@@ -354,7 +360,7 @@ export default function BusinessAuditTab({
     void load();
 
     return () => controller.abort();
-  }, [selectedStudentId]);
+  }, [selectedStudentId, requestedReviewId]);
 
   const selectedReview = useMemo(
     () => reviews.find((review) => review.id === selectedReviewId) ?? null,
@@ -789,6 +795,7 @@ export default function BusinessAuditTab({
                       color={selected ? 'primary' : 'inherit'}
                       onClick={() => {
                         setSelectedReviewId(review.id);
+                        setLoadError(null);
                         setSaveError(null);
                         setSystemSaveError(null);
                         setPrioritySaveError(null);

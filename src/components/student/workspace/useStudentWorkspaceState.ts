@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { fetchStudentProgressCourses } from '@/lib/studentOverview';
 import type {
@@ -48,9 +48,10 @@ type UseStudentWorkspaceStateArgs = {
   setQuery: (patch: WorkspaceQueryPatch) => void;
 };
 
-async function loadAdminStudents(requestedId: string | null): Promise<LoadedStudents> {
+async function loadAdminStudents(requestedId: string | null, signal: AbortSignal): Promise<LoadedStudents> {
   const response = await fetch('/api/admin/list-users?membership=coaching', {
     cache: 'no-store',
+    signal,
   });
   const body = (await response.json()) as { items?: AdminListUserRow[]; error?: string };
 
@@ -75,13 +76,13 @@ async function loadAdminStudents(requestedId: string | null): Promise<LoadedStud
   };
 }
 
-async function loadCoachStudents(requestedId: string | null): Promise<LoadedStudents> {
+async function loadCoachStudents(requestedId: string | null, signal: AbortSignal): Promise<LoadedStudents> {
   const params = new URLSearchParams();
   if (requestedId) params.set('requestedId', requestedId);
   const query = params.toString();
   const response = await fetch(
     query ? `/api/coach/workspace-students?${query}` : '/api/coach/workspace-students',
-    { cache: 'no-store' },
+    { cache: 'no-store', signal },
   );
   const body = (await response.json()) as CoachWorkspaceStudentsResponse;
 
@@ -116,6 +117,9 @@ export function useStudentWorkspaceState({
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
   const [studentsError, setStudentsError] = useState<string | null>(null);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const neutralAuditLanding = !selectedStudentId && tab === 'audit';
 
   const [coachProgressCourses, setCoachProgressCourses] = useState<CoachProgressCourse[]>([]);
   const [coachProgressLoading, setCoachProgressLoading] = useState(false);
@@ -123,6 +127,7 @@ export function useStudentWorkspaceState({
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
 
     (async () => {
       try {
@@ -130,8 +135,8 @@ export function useStudentWorkspaceState({
         setStudentsError(null);
         const result =
           mode === 'admin'
-            ? await loadAdminStudents(selectedStudentId)
-            : await loadCoachStudents(selectedStudentId);
+            ? await loadAdminStudents(selectedStudentId, controller.signal)
+            : await loadCoachStudents(selectedStudentId, controller.signal);
         if (!active) return;
 
         const { items, resolvedStudentId } = result;
@@ -139,14 +144,17 @@ export function useStudentWorkspaceState({
 
         // A direct link to the Business Review tab should open as a neutral
         // landing page so the coach can deliberately choose the right student.
-        if (!selectedStudentId && items[0] && tab !== 'audit') {
+        if (!selectedStudentId && items[0] && !neutralAuditLanding) {
           setQuery({ userId: items[0].id });
           return;
         }
 
         if (selectedStudentId && resolvedStudentId !== selectedStudentId) {
           setQuery({
-            userId: resolvedStudentId ?? (tab === 'audit' ? null : items[0]?.id ?? null),
+            userId: resolvedStudentId ?? (tabRef.current === 'audit' ? null : items[0]?.id ?? null),
+            // An unavailable member must not carry appointment context over to
+            // a fallback member. Merged-account redirects keep the same context.
+            ...(resolvedStudentId ? {} : { noteId: null, meetingId: null, reviewId: null }),
           });
         }
       } catch (error) {
@@ -161,8 +169,9 @@ export function useStudentWorkspaceState({
 
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [mode, selectedStudentId, setQuery, tab]);
+  }, [mode, selectedStudentId, neutralAuditLanding, setQuery]);
 
   const selectedStudent = useMemo(
     () => students.find((student) => student.id === selectedStudentId) ?? null,

@@ -1,5 +1,8 @@
 import type { UserStatus, UserStatusSource } from '@/types/coaching';
 
+export type StatusOverviewSortBy = 'name' | 'status' | 'kpi' | 'one_on_one' | 'group' | 'courses';
+export type StatusOverviewSortDirection = 'asc' | 'desc';
+
 export type StatusOverviewRow = {
   user_id: string;
   full_name: string;
