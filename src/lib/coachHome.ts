@@ -1,11 +1,10 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { DateTime } from 'luxon';
 import { loadCoachingCycles, selectActiveCoachingCycle } from '@/lib/coachingCycles';
 import { getContentNodeHref } from '@/lib/contentNodeLinks';
 import { getAdminClient } from '@/lib/supabaseAdmin';
-import { coachWorkspaceHref, safeCoachHomeUrl, type CoachHomeRange } from '@/lib/coachHomeShared';
+import { coachWorkspaceHref, type CoachHomeRange } from '@/lib/coachHomeShared';
 import { loadCoachAssignments, loadCoachSchedule, relationshipMeetingKind, type CoachScheduledMeeting } from '@/lib/coachSchedule';
 import type { CoachHomeGroupSession, CoachHomeMeeting, CoachHomePriority, CoachHomeResponse, CoachHomeSource } from '@/types/coachHome';
 import { COACH_GROUP_CALENDAR_URL, loadPublishedCoachGroups } from '@/lib/coachHomeGroups';
@@ -38,41 +37,14 @@ async function profilesFor(client: SupabaseClient, ids: string[]): Promise<Profi
   return pages.flat();
 }
 
-/** No coach filter: coaches need to recommend sessions led by any coach. */
-async function loadProgrammeGroups(client: SupabaseClient): Promise<{ sessions: CoachHomeGroupSession[]; source: CoachHomeSource }> {
-  const now = DateTime.utc();
+/** Coach-wide group recommendations come only from the public REBOOT calendar. */
+export async function loadCoachHomeGroups(): Promise<{ sessions: CoachHomeGroupSession[]; source: CoachHomeSource }> {
   try {
-    const result = await client.from('ninety_day_cycle_meetings')
-      .select('id,title,starts_at,ends_at,join_url,ninety_day_cycles!inner(name,status)')
-      .eq('ninety_day_cycles.status', 'active').gte('starts_at', now.minus({ hours: 2 }).toISO())
-      .lt('starts_at', now.plus({ days: 30 }).toISO()).order('starts_at').limit(100);
-    const meetings = rows<{ id: number; title: string; starts_at: string; ends_at: string | null; join_url: string | null;
-      ninety_day_cycles: { name: string; status: string } | Array<{ name: string; status: string }> }>(result);
-    const sessions = meetings.filter((meeting) => Date.parse(meeting.ends_at ?? meeting.starts_at) >= now.toMillis())
-      .map((meeting) => {
-        const cycle = Array.isArray(meeting.ninety_day_cycles) ? meeting.ninety_day_cycles[0] : meeting.ninety_day_cycles;
-        return { id: `ninety-day:${meeting.id}`, title: meeting.title, start: meeting.starts_at, end: meeting.ends_at,
-          joinUrl: safeCoachHomeUrl(meeting.join_url), audience: cycle?.name || '90-day programme members' };
-      });
-    return { sessions, source: ready };
+    return { sessions: await loadPublishedCoachGroups(), source: ready };
   } catch {
-    return { sessions: [], source: { status: 'unavailable', message: 'Group sessions could not be loaded. The full group calendar is still available.' } };
+    return { sessions: [], source: { status: 'unavailable',
+      message: 'The published group calendar could not be loaded. Open the full calendar for all sessions.' } };
   }
-}
-
-export async function loadCoachHomeGroups(client: SupabaseClient): Promise<{ sessions: CoachHomeGroupSession[]; source: CoachHomeSource }> {
-  const [programme, published] = await Promise.allSettled([loadProgrammeGroups(client), loadPublishedCoachGroups()]);
-  const programmeReady = programme.status === 'fulfilled' && programme.value.source.status === 'ready';
-  const publishedReady = published.status === 'fulfilled';
-  const sessions = [
-    ...(programmeReady && programme.status === 'fulfilled' ? programme.value.sessions : []),
-    ...(publishedReady ? published.value : []),
-  ].sort((a, b) => a.start.localeCompare(b.start));
-  return { sessions, source: programmeReady && publishedReady ? ready : {
-    status: programmeReady || publishedReady ? 'partial' : 'unavailable',
-    message: !publishedReady ? 'The published group calendar could not be loaded. Open the full calendar for all sessions.'
-      : 'Programme sessions could not be loaded. The published REBOOT calendar is shown.',
-  } };
 }
 
 async function loadMemberContext(client: SupabaseClient, memberId: string, scheduled: CoachScheduledMeeting[]) {
@@ -127,7 +99,7 @@ async function loadMemberContext(client: SupabaseClient, memberId: string, sched
 export async function buildCoachHome(coachId: string, roleCodes: string[], range: CoachHomeRange): Promise<CoachHomeResponse> {
   const client = getAdminClient();
   const [coachProfiles, assignments, groups] = await Promise.all([
-    profilesFor(client, [coachId]), loadCoachAssignments(client, coachId), loadCoachHomeGroups(client),
+    profilesFor(client, [coachId]), loadCoachAssignments(client, coachId), loadCoachHomeGroups(),
   ]);
   const profile = coachProfiles[0];
   const responsibilities = [...new Set(assignments.map((row) => relationshipMeetingKind(row.relationship_type) === 'implementation' ? 'implementation' as const : 'primary' as const))];
