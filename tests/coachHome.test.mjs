@@ -128,7 +128,7 @@ const savedMeeting = (id, meeting_type_id = 1, options = {}) => ({
 });
 const assignment = (user_id, relationship_type = 'implementation', options = {}) => ({ user_id, coach_id: 'coach', relationship_type, course_id: 2, is_active: true, ended_at: null, ...options });
 
-function serviceFixture({ failedTable = null, eligible = ['member', 'partner', 'reviewer'], change = () => {} } = {}) {
+function serviceFixture({ failedTable = null, eligible = ['member', 'partner', 'reviewer'], change = () => {}, publishedSessions = [], publishedFailure = false } = {}) {
   const tables = {
     // GHL profile IDs are intentionally absent: the agenda must not depend on them.
     profiles: [
@@ -155,7 +155,9 @@ function serviceFixture({ failedTable = null, eligible = ['member', 'partner', '
     business_review_preparation_responses: [{ business_review_id: 20, submitted_at: '2026-10-05T18:00:00Z' }],
   };
   change(tables);
-  const client = fakeClient(tables, failedTable);
+  const queryClient = fakeClient(tables, failedTable);
+  const requestedTables = [];
+  const client = { from(table) { requestedTables.push(table); return queryClient.from(table); } };
   const cycles = [
     { id: 'business_audit:10', noteId: 1, businessReviewId: 10, kind: 'business_audit', cycleDate: '2026-09-01', cancelled: false },
     { id: 'business_audit:20', noteId: 2, businessReviewId: 20, kind: 'business_audit', cycleDate: '2026-10-08', cancelled: false },
@@ -173,10 +175,33 @@ function serviceFixture({ failedTable = null, eligible = ['member', 'partner', '
     '@/lib/contentNodeLinks': { getContentNodeHref: (node) => `/library/${node.slug}` },
     '@/lib/supabaseAdmin': { getAdminClient: () => client },
     '@/lib/coachHomeShared': shared,
-    '@/lib/coachHomeGroups': { COACH_GROUP_CALENDAR_URL: groups.COACH_GROUP_CALENDAR_URL, loadPublishedCoachGroups: async () => [] },
+    '@/lib/coachHomeGroups': { COACH_GROUP_CALENDAR_URL: groups.COACH_GROUP_CALENDAR_URL, loadPublishedCoachGroups: async () => {
+      if (publishedFailure) throw new Error('Public calendar unavailable');
+      return publishedSessions;
+    } },
   }, { fetch: async () => { throw new Error('The saved agenda must never request GHL.'); } });
-  return { ...service, schedule, client, tables };
+  return { ...service, schedule, client, tables, requestedTables };
 }
+
+test('coach group sessions use only AddEvent and never query 90-day programme sessions', async () => {
+  const sessions = [{ id: 'addevent:public:occurrence', title: 'Public REBOOT session', start: '2026-10-08T18:00:00Z', end: null, joinUrl: null, audience: 'REBOOT group calendar' }];
+  const env = serviceFixture({ publishedSessions: sessions });
+  const home = await env.buildCoachHome('coach', ['coach'], range);
+  assert.equal(home.groupSessions[0].id, sessions[0].id);
+  assert.equal(home.groupSessions.length, 1);
+  assert.equal(home.sources.groups.status, 'ready');
+  assert.equal(env.requestedTables.includes('ninety_day_cycle_meetings'), false);
+});
+
+test('an AddEvent outage reports unavailable without falling back to programme sessions', async () => {
+  const env = serviceFixture({ publishedFailure: true });
+  const home = await env.buildCoachHome('coach', ['coach'], range);
+  assert.equal(home.groupSessions.length, 0);
+  assert.equal(home.sources.groups.status, 'unavailable');
+  assert.equal(home.sources.schedule.status, 'ready');
+  assert.equal(home.groupCalendarUrl, groups.COACH_GROUP_CALENDAR_URL);
+  assert.equal(env.requestedTables.includes('ninety_day_cycle_meetings'), false);
+});
 
 test('saved agenda uses each member relationship and stored attendees without GHL IDs or title matching', async () => {
   const home = await serviceFixture().buildCoachHome('coach', ['coach'], range);
