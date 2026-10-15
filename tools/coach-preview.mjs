@@ -156,7 +156,11 @@ function serve() {
     if (url.pathname.startsWith('/preview/')) { response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end('<!doctype html><title>Local coaching preview</title><main style="font:18px system-ui;max-width:600px;margin:80px auto"><h1>Local coaching preview</h1><p>This is a synthetic meeting or booking link for testing. No real call or booking is created.</p><a href="http://127.0.0.1:3015/coach">Back to coach home</a></main>'); return; }
     const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
     let payload;
-    if (url.pathname === '/calendars/events') {
+    if (url.pathname.startsWith('/calendars/events/appointments/')) {
+      const event = fixture.events.find((item) => item.id === decodeURIComponent(url.pathname.split('/').at(-1)));
+      if (!event) { response.writeHead(404); response.end('Unknown preview appointment'); return; }
+      payload = { event };
+    } else if (url.pathname === '/calendars/events') {
       const from = Number(url.searchParams.get('startTime')) || 0;
       const to = Number(url.searchParams.get('endTime')) || Infinity;
       const userId = url.searchParams.get('userId');

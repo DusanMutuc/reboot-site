@@ -138,6 +138,26 @@ const homePayload = (options = {}) => ({
 });
 const resolve = (request, payload) => request.work.resolve({ ok: true, json: async () => payload });
 
+test('an unavailable saved schedule is not presented as a week with no meetings', async () => {
+  const env = homeEnvironment(), home = env.mount(); await env.flush();
+  const sources = homePayload().sources;
+  resolve(env.requests[0], homePayload({ sources: { ...sources, schedule: { status: 'unavailable', message: 'Please retry.' } } }));
+  await env.flush();
+  const banner = elements(home.value, item => item.props?.component === 'h1')[0];
+  assert.equal(banner.props.children, 'Your schedule is unavailable');
+});
+
+test('date-only scheduled records show an unset time rather than midnight or an in-progress call', async () => {
+  const env = homeEnvironment(), home = env.mount(); await env.flush();
+  resolve(env.requests[0], homePayload({ meetings: [{ ...meeting('manual', 'Member'), kind: 'implementation',
+    title: 'Implementation meeting', start: '2026-10-09T00:00:00Z', end: '2026-10-09T23:59:59Z', dateOnly: true, workspaceHref: '/coach/students-overview' }] }));
+  await env.flush();
+  const banner = elements(home.value, item => item.props?.['aria-label'] === 'Next meeting')[0];
+  const labels = elements(banner, item => item.type === 'Typography').map(item => String(item.props.children));
+  assert.ok(labels.some(label => label.includes('Time not set')));
+  assert.ok(!labels.some(label => label.includes('In progress')));
+});
+
 test('Home drops an older refresh response after navigation to another week', async () => {
   const env = homeEnvironment(), home = env.mount(); await env.flush();
   resolve(env.requests[0], homePayload()); await env.flush();

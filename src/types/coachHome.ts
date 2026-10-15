@@ -15,8 +15,11 @@ export type CoachHomeMeeting = {
   title: string;
   start: string;
   end: string | null;
+  /** Date-only manual records appear without an invented appointment time. */
+  dateOnly?: boolean;
   joinUrl: string | null;
   member: { id: string; name: string } | null;
+  people?: Array<{ id: string; name: string; workspaceHref: string }>;
   workspaceHref: string;
   priorities: CoachHomePriority[];
   prioritiesState: 'ready' | 'unavailable';

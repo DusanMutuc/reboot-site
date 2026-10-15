@@ -2,19 +2,15 @@ import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { DateTime } from 'luxon';
-import { GHL } from '@/lib/config';
-import { fetchCoachingWorkspaceUserIdSet } from '@/lib/currentMembers';
 import { loadCoachingCycles, selectActiveCoachingCycle } from '@/lib/coachingCycles';
-import { getNotesScopeUserIds } from '@/lib/partnershipScope';
 import { getContentNodeHref } from '@/lib/contentNodeLinks';
 import { getAdminClient } from '@/lib/supabaseAdmin';
-import { coachWorkspaceHref, normalizeCoachCalendar, safeCoachHomeUrl, type CoachHomeRange, type CoachCalendarEvent } from '@/lib/coachHomeShared';
+import { coachWorkspaceHref, safeCoachHomeUrl, type CoachHomeRange } from '@/lib/coachHomeShared';
+import { loadCoachAssignments, loadCoachSchedule, relationshipMeetingKind, type CoachScheduledMeeting } from '@/lib/coachSchedule';
 import type { CoachHomeGroupSession, CoachHomeMeeting, CoachHomePriority, CoachHomeResponse, CoachHomeSource } from '@/types/coachHome';
 import { COACH_GROUP_CALENDAR_URL, loadPublishedCoachGroups } from '@/lib/coachHomeGroups';
 
-type Profile = { id: string; first_name: string | null; last_name: string | null; ghl_contact_id: string | null; ghl_user_id: string | null };
-type Assignment = { user_id: string; relationship_type: string | null };
-type LocalMeeting = { id: number; date: string; ghl_appointment_id: string; ghl_status: string | null };
+type Profile = { id: string; first_name: string | null; last_name: string | null };
 type Review = { id: number; meeting_id: number | null; coaching_note_id: number };
 type PriorityRow = { system_id: number; position: number };
 type SystemRow = { id: number; label: string; library_item_id: number | null };
@@ -37,34 +33,9 @@ async function mapLimit<T, U>(items: T[], mapper: (item: T) => Promise<U>, limit
 async function profilesFor(client: SupabaseClient, ids: string[]): Promise<Profile[]> {
   const pages = [];
   for (let offset = 0; offset < ids.length; offset += 100) {
-    pages.push(rows<Profile>(await client.from('profiles').select('id,first_name,last_name,ghl_contact_id,ghl_user_id').in('id', ids.slice(offset, offset + 100))));
+    pages.push(rows<Profile>(await client.from('profiles').select('id,first_name,last_name').in('id', ids.slice(offset, offset + 100))));
   }
   return pages.flat();
-}
-
-async function loadSchedule(ghlUserId: string | null, range: CoachHomeRange): Promise<{ events: CoachCalendarEvent[]; source: CoachHomeSource }> {
-  if (!ghlUserId?.trim()) return { events: [], source: { status: 'unavailable', message: 'Your coaching calendar is not connected yet.' } };
-  if (!GHL.BASE || !GHL.TOKEN || !GHL.VERSION || !GHL.LOCATION_ID) {
-    return { events: [], source: { status: 'unavailable', message: 'The calendar connection is not configured.' } };
-  }
-  try {
-    const url = new URL(`${GHL.BASE.replace(/\/+$/, '')}/calendars/events`);
-    const localDevelopment = process.env.NODE_ENV !== 'production' && url.protocol === 'http:'
-      && ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname);
-    if ((url.protocol !== 'https:' && !localDevelopment) || url.username || url.password) throw new Error('Invalid calendar configuration.');
-    url.searchParams.set('locationId', GHL.LOCATION_ID);
-    url.searchParams.set('userId', ghlUserId.trim());
-    url.searchParams.set('startTime', String(range.startMs));
-    url.searchParams.set('endTime', String(range.endMs));
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${GHL.TOKEN}`, Version: GHL.VERSION, Accept: 'application/json' },
-      cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) throw new Error('The calendar could not be loaded.');
-    return { events: normalizeCoachCalendar(await response.json(), range), source: ready };
-  } catch {
-    return { events: [], source: { status: 'unavailable', message: 'Your calendar could not be loaded. Please retry.' } };
-  }
 }
 
 /** No coach filter: coaches need to recommend sessions led by any coach. */
@@ -104,40 +75,11 @@ export async function loadCoachHomeGroups(client: SupabaseClient): Promise<{ ses
   } };
 }
 
-async function matchMembers(client: SupabaseClient, events: CoachCalendarEvent[], assignedProfiles: Profile[], eligibleIds: Set<string>): Promise<Map<string, string>> {
-  const assignedIds = new Set(assignedProfiles.map((profile) => profile.id));
-  const result = new Map<string, string>();
-  const contacts = [...new Set(events.map((event) => event.contactId).filter((id): id is string => Boolean(id)))];
-  const unknown: string[] = [];
-  for (const contactId of contacts) {
-    const matches = assignedProfiles.filter((profile) => [profile.ghl_contact_id?.trim(), profile.ghl_user_id?.trim()].includes(contactId));
-    if (matches.length === 1) result.set(contactId, matches[0].id);
-    else if (matches.length === 0) unknown.push(contactId);
-  }
-  // Resolve a partner only when the notes-sharing scope leads to one assigned
-  // member. Never match on names or emails, or promote an unrelated contact.
-  for (let offset = 0; offset < unknown.length; offset += 100) {
-    const batch = unknown.slice(offset, offset + 100);
-    const lookups = await Promise.all(['ghl_contact_id', 'ghl_user_id'].map((column) => client.from('profiles')
-      .select('id,first_name,last_name,ghl_contact_id,ghl_user_id').in(column, batch).is('merged_at', null)));
-    const profiles = [...new Map(lookups.flatMap((lookup) => rows<Profile>(lookup)).map((profile) => [profile.id, profile])).values()];
-    await mapLimit(batch, async (contactId) => {
-      const candidates = profiles.filter((profile) => eligibleIds.has(profile.id)
-        && [profile.ghl_contact_id?.trim(), profile.ghl_user_id?.trim()].includes(contactId));
-      if (candidates.length !== 1) return;
-      const aliases = await getNotesScopeUserIds(client, candidates[0].id);
-      const visible = aliases.filter((id) => assignedIds.has(id));
-      if (visible.length === 1) result.set(contactId, visible[0]);
-    });
-  }
-  return result;
-}
-
-async function loadMemberContext(client: SupabaseClient, memberId: string, events: CoachCalendarEvent[], localMeetings: LocalMeeting[]) {
+async function loadMemberContext(client: SupabaseClient, memberId: string, scheduled: CoachScheduledMeeting[]) {
   const cycles = await loadCoachingCycles(client, memberId);
   const active = cycles.cycles.find((cycle) => cycle.id === cycles.activeCycleId);
   const reviewIds = cycles.cycles.flatMap((cycle) => cycle.businessReviewId ? [cycle.businessReviewId] : []);
-  const relevantLocal = localMeetings.filter((meeting) => events.some((event) => event.id === meeting.ghl_appointment_id));
+  const relevantLocal = scheduled.map((item) => item.meeting);
   const localIds = relevantLocal.map((meeting) => meeting.id);
   const [priorityResult, reviewsResult, attendanceResult, sessionResult] = await Promise.all([
     active?.businessReviewId ? client.from('business_review_system_priorities').select('system_id,position')
@@ -166,17 +108,16 @@ async function loadMemberContext(client: SupabaseClient, memberId: string, event
   const preparations = exactReviewIds.length ? rows<{ business_review_id: number; submitted_at: string | null }>(await client.from('business_review_preparation_responses')
     .select('business_review_id,submitted_at').in('business_review_id', exactReviewIds)) : [];
   const links = new Map<string, { href: string; prep: boolean | null }>();
-  for (const event of events) {
-    const local = relevantLocal.find((meeting) => meeting.ghl_appointment_id === event.id);
-    if (!local) continue;
+  for (const event of scheduled) {
+    const local = event.meeting;
     if (event.kind === 'business_review') {
       const review = reviews.find((row) => Number(row.meeting_id) === Number(local.id));
-      if (review) links.set(event.id, { href: coachWorkspaceHref(memberId, event.kind, { reviewId: Number(review.id) }),
+      if (review) links.set(String(local.id), { href: coachWorkspaceHref(memberId, event.kind, { reviewId: Number(review.id) }),
         prep: preparations.some((row) => Number(row.business_review_id) === Number(review.id) && Boolean(row.submitted_at)) });
     } else {
       const session = sessions.find((row) => Number(row.meeting_id) === Number(local.id));
       const cycle = session ? cycles.cycles.find((row) => row.noteId === Number(session.note_id)) : selectActiveCoachingCycle(cycles.cycles, local.date);
-      if (cycle && (session || attendance.has(Number(local.id)))) links.set(event.id,
+      if (cycle && (session || attendance.has(Number(local.id)))) links.set(String(local.id),
         { href: coachWorkspaceHref(memberId, event.kind, { noteId: cycle.noteId, meetingId: Number(local.id) }), prep: null });
     }
   }
@@ -185,55 +126,47 @@ async function loadMemberContext(client: SupabaseClient, memberId: string, event
 
 export async function buildCoachHome(coachId: string, roleCodes: string[], range: CoachHomeRange): Promise<CoachHomeResponse> {
   const client = getAdminClient();
-  const [coachProfiles, assignmentResult, eligibleIds, groups] = await Promise.all([
-    profilesFor(client, [coachId]),
-    client.from('user_coaches').select('user_id,relationship_type').eq('coach_id', coachId).eq('is_active', true)
-      .or(`ended_at.is.null,ended_at.gt.${new Date().toISOString()}`),
-    fetchCoachingWorkspaceUserIdSet(client),
-    loadCoachHomeGroups(client),
+  const [coachProfiles, assignments, groups] = await Promise.all([
+    profilesFor(client, [coachId]), loadCoachAssignments(client, coachId), loadCoachHomeGroups(client),
   ]);
   const profile = coachProfiles[0];
-  const assignments = rows<Assignment>(assignmentResult).filter((row) => eligibleIds.has(row.user_id));
-  const responsibilities = [...new Set(assignments.map((row) => row.relationship_type === 'implementation' ? 'implementation' as const : 'primary' as const))];
+  const responsibilities = [...new Set(assignments.map((row) => relationshipMeetingKind(row.relationship_type) === 'implementation' ? 'implementation' as const : 'primary' as const))];
   if (!responsibilities.length && roleCodes.includes('implementation_coach')) responsibilities.push('implementation');
-  const [assignedProfiles, schedule] = await Promise.all([
-    profilesFor(client, [...new Set(assignments.map((row) => row.user_id))]), loadSchedule(profile?.ghl_user_id ?? null, range),
-  ]);
+  let scheduleSource: CoachHomeSource = ready;
+  let scheduled: CoachScheduledMeeting[] = [];
+  try { scheduled = await loadCoachSchedule(client, coachId, assignments, range); }
+  catch { scheduleSource = { status: 'unavailable', message: 'Your saved meetings could not be loaded. Please retry.' }; }
+  const memberIds = [...new Set(scheduled.flatMap((item) => item.memberIds))];
+  const assignedProfiles = await profilesFor(client, memberIds);
   let prioritiesSource: CoachHomeSource = ready;
-  let memberByContact = new Map<string, string>();
-  try { memberByContact = await matchMembers(client, schedule.events, assignedProfiles, eligibleIds); }
-  catch { prioritiesSource = { status: 'unavailable', message: 'Member context could not be loaded. Open Coaching space to find a member.' }; }
-  const memberIds = [...new Set(memberByContact.values())];
-  const localMeetings: LocalMeeting[] = [];
-  try {
-    for (let offset = 0; offset < schedule.events.length; offset += 100) {
-      localMeetings.push(...rows<LocalMeeting>(await client.from('meetings').select('id,date,ghl_appointment_id,ghl_status')
-        .in('ghl_appointment_id', schedule.events.slice(offset, offset + 100).map((event) => event.id))));
-    }
-  } catch { prioritiesSource = { status: 'partial', message: 'Exact meeting links could not be loaded. Member workspaces are still available.' }; }
   const contexts = new Map(await mapLimit(memberIds, async (memberId) => {
     try {
-      const context = await loadMemberContext(client, memberId,
-        schedule.events.filter((event) => event.contactId && memberByContact.get(event.contactId) === memberId), localMeetings);
-      return [memberId, context] as const;
+      return [memberId, await loadMemberContext(client, memberId, scheduled.filter((item) => item.memberIds.includes(memberId)))] as const;
     } catch {
       prioritiesSource = { status: 'partial', message: 'Some member priorities or preparation details could not be loaded. Please retry.' };
       return [memberId, null] as const;
     }
   }));
-  const meetings: CoachHomeMeeting[] = schedule.events.map((event) => {
-    const memberId = event.contactId ? memberByContact.get(event.contactId) : null;
-    const member = assignedProfiles.find((row) => row.id === memberId);
+  const meetings: CoachHomeMeeting[] = scheduled.map((item) => {
+    const id = String(item.meeting.id);
+    const people = item.memberIds.flatMap((memberId) => {
+      const member = assignedProfiles.find((row) => row.id === memberId);
+      if (!member) return [];
+      return [{ id: memberId, name: `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim() || 'Member',
+        workspaceHref: contexts.get(memberId)?.links.get(id)?.href ?? coachWorkspaceHref(memberId, item.kind) }];
+    });
+    const memberId = people.find((person) => contexts.get(person.id)?.links.has(id))?.id ?? people[0]?.id;
     const context = memberId ? contexts.get(memberId) : null;
-    const link = context?.links.get(event.id);
-    return { id: event.id, kind: event.kind, title: event.kind === 'implementation' ? 'Implementation meeting' : 'Business Review',
-      start: event.start, end: event.end, joinUrl: event.joinUrl,
-      member: member ? { id: member.id, name: `${member.first_name ?? ''} ${member.last_name ?? ''}`.trim() || 'Member' } : null,
-      workspaceHref: link?.href ?? coachWorkspaceHref(memberId, event.kind), priorities: context?.priorities ?? [],
+    const link = context?.links.get(id);
+    return { id, kind: item.kind, title: item.kind === 'implementation' ? 'Implementation meeting' : 'Business Review',
+      start: item.start, end: item.end, dateOnly: item.dateOnly,
+      joinUrl: item.meeting.ghl_appointment_id ? `/api/coach/meetings/${id}/join` : null,
+      member: memberId ? { id: memberId, name: people.map((person) => person.name).join(' & ') } : null, people,
+      workspaceHref: link?.href ?? coachWorkspaceHref(memberId, item.kind), priorities: context?.priorities ?? [],
       prioritiesState: context ? 'ready' : 'unavailable', prepSubmitted: link?.prep ?? null };
   });
   return { timezone: range.timezone, weekStart: range.weekStart, weekEnd: range.weekEnd, generatedAt: new Date().toISOString(),
     coach: { id: coachId, name: `${profile?.first_name ?? ''} ${profile?.last_name ?? ''}`.trim() || 'Coach', responsibilities },
     meetings, groupSessions: groups.sessions, groupCalendarUrl: COACH_GROUP_CALENDAR_URL,
-    sources: { schedule: schedule.source, priorities: prioritiesSource, groups: groups.source } };
+    sources: { schedule: scheduleSource, priorities: prioritiesSource, groups: groups.source } };
 }

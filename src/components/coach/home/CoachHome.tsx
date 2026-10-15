@@ -48,7 +48,7 @@ function MeetingRow({ meeting, timezone, now }: { meeting: CoachHomeMeeting; tim
       <Box component="button" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}
         aria-label={`${expanded ? 'Hide' : 'Show'} preparation for ${name}`}
         sx={{ display: 'grid', gridTemplateColumns: '55px minmax(0,1fr) 18px', gap: 1.5, alignItems: 'center', flex: 1, minWidth: { xs: '100%', sm: 0 }, color: brand.ink, background: 'none', border: 0, p: 0, textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer', '&:hover .meeting-name': { color: brand.turquoiseDeep } }}>
-        <Box sx={{ fontVariantNumeric: 'tabular-nums' }}><Typography sx={secondary}>{timeLabel(meeting.start, timezone, 'ccc')}</Typography><Typography sx={{ fontSize: 13 }}>{timeLabel(meeting.start, timezone)}</Typography></Box>
+        <Box sx={{ fontVariantNumeric: 'tabular-nums' }}><Typography sx={secondary}>{timeLabel(meeting.start, timezone, 'ccc')}</Typography><Typography sx={{ fontSize: 13 }}>{meeting.dateOnly ? 'Time not set' : timeLabel(meeting.start, timezone)}</Typography></Box>
         <Box sx={{ minWidth: 0 }}><Typography className="meeting-name" sx={{ fontSize: 14, fontWeight: 500, transition: 'color .15s' }}>{name}</Typography><Typography sx={{ ...secondary, overflowWrap: 'anywhere', mt: 0.25 }}>{kind}{past ? ' · Earlier' : ''}</Typography><Typography sx={{ ...secondary, mt: 0.5 }}>{subtitle}</Typography></Box>
         <ExpandMoreRounded sx={{ fontSize: 18, color: brand.inkMuted, transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
       </Box>
@@ -64,6 +64,7 @@ function MeetingRow({ meeting, timezone, now }: { meeting: CoachHomeMeeting; tim
         : <Typography sx={secondary}>There are no priority systems in the current cycle.</Typography>}
       {!meeting.member && <Typography sx={{ ...secondary, mt: 1 }}>This calendar appointment could not be matched to an accessible member.</Typography>}
       <Stack direction="row" useFlexGap flexWrap="wrap" spacing={2} sx={{ mt: 1.5 }}>
+        {(meeting.people?.length ?? 0) > 1 && meeting.people!.map((person) => <Button key={person.id} component={Link} href={person.workspaceHref} sx={textButton}>Open {person.name}</Button>)}
         {meeting.member && <Button component={Link} href={`/coach/students-overview?${new URLSearchParams({ userId: meeting.member.id, tab: 'coaching-notes' })}`} sx={textButton}>Coaching history</Button>}
         {meeting.joinUrl && <Button component="a" href={meeting.joinUrl} target="_blank" rel="noopener noreferrer" startIcon={<VideocamRounded />} sx={textButton}>Join call</Button>}
       </Stack>
@@ -161,6 +162,7 @@ export default function CoachHome({ fullSchedule = false }: { fullSchedule?: boo
   const filtered = agenda.filter(m => (!day || timeLabel(m.start, zone, 'yyyy-MM-dd') === day) && (system === null || m.priorities.some(p => p.id === system)));
   const visibleMeetings = showAllMeetings || day || system !== null ? filtered : filtered.slice(0, 6);
   const next = upcoming[0];
+  const scheduleUnavailable = data?.sources.schedule.status === 'unavailable';
   const groups = (data?.groupSessions ?? []).filter(g => Date.parse(g.end ?? g.start) >= now);
   const visibleGroups = showAllGroups ? groups : groups.slice(0, 3);
   const reviewMeetings = preparationMeetings.filter(m => m.kind === 'business_review');
@@ -174,8 +176,8 @@ export default function CoachHome({ fullSchedule = false }: { fullSchedule?: boo
     <Box component="section" aria-label="Next meeting" sx={{ bgcolor: brand.turquoiseTint, borderBottom: `1px solid ${brand.border}` }}>
       <Container maxWidth={false} sx={container}><Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ xs: 'flex-start', md: 'center' }} justifyContent="space-between" spacing={2} sx={{ py: 2.5 }}>
         <Box>
-          <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: brand.inkSoft }}>{loading ? 'Your next 1on1' : next ? `${Date.parse(next.start) <= now ? 'In progress' : 'Next 1on1'} · ${timeLabel(next.start, zone, 'ccc d LLL, HH:mm')}` : 'Your coaching week'}</Typography>
-          <Typography component="h1" sx={{ fontFamily: '"League Spartan", Arial, sans-serif', fontWeight: 700, fontSize: { xs: 23, md: 27 }, mt: 0.5, lineHeight: 1.2 }}>{loading ? 'Loading your schedule…' : error ? 'Your schedule is unavailable' : next ? `${next.member?.name ?? next.title} · ${next.kind === 'implementation' ? 'Implementation' : 'Business Review'}` : selectedWeekPast ? 'Review this week’s meetings' : 'No upcoming 1on1s this week'}</Typography>
+          <Typography sx={{ fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', color: brand.inkSoft }}>{loading ? 'Your next 1on1' : next ? `${!next.dateOnly && Date.parse(next.start) <= now ? 'In progress' : 'Next 1on1'} · ${timeLabel(next.start, zone, next.dateOnly ? 'ccc d LLL' : 'ccc d LLL, HH:mm')}${next.dateOnly ? ' · Time not set' : ''}` : 'Your coaching week'}</Typography>
+          <Typography component="h1" sx={{ fontFamily: '"League Spartan", Arial, sans-serif', fontWeight: 700, fontSize: { xs: 23, md: 27 }, mt: 0.5, lineHeight: 1.2 }}>{loading ? 'Loading your schedule…' : error || scheduleUnavailable ? 'Your schedule is unavailable' : next ? `${next.member?.name ?? next.title} · ${next.kind === 'implementation' ? 'Implementation' : 'Business Review'}` : selectedWeekPast ? 'Review this week’s meetings' : 'No upcoming 1on1s this week'}</Typography>
           {next && <Typography sx={{ ...secondary, mt: 0.75 }}>{next.kind === 'implementation' ? next.prioritiesState === 'unavailable' ? 'Current priorities unavailable' : next.priorities.length ? `Current priorities: ${next.priorities.map(p => p.label).join(' · ')}` : 'No current priority systems' : next.prepSubmitted === null ? 'Open the member workspace to review preparation' : next.prepSubmitted ? 'Member preparation submitted' : 'Awaiting member preparation'}</Typography>}
         </Box>
         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ flexShrink: 0 }}>
@@ -187,7 +189,7 @@ export default function CoachHome({ fullSchedule = false }: { fullSchedule?: boo
 
     <Container component="main" maxWidth={false} sx={{ ...container, py: { xs: 3, md: 3.5 } }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} sx={{ mb: 3 }}>
-        <Box><Typography component="h2" sx={{ fontFamily: '"League Spartan", Arial, sans-serif', fontSize: 29, fontWeight: 700, lineHeight: 1.2 }}>{fullSchedule ? 'Your schedule' : 'Your week'}</Typography><Typography sx={{ ...secondary, mt: 0.5 }}>{weekDate.toFormat('d LLL')}–{weekDate.plus({ days: 6 }).toFormat('d LLL yyyy')} · {zone.replaceAll('_', ' ')}</Typography></Box>
+        <Box><Typography component="h2" sx={{ fontFamily: '"League Spartan", Arial, sans-serif', fontSize: 29, fontWeight: 700, lineHeight: 1.2 }}>{fullSchedule ? 'Your schedule' : 'Your week'}</Typography><Typography sx={{ ...secondary, mt: 0.5 }}>{weekDate.toFormat('d LLL')}–{weekDate.plus({ days: 6 }).toFormat('d LLL yyyy')} · {zone.replaceAll('_', ' ')}</Typography><Typography sx={{ ...secondary, mt: 0.5 }}>Bookings update after the daily calendar sync.</Typography></Box>
         <Stack direction="row" spacing={0.75} alignItems="center">
           <Tooltip title="Previous week"><IconButton aria-label="Previous week" onClick={() => changeWeek(-1)} disabled={loading}><ChevronLeftRounded /></IconButton></Tooltip>
           <Button onClick={() => { setWeek(thisWeek); setDay(null); setSystem(null); }} disabled={loading || currentWeek} sx={textButton}>This week</Button>
