@@ -167,7 +167,7 @@ function serve() {
       payload = { events: fixture.events.filter((event) => (!userId || event.userId === userId) && Date.parse(event.startTime) >= from && Date.parse(event.startTime) < to) };
     } else if (url.pathname.startsWith('/contacts/')) {
       const user = fixture.users.find((item) => item.ghl === url.pathname.split('/')[2]);
-      payload = { contact: user ? { id: user.ghl, name: user.name, email: user.email } : null };
+      payload = { contact: user ? { id: user.ghl, locationId: 'preview-location', name: user.name, email: user.email } : null };
     } else if (url.pathname === '/calendars/' || url.pathname === '/calendars') {
       payload = { calendars: ['implementation', 'business_review'].map((kind) => ({ id: `preview-${kind}-calendar`, name: `Preview ${kind}` })) };
     } else { response.writeHead(404); response.end('Unknown local preview endpoint'); return; }
