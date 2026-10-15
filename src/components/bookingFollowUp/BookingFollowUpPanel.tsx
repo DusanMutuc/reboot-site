@@ -42,6 +42,7 @@ import type {
 
 type Props = {
   mode: 'coach' | 'admin';
+  businessReviewOnly?: boolean;
 };
 
 type Filter = 'attention' | 'all';
@@ -99,7 +100,7 @@ function waitForRetry(signal: AbortSignal | undefined, delayMs: number): Promise
   });
 }
 
-export default function BookingFollowUpPanel({ mode }: Props) {
+export default function BookingFollowUpPanel({ mode, businessReviewOnly = false }: Props) {
   const [report, setReport] = useState<BookingFollowUpResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -117,7 +118,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
     try {
       const endpoint = mode === 'admin'
         ? '/api/admin/booking-follow-up'
-        : '/api/coach/booking-follow-up';
+        : `/api/coach/booking-follow-up${businessReviewOnly ? '?meetingType=business-review' : ''}`;
       let lastError: Error | null = null;
 
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -164,7 +165,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
         setRefreshing(false);
       }
     }
-  }, [mode]);
+  }, [mode, businessReviewOnly]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -197,7 +198,7 @@ export default function BookingFollowUpPanel({ mode }: Props) {
   }, [filter, report]);
 
   if (mode === 'coach') {
-    return <CoachBookingFollowUp report={report} loading={loading} refreshing={refreshing} error={error} onRefresh={() => void load(undefined, true)} onRetry={() => void load()} />;
+    return <CoachBookingFollowUp report={report} businessReviewOnly={businessReviewOnly} loading={loading} refreshing={refreshing} error={error} onRefresh={() => void load(undefined, true)} onRetry={() => void load()} />;
   }
 
   const content = (

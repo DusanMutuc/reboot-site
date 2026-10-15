@@ -277,6 +277,18 @@ test('a Business Review link selects its exact review instead of the default wit
   assert.equal(env.requests[0].options.method, undefined);
 });
 
+test('a member-form link opens the exact review’s preparation while ordinary workspace links keep it collapsed', async () => {
+  const env = reviewEnvironment();
+  const component = env.mount({ selectedStudentId: 'ada', requestedReviewId: 12, openPreparation: true });
+  env.requests[0].work.resolve({ ok: true, json: async () => fixtureReviews() }); await env.flush();
+  assert.equal(findElement(component.value, 'Accordion').props.expanded, true);
+  assert.equal(findElement(component.value, 'CoachingNotesPanel').props.fixedNoteId, 112);
+  assert.equal(env.requests.length, 1, 'Opening a member form must not write or create a review');
+  component.update({ selectedStudentId: 'ada', requestedReviewId: 12, openPreparation: false }); await env.flush();
+  assert.equal(findElement(component.value, 'Accordion').props.expanded, false);
+  assert.equal(env.requests.length, 1);
+});
+
 test('same-member Business Review navigation ignores an older request even when it resolves last', async () => {
   const env = reviewEnvironment();
   const component = env.mount({ selectedStudentId: 'ada', requestedReviewId: 12 });

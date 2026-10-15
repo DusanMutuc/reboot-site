@@ -45,6 +45,7 @@ type BusinessAuditTabProps = {
   selectedStudentId: string;
   studentName?: string | null;
   requestedReviewId?: number | null;
+  openPreparation?: boolean;
 };
 
 type ApiErrorBody = {
@@ -279,6 +280,7 @@ export default function BusinessAuditTab({
   selectedStudentId,
   studentName,
   requestedReviewId,
+  openPreparation = false,
 }: BusinessAuditTabProps) {
   const [dimensions, setDimensions] = useState<FocusFinderDimension[]>([]);
   const [reviews, setReviews] = useState<BusinessReview[]>([]);
@@ -303,6 +305,18 @@ export default function BusinessAuditTab({
   const [hasSaved, setHasSaved] = useState(false);
   const saveQueuesRef = useRef<Map<string, Promise<void>>>(new Map());
   const activeStudentIdRef = useRef(selectedStudentId);
+  const preparationRef = useRef<HTMLDivElement | null>(null);
+  const [preparationOpen, setPreparationOpen] = useState(openPreparation);
+
+  useEffect(() => {
+    setPreparationOpen(openPreparation);
+  }, [openPreparation, selectedStudentId, selectedReviewId]);
+
+  useEffect(() => {
+    if (openPreparation && !loading && preparationRef.current) {
+      preparationRef.current.scrollIntoView({ block: 'start' });
+    }
+  }, [openPreparation, loading, selectedReviewId]);
 
   useEffect(() => {
     activeStudentIdRef.current = selectedStudentId;
@@ -861,6 +875,9 @@ export default function BusinessAuditTab({
               ) : null}
 
               <Accordion
+                ref={preparationRef}
+                expanded={preparationOpen}
+                onChange={(_event, expanded) => setPreparationOpen(expanded)}
                 disableGutters
                 elevation={0}
                 sx={{
@@ -868,6 +885,7 @@ export default function BusinessAuditTab({
                   borderColor: 'grey.200',
                   borderRadius: '12px !important',
                   overflow: 'hidden',
+                  scrollMarginTop: '112px',
                   '&::before': { display: 'none' },
                 }}
               >
@@ -898,7 +916,7 @@ export default function BusinessAuditTab({
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
                         {selectedReview.preparation
-                          ? 'Expand to review the student’s submitted answers.'
+                          ? preparationOpen ? 'Submitted answers for this Business Review.' : 'Expand to review the student’s submitted answers.'
                           : 'No responses are available for this review yet.'}
                       </Typography>
                     </Box>

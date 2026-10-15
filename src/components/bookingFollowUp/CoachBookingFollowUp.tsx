@@ -12,6 +12,7 @@ import { bookingFollowUpQueue, followUpReason } from '@/lib/coachHomeView';
 import type { BookingFollowUpMember, BookingFollowUpResponse, BookingMeetingSummary } from '@/types/bookingFollowUp';
 
 type Props = {
+  businessReviewOnly?: boolean;
   report: BookingFollowUpResponse | null;
   loading: boolean;
   refreshing: boolean;
@@ -33,8 +34,8 @@ function recency(meeting: BookingMeetingSummary | null) {
   return meeting.daysAgo == null ? date(meeting) : `${meeting.daysAgo} days ago`;
 }
 
-function workspaceHref(userId: string, member: BookingFollowUpMember, history = false) {
-  const tab = history ? 'coaching-notes' : member.isNewMember ? 'overview' : member.needsImplementation ? 'notes' : member.needsM2 ? 'audit' : 'overview';
+function workspaceHref(userId: string, member: BookingFollowUpMember, history = false, businessReviewOnly = false) {
+  const tab = history ? 'coaching-notes' : businessReviewOnly ? 'audit' : member.isNewMember ? 'overview' : member.needsImplementation ? 'notes' : member.needsM2 ? 'audit' : 'overview';
   return `/coach/students-overview?${new URLSearchParams({ userId, courseId: '2', tab })}`;
 }
 
@@ -49,12 +50,12 @@ function LastMeeting({ label, meeting, children }: { label: string; meeting: Boo
   );
 }
 
-function MemberFollowUp({ member }: { member: BookingFollowUpMember }) {
+function MemberFollowUp({ member, businessReviewOnly = false }: { member: BookingFollowUpMember; businessReviewOnly?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const detailId = `booking-details-${member.userId}`;
   const people = member.people.length ? member.people : [{ userId: member.userId, name: member.name, email: member.email }];
-  const secondary = member.isNewMember ? 'No coaching history yet' : member.needsImplementation && !member.needsM2
+  const secondary = businessReviewOnly ? `Last Business Review · ${recency(member.lastM2)}` : member.isNewMember ? 'No coaching history yet' : member.needsImplementation && !member.needsM2
     ? `Last implementation · ${recency(member.lastImplementation)}`
     : `Last Business Review · ${recency(member.lastM2)}`;
 
@@ -76,11 +77,11 @@ function MemberFollowUp({ member }: { member: BookingFollowUpMember }) {
           <Box component="span" sx={{ fontSize: 14, fontWeight: 600, overflowWrap: 'anywhere' }}>{member.name}{member.isNewMember ? <Box component="span" sx={{ display: 'block', color: brand.turquoiseDeep, fontSize: 12, fontWeight: 400 }}>New member</Box> : null}</Box>
         </Button>
         <Box sx={{ gridColumn: { xs: 1, md: 'auto' }, gridRow: { xs: 2, md: 'auto' }, pl: { xs: 3.25, md: 0 }, minWidth: 0 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>{followUpReason(member)}</Typography>
+          <Typography sx={{ fontSize: 14, fontWeight: 500 }}>{followUpReason(member, businessReviewOnly)}</Typography>
           <Typography sx={{ fontSize: 12, color: brand.inkSoft, mt: 0.5 }}>{secondary}</Typography>
         </Box>
         <Stack alignItems="flex-end" sx={{ gridColumn: { xs: 2, md: 'auto' }, gridRow: { xs: '1 / span 2', md: 'auto' }, maxWidth: { xs: 125, md: 180 } }}>
-          {people.map((person) => <Button key={person.userId} component={Link} href={workspaceHref(person.userId, member)} aria-label={`Open ${person.name}'s coaching space`} endIcon={<ArrowForwardRoundedIcon />} sx={{ ...textButtonSx, textAlign: 'right' }}>{people.length > 1 ? `Open ${person.name}` : 'Open space'}</Button>)}
+          {people.map((person) => <Button key={person.userId} component={Link} href={workspaceHref(person.userId, member, false, businessReviewOnly)} aria-label={`Open ${person.name}'s coaching space`} endIcon={<ArrowForwardRoundedIcon />} sx={{ ...textButtonSx, textAlign: 'right' }}>{people.length > 1 ? `Open ${person.name}` : 'Open space'}</Button>)}
         </Stack>
       </Box>
       <Collapse in={expanded}>
@@ -112,9 +113,9 @@ function MemberFollowUp({ member }: { member: BookingFollowUpMember }) {
   );
 }
 
-export default function CoachBookingFollowUp({ report, loading, refreshing, error, onRefresh, onRetry }: Props) {
+export default function CoachBookingFollowUp({ report, loading, refreshing, error, onRefresh, onRetry, businessReviewOnly = false }: Props) {
   const [query, setQuery] = useState('');
-  const queue = useMemo(() => report ? bookingFollowUpQueue(report) : [], [report]);
+  const queue = useMemo(() => report ? bookingFollowUpQueue(report, businessReviewOnly) : [], [report, businessReviewOnly]);
   const warnings = useMemo(() => report?.groups.flatMap((group) => {
     if (!group.dataComplete || group.dataWarning) return [`${group.coachName}: ${group.dataWarning ?? 'Booking information could not be checked.'}`];
     return group.members.filter((member) => !member.dataComplete).map((member) => `${member.name}: ${member.dataWarning ?? 'Booking information could not be checked.'}`);
@@ -131,7 +132,8 @@ export default function CoachBookingFollowUp({ report, loading, refreshing, erro
       </Box>
       {loading ? <Stack spacing={1.5} aria-label="Loading booking follow-up">{[0, 1, 2].map((key) => <Skeleton key={key} variant="rounded" height={76} />)}</Stack> : error ? <Alert severity="error" action={<Button color="inherit" size="small" onClick={onRetry}>Try again</Button>}>{error}</Alert> : !report || !report.groups.length ? <Alert severity="info">No active coach roster assignments were found.</Alert> : <>
         {warnings.length ? <Alert severity="warning" sx={{ mb: 2 }}>Some booking information could not be checked. These members are excluded from follow-up until their bookings can be confirmed.{[...new Set(warnings)].map((warning) => <Typography key={warning} sx={{ fontSize: 12, mt: 0.75 }}>{warning}</Typography>)}</Alert> : null}
-        {members.length ? <Box sx={{ borderTop: `1px solid ${brand.border}` }}>{members.map((member) => <MemberFollowUp key={member.userId} member={member} />)}</Box> : <Typography sx={{ color: brand.inkSoft, fontSize: 14, py: 3 }}>{normalizedQuery ? 'No members matched your search.' : warnings.length ? 'No confirmed booking follow-ups were found in the available data.' : 'All checked members have their bookings covered.'}</Typography>}
+        {businessReviewOnly && <Typography sx={{ color: brand.inkSoft, fontSize: 12, mb: 1.5 }}>Your roster members without their next Business Review booked.</Typography>}
+        {members.length ? <Box sx={{ borderTop: `1px solid ${brand.border}` }}>{members.map((member) => <MemberFollowUp key={member.userId} member={member} businessReviewOnly={businessReviewOnly} />)}</Box> : <Typography sx={{ color: brand.inkSoft, fontSize: 14, py: 3 }}>{normalizedQuery ? 'No members matched your search.' : warnings.length ? 'No confirmed booking follow-ups were found in the available data.' : 'All checked members have their bookings covered.'}</Typography>}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mt: 2 }}><Typography sx={{ color: brand.inkSoft, fontSize: 12 }}>Last checked {new Date(report.generatedAt).toLocaleString()} · Paused members are excluded</Typography><Typography sx={{ color: brand.inkSoft, fontSize: 12 }} role="status">{normalizedQuery ? `${members.length} of ${queue.length}` : queue.length} follow-up{queue.length === 1 ? '' : 's'}</Typography></Box>
       </>}
     </Box>
