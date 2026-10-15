@@ -141,7 +141,7 @@ export async function buildBookingFollowUp(
   ]);
   const eligibleUserIdSet = new Set(eligibleUserIds);
   const visibleAssignments = assignments.filter((row) => eligibleUserIdSet.has(row.user_id)
-    && (!options.businessReviewOnly || (normalizeRelationship(row.relationship_type) === 'primary'
+    && (!options.businessReviewOnly || ((row.relationship_type === 'primary' || row.relationship_type === null)
       && (!row.ended_at || Date.parse(row.ended_at) > Date.now()))));
 
   if (visibleAssignments.length === 0) {

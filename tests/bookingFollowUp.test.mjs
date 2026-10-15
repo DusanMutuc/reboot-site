@@ -110,9 +110,10 @@ test('coach follow-up filters membership while retaining its coach scope', async
 });
 
 test('Business Review follow-up lists only the signed-in coach’s current primary roster, including legacy primary relationships', async () => {
-  const { build } = fixture({ current: ['primary', 'legacy', 'implementation', 'ended', 'other'], past: [],
+  const { build } = fixture({ current: ['primary', 'legacy', 'implementation', 'ended', 'other', 'unsupported'], past: [],
     assignments: [assignment('primary'), { ...assignment('legacy'), relationship_type: null },
       { ...assignment('implementation'), relationship_type: 'implementation' },
+      { ...assignment('unsupported'), relationship_type: 'support' },
       { ...assignment('ended'), ended_at: '2026-01-02T00:00:00Z' }, assignment('other', 'other-coach')] });
   const result = await build({ coachId: 'coach', businessReviewOnly: true });
   assert.deepEqual(memberIds(result), ['legacy', 'primary']);
