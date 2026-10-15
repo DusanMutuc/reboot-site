@@ -28,6 +28,7 @@ type AssignmentRow = {
   coach_id: string;
   relationship_type: string | null;
   assigned_at: string | null;
+  ended_at?: string | null;
 };
 
 type ProfileRow = {
@@ -106,6 +107,7 @@ type CoachScan = {
 
 type BuildOptions = {
   coachId?: string;
+  businessReviewOnly?: boolean;
 };
 
 export type GhlCoachingAppointment = {
@@ -138,7 +140,9 @@ export async function buildBookingFollowUp(
     fetchCoachingWorkspaceUserIds(supabase),
   ]);
   const eligibleUserIdSet = new Set(eligibleUserIds);
-  const visibleAssignments = assignments.filter((row) => eligibleUserIdSet.has(row.user_id));
+  const visibleAssignments = assignments.filter((row) => eligibleUserIdSet.has(row.user_id)
+    && (!options.businessReviewOnly || ((row.relationship_type === 'primary' || row.relationship_type === null)
+      && (!row.ended_at || Date.parse(row.ended_at) > Date.now()))));
 
   if (visibleAssignments.length === 0) {
     return { generatedAt: new Date().toISOString(), groups: [] };
@@ -221,6 +225,22 @@ export async function buildBookingFollowUp(
       pauseHistoryByUserId,
     }))
     .sort((a, b) => a.coachName.localeCompare(b.coachName, undefined, { sensitivity: 'base' }));
+
+  if (options.businessReviewOnly) {
+    for (const group of groups) {
+      // Partners still share booking checks, but only this coach's primary-roster
+      // accounts are listed in the head-coach follow-up view.
+      const rosterIds = new Set(visibleByCoachId.get(group.coachId)?.map((row) => row.user_id));
+      group.members = group.members.flatMap((member) => {
+        const people = member.people.filter((person) => rosterIds.has(person.userId));
+        if (!people.length) return [];
+        const memberIds = people.map((person) => person.userId);
+        return [{ ...member, people, memberIds, userId: [...memberIds].sort().join(':'),
+          name: people.map((person) => person.name).join(' & '),
+          email: people.map((person) => person.email).filter(isPresent).join(' & ') || null }];
+      });
+    }
+  }
 
   return { generatedAt: new Date().toISOString(), groups };
 }
@@ -371,7 +391,7 @@ async function fetchAssignments(
 ): Promise<AssignmentRow[]> {
   let query = supabase
     .from('user_coaches')
-    .select('user_id, coach_id, relationship_type, assigned_at')
+    .select('user_id, coach_id, relationship_type, assigned_at, ended_at')
     .eq('course_id', COURSE_ID)
     .eq('is_active', true);
 

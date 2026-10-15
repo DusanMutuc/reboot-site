@@ -110,6 +110,7 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
 
         params.set(key, String(value));
       });
+      if ('userId' in patch || (patch.tab && patch.tab !== 'audit')) params.delete('section');
 
       const next = params.toString();
       const navigate = () => {
@@ -281,6 +282,7 @@ export default function StudentWorkspace({ mode, onNavigationGuardChange }: {
             selectedStudentId={activeStudentId}
             studentName={selectedStudent.full_name}
             requestedReviewId={requestedReviewId}
+            openPreparation={searchParams.get('section') === 'member-form'}
           />
         );
       case 'progress':

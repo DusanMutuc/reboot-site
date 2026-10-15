@@ -109,6 +109,55 @@ test('coach follow-up filters membership while retaining its coach scope', async
   assert.deepEqual(Array.from(report.groups, (group) => group.coachId), ['coach']);
 });
 
+test('Business Review follow-up lists only the signed-in coach’s current primary roster, including legacy primary relationships', async () => {
+  const { build } = fixture({ current: ['primary', 'legacy', 'implementation', 'ended', 'other', 'unsupported'], past: [],
+    assignments: [assignment('primary'), { ...assignment('legacy'), relationship_type: null },
+      { ...assignment('implementation'), relationship_type: 'implementation' },
+      { ...assignment('unsupported'), relationship_type: 'support' },
+      { ...assignment('ended'), ended_at: '2026-01-02T00:00:00Z' }, assignment('other', 'other-coach')] });
+  const result = await build({ coachId: 'coach', businessReviewOnly: true });
+  assert.deepEqual(memberIds(result), ['legacy', 'primary']);
+  assert.deepEqual(Array.from(result.groups, group => group.coachId), ['coach']);
+});
+
+test('the head-coach view keeps shared booking checks but never lists a partner from another coach’s roster', async () => {
+  const { build } = fixture({ current: ['member', 'partner'], past: [],
+    assignments: [assignment('member'), assignment('partner', 'partner-coach')],
+    partnerships: [partner('member'), partner('partner')] });
+  const result = await build({ coachId: 'coach', businessReviewOnly: true });
+  assert.deepEqual(memberIds(result), ['member']);
+  assert.deepEqual(Array.from(result.groups[0].members[0].people, person => person.userId), ['member']);
+  assert.equal(result.groups[0].members[0].name, 'member Person');
+});
+
+test('the scoped follow-up endpoint uses the authenticated coach and rejects unknown meeting types', async () => {
+  const source = ts.transpileModule(fs.readFileSync(new URL('../src/app/api/coach/booking-follow-up/route.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const exports = {}, builds = [];
+  let guard = { ok: false, res: { status: 401 } };
+  const imports = {
+    'next/server': { NextResponse: { json: (body, options) => ({ body, status: options?.status ?? 200, headers: options?.headers }) } },
+    '@/lib/requireUser': { requireUser: async () => guard },
+    '@/lib/bookingFollowUp': { buildBookingFollowUp: async options => { builds.push(options); return { groups: [] }; } },
+  };
+  vm.runInNewContext(source, { exports, console, require: name => imports[name] });
+  const request = { nextUrl: new URL('http://localhost/api/coach/booking-follow-up?meetingType=business-review&coachId=someone-else') };
+  assert.equal((await exports.GET(request)).status, 401);
+  guard = { ok: true, user: { id: 'member' }, roleCodes: ['user'] };
+  assert.equal((await exports.GET(request)).status, 403);
+  assert.equal(builds.length, 0);
+  guard = { ok: true, user: { id: 'actual-coach' }, roleCodes: ['coach'] };
+  const response = await exports.GET(request);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers['Cache-Control'], 'private, no-store');
+  assert.equal(builds[0].coachId, 'actual-coach');
+  assert.equal(builds[0].businessReviewOnly, true);
+  request.nextUrl.searchParams.set('meetingType', 'unknown');
+  assert.equal((await exports.GET(request)).status, 400);
+  assert.equal(builds.length, 1);
+});
+
 test('an active partnership cannot reintroduce a past member or their coach', async () => {
   const { build, scans, calls } = fixture({ assignments: [assignment('member'), assignment('past', 'past-coach')], partnerships: [partner('member'), partner('past')] });
   assert.deepEqual(memberIds(await build({ coachId: 'coach' })), ['member']);

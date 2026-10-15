@@ -16,9 +16,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Coach access required.' }, { status: 403 });
   }
 
+  const meetingType = request.nextUrl.searchParams.get('meetingType');
+  if (meetingType && meetingType !== 'business-review') {
+    return NextResponse.json({ error: 'Choose a valid follow-up meeting type.' }, { status: 400 });
+  }
+
   try {
-    const result = await buildBookingFollowUp({ coachId: guard.user.id });
-    return NextResponse.json(result);
+    const result = await buildBookingFollowUp({ coachId: guard.user.id, businessReviewOnly: meetingType === 'business-review' });
+    return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('[booking-follow-up] Coach report failed', error);
     return NextResponse.json(

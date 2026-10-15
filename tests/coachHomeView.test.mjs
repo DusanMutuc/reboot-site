@@ -6,7 +6,7 @@ import ts from 'typescript';
 import * as luxon from 'luxon';
 import * as homeView from '../src/lib/coachHomeView.ts';
 
-const { weeklyPriorities, bookingFollowUpQueue, followUpReason, isUpcomingCoachMeeting } = homeView;
+const { weeklyPriorities, bookingFollowUpQueue, followUpReason, isUpcomingCoachMeeting, memberFormHref } = homeView;
 const plain = value => JSON.parse(JSON.stringify(value));
 const priority = (id, label) => ({ id, label, guideHref: `/library/${id}` });
 const meeting = (id, memberId, priorities = []) => ({ id, member: memberId ? { id: memberId, name: memberId } : null, priorities, prioritiesState: 'ready' });
@@ -41,6 +41,30 @@ test('a shared business receives one follow-up even if accounts and coach groups
   const first = followUp('alice:bob', { memberIds: ['alice', 'bob'] });
   const second = followUp('alice:bob', { memberIds: ['bob', 'alice'] });
   assert.equal(bookingFollowUpQueue({ groups: [report(first).groups[0], report(second).groups[0]] }).length, 1);
+});
+
+test('head-coach follow-up includes recent and new primary-roster members without a review, but excludes booked, paused and uncertain members', () => {
+  const primary = (id, options = {}) => followUp(id, { relationshipTypes: ['primary'], upcomingM2: null, ...options });
+  const input = report(primary('recent', { needsImplementation: false, needsM2: false }),
+    primary('new', { isNewMember: true }), primary('booked', { upcomingM2: { id: 'future' }, needsImplementation: true }),
+    primary('paused', { pauseStartedAt: '2026-10-01' }), primary('uncertain', { dataComplete: false }),
+    followUp('implementation-only', { relationshipTypes: ['implementation'], upcomingM2: null }));
+  assert.deepEqual(bookingFollowUpQueue(input, true).map(member => member.name), ['new', 'recent']);
+  assert.equal(followUpReason(primary('new', { isNewMember: true }), true), 'Business Review booking missing');
+});
+
+test('member-form links require a submitted form and preserve the exact member and review', () => {
+  const review = { ...meeting('call', 'alice'), kind: 'business_review', prepSubmitted: true,
+    workspaceHref: '/coach/students-overview?userId=alice&tab=audit&reviewId=17' };
+  const target = new URL(memberFormHref(review), 'http://localhost');
+  assert.equal(target.searchParams.get('userId'), 'alice');
+  assert.equal(target.searchParams.get('reviewId'), '17');
+  assert.equal(target.searchParams.get('section'), 'member-form');
+  for (const options of [{ prepSubmitted: false }, { prepSubmitted: null }, { kind: 'implementation' },
+    { workspaceHref: '/coach/students-overview?userId=alice&tab=audit' },
+    { workspaceHref: '/coach/students-overview?userId=bob&tab=audit&reviewId=17' }]) {
+    assert.equal(memberFormHref({ ...review, ...options }), null);
+  }
 });
 
 test('follow-up reasons distinguish new members from missing implementation and review bookings', () => {
@@ -145,6 +169,38 @@ test('an unavailable saved schedule is not presented as a week with no meetings'
   await env.flush();
   const banner = elements(home.value, item => item.props?.component === 'h1')[0];
   assert.equal(banner.props.children, 'Your schedule is unavailable');
+});
+
+test('a primary coach gets Business Review booking follow-up in place of the preparation summary', async () => {
+  const env = homeEnvironment(), home = env.mount(); await env.flush();
+  resolve(env.requests[0], homePayload({ coach: { id: 'coach', name: 'Head coach', responsibilities: ['primary'] } })); await env.flush();
+  assert.equal(elements(home.value, item => item.props?.['aria-label'] === 'Business Review preparation').length, 0);
+  const queueElement = elements(home.value, item => typeof item.type === 'function' && item.type.name === 'FollowUpQueue')[0];
+  assert.equal(queueElement.props.businessReviewOnly, true);
+  const queue = env.mount(queueElement.props, queueElement.type); await env.flush();
+  assert.equal(env.requests[1].url, '/api/coach/booking-follow-up?meetingType=business-review');
+  resolve(env.requests[1], report(followUp('recent', { relationshipTypes: ['primary'], upcomingM2: null, needsImplementation: false, needsM2: false })));
+  await env.flush();
+  assert.match(visibleText(queue.value), /Business Review booking missing/);
+  const memberLink = elements(queue.value, item => item.props?.href?.startsWith('/coach/students-overview?'))[0];
+  assert.equal(new URL(memberLink.props.href, 'http://localhost').searchParams.get('tab'), 'audit');
+  assert.ok(elements(queue.value, item => item.props?.href === '/coach/members?view=follow-up&meetingType=business-review').length);
+});
+
+test('submitted meeting forms have a separate clickable link while missing forms remain a status', async () => {
+  const env = homeEnvironment(), home = env.mount(); await env.flush();
+  const review = { ...meeting('call', 'alice'), kind: 'business_review', prepSubmitted: true,
+    start: '2026-10-09T15:00:00Z', workspaceHref: '/coach/students-overview?userId=alice&tab=audit&reviewId=17' };
+  resolve(env.requests[0], homePayload({ meetings: [review] })); await env.flush();
+  const rowElement = elements(home.value, item => typeof item.type === 'function' && item.type.name === 'MeetingRow')[0];
+  const row = env.mount(rowElement.props, rowElement.type); await env.flush();
+  const link = elements(row.value, item => item.props?.['aria-label'] === 'Open member form for alice')[0];
+  assert.equal(link.props.href, '/coach/students-overview?userId=alice&tab=audit&reviewId=17&section=member-form');
+  const expandButton = elements(row.value, item => item.props?.component === 'button')[0];
+  assert.equal(elements(expandButton, item => item.props?.href).length, 0, 'The form link cannot be nested in the expand button');
+  row.update({ ...rowElement.props, meeting: { ...review, prepSubmitted: false } }); await env.flush();
+  assert.match(visibleText(row.value), /Awaiting member form/);
+  assert.equal(elements(row.value, item => item.props?.['aria-label'] === 'Open member form for alice').length, 0);
 });
 
 test('date-only scheduled records show an unset time rather than midnight or an in-progress call', async () => {
