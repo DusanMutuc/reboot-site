@@ -26,6 +26,7 @@ import { supabase } from '@/lib/supabaseClient';
 import type { BookingOption, CalendarLink, CallStatus, NextCall, RoomOption } from './types';
 import rebootLogo from '../../../public/Reboot Logo - Color.png';
 import MembershipViewSwitcher from '@/components/MembershipViewSwitcher';
+import AccountSettingsLink from '@/components/account/AccountSettingsLink';
 
 /** The programme content and tracker are already present on this page. */
 
@@ -202,6 +203,7 @@ export default function StickyBar({
             aria-label="Main"
             sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.25 }}
           >
+            <AccountSettingsLink sx={{ color: 'rgba(255,255,255,.8)', textTransform: 'none', mr: 1 }} />
             {hasCallsMenu ? (
               <Box
                 component="button"
@@ -417,6 +419,7 @@ export default function StickyBar({
 
           <Divider sx={{ my: 1 }} />
 
+          <AccountSettingsLink menuItem onClick={() => setDrawerOpen(false)} sx={menuItemSx} />
           <MenuItem onClick={handleSignOut} disabled={signingOut} sx={menuItemSx}>
             <LogoutRoundedIcon sx={{ fontSize: 19, color: brand.inkMuted }} />
             {signingOut ? 'Signing out…' : 'Sign out'}

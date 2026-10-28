@@ -11,6 +11,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { supabase } from '@/lib/supabaseClient';
 import { extractRoleCodes } from '@/lib/userRoles';
 import MembershipViewSwitcher from '@/components/MembershipViewSwitcher';
+import AccountSettingsLink from '@/components/account/AccountSettingsLink';
 import type { Theme } from '@mui/material/styles';
 import type { SystemStyleObject } from '@mui/system';
 
@@ -225,6 +226,7 @@ export default function TopNav({
             </Box>
 
             <MembershipViewSwitcher currentView="member" />
+            <AccountSettingsLink sx={{ alignSelf: 'flex-end', color: '#fff' }} />
 
             {/* DESKTOP NAV */}
             <Box

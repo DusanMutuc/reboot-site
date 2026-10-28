@@ -22,6 +22,9 @@ import LayersIcon from '@mui/icons-material/Layers';
 import CollectionsBookmarkIcon from '@mui/icons-material/CollectionsBookmark';
 import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import { friendlyLockReason, type CourseNodeProgress } from '@/lib/courseContinuation';
 
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
 
@@ -38,9 +41,11 @@ type StudentCourseTreeProps = {
   expanded: Set<number>;
   selectedNodeId: number | null;
   lockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
+  progress?: Record<number, CourseNodeProgress['status']>;
   onToggle: (nodeId: number) => void;
   onSelectContent: (node: NodeSubtree, lockStatus: ChildUnlockStatus | undefined) => void;
   onBackToCourses: () => void;
+  onGetHelp?: () => void;
   fullHeight?: boolean;
   /** Disable expand/collapse animations (avoids “re-expanding” flicker on nav) */
   noTransition?: boolean;
@@ -51,6 +56,7 @@ type TreeNodeProps = {
   depth: number;
   expanded: Set<number>;
   lockStatuses: Record<number, Record<number, ChildUnlockStatus>>;
+  progress: Record<number, CourseNodeProgress['status']>;
   selectedNodeId: number | null;
   parentId: number | null;
   /** True if any ancestor up the chain is locked */
@@ -66,6 +72,7 @@ function TreeNode({
   depth,
   expanded,
   lockStatuses,
+  progress,
   selectedNodeId,
   parentId,
   ancestorLocked = false,
@@ -143,6 +150,7 @@ function TreeNode({
 
       <ListItemText
         primary={node.title ?? 'Untitled'}
+        secondary={isLocked ? friendlyLockReason(lockStatus?.reason) : progress[node.id] === 'completed' ? 'Completed' : progress[node.id] === 'in_progress' ? 'In progress' : undefined}
         primaryTypographyProps={{
           variant: isContentNode ? 'body1' : 'subtitle2',
           fontWeight: isContentNode ? 600 : 500,
@@ -150,10 +158,11 @@ function TreeNode({
       />
 
       {isLocked ? (
-        <Tooltip title={lockStatus?.reason ?? 'This lesson is locked until prerequisites are complete.'}>
+        <Tooltip title={friendlyLockReason(lockStatus?.reason)}>
           <LockOutlinedIcon fontSize="small" sx={{ color: 'text.disabled' }} />
         </Tooltip>
-      ) : null}
+      ) : progress[node.id] === 'completed' ? <CheckCircleOutlineIcon fontSize="small" color="success" />
+        : progress[node.id] === 'in_progress' ? <PlayCircleOutlineIcon fontSize="small" color="primary" /> : null}
     </ListItemButton>
   );
 
@@ -170,6 +179,7 @@ function TreeNode({
                 depth={depth + 1}
                 expanded={expanded}
                 lockStatuses={lockStatuses}
+                progress={progress}
                 selectedNodeId={selectedNodeId}
                 parentId={subtree.node.id}
                 ancestorLocked={isLocked} // propagate effective lock to descendants
@@ -191,9 +201,11 @@ export default function StudentCourseTree({
   expanded,
   selectedNodeId,
   lockStatuses,
+  progress = {},
   onToggle,
   onSelectContent,
   onBackToCourses,
+  onGetHelp,
   fullHeight = true,
   noTransition = false,
 }: StudentCourseTreeProps) {
@@ -239,6 +251,7 @@ export default function StudentCourseTree({
         <Button startIcon={<ArrowBackIcon />} onClick={onBackToCourses} size="small" sx={{ mb: 1 }}>
           All courses
         </Button>
+        {onGetHelp && <Button onClick={onGetHelp} size="small" sx={{ mb: 1 }}>Get help</Button>}
         <Typography variant="h6" sx={{ fontWeight: 700 }}>
           {course.node.title ?? 'Untitled course'}
         </Typography>
@@ -263,6 +276,7 @@ export default function StudentCourseTree({
               depth={0}
               expanded={expanded}
               lockStatuses={lockStatuses}
+              progress={progress}
               selectedNodeId={selectedNodeId}
               parentId={course.node.id}
               onToggle={onToggle}

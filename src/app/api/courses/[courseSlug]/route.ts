@@ -11,6 +11,7 @@ import {
 import { resolveAccessibleCourseBySlug } from '@/lib/courseAccess';
 import { fetchAccessibleContentNodes } from '@/lib/contentEntitlements';
 import type { ChildUnlockStatus, NodeSubtree } from '@/types/course';
+import { loadCourseProgress } from '@/lib/courseProgressServer';
 
 function sanitizeSubtree(subtree: BuilderNodeSubtree, accessibleIds: Set<number>): NodeSubtree | null {
   const nodeState = (subtree.node.state ?? 'draft') as string;
@@ -35,12 +36,13 @@ function sanitizeSubtree(subtree: BuilderNodeSubtree, accessibleIds: Set<number>
   };
 }
 
-function collectParentIds(subtree: NodeSubtree, acc: Set<number>) {
+function collectParentIds(subtree: NodeSubtree, acc: Set<number>, nodeIds: number[]) {
+  nodeIds.push(subtree.node.id);
   if (subtree.children.length > 0) {
     acc.add(subtree.node.id);
   }
   for (const child of subtree.children) {
-    collectParentIds(child.subtree, acc);
+    collectParentIds(child.subtree, acc, nodeIds);
   }
 }
 
@@ -74,12 +76,14 @@ export async function GET(req: NextRequest, context: unknown) {
 
     // 2) collect all parent node IDs (nodes that have children)
     const parentIdsSet = new Set<number>();
-    collectParentIds(sanitized, parentIdsSet);
+    const progressNodeIds: number[] = [];
+    collectParentIds(sanitized, parentIdsSet, progressNodeIds);
     const parentIds = Array.from(parentIdsSet);
+    const progress = await loadCourseProgress(guard.supabase, guard.user.id, progressNodeIds);
 
     // if no parents, nothing to lock
     if (parentIds.length === 0) {
-      return NextResponse.json({ course: sanitized, unlockStatuses: {} });
+      return NextResponse.json({ course: sanitized, unlockStatuses: {}, progress }, { headers: { 'Cache-Control': 'private, no-store' } });
     }
 
     // 3) bulk RPC to get unlock statuses for this user
@@ -120,7 +124,7 @@ export async function GET(req: NextRequest, context: unknown) {
       unlockStatuses[Number(pid)].sort((a, b) => a.child_position - b.child_position);
     }
 
-    return NextResponse.json({ course: sanitized, unlockStatuses });
+    return NextResponse.json({ course: sanitized, unlockStatuses, progress }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error: unknown) {
     return handleCourseBuilderError(error);
   }

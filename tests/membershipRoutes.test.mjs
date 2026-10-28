@@ -34,6 +34,40 @@ function loadMiddleware(codes, context, authenticated = true) {
 const context = { default_home: 'ninety-day', has_active_ninety_day_enrollment: true };
 const dual = ['user', 'ninety-day-user'];
 
+test('support submissions remain reachable without normal member access', async () => {
+  for (const codes of [[], ['past_member'], ['assistant'], ['ninety-day-user']]) {
+    const middleware = loadMiddleware(codes, undefined, codes.length > 0);
+    const response = await middleware(new NextRequest('https://reboot.example/api/support', { method: 'POST' }));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('location'), null);
+  }
+});
+
+test('the public support exception does not expose similarly named APIs', async () => {
+  const middleware = loadMiddleware([], undefined, false);
+  for (const path of ['/api/support-admin', '/api/support/private']) {
+    const response = await middleware(new NextRequest(`https://reboot.example${path}`));
+    assert.equal(response.status, 307);
+    assert.equal(new URL(response.headers.get('location')).pathname, '/login');
+  }
+});
+
+test('account settings are reachable for active member, programme and assistant roles', async () => {
+  for (const codes of [['user'], ['ninety-day-user'], ['assistant'], ['coach']]) {
+    const response = await loadMiddleware(codes)(new NextRequest('https://reboot.example/account'));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('location'), null);
+  }
+  for (const path of ['/account-admin', '/accounting']) {
+    const response = await loadMiddleware(['assistant'])(new NextRequest('https://reboot.example' + path));
+    assert.equal(new URL(response.headers.get('location')).pathname, '/assistant-library');
+  }
+  const removed = await loadMiddleware(['past_member'])(new NextRequest('https://reboot.example/account'));
+  assert.equal(new URL(removed.headers.get('location')).pathname, '/access-removed');
+  const anonymous = await loadMiddleware([], undefined, false)(new NextRequest('https://reboot.example/account'));
+  assert.equal(new URL(anonymous.headers.get('location')).pathname, '/login');
+});
+
 test('middleware allows both dashboards regardless of the dual member default', async () => {
   for (const default_home of ['member', 'ninety-day']) {
     const middleware = loadMiddleware(dual, { ...context, default_home });

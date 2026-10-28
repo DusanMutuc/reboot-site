@@ -33,6 +33,14 @@ test('concurrent completion callers await the same pending write and can retry a
   pending.resolve(response({error:'offline'},503));await failed;
   await current.markCompleted();assert.equal(count,2);
 });
+
+test('returning to unfinished work records a fresh visit but completed review stays deduplicated',async()=>{
+  const calls=[];const render=hook(async(_,options)=>{calls.push(JSON.parse(options.body));return response();});
+  await render(1).markStarted();await render(2).markStarted();await render(1).markStarted();
+  assert.deepEqual(calls.map((call)=>call.nodeId),[1,2,1]);
+  await render(1).markCompleted();await render(2).markStarted();await render(1).markStarted();
+  assert.equal(calls.filter((call)=>call.nodeId===1&&call.action==='start').length,2);
+});
 test('an old node failure cannot reset a newer node in-flight completion',async()=>{
   const first=deferred(),second=deferred();const calls=[];
   const render=hook(async(_,options)=>{const payload=JSON.parse(options.body);calls.push(payload);return payload.nodeId===1?first.promise:second.promise;});

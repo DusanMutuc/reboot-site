@@ -11,6 +11,7 @@ import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
 import { supabase } from '@/lib/supabaseClient';
 import rebootLogo from '../../../public/Reboot Logo - Color.png';
+import AccountSettingsLink from '@/components/account/AccountSettingsLink';
 
 const navigation = [
   { label: 'Home', href: '/coach' },
@@ -79,6 +80,7 @@ export default function CoachTopBar({ coachName, roleLabel = 'Coach workspace' }
       <Menu id="coach-account-menu" anchorEl={accountAnchor} open={Boolean(accountAnchor)} onClose={() => setAccountAnchor(null)}
         slotProps={{ list: { 'aria-labelledby': 'coach-account-button' }, paper: { sx: { minWidth: 200, mt: 0.5, border: `1px solid ${brand.border}`, boxShadow: '0 12px 32px rgba(16,20,19,.12)' } } }}>
         {coachName ? <Typography sx={{ px: 2, py: 1, fontSize: 13, fontWeight: 600 }}>{coachName}</Typography> : null}
+        <AccountSettingsLink menuItem onClick={() => setAccountAnchor(null)} sx={{ fontSize: 14, py: 1.5 }} />
         <MenuItem onClick={() => void signOut()} disabled={signingOut} sx={{ gap: 1.25, fontSize: 14, py: 1.5 }}>
           <LogoutRoundedIcon fontSize="small" />{signingOut ? 'Signing out…' : 'Sign out'}
         </MenuItem>
@@ -95,6 +97,7 @@ export default function CoachTopBar({ coachName, roleLabel = 'Coach workspace' }
           ))}
         </Box>
         <Divider />
+        <AccountSettingsLink menuItem onClick={() => setDrawerOpen(false)} sx={{ mx: 1, px: 2, minHeight: 48, fontSize: 14 }} />
         <MenuItem onClick={() => void signOut()} disabled={signingOut} sx={{ mx: 1, my: 1, px: 2, gap: 1.25, minHeight: 48, fontSize: 14 }}><LogoutRoundedIcon fontSize="small" />{signingOut ? 'Signing out…' : 'Sign out'}</MenuItem>
       </Drawer>
       <Snackbar open={signOutError} autoHideDuration={6000} onClose={() => setSignOutError(false)}><Alert severity="error" onClose={() => setSignOutError(false)}>Could not sign out. Please try again.</Alert></Snackbar>

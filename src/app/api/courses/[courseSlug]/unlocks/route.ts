@@ -4,6 +4,8 @@ import { requireUser } from '@/lib/requireUser';
 import { adminClient, fetchNodeSubtree } from '@/lib/courseBuilder';
 import { collectSubtreeNodeIds, resolveAccessibleCourseBySlug } from '@/lib/courseAccess';
 import type { ChildUnlockStatus } from '@/types/course';
+import { loadCourseProgress } from '@/lib/courseProgressServer';
+import { fetchAccessibleContentNodes } from '@/lib/contentEntitlements';
 
 export async function POST(req: NextRequest, context: unknown) {
   const guard = await requireUser(req);
@@ -68,5 +70,13 @@ export async function POST(req: NextRequest, context: unknown) {
     unlockStatuses[Number(parentId)].sort((a, b) => a.child_position - b.child_position);
   }
 
-  return NextResponse.json({ unlockStatuses });
+  try {
+    const accessibleIds = (await fetchAccessibleContentNodes(guard.user.id))
+      .filter((row) => Number(row.root_id) === course.id && allowedNodeIds.has(Number(row.node_id)))
+      .map((row) => Number(row.node_id));
+    const progress = await loadCourseProgress(guard.supabase, guard.user.id, accessibleIds);
+    return NextResponse.json({ unlockStatuses, progress }, { headers: { 'Cache-Control': 'private, no-store' } });
+  } catch {
+    return NextResponse.json({ error: 'Could not refresh course progress.' }, { status: 500 });
+  }
 }

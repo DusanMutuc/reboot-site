@@ -22,9 +22,10 @@ import rebootLogo from '/public/Reboot Logo - Color.png'; // Add this import
 type LoginClientProps = {
   redirectTo?: string | null;
   passwordUpdated?: boolean;
+  backupEmailEnabled?: boolean;
 };
 
-export default function LoginClient({ redirectTo = null, passwordUpdated = false }: LoginClientProps) {
+export default function LoginClient({ redirectTo = null, passwordUpdated = false, backupEmailEnabled = false }: LoginClientProps) {
   const router = useRouter();
   
   // Use useState and useEffect for hydration-safe responsive detection
@@ -34,6 +35,8 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
+  const loginInFlight = useRef(false);
 
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
@@ -59,36 +62,65 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
   }, []);
 
   const handleLogin = async () => {
+    if (loginInFlight.current) return;
+    loginInFlight.current = true;
+    setSigningIn(true);
     setError(null);
   
-    const email = (emailRef.current?.value || '').trim();
-    const password = passRef.current?.value || '';
-  
-    const { data: authData, error: signInError } =
-      await supabase.auth.signInWithPassword({ email, password });
-  
-    if (signInError) {
-      setError(signInError.code === 'invalid_credentials'
-        ? 'We couldn’t sign you in. Check your email and password, or choose “Set up or reset password” to get an email link and choose a password.'
-        : signInError.message);
-      return;
-    }
-  
-    const user = authData.user;
-    if (!user) {
-      setError('No user data returned');
-      return;
-    }
-  
+    const enteredEmail = (emailRef.current?.value || email).trim();
+    const enteredPassword = passRef.current?.value || password;
+
     try {
-      await assertAccountSessionAllowed(supabase);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Account access could not be verified.');
-      return;
+      if (backupEmailEnabled) {
+        const response = await fetch('/api/auth/backup-login', {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: enteredEmail, password: enteredPassword }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          throw new Error(result.code === 'rate_limited' ? 'Please wait a little before trying again.'
+            : result.code === 'feature_disabled' ? 'Please refresh this page and try signing in again.'
+            : 'We couldn’t sign you in. Check your email and password, or request a password link.');
+        }
+        // The server checked account access and set the existing Supabase cookies.
+        // A full navigation avoids using an older in-memory browser session.
+        const target = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')
+          && !/[\\\u0000-\u001f]/.test(redirectTo) ? redirectTo : '/';
+        window.location.assign(target);
+        return;
+      }
+  
+      const { data: authData, error: signInError } =
+        await supabase.auth.signInWithPassword({ email: enteredEmail, password: enteredPassword });
+  
+      if (signInError) {
+        setError(signInError.code === 'invalid_credentials'
+          ? 'We couldn’t sign you in. Check your email and password, or choose “Set up or reset password” to get an email link and choose a password.'
+          : signInError.message);
+        return;
+      }
+  
+      const user = authData.user;
+      if (!user) {
+        setError('No user data returned');
+        return;
+      }
+  
+      try {
+        await assertAccountSessionAllowed(supabase);
+      } catch (error) {
+        setError(error instanceof Error ? error.message : 'Account access could not be verified.');
+        return;
+      }
+      // The root route resolves membership and the admin-selected default home.
+      router.replace(redirectTo || '/');
+      router.refresh();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'We couldn’t sign you in. Please try again.');
+    } finally {
+      loginInFlight.current = false;
+      setSigningIn(false);
     }
-    // The root route resolves membership and the admin-selected default home.
-    router.replace(redirectTo || '/');
-    router.refresh();
   };
 
   const handleLoginSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -116,6 +148,17 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
     setForgotError(null);
     setForgotMessage(null);
     try {
+      if (backupEmailEnabled) {
+        const response = await fetch('/api/auth/backup-recovery', {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: forgotEmail.trim() }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) throw new Error(result.code === 'rate_limited'
+          ? 'Please wait a little before requesting another link.' : 'The request could not be completed. Please try again.');
+        setForgotMessage('If this email can receive a Reboot password link, we’ve sent one. Check your inbox and spam folder, then use the latest link.');
+        return;
+      }
       const { error } = await supabase.auth.resetPasswordForEmail(
         forgotEmail.trim(),
         { redirectTo: 'https://hub.rebootmembers.com/reset-password' }
@@ -152,7 +195,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
       <DialogTitle id="password-reset-title" sx={{ fontSize: '20px' }}>Set up or reset your password</DialogTitle>
       <DialogContent>
         <Typography variant="body2" sx={{ fontSize: '14px' }}>
-          Enter the email you use for Reboot. We’ll email you a link to choose your own password. After saving it, return to the login page and sign in with your new password.
+          {backupEmailEnabled ? 'Enter your primary or verified backup email.' : 'Enter the email you use for Reboot.'} We’ll email you a link to choose your own password. After saving it, return to the login page and sign in with your new password.
         </Typography>
         <TextField
           label="Enter your email"
@@ -173,7 +216,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
           <Box role="status" sx={{ mt: 1 }}>
             <Typography color="success.main" sx={{ fontSize: '14px' }}>{forgotMessage}</Typography>
             <Typography variant="body2" sx={{ mt: 1, fontSize: '14px' }}>
-              Still need help? <Link href="/support" prefetch={false}>Contact support</Link>.
+              Still need help? <Link href="/support?from=%2Flogin" prefetch={false}>Contact support</Link>.
             </Typography>
           </Box>
         )}
@@ -283,6 +326,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
             </Typography>
 
             {passwordNotice}
+            {backupEmailEnabled ? <Typography variant="body2" sx={{ mb: 2 }}>Use your primary or verified backup email with the same password.</Typography> : null}
 
             <TextField
               placeholder="Email"
@@ -359,6 +403,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
 
             <Button
               type="submit"
+              disabled={signingIn}
               variant="contained"
               color="secondary"
               fullWidth
@@ -384,7 +429,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
             <Box sx={{ mt: 2.5, display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap' }}>
               <Button
                 component={Link}
-                href="/support"
+                href="/support?from=%2Flogin"
                 prefetch={false}
                 variant="text"
                 sx={{
@@ -474,6 +519,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
           </Typography>
 
           {passwordNotice}
+          {backupEmailEnabled ? <Typography variant="body2" sx={{ mb: 2 }}>Use your primary or verified backup email with the same password.</Typography> : null}
 
           <TextField
             placeholder="Email"
@@ -543,6 +589,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
 
           <Button
             type="submit"
+            disabled={signingIn}
             variant="contained"
             color="secondary"
             fullWidth
@@ -570,7 +617,7 @@ export default function LoginClient({ redirectTo = null, passwordUpdated = false
           <Box sx={{ mt: '2rem', display: 'flex', justifyContent: 'center', gap: 3, flexWrap: 'wrap' }}>
             <Button
               component={Link}
-              href="/support"
+              href="/support?from=%2Flogin"
               prefetch={false}
               variant="text"
               sx={{

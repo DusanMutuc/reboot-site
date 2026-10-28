@@ -31,6 +31,8 @@ type LessonContentProps = {
   loading: boolean;
   error?: string | null;
   onCompleted?: (nodeId: number) => void;
+  onStarted?: (nodeId: number) => void;
+  completed?: boolean;
 };
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -58,7 +60,7 @@ function toRenderableBlock(block: ContentBlock): RenderableBlock {
   };
 }
 
-export default function LessonContent({ lesson, loading, error, onCompleted }: LessonContentProps) {
+export default function LessonContent({ lesson, loading, error, onCompleted, onStarted, completed = false }: LessonContentProps) {
   // Lazily loaded blocks for the currently selected lesson/chapter
   const [blocks, setBlocks] = useState<RenderableBlock[]>([]);
   const [blocksState, setBlocksState] = useState<LoadState>('idle');
@@ -148,15 +150,18 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   }, [markCompleted, nodeId, onCompleted]);
 
   const startLesson = useCallback(async () => {
-    if (!nodeId) return;
+    if (!nodeId || completed) return;
     try {
       await markStarted();
-      if (currentNodeId.current === nodeId) setProgressSaveError((error) => error === 'start' ? null : error);
+      if (currentNodeId.current === nodeId) {
+        setProgressSaveError((error) => error === 'start' ? null : error);
+        onStarted?.(nodeId);
+      }
     } catch (e) {
       console.error('startLesson failed', e);
       if (currentNodeId.current === nodeId && !completedOnceRef.current) setProgressSaveError('start');
     }
-  }, [markStarted, nodeId]);
+  }, [markStarted, nodeId, completed, onStarted]);
 
   // ===== 1) Lazy-load blocks whenever the selected node changes =====
   useEffect(() => {
@@ -468,7 +473,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
   }, [vimeoVideoBlockIds, videoProgressByBlock]);
 
   useEffect(() => {
-    if (completedOnceRef.current) return;
+    if (completed || completedOnceRef.current) return;
     if (blocksState !== 'ready' || !nodeId || blocksNodeId !== nodeId) return;
     if (assetBlockIds.length > 0 && resourceState !== 'ready') return;
 
@@ -520,6 +525,7 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
     assetBlockIds.length,
     resourceState,
     completeLesson,
+    completed,
   ]);
 
   // ===== 5) Submit/Update handler for a specific Smart Doc placement =====
@@ -677,6 +683,28 @@ export default function LessonContent({ lesson, loading, error, onCompleted }: L
             </Typography>
           ) : null}
         </Box>
+
+        {completed ? <Alert severity="success">Completed. You can review this lesson without changing your place in the course.</Alert> : blocksState === 'ready' && (assetBlockIds.length === 0 || resourceState === 'ready') && (
+          <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>To complete this {labels.lower}</Typography>
+            {vimeoVideoBlockIds.map((id) => {
+              const block = blocks.find((item) => item.id === id);
+              const title = block?.resource_id ? resources[block.resource_id]?.title : null;
+              return <Typography key={id} variant="body2" sx={{ mt: 0.5 }}>
+                {(videoProgressByBlock[id] ?? 0) >= 0.8 ? 'Done:' : 'Remaining:'} Watch at least 80% of {title || 'the video'}.
+              </Typography>;
+            })}
+            {smartDocBlockIds.map((id) => {
+              const block = blocks.find((item) => item.id === id);
+              return <Typography key={id} variant="body2" sx={{ mt: 0.5 }}>
+                {smartDocStatus[id]?.status === 'submitted' ? 'Done:' : 'Remaining:'} Complete and submit {block?.label || 'the Smart Doc'}.
+              </Typography>;
+            })}
+            {smartDocBlockIds.length === 0 && vimeoVideoBlockIds.length === 0 && (
+              <Typography variant="body2" sx={{ mt: 0.5 }}>Read through the content. Completion is saved automatically near the end of the page.</Typography>
+            )}
+          </Box>
+        )}
 
         {/* Blocks load state */}
         {blocksState === 'loading' && (

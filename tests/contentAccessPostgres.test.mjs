@@ -250,6 +250,26 @@ test('content entitlements and published progress execute against PostgreSQL wit
       await asUser(3); assert.equal(await scalar('select can_user_access_course(auth.uid(),120)'),false);
       await asUser(5); assert.equal(await scalar('select can_user_access_course(auth.uid(),120)'),true,'full dual membership survives ended programme');
     });
+    await subtest('persisted progress identifies the last unfinished visit without resetting completed work',async () => {
+      await asUser(1);
+      await db.exec('select mark_node_started(124);');
+      await asService();
+      await db.exec(`update user_node_progress set updated_at='2020-01-01' where user_id='${uid(1)}' and node_id=124;`);
+      await asUser(1);
+      await db.exec('select mark_node_started(124);');
+      assert.equal(await scalar("select updated_at>'2020-01-01'::timestamptz from user_node_progress where node_id=124 and user_id=auth.uid()"),true);
+      await db.exec('select mark_completed_and_cascade(124);');
+      const completedAt=await scalar('select completed_at from user_node_progress where node_id=124 and user_id=auth.uid()');
+      await db.exec('select mark_node_started(124);');
+      const reviewed=(await rows('select status,completed_at from user_node_progress where node_id=124 and user_id=auth.uid()'))[0];
+      assert.equal(reviewed.status,'completed');assert.deepEqual(reviewed.completed_at,completedAt);
+      await asUser(5);
+      assert.equal(await scalar('select count(*)::int from user_node_progress where user_id=auth.uid() and node_id=124'),0);
+      await db.exec('select mark_node_started(124);');
+      assert.equal(await scalar('select status from user_node_progress where user_id=auth.uid() and node_id=124'),'in_progress');
+      await asUser(1);
+      assert.equal(await scalar('select status from user_node_progress where user_id=auth.uid() and node_id=124'),'completed');
+    });
     await subtest('legacy search entry points inherit content RLS and do not bypass revoked or anonymous access',async () => {
       for(const actor of [2,null]) {
         if(actor) await asUser(actor);

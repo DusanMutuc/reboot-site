@@ -366,3 +366,26 @@ npm.cmd run docs:db
 ```
 
 The command requires `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` and reads metadata only.
+
+
+## Pending verified backup-email extension
+
+The default-off `codex/verified-backup-email` branch adds migration
+`20261028140114_verified_backup_email.sql`. This is a pending local-test extension,
+not part of the live snapshot described above. See
+[the PC testing handoff](backup-email-local-testing.md) before applying it.
+
+Supabase Auth retains the one primary email, password and account UUID. The private
+`reboot_backup_email` schema holds a normalized ownership registry, one verified
+backup per UUID, verification challenges, one-use recovery grants and quotas.
+Service-only public RPCs expose bounded operations; browser roles cannot read
+these tables or resolve email ownership. Native Auth/signup/admin email mutations
+are checked by an ownership trigger so a primary address cannot collide with a
+verified backup. Auth credential, MFA and account-archive changes invalidate
+outstanding credentials. Account transfers do not move backup addresses.
+
+Do not create a second Auth identity for a backup address, copy password hashes,
+or update the Auth email to implement alias login. Server routes resolve an alias
+privately and let Supabase validate the same account password. Production
+installation requires collision/backfill and Auth privilege review; turning off
+the application flag retains the additive namespace guard and saved settings.

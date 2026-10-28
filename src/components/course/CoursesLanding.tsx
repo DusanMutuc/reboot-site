@@ -71,9 +71,10 @@ function resolveHeroSrc(value: string | null | undefined): string | null {
 type CourseCardProps = {
   course: CourseSummary;
   progressPct?: number; // 0–100
+  hasStarted?: boolean;
 };
 
-function CourseCard({ course, progressPct }: CourseCardProps) {
+function CourseCard({ course, progressPct, hasStarted = false }: CourseCardProps) {
   const slug = course.slug ?? '';
   const heroSrc = resolveHeroSrc(course.hero_image);
   const progress = typeof progressPct === 'number' ? Math.max(0, Math.min(100, progressPct)) : 0;
@@ -163,7 +164,7 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
             disableElevation
             sx={{ textTransform: 'none', fontWeight: 700, borderRadius: 2, py: 1.25 }}
           >
-            {progress > 0 ? 'Continue' : 'Start'}
+            {progress >= 100 ? 'Review course' : progress > 0 || hasStarted ? 'Continue course' : 'Start course'}
           </Button>
         </CardContent>
       </CardActionArea>
@@ -174,6 +175,7 @@ function CourseCard({ course, progressPct }: CourseCardProps) {
 export default function CoursesLanding() {
   const [state, setState] = useState<FetchState>({ status: 'loading' });
   const [progressByCourse, setProgressByCourse] = useState<Record<number, number>>({});
+  const [startedByCourse, setStartedByCourse] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
     let active = true;
@@ -213,15 +215,22 @@ export default function CoursesLanding() {
             _user_id: userId,
             _course_id: c.id,
           });
-          if (error) return [c.id, 0] as const;
+          if (error) return [c.id, 0, false] as const;
           const row = Array.isArray(data) ? data[0] : data;
-          const pct = row?.progress ? Math.round(row.progress * 100) : 0;
-          return [c.id, pct] as const;
+          // Never round an unfinished course up to "Review course".
+          const pct = row?.progress ? Math.floor(row.progress * 100) : 0;
+          let started = pct > 0;
+          if (!started) {
+            const detail = await supabase.rpc('get_user_course_completion_detail', { _user_id: userId, _course_id: c.id });
+            started = !detail.error && (detail.data ?? []).some((item: { status: string }) => item.status === 'in_progress' || item.status === 'completed');
+          }
+          return [c.id, pct, started] as const;
         })
       );
 
       if (!cancelled) {
-        setProgressByCourse(Object.fromEntries(entries));
+        setProgressByCourse(Object.fromEntries(entries.map(([id, pct]) => [id, pct])));
+        setStartedByCourse(Object.fromEntries(entries.map(([id, , started]) => [id, started])));
       }
     })();
 
@@ -289,11 +298,11 @@ export default function CoursesLanding() {
           state.courses.map((course) => {
             if (!course.slug) return null;
             const pct = progressByCourse[course.id] ?? 0;
-            return <CourseCard key={course.id} course={course} progressPct={pct} />;
+            return <CourseCard key={course.id} course={course} progressPct={pct} hasStarted={startedByCourse[course.id]} />;
           })}
       </Box>
     );
-  }, [state, progressByCourse]);
+  }, [state, progressByCourse, startedByCourse]);
 
   return (
     <Box

@@ -41,6 +41,7 @@ const NINETY_DAY_PAGE_PREFIXES = [
   '/library',
   '/courses',
   '/tracker',
+  '/account',
   '/support',
   '/reset-password',
   '/r',
@@ -55,7 +56,10 @@ export async function middleware(req: NextRequest) {
   const isApiRequest = pathname.startsWith('/api');
 
   if (pathname === ACCOUNT_MERGED_PATH) return NextResponse.next();
-  const isPublicRequest = PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
+  // Support must also work for people who cannot sign in or have lost access.
+  // The exact endpoint validates identity, delivery configuration and rate limits.
+  const isPublicRequest = pathname === '/api/support'
+    || PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix));
   const isAuthPage = ['/login', RESET_PATH, '/auth'].some((prefix) => isPathAtOrBelow(pathname, prefix));
   // Public APIs enforce their own guards. Auth pages must also reject a merged
   // session already present before a login, recovery or mobile handoff exchange.
@@ -172,6 +176,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const assistantAllowed =
+    isPathAtOrBelow(pathname, '/account') ||
     pathname === '/assistant-library' ||
     pathname.startsWith('/assistant-library/') ||
     pathname.startsWith('/r/') ||

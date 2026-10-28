@@ -8,6 +8,7 @@ import GridViewIcon from '@mui/icons-material/GridView';
 import ImageIcon from '@mui/icons-material/Image';
 import Link from 'next/link';
 import Image from 'next/image';
+import AccountSettingsLink from '@/components/account/AccountSettingsLink';
 import { useRouter, useSelectedLayoutSegments } from 'next/navigation';
 import {
   fetchLibrarySidebarItems,
@@ -288,6 +289,7 @@ const LibrarySidebar = memo(function LibrarySidebar({
           </Tooltip>
         </Stack>
         {showLegendsFilter ? <LegendsLibraryViewControl compact /> : null}
+        <AccountSettingsLink sx={{ mt: 1 }} />
       </Box>
 
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
@@ -427,7 +429,7 @@ function LibrarySidebarLayoutContent({
   const onGrid = !selectedSlug;
 
   return onGrid ? (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}>{children}</Box>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'grey.50' }}><AccountSettingsLink sx={{ display: 'flex', width: 'fit-content', ml: 'auto', mr: 3, mt: 2 }} />{children}</Box>
   ) : (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'grey.50' }}>
       <LibrarySidebar

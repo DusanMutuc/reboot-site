@@ -6,6 +6,9 @@ import type {
   BusinessAuditPreparationAnswers,
   BusinessAuditPreparationAudit,
   BusinessAuditPreparationPayload,
+  BusinessAuditPreparationDraft,
+  BusinessAuditPreparationInput,
+  BusinessAuditPreparationSaveResult,
 } from '@/lib/businessAuditPreparationShared';
 
 type BusinessReviewRow = {
@@ -38,6 +41,23 @@ type PreparationResponseRow = {
   submitted_at: string;
   updated_at: string;
 };
+
+type PreparationDraftRow = {
+  business_review_id: number; values: BusinessAuditPreparationInput; revision: number;
+  submitted_revision: number | null; updated_at: string; last_request_id: string;
+};
+function mapDraft(row: PreparationDraftRow | null): BusinessAuditPreparationDraft | null {
+  return row ? { values: row.values, revision: row.revision, submittedRevision: row.submitted_revision,
+    updatedAt: row.updated_at, lastRequestId: row.last_request_id } : null;
+}
+
+async function loadDraft(client: SupabaseClient, businessReviewId: number) {
+  const { data, error } = await client.from('business_review_preparation_drafts')
+    .select('business_review_id,values,revision,submitted_revision,updated_at,last_request_id')
+    .eq('business_review_id', businessReviewId).maybeSingle();
+  if (error) throw error;
+  return mapDraft(data as PreparationDraftRow | null);
+}
 
 function isCancelledStatus(status: string | null): boolean {
   if (!status) return false;
@@ -98,9 +118,10 @@ async function loadAnswers(
 async function findPreparationAudit(
   client: SupabaseClient,
   userId: string,
+  businessReviewId?: number,
 ): Promise<{ review: BusinessReviewRow; meeting: MeetingRow } | null> {
   const today = DateTime.now().setZone(BUSINESS_AUDIT_TIMEZONE).toISODate();
-  const { data: reviewData, error: reviewError } = await client
+  let query = client
     .from('business_reviews')
     .select('id, review_date, status, meeting_id')
     .eq('user_id', userId)
@@ -108,6 +129,8 @@ async function findPreparationAudit(
     .order('review_date', { ascending: false })
     .order('id', { ascending: false })
     .limit(100);
+  if (businessReviewId !== undefined) query = query.eq('id', businessReviewId);
+  const { data: reviewData, error: reviewError } = await query;
 
   if (reviewError) throw new Error(reviewError.message);
   const reviews = (reviewData ?? []) as BusinessReviewRow[];
@@ -156,14 +179,17 @@ async function findPreparationAudit(
 export async function loadBusinessAuditPreparation(
   client: SupabaseClient,
   userId: string,
+  businessReviewId?: number,
 ): Promise<BusinessAuditPreparationPayload | null> {
-  const target = await findPreparationAudit(client, userId);
+  const target = await findPreparationAudit(client, userId, businessReviewId);
   if (!target) return null;
   const today = DateTime.now().setZone(BUSINESS_AUDIT_TIMEZONE).toISODate() ?? '1970-01-01';
 
   return {
+    userId,
     audit: mapAudit(target.review, target.meeting, today),
     answers: await loadAnswers(client, Number(target.review.id)),
+    draft: await loadDraft(client, Number(target.review.id)),
   };
 }
 
@@ -192,37 +218,21 @@ export async function userCanEditBusinessAuditPreparation(
   return Boolean(meeting && !isCancelledStatus(meeting.ghl_status));
 }
 
-export async function upsertBusinessAuditPreparation(
+export async function saveBusinessAuditPreparation(
   client: SupabaseClient,
+  userId: string,
   businessReviewId: number,
-  answers: Omit<BusinessAuditPreparationAnswers, 'submittedAt' | 'updatedAt'>,
-): Promise<BusinessAuditPreparationAnswers> {
-  const now = new Date().toISOString();
-  const { data, error } = await client
-    .from('business_review_preparation_responses')
-    .upsert(
-      {
-        business_review_id: businessReviewId,
-        business_forward_wins: answers.businessForwardWins,
-        personal_forward_wins: answers.personalForwardWins,
-        greatest_business_challenge: answers.greatestBusinessChallenge,
-        greatest_personal_challenge: answers.greatestPersonalChallenge,
-        desired_call_outcome: answers.desiredCallOutcome,
-        topics_to_discuss: answers.topicsToDiscuss,
-        business_rating: answers.businessRating,
-        personal_rating: answers.personalRating,
-        submitted_at: now,
-        updated_at: now,
-      },
-      { onConflict: 'business_review_id' },
-    )
-    .select(
-      'business_review_id, business_forward_wins, personal_forward_wins, greatest_business_challenge, greatest_personal_challenge, desired_call_outcome, topics_to_discuss, business_rating, personal_rating, submitted_at, updated_at',
-    )
-    .single();
-
-  if (error) throw new Error(error.message);
-  const mapped = mapAnswers(data as PreparationResponseRow);
-  if (!mapped) throw new Error('The saved preparation form could not be reloaded.');
-  return mapped;
+  values: BusinessAuditPreparationInput,
+  expectedRevision: number,
+  requestId: string,
+  submit: boolean,
+): Promise<BusinessAuditPreparationSaveResult> {
+  const { data, error } = await client.rpc('save_business_review_preparation', {
+    _user_id: userId, _business_review_id: businessReviewId, _values: values,
+    _expected_revision: expectedRevision, _request_id: requestId, _submit: submit,
+  });
+  if (error) throw error;
+  const draft = mapDraft(data?.draft as PreparationDraftRow | null);
+  if (!draft) throw new Error('The saved preparation form could not be reloaded.');
+  return { businessReviewId, draft, answers: mapAnswers(data.answers as PreparationResponseRow | null) };
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Box, Container, Typography } from '@mui/material';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { brand, HOME_MAX_WIDTH } from '@/lib/homeTheme';
@@ -16,6 +17,8 @@ export function HubFooter({
   links: UtilityLink[];
   flush?: boolean;
 }) {
+  const pathname = usePathname();
+  const supportHref = `/support?from=${encodeURIComponent(pathname || '/')}`;
   const supportStep = helpSteps.find((step) => step.title === 'Something is broken') ?? {
     title: 'Something is broken',
     detail: 'Login trouble, a missing training, or numbers that look wrong.',
@@ -56,7 +59,7 @@ export function HubFooter({
             </Box>
             <Box
               component={Link}
-              href={supportStep.href}
+              href={supportStep.href === '/support' ? supportHref : supportStep.href}
               sx={{
                 gridColumn: { xs: '1 / -1', md: 'auto' },
                 justifySelf: { xs: 'stretch', sm: 'start', md: 'end' },
@@ -99,7 +102,7 @@ export function HubFooter({
               <Box
                 key={link.label}
                 component={Link}
-                href={link.href}
+                href={link.href === '/support' ? supportHref : link.href}
                 sx={{
                   fontSize: 14,
                   lineHeight: 1.45,
@@ -128,7 +131,7 @@ export function HubFooter({
               <Box component={Link} href="/privacy-policy" sx={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', '&:hover': { color: brand.turquoise } }}>
                 Privacy policy
               </Box>
-              <Box component={Link} href="/support" sx={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', '&:hover': { color: brand.turquoise } }}>
+              <Box component={Link} href={supportHref} sx={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', '&:hover': { color: brand.turquoise } }}>
                 Support
               </Box>
             </Box>

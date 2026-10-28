@@ -1,195 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-import {
-  loadBusinessAuditPreparation,
-  upsertBusinessAuditPreparation,
-  userCanEditBusinessAuditPreparation,
-} from '@/lib/businessAuditPreparation';
-import { BUSINESS_AUDIT_RATING_OPTIONS } from '@/lib/businessAuditPreparationShared';
+import { loadBusinessAuditPreparation, saveBusinessAuditPreparation, userCanEditBusinessAuditPreparation } from '@/lib/businessAuditPreparation';
+import { validatePreparation, type BusinessAuditPreparationInput } from '@/lib/businessAuditPreparationShared';
 import { requireUser } from '@/lib/requireUser';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
+const headers = { 'Cache-Control': 'private, no-store' };
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const MAX_ANSWER_LENGTH = 10_000;
-const validRatings = new Set<number>(BUSINESS_AUDIT_RATING_OPTIONS);
-
-type SaveBody = {
-  businessReviewId?: unknown;
-  businessForwardWins?: unknown;
-  personalForwardWins?: unknown;
-  greatestBusinessChallenge?: unknown;
-  greatestPersonalChallenge?: unknown;
-  desiredCallOutcome?: unknown;
-  topicsToDiscuss?: unknown;
-  businessRating?: unknown;
-  personalRating?: unknown;
-};
-
-type ValidatedAnswers = {
-  businessReviewId: number;
-  answers: {
-    businessForwardWins: string;
-    personalForwardWins: string;
-    greatestBusinessChallenge: string;
-    greatestPersonalChallenge: string;
-    desiredCallOutcome: string;
-    topicsToDiscuss: string;
-    businessRating: number;
-    personalRating: number;
-  };
-};
-
-async function readBody(request: NextRequest): Promise<SaveBody | null> {
-  try {
-    const body = (await request.json()) as unknown;
-    return body && typeof body === 'object' ? (body as SaveBody) : null;
-  } catch {
-    return null;
+function failure(error: unknown) {
+  const code = (error as { code?: string })?.code;
+  if (['42P01', '42883', 'PGRST202', 'PGRST205'].includes(code ?? '')) {
+    return NextResponse.json({ error: 'Preparation saving is temporarily unavailable. Please try again later.' }, { status: 503, headers });
   }
-}
-
-function readRequiredText(
-  value: unknown,
-  field: string,
-  errors: Record<string, string>,
-): string {
-  if (typeof value !== 'string' || !value.trim()) {
-    errors[field] = 'This answer is required.';
-    return '';
-  }
-
-  const trimmed = value.trim();
-  if (trimmed.length > MAX_ANSWER_LENGTH) {
-    errors[field] = `Keep this answer under ${MAX_ANSWER_LENGTH.toLocaleString()} characters.`;
-  }
-  return trimmed;
-}
-
-function readRating(
-  value: unknown,
-  field: string,
-  errors: Record<string, string>,
-): number {
-  const parsed = typeof value === 'number' ? value : Number.NaN;
-  if (!Number.isInteger(parsed) || !validRatings.has(parsed)) {
-    errors[field] = 'Choose a rating from 1–10. Ratings 5 and 7 are not available.';
-    return 0;
-  }
-  return parsed;
-}
-
-function validateBody(body: SaveBody | null):
-  | { ok: true; value: ValidatedAnswers }
-  | { ok: false; errors: Record<string, string> } {
-  const errors: Record<string, string> = {};
-  const businessReviewId =
-    typeof body?.businessReviewId === 'number' ? body.businessReviewId : Number.NaN;
-
-  if (!Number.isSafeInteger(businessReviewId) || businessReviewId <= 0) {
-    errors.businessReviewId = 'A valid Business Review is required.';
-  }
-
-  const answers = {
-    businessForwardWins: readRequiredText(
-      body?.businessForwardWins,
-      'businessForwardWins',
-      errors,
-    ),
-    personalForwardWins: readRequiredText(
-      body?.personalForwardWins,
-      'personalForwardWins',
-      errors,
-    ),
-    greatestBusinessChallenge: readRequiredText(
-      body?.greatestBusinessChallenge,
-      'greatestBusinessChallenge',
-      errors,
-    ),
-    greatestPersonalChallenge: readRequiredText(
-      body?.greatestPersonalChallenge,
-      'greatestPersonalChallenge',
-      errors,
-    ),
-    desiredCallOutcome: readRequiredText(
-      body?.desiredCallOutcome,
-      'desiredCallOutcome',
-      errors,
-    ),
-    topicsToDiscuss: readRequiredText(body?.topicsToDiscuss, 'topicsToDiscuss', errors),
-    businessRating: readRating(body?.businessRating, 'businessRating', errors),
-    personalRating: readRating(body?.personalRating, 'personalRating', errors),
-  };
-
-  return Object.keys(errors).length > 0
-    ? { ok: false, errors }
-    : { ok: true, value: { businessReviewId, answers } };
+  if (code === '40001') return NextResponse.json({ error: 'Your preparation was updated in another tab or device. Review the saved version before continuing.', conflict: true }, { status: 409, headers });
+  if (code === '42501') return NextResponse.json({ error: 'This Business Review is no longer available for your account.' }, { status: 404, headers });
+  if (code === '22023') return NextResponse.json({ error: 'These answers could not be saved. Check the form and try again.' }, { status: 400, headers });
+  return NextResponse.json({ error: 'Could not save or load your preparation. Your local changes are preserved; please retry.' }, { status: 500, headers });
 }
 
 export async function GET(request: NextRequest) {
   const guard = await requireUser(request);
   if (!guard.ok) return guard.res;
-
-  try {
-    const payload = await loadBusinessAuditPreparation(
-      getAdminClient(),
-      guard.user.id,
-    );
-
-    if (!payload) {
-      return NextResponse.json(
-        {
-          error: 'No upcoming Business Review was found for your account.',
-        },
-        { status: 404 },
-      );
-    }
-
-    return NextResponse.json(payload, {
-      headers: { 'Cache-Control': 'private, no-store' },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not load the preparation form.';
-    return NextResponse.json({ error: message }, { status: 500 });
+  const id = request.nextUrl.searchParams.get('businessReviewId');
+  const businessReviewId = id === null ? undefined : Number(id);
+  if (businessReviewId !== undefined && (!Number.isSafeInteger(businessReviewId) || businessReviewId <= 0)) {
+    return NextResponse.json({ error: 'A valid Business Review is required.' }, { status: 400, headers });
   }
+  try {
+    const payload = await loadBusinessAuditPreparation(getAdminClient(), guard.user.id, businessReviewId);
+    if (!payload) return NextResponse.json({ error: 'No Business Review was found for your account.' }, { status: 404, headers });
+    return NextResponse.json(payload, { headers });
+  } catch (error) { return failure(error); }
 }
 
 export async function PUT(request: NextRequest) {
   const guard = await requireUser(request);
   if (!guard.ok) return guard.res;
-
-  const validation = validateBody(await readBody(request));
-  if (!validation.ok) {
-    return NextResponse.json(
-      { error: 'Complete all required questions.', fieldErrors: validation.errors },
-      { status: 400 },
-    );
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+    || !Number.isSafeInteger(body.businessReviewId) || body.businessReviewId <= 0
+    || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0
+    || typeof body.requestId !== 'string' || !uuid.test(body.requestId)
+    || !['draft', 'submit'].includes(body.mode)) {
+    return NextResponse.json({ error: 'Reload the preparation form before saving; your local answers are preserved.' }, { status: 400, headers });
   }
-
-  const admin = getAdminClient();
-
+  const fieldErrors = validatePreparation(body.values, body.mode === 'submit');
+  if (Object.keys(fieldErrors).length) {
+    return NextResponse.json({ error: body.mode === 'submit' ? 'Complete all eight questions before submitting.' : 'Check your answers before saving.', fieldErrors }, { status: 400, headers });
+  }
   try {
-    const canEditAudit = await userCanEditBusinessAuditPreparation(
-      admin,
-      guard.user.id,
-      validation.value.businessReviewId,
-    );
-    if (!canEditAudit) {
-      return NextResponse.json(
-        { error: 'This Business Review was not found for your account.' },
-        { status: 404 },
-      );
+    const admin = getAdminClient();
+    if (!await userCanEditBusinessAuditPreparation(admin, guard.user.id, body.businessReviewId)) {
+      return NextResponse.json({ error: 'This Business Review was not found for your account.' }, { status: 404, headers });
     }
-
-    const answers = await upsertBusinessAuditPreparation(
-      admin,
-      validation.value.businessReviewId,
-      validation.value.answers,
-    );
-
-    return NextResponse.json({ answers });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Could not save the preparation form.';
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+    const result = await saveBusinessAuditPreparation(admin, guard.user.id, body.businessReviewId,
+      body.values as BusinessAuditPreparationInput, body.expectedRevision, body.requestId, body.mode === 'submit');
+    return NextResponse.json(result, { headers });
+  } catch (error) { return failure(error); }
 }

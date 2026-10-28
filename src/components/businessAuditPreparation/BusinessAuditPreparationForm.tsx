@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo } from 'react';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
 import AssignmentTurnedInOutlinedIcon from '@mui/icons-material/AssignmentTurnedInOutlined';
 import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlined';
@@ -17,6 +17,7 @@ import {
   CircularProgress,
   Container,
   Divider,
+  LinearProgress,
   Paper,
   Stack,
   TextField,
@@ -27,62 +28,10 @@ import {
 import Link from 'next/link';
 
 import {
-  BUSINESS_AUDIT_RATING_OPTIONS,
-  type BusinessAuditPreparationAnswers,
-  type BusinessAuditPreparationPayload,
+  BUSINESS_AUDIT_RATING_OPTIONS, BUSINESS_AUDIT_TEXT_FIELDS, EMPTY_PREPARATION,
+  preparationInput, preparationProgress,
 } from '@/lib/businessAuditPreparationShared';
-
-type EditableAnswers = {
-  businessForwardWins: string;
-  personalForwardWins: string;
-  greatestBusinessChallenge: string;
-  greatestPersonalChallenge: string;
-  desiredCallOutcome: string;
-  topicsToDiscuss: string;
-  businessRating: number | null;
-  personalRating: number | null;
-};
-
-type ApiError = {
-  error?: string;
-  fieldErrors?: Record<string, string>;
-};
-
-const EMPTY_ANSWERS: EditableAnswers = {
-  businessForwardWins: '',
-  personalForwardWins: '',
-  greatestBusinessChallenge: '',
-  greatestPersonalChallenge: '',
-  desiredCallOutcome: '',
-  topicsToDiscuss: '',
-  businessRating: null,
-  personalRating: null,
-};
-
-const ANSWER_FIELDS = [
-  'businessForwardWins',
-  'personalForwardWins',
-  'greatestBusinessChallenge',
-  'greatestPersonalChallenge',
-  'desiredCallOutcome',
-  'topicsToDiscuss',
-] as const;
-
-function toEditableAnswers(
-  answers: BusinessAuditPreparationAnswers | null,
-): EditableAnswers {
-  if (!answers) return { ...EMPTY_ANSWERS };
-  return {
-    businessForwardWins: answers.businessForwardWins,
-    personalForwardWins: answers.personalForwardWins,
-    greatestBusinessChallenge: answers.greatestBusinessChallenge,
-    greatestPersonalChallenge: answers.greatestPersonalChallenge,
-    desiredCallOutcome: answers.desiredCallOutcome,
-    topicsToDiscuss: answers.topicsToDiscuss,
-    businessRating: answers.businessRating,
-    personalRating: answers.personalRating,
-  };
-}
+import { usePreparationDraft } from './usePreparationDraft';
 
 function formatAuditDate(value: string): string {
   const date = new Date(`${value}T12:00:00`);
@@ -117,119 +66,34 @@ function formatSavedAt(value: string): string {
 }
 
 export default function BusinessAuditPreparationForm() {
-  const [payload, setPayload] = useState<BusinessAuditPreparationPayload | null>(null);
-  const [answers, setAnswers] = useState<EditableAnswers>(EMPTY_ANSWERS);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function load() {
-      setLoading(true);
-      setLoadError(null);
-      setSaved(false);
-
-      try {
-        const response = await fetch('/api/business-audit-preparation', {
-          cache: 'no-store',
-          signal: controller.signal,
-        });
-        const body = (await response.json()) as BusinessAuditPreparationPayload & ApiError;
-        if (!response.ok) {
-          throw new Error(body.error || 'Could not load your Business Review preparation form.');
-        }
-
-        setPayload(body);
-        setAnswers(toEditableAnswers(body.answers));
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setLoadError(
-          error instanceof Error
-            ? error.message
-            : 'Could not load your Business Review preparation form.',
-        );
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-
-    void load();
-    return () => controller.abort();
-  }, []);
-
+  const { editor, loading, loadError, retryLoad } = usePreparationDraft();
+  const payload = editor?.payload ?? null;
+  const answers = editor?.values ?? EMPTY_PREPARATION;
+  const saving = editor?.submitting ?? false;
+  const saveError = editor?.error ?? null;
+  const fieldErrors = editor?.fieldErrors ?? {};
+  const saved = editor?.submitted && !editor.hasUnsubmittedChanges;
+  const progress = preparationProgress(answers);
   const meetingTime = useMemo(
     () => payload && formatMeetingTime(payload.audit.startsAt, payload.audit.timezone),
     [payload],
   );
-
-  const updateText = (field: (typeof ANSWER_FIELDS)[number], value: string) => {
-    setAnswers((current) => ({ ...current, [field]: value }));
-    setFieldErrors((current) => ({ ...current, [field]: '' }));
-    setSaveError(null);
-    setSaved(false);
-  };
-
+  const updateText = (field: (typeof BUSINESS_AUDIT_TEXT_FIELDS)[number], value: string) => editor?.edit(field, value);
   const updateRating = (field: 'businessRating' | 'personalRating', value: number | null) => {
-    if (value === null) return;
-    setAnswers((current) => ({ ...current, [field]: value }));
-    setFieldErrors((current) => ({ ...current, [field]: '' }));
-    setSaveError(null);
-    setSaved(false);
+    if (value !== null) editor?.edit(field, value);
   };
-
-  const validate = (): Record<string, string> => {
-    const errors: Record<string, string> = {};
-    for (const field of ANSWER_FIELDS) {
-      if (!answers[field].trim()) errors[field] = 'This answer is required.';
-    }
-    if (answers.businessRating === null) errors.businessRating = 'Choose a rating.';
-    if (answers.personalRating === null) errors.personalRating = 'Choose a rating.';
-    return errors;
-  };
-
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!payload) return;
-
-    const errors = validate();
-    setFieldErrors(errors);
-    setSaveError(null);
-    setSaved(false);
-    if (Object.keys(errors).length > 0) {
-      setSaveError('Please answer all eight questions before submitting.');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const response = await fetch('/api/business-audit-preparation', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessReviewId: payload.audit.id,
-          ...answers,
-        }),
-      });
-      const body = (await response.json()) as { answers?: BusinessAuditPreparationAnswers } & ApiError;
-      if (!response.ok || !body.answers) {
-        setFieldErrors(body.fieldErrors ?? {});
-        throw new Error(body.error || 'Could not save your answers.');
-      }
-
-      setPayload((current) => (current ? { ...current, answers: body.answers! } : current));
-      setAnswers(toEditableAnswers(body.answers));
-      setSaved(true);
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Could not save your answers.');
-    } finally {
-      setSaving(false);
-    }
+    void editor?.submit();
   };
+  const status = editor?.submitting ? 'Submitting answers…'
+    : editor?.saving ? 'Saving draft…'
+    : editor?.conflict ? 'Review conflicting versions'
+    : saveError ? 'Draft could not be saved'
+    : editor?.dirty ? 'Unsaved changes'
+    : payload?.draft && payload.draft.submittedRevision === payload.draft.revision ? 'All changes submitted'
+    : payload?.draft ? `Draft saved ${formatSavedAt(payload.draft.updatedAt)}`
+    : payload?.answers ? 'Submitted answers loaded' : 'Your draft saves automatically as you write.';
 
   return (
     <Box
@@ -309,12 +173,14 @@ export default function BusinessAuditPreparationForm() {
               If you only just booked the meeting, synchronization can take up to one hour. You
               can return using the reminder link once the appointment has been connected.
             </Typography>
-            <Button component={Link} href="/dashboard" variant="contained" sx={{ mt: 3 }}>
-              Return to Member Hub
-            </Button>
+            <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
+              <Button variant="contained" onClick={retryLoad}>Try again</Button>
+              <Button component={Link} href="/dashboard">Return to Member Hub</Button>
+            </Stack>
           </Paper>
         ) : (
           <Box component="form" noValidate onSubmit={handleSubmit}>
+            <Box component="fieldset" disabled={saving} sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}>
             <Paper
               elevation={0}
               sx={{
@@ -365,10 +231,10 @@ export default function BusinessAuditPreparationForm() {
                     <CheckCircleOutlineIcon fontSize="small" />
                     <Box>
                       <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                        Submitted
+                        {editor?.hasUnsubmittedChanges ? 'Submitted · draft changes not sent' : 'Submitted'}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Last saved {formatSavedAt(payload.answers.updatedAt)}
+                        Last submitted {formatSavedAt(payload.answers.submittedAt)}
                       </Typography>
                     </Box>
                   </Stack>
@@ -388,10 +254,34 @@ export default function BusinessAuditPreparationForm() {
                 '& .MuiAlert-message': { fontSize: '0.95rem', lineHeight: 1.55 },
               }}
             >
-              All eight questions are required. You can return through the same link and update
-              your answers at any time.
+              Your draft saves automatically. Complete all eight questions, then submit to share
+              your answers with your coach. You can return and submit updated answers later.
             </Alert>
 
+            <Paper elevation={0} sx={{ p: 2.5, mb: 3, borderRadius: 3 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" gap={1} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                <Typography fontWeight={800}>{progress} of 8 questions answered</Typography>
+                <Typography role="status" aria-live="polite" variant="body2" color={saveError ? 'error.main' : 'text.secondary'}>{status}</Typography>
+              </Stack>
+              <LinearProgress variant="determinate" value={progress / 8 * 100} aria-label={`${progress} of 8 questions answered`} sx={{ mt: 1.5, height: 6, borderRadius: 1 }} />
+              {editor?.recovered && <Typography variant="body2" sx={{ mt: 1 }}>Your unfinished answers have been restored in this tab.</Typography>}
+              {saveError && !editor?.conflict && <Button type="button" onClick={() => void editor?.retry()} disabled={editor?.saving} sx={{ mt: 1 }}>Retry save</Button>}
+            </Paper>
+            {editor?.conflict && <Alert severity="warning" sx={{ mb: 3 }}>
+              <Typography fontWeight={800}>Your preparation changed in another tab or device.</Typography>
+              <Typography variant="body2">Your answers remain in the form below. Compare the saved version before choosing which to keep.</Typography>
+              <Box component="details" sx={{ mt: 1 }}>
+                <Box component="summary" sx={{ cursor: 'pointer', fontWeight: 700 }}>View the saved answers</Box>
+                {Object.entries(preparationInput(editor.conflict.draft?.values ?? editor.conflict.answers)).map(([field, value]) => <Box key={field} sx={{ mt: 1 }}>
+                  <Typography variant="caption" fontWeight={800}>{field.replace(/([A-Z])/g, ' $1')}</Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{value === null || value === '' ? '(Not answered)' : value}</Typography>
+                </Box>)}
+              </Box>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 1.5 }}>
+                <Button type="button" onClick={() => editor.resolveConflict(false)}>Use saved answers</Button>
+                <Button type="button" onClick={() => editor.resolveConflict(true)}>Keep my answers as the new draft</Button>
+              </Stack>
+            </Alert>}
             <QuestionSection
               icon={<EmojiEventsOutlinedIcon />}
               eyebrow="01 · Reflect"
@@ -482,7 +372,7 @@ export default function BusinessAuditPreparationForm() {
             ) : null}
             {saved ? (
               <Alert severity="success" sx={{ mb: 2, borderRadius: 3 }}>
-                Your answers have been saved. You can return and edit them before the meeting.
+                Your answers have been submitted to your coach. You can return and submit updates before the meeting.
               </Alert>
             ) : null}
 
@@ -503,10 +393,10 @@ export default function BusinessAuditPreparationForm() {
               >
                 <Box>
                   <Typography sx={{ fontWeight: 900 }}>
-                    {payload.answers ? 'Update your preparation' : 'Ready to submit?'}
+                    {payload.answers ? 'Ready to submit your updates?' : 'Ready to submit?'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Saving again replaces the answers for this Business Review.
+                    {payload.answers ? 'Your coach sees your last submission until you submit these changes.' : 'Drafts stay private until you submit all eight answers.'}
                   </Typography>
                 </Box>
                 <Button
@@ -514,13 +404,14 @@ export default function BusinessAuditPreparationForm() {
                   variant="contained"
                   size="large"
                   startIcon={saving ? <CircularProgress size={18} color="inherit" /> : <SaveOutlinedIcon />}
-                  disabled={saving}
+                  disabled={saving || Boolean(editor?.conflict)}
                   sx={{ minWidth: 190, py: 1.25, fontWeight: 900 }}
                 >
-                  {saving ? 'Saving…' : payload.answers ? 'Save changes' : 'Submit answers'}
+                  {saving ? 'Submitting…' : payload.answers ? 'Submit updated answers' : 'Submit answers'}
                 </Button>
               </Stack>
             </Paper>
+            </Box>
           </Box>
         )}
       </Container>

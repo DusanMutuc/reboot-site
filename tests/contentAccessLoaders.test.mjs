@@ -119,6 +119,7 @@ test('course tree service loader removes nodes outside the selected published en
   const node=(id,state='published',children=[])=>({node:{id,state},blocks:[],children:children.map((subtree)=>({edge:{},subtree}))});
   const tree=node(120,'published',[node(121,'draft',[node(124)]),node(122,'published',[node(123)]),node(125)]);
   const api=load('src/app/api/courses/[courseSlug]/route.ts',{
+    '@/lib/courseProgressServer':{loadCourseProgress:async()=>[]},
     '@/lib/requireUser':{requireUser:async()=>({ok:true,user:{id:'viewer'}})},
     '@/lib/courseBuilder':{...builder({rpc:async()=>({data:[],error:null})}),fetchNodeSubtree:async()=>tree},
     '@/lib/courseAccess':{resolveAccessibleCourseBySlug:async()=>({id:120})},
@@ -154,6 +155,8 @@ test('resource download uses shared entitlement, honors denied guards, and fails
 test('unlock refresh awaits Next route params before resolving the course',async()=>{
   const calls=[];
   const api=load('src/app/api/courses/[courseSlug]/unlocks/route.ts',{
+    '@/lib/courseProgressServer':{loadCourseProgress:async()=>[]},
+    '@/lib/contentEntitlements':{fetchAccessibleContentNodes:async()=>[{node_id:120,root_id:120}]},
     '@/lib/requireUser':{requireUser:async()=>({ok:true,user:{id:'viewer'}})},
     '@/lib/courseBuilder':{adminClient:{rpc:async()=>({data:[],error:null})},fetchNodeSubtree:async()=>({})},
     '@/lib/courseAccess':{resolveAccessibleCourseBySlug:async(_,slug)=>{calls.push(slug);return {id:120};},collectSubtreeNodeIds:()=>new Set([120])},

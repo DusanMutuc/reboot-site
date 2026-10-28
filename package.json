@@ -40,10 +40,12 @@
     "dompurify": "^3.2.3",
     "luxon": "^3.7.2",
     "next": "15.4.10",
+    "nodemailer": "10.2.1",
     "papaparse": "^5.5.3",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
-    "recharts": "^3.4.1"
+    "recharts": "^3.4.1",
+    "sharp": "0.34.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
