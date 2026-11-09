@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { GHL } from '@/lib/config';
 import { fetchBookingGhl } from '@/lib/bookingGhlFetch';
+import { resolveBookingGhlContacts } from '@/lib/bookingGhlContacts';
 import { fetchCoachingWorkspaceUserIds, filterUnmergedAccountIds } from '@/lib/currentMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { activeDaysSinceForGroup, activePause, loadMemberPauses, type MemberPause } from '@/lib/memberPauses';
@@ -20,6 +21,7 @@ const MAX_HISTORY_DAYS = 540;
 const FUTURE_SCAN_DAYS = 180;
 const ASSIGNMENT_HISTORY_BUFFER_DAYS = 90;
 const GHL_SCAN_CHUNK_DAYS = 180;
+const GHL_CALENDAR_TIMEOUT_MS = 8_000;
 const IMPLEMENTATION_REMINDER_DAYS = 4;
 const M2_REMINDER_DAYS = 28;
 const GHL_FETCH_CONCURRENCY = 4;
@@ -160,8 +162,10 @@ export async function buildBookingFollowUp(
       (studentId) => partnershipMembersByUserId.get(studentId) ?? [studentId],
     ),
   );
-  const pauseHistoryByUserId = await loadMemberPauses(supabase, analysisStudentIds);
-  const analysisAssignments = await fetchAssignmentsForStudents(supabase, analysisStudentIds);
+  const [pauseHistoryByUserId, analysisAssignments] = await Promise.all([
+    loadMemberPauses(supabase, analysisStudentIds),
+    fetchAssignmentsForStudents(supabase, analysisStudentIds),
+  ]);
 
   const coachIds = unique(analysisAssignments.map((row) => row.coach_id));
   const studentIds = unique([
@@ -170,32 +174,11 @@ export async function buildBookingFollowUp(
   ]);
   const allIds = unique([...coachIds, ...studentIds]);
 
-  const [{ data: profileRows, error: profileError }, emailById] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, first_name, last_name, ghl_user_id, ghl_contact_id')
-      .in('id', allIds),
+  const scanRange = getScanRange(analysisAssignments);
+  const [{ profileById, coachScans: rawCoachScans }, emailById] = await Promise.all([
+    fetchProfilesAndCoachScans(supabase, allIds, coachIds, scanRange.startMs, scanRange.endMs),
     fetchEmails(supabase, new Set(allIds)),
   ]);
-
-  if (profileError) {
-    throw new Error(`Could not load coach and member profiles: ${profileError.message}`);
-  }
-
-  const profileById = new Map(
-    ((profileRows ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-  );
-  const scanRange = getScanRange(analysisAssignments);
-  const rawCoachScans = await mapWithConcurrency(
-    coachIds,
-    GHL_FETCH_CONCURRENCY,
-    async (coachId) => scanCoachCalendar(
-      coachId,
-      profileById.get(coachId)?.ghl_user_id ?? null,
-      scanRange.startMs,
-      scanRange.endMs,
-    ),
-  );
   const meetingCandidateAssignments = expandAssignmentsForPartnerships(
     analysisAssignments,
     partnershipMembersByUserId,
@@ -293,31 +276,10 @@ async function findAppointmentsForSync(
     ? await fetchCoachingWorkspaceUserIds(supabase)
     : [];
   const allIds = unique([...coachIds, ...studentIds, ...coachableIds]);
-  const [{ data: profileRows, error: profileError }, emailById] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, first_name, last_name, ghl_user_id, ghl_contact_id')
-      .in('id', allIds),
+  const [{ profileById, coachScans: rawCoachScans }, emailById] = await Promise.all([
+    fetchProfilesAndCoachScans(supabase, allIds, coachIds, input.startMs, input.endMs),
     fetchEmails(supabase, new Set(allIds)),
   ]);
-
-  if (profileError) {
-    throw new Error(`Could not load coach and member profiles: ${profileError.message}`);
-  }
-
-  const profileById = new Map(
-    ((profileRows ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]),
-  );
-  const rawCoachScans = await mapWithConcurrency(
-    coachIds,
-    GHL_FETCH_CONCURRENCY,
-    async (coachId) => scanCoachCalendar(
-      coachId,
-      profileById.get(coachId)?.ghl_user_id ?? null,
-      input.startMs,
-      input.endMs,
-    ),
-  );
   const assignmentsByCoachId = groupBy(assignments, (assignment) => assignment.coach_id);
   const coachScans = await resolveUnmatchedContactDetails({
     coachScans: rawCoachScans, assignmentsByCoachId, profileById, emailById,
@@ -483,15 +445,16 @@ async function fetchEmails(
   wantedIds: Set<string>,
 ): Promise<Map<string, string>> {
   const emailById = new Map<string, string>();
+  const remainingIds = new Set(wantedIds);
   const perPage = 1000;
 
-  for (let page = 1; ; page += 1) {
+  for (let page = 1; remainingIds.size > 0; page += 1) {
     const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
     if (error) throw new Error(`Could not load account emails: ${error.message}`);
 
     for (const user of data.users) {
-      if (wantedIds.has(user.id) && user.email) {
-        emailById.set(user.id, user.email.trim().toLowerCase());
+      if (remainingIds.delete(user.id)) {
+        if (user.email) emailById.set(user.id, user.email.trim().toLowerCase());
       }
     }
 
@@ -499,6 +462,36 @@ async function fetchEmails(
   }
 
   return emailById;
+}
+
+async function fetchProfilesAndCoachScans(
+  supabase: SupabaseClient,
+  allIds: string[],
+  coachIds: string[],
+  startMs: number,
+  endMs: number,
+): Promise<{ profileById: Map<string, ProfileRow>; coachScans: CoachScan[] }> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, first_name, last_name, ghl_user_id, ghl_contact_id')
+    .in('id', allIds);
+  if (error) throw new Error(`Could not load coach and member profiles: ${error.message}`);
+
+  const profileById = new Map(((data ?? []) as ProfileRow[]).map((profile) => [profile.id, profile]));
+  // Separate coach profiles can point to one GHL calendar. Share only its raw
+  // scan in this report; each logical coach still matches its own assignments.
+  const scansByGhlUserId = new Map<string, Promise<CoachScan>>();
+  const coachScans = await mapWithConcurrency(coachIds, GHL_FETCH_CONCURRENCY, async (coachId) => {
+    const ghlUserId = profileById.get(coachId)?.ghl_user_id?.trim();
+    if (!ghlUserId) return scanCoachCalendar(coachId, null, startMs, endMs);
+    let pending = scansByGhlUserId.get(ghlUserId);
+    if (!pending) {
+      pending = scanCoachCalendar(coachId, ghlUserId, startMs, endMs);
+      scansByGhlUserId.set(ghlUserId, pending);
+    }
+    return { ...await pending, coachId };
+  });
+  return { profileById, coachScans };
 }
 
 function getScanRange(assignments: AssignmentRow[]): { startMs: number; endMs: number } {
@@ -540,28 +533,39 @@ async function scanCoachCalendar(
   try {
     const chunkResults = await Promise.all(
       buildTimeChunks(startMs, endMs, GHL_SCAN_CHUNK_DAYS).map(async (chunk) => {
-      const url = new URL(`${base}/calendars/events`);
-      url.searchParams.set('locationId', GHL.LOCATION_ID);
-      url.searchParams.set('userId', trimmedGhlUserId);
-      url.searchParams.set('startTime', String(chunk.startMs));
-      url.searchParams.set('endTime', String(chunk.endMs));
+        const url = new URL(`${base}/calendars/events`);
+        url.searchParams.set('locationId', GHL.LOCATION_ID);
+        url.searchParams.set('userId', trimmedGhlUserId);
+        url.searchParams.set('startTime', String(chunk.startMs));
+        url.searchParams.set('endTime', String(chunk.endMs));
 
-      const response = await fetchBookingGhl(url.toString(), {
-        headers: {
-          Authorization: `Bearer ${GHL.TOKEN}`,
-          Version: GHL.VERSION,
-          Accept: 'application/json',
-        },
-        cache: 'no-store',
-      });
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            const response = await fetchBookingGhl(url.toString(), {
+              headers: {
+                Authorization: `Bearer ${GHL.TOKEN}`,
+                Version: GHL.VERSION,
+                Accept: 'application/json',
+              },
+              cache: 'no-store',
+            }, GHL_CALENDAR_TIMEOUT_MS);
 
-      if (!response.ok) {
-        const detail = await response.text().catch(() => '');
-        return { ok: false as const, status: response.status, detail };
-      }
+            if (!response.ok) {
+              const detail = await response.text().catch(() => '');
+              return { ok: false as const, status: response.status, detail };
+            }
 
-      const payload: unknown = await response.json();
-        return { ok: true as const, events: extractRawEvents(payload) };
+            const payload: unknown = await response.json();
+            return { ok: true as const, events: extractRawEvents(payload) };
+          } catch (error) {
+            // A single stalled response must not hold the whole report open.
+            // Include body reads, which can time out after headers arrive.
+            const timedOut = error !== null && typeof error === 'object'
+              && 'name' in error && error.name === 'TimeoutError';
+            if (attempt === 0 && timedOut) continue;
+            throw error;
+          }
+        }
       }),
     );
     const failedChunk = chunkResults.find((result) => !result.ok);
@@ -662,27 +666,7 @@ async function resolveUnmatchedContactDetails({
     }
   }
   const ids = unique([...wantedByCoach.values()].flatMap((ids) => [...ids]));
-  const resolved = new Map(await mapWithConcurrency(ids, GHL_FETCH_CONCURRENCY, async (contactId) => {
-    try {
-      if (!GHL.BASE || !GHL.TOKEN || !GHL.VERSION || !GHL.LOCATION_ID) throw new Error('Missing calendar configuration.');
-      const base = new URL(GHL.BASE);
-      const local = process.env.NODE_ENV !== 'production' && base.protocol === 'http:'
-        && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
-      if ((base.protocol !== 'https:' && !local) || base.username || base.password) throw new Error('Invalid calendar configuration.');
-      const response = await fetchBookingGhl(`${base.href.replace(/\/+$/, '')}/contacts/${encodeURIComponent(contactId)}`, {
-        headers: { Authorization: `Bearer ${GHL.TOKEN}`, Version: GHL.VERSION, Accept: 'application/json' },
-        cache: 'no-store', redirect: 'error',
-      }, 8_000);
-      if (!response.ok) throw new Error('The contact could not be loaded.');
-      const payload = await response.json();
-      const contact = payload?.contact;
-      if (contact?.id !== contactId || contact.locationId !== GHL.LOCATION_ID) throw new Error('Invalid calendar contact.');
-      const name = [readString(contact.firstName), readString(contact.lastName)].filter(isPresent).join(' ');
-      return [contactId, { name: name || readString(contact.name), email: readString(contact.email)?.toLowerCase() ?? null }] as const;
-    } catch {
-      return [contactId, null] as const;
-    }
-  }));
+  const resolved = await resolveBookingGhlContacts(ids);
   return coachScans.map((scan) => ({
     ...scan,
     error: scan.error ?? ([...(wantedByCoach.get(scan.coachId) ?? [])].some((id) => !resolved.get(id))

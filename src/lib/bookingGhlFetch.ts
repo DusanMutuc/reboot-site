@@ -38,7 +38,7 @@ async function waitForTurn(): Promise<void> {
   }
 }
 
-/** Pace the booking report's GET requests and retry temporary GHL throttling. */
+/** Limit booking report reads and retry temporary GHL throttling. */
 export async function fetchBookingGhl(
   url: string,
   init: RequestInit,

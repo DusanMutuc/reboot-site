@@ -21,10 +21,13 @@ function fixture({
   assignments = [assignment('member'), assignment('past')],
   partnerships = [], enrollments = [], pauses = [], archived = [], events = [], failTable, membershipError,
   profileOverrides = [], contacts = {}, contactStatus = 200,
+  authPages, beforeAuthPage, calendarResponse,
 } = {}) {
   const calls = [];
   const scans = [];
   const contactRequests = [];
+  const authRequests = [];
+  const calendarRequests = [];
   const allIds = [...new Set([
     ...assignments.flatMap((row) => [row.user_id, row.coach_id]),
     ...partnerships.map((row) => row.user_id),
@@ -64,7 +67,13 @@ function fixture({
       };
       return query;
     },
-    auth: { admin: { listUsers: async () => ({ data: { users: allIds.map((id) => ({ id, email: `${id}@example.invalid` })) }, error: null }) } },
+    auth: { admin: { listUsers: async ({ page, perPage }) => {
+      authRequests.push({ page, perPage });
+      await beforeAuthPage?.(page);
+      return { data: { users: authPages
+        ? authPages[page - 1] ?? []
+        : allIds.map((id) => ({ id, email: `${id}@example.invalid` })) }, error: null };
+    } } },
   };
   const source = ts.transpileModule(fs.readFileSync(new URL('../src/lib/bookingFollowUp.ts', import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -73,29 +82,46 @@ function fixture({
   const imports = {
     '@/lib/bookingGhlFetch': { fetchBookingGhl: (url, options, timeoutMs) => fixtureFetch(url, {
       ...options, ...(timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) }),
-    }) },
+    }, timeoutMs) },
     '@/lib/currentMembers': currentMembers,
     '@/lib/memberPauses': memberPauses,
     '@/lib/supabaseAdmin': { getAdminClient: () => client },
     '@/lib/config': { GHL: { BASE: 'https://calendar.example.invalid', TOKEN: 'fixture', VERSION: 'fixture', LOCATION_ID: 'fixture' } },
   };
-  const fixtureFetch = async (url, options) => {
+  const fixtureFetch = async (url, options, timeoutMs) => {
       const parsed = new URL(url);
+      if (parsed.pathname === '/contacts/search') {
+        const ids = JSON.parse(options.body).filters[0].filters.map((filter) => filter.value);
+        contactRequests.push({ ids, options });
+        return { ok: contactStatus === 200, json: async () => ({ contacts: ids.map((id) => contacts[id]).filter(Boolean), hasMore: false }) };
+      }
       if (parsed.pathname.startsWith('/contacts/')) {
         const id = decodeURIComponent(parsed.pathname.split('/').at(-1));
         contactRequests.push({ id, options });
         return { ok: contactStatus === 200, json: async () => ({ contact: contacts[id] ?? null }) };
       }
       scans.push(parsed.searchParams.get('userId'));
+      const call = { url: parsed, options, timeoutMs };
+      calendarRequests.push(call);
+      if (calendarResponse) return calendarResponse(call);
       return { ok: true, json: async () => ({ events }) };
     };
+  const contactsExports = {};
+  const contactsSource = ts.transpileModule(fs.readFileSync(new URL('../src/lib/bookingGhlContacts.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  vm.runInNewContext(contactsSource, {
+    exports: contactsExports, URL, process: { env: { NODE_ENV: 'test' } },
+    require: (name) => imports[name] ?? require(name),
+  });
+  imports['@/lib/bookingGhlContacts'] = contactsExports;
   vm.runInNewContext(source, {
     exports, console, URL, AbortSignal, process: { env: { NODE_ENV: 'test' } },
     require: (name) => imports[name] ?? require(name),
     fetch: fixtureFetch,
   });
   return { build: exports.buildBookingFollowUp, syncAudit: exports.findBusinessAuditAppointmentsForSync,
-    syncImplementation: exports.findImplementationAppointmentsForSync, client, calls, scans, contactRequests };
+    syncImplementation: exports.findImplementationAppointmentsForSync, client, calls, scans, contactRequests, authRequests, calendarRequests };
 }
 
 const memberIds = (report) => [...new Set(report.groups.flatMap((group) => group.members.flatMap((member) => member.memberIds)))].sort();
@@ -111,6 +137,137 @@ test('coach follow-up filters membership while retaining its coach scope', async
   const report = await build({ coachId: 'coach' });
   assert.deepEqual(memberIds(report), ['member']);
   assert.deepEqual(Array.from(report.groups, (group) => group.coachId), ['coach']);
+});
+
+test('coach profiles sharing one GHL user reuse a calendar scan without merging rosters', async () => {
+  const members = ['first-member', 'second-member'];
+  const rows = members.map((id, index) => assignment(id, `coach-${index + 1}`));
+  const events = members.map((id) => ({ id: `appointment-${id}`, contactId: id,
+    title: `${id} Person Business Review with Shared Calendar`, startTime: futureStart() }));
+  const contacts = Object.fromEntries(members.map((id) => [id, {
+    id, locationId: 'fixture', firstName: id, lastName: 'Person', email: `${id}@example.invalid`,
+  }]));
+  const options = { current: members, past: [], assignments: rows, events, contacts,
+    profileOverrides: [
+      { id: 'coach-1', ghl_user_id: 'shared-calendar' },
+      { id: 'coach-2', ghl_user_id: ' shared-calendar ' },
+    ] };
+  const singleCoach = fixture({ ...options, current: members.slice(0, 1), assignments: rows.slice(0, 1) });
+  await singleCoach.build();
+  const env = fixture(options);
+  const report = await env.build();
+  assert.equal(env.scans.length, singleCoach.scans.length, 'The same GHL user/range is scanned once per report');
+  assert.ok(env.scans.every((id) => id === 'shared-calendar'));
+  assert.equal(report.groups.length, 2);
+  for (const [index, memberId] of members.entries()) {
+    const group = report.groups.find((item) => item.coachId === `coach-${index + 1}`);
+    assert.equal(group.dataComplete, true);
+    assert.deepEqual(Array.from(group.members, (row) => row.userId), [memberId]);
+    assert.equal(group.members[0].upcomingM2.id, `appointment-${memberId}`);
+    assert.equal(group.members[0].upcomingM2.coachId, group.coachId);
+  }
+});
+
+test('calendar scans start while account-email loading is still pending', async () => {
+  let releaseEmails;
+  const pendingEmails = new Promise((resolve) => { releaseEmails = resolve; });
+  const env = fixture({ beforeAuthPage: () => pendingEmails });
+  const building = env.build();
+  await new Promise((resolve) => setImmediate(resolve));
+  try {
+    assert.ok(env.scans.length > 0, 'Calendar I/O should overlap the slower Auth listing');
+  } finally {
+    releaseEmails();
+  }
+  assert.equal((await building).groups.length, 1);
+});
+
+test('email pagination stops once every requested account is seen, including a null email', async () => {
+  const firstPage = [
+    { id: 'member', email: ' Member@Example.Invalid ' },
+    { id: 'coach', email: null },
+    ...Array.from({ length: 998 }, (_, index) => ({ id: `unrelated-${index}`, email: null })),
+  ];
+  const env = fixture({ past: [], assignments: [assignment('member')], authPages: [firstPage] });
+  const report = await env.build();
+  assert.deepEqual(env.authRequests.map((request) => request.page), [1]);
+  assert.equal(report.groups[0].coachEmail, null);
+  assert.equal(report.groups[0].members[0].email, 'member@example.invalid');
+});
+
+test('email pagination continues until a requested account on a later page is found', async () => {
+  const firstPage = [{ id: 'coach', email: 'coach@example.invalid' },
+    ...Array.from({ length: 999 }, (_, index) => ({ id: `unrelated-${index}`, email: null }))];
+  const env = fixture({ past: [], assignments: [assignment('member')], authPages: [
+    firstPage, [{ id: 'member', email: 'member@example.invalid' }],
+  ] });
+  const report = await env.build();
+  assert.deepEqual(env.authRequests.map((request) => request.page), [1, 2]);
+  assert.equal(report.groups[0].members[0].email, 'member@example.invalid');
+});
+
+for (const stage of ['fetch', 'body']) {
+  test(`a calendar ${stage} timeout retries the affected chunk once with a fresh eight-second signal`, async () => {
+    const attempts = new Map();
+    const event = { id: 'upcoming-review', contactId: 'member',
+      title: 'member Person Business Review with coach Person', startTime: futureStart() };
+    const env = fixture({ calendarResponse: (call) => {
+      const key = call.url.searchParams.get('startTime');
+      const count = (attempts.get(key) ?? 0) + 1;
+      attempts.set(key, count);
+      if (count === 1 && stage === 'fetch') throw { name: 'TimeoutError' };
+      return { ok: true, json: async () => {
+        if (count === 1 && stage === 'body') throw { name: 'TimeoutError' };
+        return { events: [event] };
+      } };
+    } });
+    const group = (await env.build()).groups[0];
+    assert.equal(group.dataComplete, true);
+    assert.equal(group.members[0].upcomingM2.id, event.id);
+    assert.ok(attempts.size > 0);
+    assert.ok([...attempts.values()].every((count) => count === 2), 'Each chunk gets only one timeout retry');
+    assert.ok(env.calendarRequests.every((call) => call.timeoutMs === 8000));
+    const signals = env.calendarRequests.map((call) => call.options.signal);
+    assert.ok(signals.every((signal) => signal instanceof AbortSignal));
+    assert.equal(new Set(signals).size, signals.length, 'A retry cannot reuse an expired timeout signal');
+  });
+}
+
+test('a repeated calendar timeout keeps the whole coach incomplete despite other successful chunks', async () => {
+  const attempts = new Map();
+  let stalledChunk;
+  const event = { id: 'partial-review', contactId: 'member',
+    title: 'member Person Business Review with coach Person', startTime: futureStart() };
+  const env = fixture({ calendarResponse: (call) => {
+    const key = call.url.searchParams.get('startTime');
+    stalledChunk ??= key;
+    attempts.set(key, (attempts.get(key) ?? 0) + 1);
+    if (key === stalledChunk) throw { name: 'TimeoutError' };
+    return { ok: true, json: async () => ({ events: [event] }) };
+  } });
+  const group = (await env.build()).groups[0];
+  assert.equal(attempts.get(stalledChunk), 2);
+  assert.ok([...attempts.entries()].every(([key, count]) => key === stalledChunk || count === 1));
+  assert.equal(group.dataComplete, false);
+  assert.match(group.dataWarning, /could not be reached/);
+  assert.equal(group.members[0].upcomingM2, null, 'A partial scan cannot be treated as complete booking data');
+  assert.equal(group.members[0].needsM2, false);
+  assert.equal(group.members[0].needsImplementation, false);
+});
+
+test('calendar HTTP errors, invalid JSON and errors without a timeout name are not retried', async () => {
+  for (const calendarResponse of [
+    () => ({ ok: false, status: 503, text: async () => 'fixture unavailable' }),
+    () => ({ ok: true, json: async () => { throw new SyntaxError('fixture invalid JSON'); } }),
+    () => { throw { detail: 'fixture unknown failure' }; },
+  ]) {
+    const env = fixture({ calendarResponse });
+    const group = (await env.build()).groups[0];
+    const keys = env.calendarRequests.map((call) => call.url.searchParams.get('startTime'));
+    assert.equal(new Set(keys).size, keys.length);
+    assert.equal(group.dataComplete, false);
+    assert.equal(group.members[0].needsM2, false);
+  }
 });
 
 test('Business Review follow-up lists only the signed-in coach’s current primary roster, including legacy primary relationships', async () => {
