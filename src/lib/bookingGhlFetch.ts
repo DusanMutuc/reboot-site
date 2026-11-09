@@ -1,4 +1,5 @@
-const REQUEST_INTERVAL_MS = 200;
+const REQUEST_WINDOW_MS = 10_000;
+const REQUESTS_PER_WINDOW = 80;
 const BURST_COOLDOWN_MS = 10_000;
 const MAX_RETRY_DELAY_MS = 30_000;
 const MAX_RETRIES = 2;
@@ -6,7 +7,7 @@ const MAX_RETRIES = 2;
 // Calendar scans and contact verification share the same GHL integration quota.
 // Serialize starts only, so slow responses do not block unrelated requests.
 let startQueue: Promise<void> = Promise.resolve();
-let nextRequestAt = 0;
+const requestStarts: number[] = [];
 let cooldownUntil = 0;
 
 async function waitForTurn(): Promise<void> {
@@ -15,12 +16,23 @@ async function waitForTurn(): Promise<void> {
   startQueue = new Promise<void>((resolve) => { release = resolve; });
   await previous;
   try {
-    let delay: number;
-    // An in-flight response can extend the cooldown while this turn is waiting.
-    while ((delay = Math.max(nextRequestAt, cooldownUntil) - Date.now()) > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+    for (;;) {
+      const now = Date.now();
+      while (requestStarts.length > 0 && requestStarts[0] <= now - REQUEST_WINDOW_MS) {
+        requestStarts.shift();
+      }
+      const availableAt = requestStarts.length >= REQUESTS_PER_WINDOW
+        ? requestStarts[0] + REQUEST_WINDOW_MS
+        : now;
+      const delay = Math.max(availableAt, cooldownUntil) - now;
+      // An in-flight response can extend the cooldown while this turn is waiting.
+      if (delay > 0) {
+        await new Promise<void>((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+      requestStarts.push(now);
+      break;
     }
-    nextRequestAt = Date.now() + REQUEST_INTERVAL_MS;
   } finally {
     release();
   }
@@ -35,10 +47,12 @@ export async function fetchBookingGhl(
   for (let attempt = 0; ; attempt += 1) {
     await waitForTurn();
     // Queue/cooldown time must not consume the contact request's timeout.
-    const response = await fetch(url, {
-      ...init,
-      ...(timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) }),
-    });
+    const timeoutSignal = timeoutMs === undefined ? null : AbortSignal.timeout(timeoutMs);
+    // An explicit signal also prevents Next from memoizing a throttled GET.
+    const signal = init.signal
+      ? (timeoutSignal ? AbortSignal.any([init.signal, timeoutSignal]) : init.signal)
+      : (timeoutSignal ?? new AbortController().signal);
+    const response = await fetch(url, { ...init, signal });
     if (response.status !== 429) return response;
 
     // A daily quota cannot be recovered within an interactive report request.
@@ -49,6 +63,8 @@ export async function fetchBookingGhl(
     cooldownUntil = Math.max(cooldownUntil, Date.now() + delay);
     if (attempt >= MAX_RETRIES) return response;
 
-    await response.body?.cancel().catch(() => undefined);
+    // Next may tee a response body; cancelling one branch can wait indefinitely
+    // for its unread sibling. Releasing the body must not block the retry.
+    void response.body?.cancel().catch(() => undefined);
   }
 }
