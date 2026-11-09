@@ -2,6 +2,7 @@ import { DateTime } from 'luxon';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { GHL } from '@/lib/config';
+import { fetchBookingGhl } from '@/lib/bookingGhlFetch';
 import { fetchCoachingWorkspaceUserIds, filterUnmergedAccountIds } from '@/lib/currentMembers';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { activeDaysSinceForGroup, activePause, loadMemberPauses, type MemberPause } from '@/lib/memberPauses';
@@ -545,7 +546,7 @@ async function scanCoachCalendar(
       url.searchParams.set('startTime', String(chunk.startMs));
       url.searchParams.set('endTime', String(chunk.endMs));
 
-      const response = await fetch(url.toString(), {
+      const response = await fetchBookingGhl(url.toString(), {
         headers: {
           Authorization: `Bearer ${GHL.TOKEN}`,
           Version: GHL.VERSION,
@@ -668,10 +669,10 @@ async function resolveUnmatchedContactDetails({
       const local = process.env.NODE_ENV !== 'production' && base.protocol === 'http:'
         && ['127.0.0.1', 'localhost', '[::1]'].includes(base.hostname);
       if ((base.protocol !== 'https:' && !local) || base.username || base.password) throw new Error('Invalid calendar configuration.');
-      const response = await fetch(`${base.href.replace(/\/+$/, '')}/contacts/${encodeURIComponent(contactId)}`, {
+      const response = await fetchBookingGhl(`${base.href.replace(/\/+$/, '')}/contacts/${encodeURIComponent(contactId)}`, {
         headers: { Authorization: `Bearer ${GHL.TOKEN}`, Version: GHL.VERSION, Accept: 'application/json' },
-        cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(8_000),
-      });
+        cache: 'no-store', redirect: 'error',
+      }, 8_000);
       if (!response.ok) throw new Error('The contact could not be loaded.');
       const payload = await response.json();
       const contact = payload?.contact;

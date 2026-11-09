@@ -71,15 +71,15 @@ function fixture({
   }).outputText;
   const exports = {};
   const imports = {
+    '@/lib/bookingGhlFetch': { fetchBookingGhl: (url, options, timeoutMs) => fixtureFetch(url, {
+      ...options, ...(timeoutMs === undefined ? {} : { signal: AbortSignal.timeout(timeoutMs) }),
+    }) },
     '@/lib/currentMembers': currentMembers,
     '@/lib/memberPauses': memberPauses,
     '@/lib/supabaseAdmin': { getAdminClient: () => client },
     '@/lib/config': { GHL: { BASE: 'https://calendar.example.invalid', TOKEN: 'fixture', VERSION: 'fixture', LOCATION_ID: 'fixture' } },
   };
-  vm.runInNewContext(source, {
-    exports, console, URL, AbortSignal, process: { env: { NODE_ENV: 'test' } },
-    require: (name) => imports[name] ?? require(name),
-    fetch: async (url, options) => {
+  const fixtureFetch = async (url, options) => {
       const parsed = new URL(url);
       if (parsed.pathname.startsWith('/contacts/')) {
         const id = decodeURIComponent(parsed.pathname.split('/').at(-1));
@@ -88,7 +88,11 @@ function fixture({
       }
       scans.push(parsed.searchParams.get('userId'));
       return { ok: true, json: async () => ({ events }) };
-    },
+    };
+  vm.runInNewContext(source, {
+    exports, console, URL, AbortSignal, process: { env: { NODE_ENV: 'test' } },
+    require: (name) => imports[name] ?? require(name),
+    fetch: fixtureFetch,
   });
   return { build: exports.buildBookingFollowUp, syncAudit: exports.findBusinessAuditAppointmentsForSync,
     syncImplementation: exports.findImplementationAppointmentsForSync, client, calls, scans, contactRequests };
